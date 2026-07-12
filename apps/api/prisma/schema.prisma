@@ -1,0 +1,427 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SystemRole {
+  admin
+  member
+}
+
+enum UserStatus {
+  active
+  disabled
+}
+
+enum PermissionLevel {
+  owner
+  editor
+  lecturer
+  viewer
+  no_access
+}
+
+enum PermissionTargetType {
+  workspace
+  folder
+  file
+}
+
+enum FileType {
+  book
+  lesson
+  course
+  exercise_set
+  doc
+  asset
+}
+
+enum FileStatus {
+  draft
+  published
+  archived
+}
+
+enum ReferenceMode {
+  snapshot
+  linked
+}
+
+enum QuestionType {
+  single_choice
+  multiple_choice
+  true_false
+  fill_blank
+  short_answer
+}
+
+enum SubmissionStatus {
+  not_started
+  in_progress
+  submitted
+  auto_graded
+  needs_manual_review
+  graded
+  late
+}
+
+enum ForumThreadStatus {
+  open
+  locked
+  archived
+}
+
+model User {
+  id           String     @id @default(cuid())
+  username     String     @unique
+  displayName  String
+  passwordHash String
+  systemRole   SystemRole
+  status       UserStatus @default(active)
+  storageQuotaBytes Int    @default(536870912)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  createdFolders Folder[]          @relation("FolderCreatedBy")
+  createdFiles   File[]            @relation("FileCreatedBy")
+  updatedFiles   File[]            @relation("FileUpdatedBy")
+  grants         PermissionGrant[] @relation("PermissionUser")
+  permissionGroupMemberships PermissionGroupMember[]
+  createdPermissionGroups PermissionGroup[] @relation("PermissionGroupCreatedBy")
+  submissions    Submission[]
+  aiConversations AiConversation[]
+  forumThreads   ForumThread[] @relation("ForumThreadAuthor")
+  forumPosts     ForumPost[]   @relation("ForumPostAuthor")
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  timeZone  String   @default("Asia/Shanghai")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folders Folder[]
+  files   File[]
+  grants  PermissionGrant[]
+  permissionGroups PermissionGroup[]
+  assets  FileAsset[]
+  aiSettings AiSettings?
+  aiConversations AiConversation[]
+  forumCategories ForumCategory[]
+  forumThreads ForumThread[]
+}
+
+model ForumCategory {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id])
+  threads   ForumThread[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, sortOrder])
+}
+
+model ForumThread {
+  id             String            @id @default(cuid())
+  workspaceId    String
+  categoryId     String
+  authorId       String
+  title          String
+  status         ForumThreadStatus @default(open)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  lastActivityAt DateTime          @default(now())
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id])
+  category  ForumCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  author    User          @relation("ForumThreadAuthor", fields: [authorId], references: [id])
+  posts     ForumPost[]
+
+  @@index([workspaceId, lastActivityAt])
+  @@index([categoryId, lastActivityAt])
+}
+
+model ForumPost {
+  id        String   @id @default(cuid())
+  threadId  String
+  parentId  String?
+  replyToId String?
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  thread ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  parent ForumPost?  @relation("ForumPostReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies ForumPost[] @relation("ForumPostReplies")
+  replyTo ForumPost? @relation("ForumPostReplyTargets", fields: [replyToId], references: [id], onDelete: SetNull)
+  targetedReplies ForumPost[] @relation("ForumPostReplyTargets")
+  author User        @relation("ForumPostAuthor", fields: [authorId], references: [id])
+
+  @@index([threadId, createdAt])
+  @@index([parentId, createdAt])
+  @@index([replyToId, createdAt])
+  @@index([authorId, createdAt])
+}
+
+model Folder {
+  id          String   @id @default(cuid())
+  workspaceId String
+  parentId    String?
+  name        String
+  sortOrder   Int      @default(0)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  parent    Folder?   @relation("FolderTree", fields: [parentId], references: [id])
+  children  Folder[]  @relation("FolderTree")
+  createdBy User      @relation("FolderCreatedBy", fields: [createdById], references: [id])
+  files     File[]
+  assets    FileAsset[]
+
+  @@index([workspaceId, parentId, sortOrder])
+}
+
+model File {
+  id          String     @id @default(cuid())
+  workspaceId String
+  folderId    String
+  type        FileType
+  title       String
+  status      FileStatus @default(draft)
+  version     Int        @default(1)
+  createdById String
+  updatedById String
+  publishedAt DateTime?
+  archivedAt  DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id])
+  folder    Folder         @relation(fields: [folderId], references: [id])
+  createdBy User           @relation("FileCreatedBy", fields: [createdById], references: [id])
+  updatedBy User           @relation("FileUpdatedBy", fields: [updatedById], references: [id])
+  blocks    ContentBlock[]
+  exercise  ExerciseSet?
+  assets    FileAsset[]
+
+  @@index([folderId, status, updatedAt])
+}
+
+model PermissionGrant {
+  id          String               @id @default(cuid())
+  workspaceId String
+  targetType  PermissionTargetType
+  targetId    String
+  userId      String?
+  groupId     String?
+  level       PermissionLevel
+  createdById String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  user      User?     @relation("PermissionUser", fields: [userId], references: [id])
+  group     PermissionGroup? @relation(fields: [groupId], references: [id])
+
+  @@unique([targetType, targetId, userId])
+  @@unique([targetType, targetId, groupId])
+  @@index([groupId])
+}
+
+model PermissionGroup {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  createdBy User      @relation("PermissionGroupCreatedBy", fields: [createdById], references: [id])
+  members   PermissionGroupMember[]
+  grants    PermissionGrant[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, name])
+}
+
+model PermissionGroupMember {
+  id        String   @id @default(cuid())
+  groupId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  group PermissionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId])
+}
+
+model ContentBlock {
+  id            String         @id @default(cuid())
+  fileId        String
+  parentBlockId String?
+  type          String
+  sortOrder     Int            @default(0)
+  dataJson      Json
+  sourceFileId  String?
+  sourceBlockId String?
+  referenceMode ReferenceMode?
+  createdById   String
+  updatedById   String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  file   File           @relation(fields: [fileId], references: [id])
+  parent ContentBlock?  @relation("BlockTree", fields: [parentBlockId], references: [id])
+  child  ContentBlock[] @relation("BlockTree")
+
+  @@index([fileId, sortOrder])
+}
+
+model ExerciseSet {
+  id                       String    @id @default(cuid())
+  fileId                   String    @unique
+  openAt                   DateTime?
+  dueAt                    DateTime?
+  allowMultipleSubmissions Boolean   @default(false)
+  showAnswerAfterSubmit    Boolean   @default(false)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  file        File         @relation(fields: [fileId], references: [id])
+  questions   Question[]
+  submissions Submission[]
+}
+
+model Question {
+  id            String       @id @default(cuid())
+  exerciseSetId String
+  type          QuestionType
+  promptJson    Json
+  optionsJson   Json?
+  answerJson    Json?
+  score         Int
+  sortOrder     Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  exerciseSet ExerciseSet       @relation(fields: [exerciseSetId], references: [id])
+  answers     SubmissionAnswer[]
+}
+
+model Submission {
+  id            String           @id @default(cuid())
+  exerciseSetId String
+  userId        String
+  status        SubmissionStatus
+  score         Int?
+  maxScore      Int
+  submittedAt   DateTime?
+  gradedAt      DateTime?
+  gradedById    String?
+  feedback      String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  exerciseSet ExerciseSet        @relation(fields: [exerciseSetId], references: [id])
+  user        User               @relation(fields: [userId], references: [id])
+  answers     SubmissionAnswer[]
+
+  @@index([exerciseSetId, userId, submittedAt])
+}
+
+model SubmissionAnswer {
+  id           String   @id @default(cuid())
+  submissionId String
+  questionId   String
+  answerJson   Json
+  score        Int?
+  feedback     String?
+  autoGraded   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  submission Submission @relation(fields: [submissionId], references: [id])
+  question   Question   @relation(fields: [questionId], references: [id])
+}
+
+model FileAsset {
+  id          String   @id @default(cuid())
+  workspaceId String
+  folderId    String?
+  fileId      String?
+  storageKey  String   @unique
+  filename    String
+  mimeType    String
+  sizeBytes   Int
+  uploadedBy  String
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  folder    Folder?   @relation(fields: [folderId], references: [id])
+  file      File?     @relation(fields: [fileId], references: [id])
+}
+
+model AiSettings {
+  id              String   @id @default(cuid())
+  workspaceId     String   @unique
+  enabled         Boolean  @default(false)
+  providerName    String   @default("OpenAI Compatible")
+  baseUrl         String   @default("")
+  model           String   @default("")
+  apiKey          String   @default("")
+  temperature     Float    @default(0.2)
+  maxContextFiles Int      @default(6)
+  maxContextChars Int      @default(12000)
+  updatedById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+}
+
+model AiConversation {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  title       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id])
+  user      User        @relation(fields: [userId], references: [id])
+  messages  AiMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model AiMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String
+  content        String
+  sourcesJson    Json?
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
