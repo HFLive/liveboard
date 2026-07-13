@@ -6,7 +6,12 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import type { SystemRole, UserSummary } from "@liveboard/shared";
+import {
+  isSuperAdmin,
+  isSystemAdmin,
+  type SystemRole,
+  type UserSummary,
+} from "@liveboard/shared";
 import type { PermissionGroupSummary } from "@liveboard/shared";
 import type { PermissionTargetType } from "@liveboard/shared";
 import argon2 from "argon2";
@@ -242,13 +247,6 @@ export class UsersService {
       throw new NotFoundException("Permission group not found");
     }
 
-    if (
-      group.name === "管理员" &&
-      group.members.some((member) => member.user.systemRole === "admin")
-    ) {
-      throw new BadRequestException("管理员权限组包含管理员账号，不能删除");
-    }
-
     await this.prisma.permissionGrant.deleteMany({ where: { groupId } });
     await this.prisma.permissionGroup.delete({ where: { id: groupId } });
     return { ok: true };
@@ -298,10 +296,6 @@ export class UsersService {
       throw new NotFoundException("User not found");
     }
 
-    if (group.name === "管理员" && user.systemRole === "admin") {
-      throw new BadRequestException("管理员账号不能移出管理员权限组");
-    }
-
     await this.prisma.permissionGroupMember.deleteMany({
       where: { groupId, userId },
     });
@@ -313,7 +307,7 @@ export class UsersService {
     actorUserId: string | null,
     input: CreateUserInput,
   ): Promise<UserSummary> {
-    await this.requireAdmin(actorUserId);
+    const actor = await this.requireAdmin(actorUserId);
     const username = input.username.trim();
     const displayName = input.displayName.trim();
 
@@ -333,6 +327,10 @@ export class UsersService {
       throw new ConflictException("Username already exists");
     }
 
+    if (!isSuperAdmin(actor.systemRole) && input.systemRole !== "member") {
+      throw new ForbiddenException("管理员只能创建普通用户");
+    }
+
     const user = await this.prisma.user.create({
       data: {
         username,
@@ -349,7 +347,7 @@ export class UsersService {
     actorUserId: string | null,
     rows: ImportUserInput[],
   ): Promise<ImportUsersResult> {
-    await this.requireAdmin(actorUserId);
+    const actor = await this.requireAdmin(actorUserId);
 
     if (rows.length === 0) {
       throw new BadRequestException("导入列表不能为空");
@@ -408,11 +406,20 @@ export class UsersService {
         continue;
       }
 
-      if (!["admin", "member"].includes(row.systemRole)) {
+      if (!["super_admin", "admin", "member"].includes(row.systemRole)) {
         result.failed.push({
           rowNumber: row.rowNumber,
           username: row.username,
           reason: "系统权限无效",
+        });
+        continue;
+      }
+
+      if (!isSuperAdmin(actor.systemRole) && row.systemRole !== "member") {
+        result.failed.push({
+          rowNumber: row.rowNumber,
+          username: row.username,
+          reason: "管理员只能导入普通用户",
         });
         continue;
       }
@@ -458,13 +465,17 @@ export class UsersService {
     userId: string,
     input: UpdateUserInput,
   ): Promise<UserSummary> {
-    await this.requireAdmin(actorUserId);
+    const actor = await this.requireAdmin(actorUserId);
     const target = await this.prisma.user.findUnique({
       where: { id: userId },
     });
 
     if (!target) {
       throw new NotFoundException("User not found");
+    }
+
+    if (!isSuperAdmin(actor.systemRole) && target.systemRole !== "member") {
+      throw new ForbiddenException("管理员不能修改其他管理员");
     }
 
     const data: {
@@ -484,17 +495,30 @@ export class UsersService {
     }
 
     if (input.systemRole) {
-      if (target.systemRole === "admin" && input.systemRole !== "admin") {
-        throw new BadRequestException("管理员系统权限已锁定为最高权限");
+      if (!isSuperAdmin(actor.systemRole) && input.systemRole !== "member") {
+        throw new ForbiddenException("只有最高管理员可以分配管理角色");
       }
       data.systemRole = input.systemRole;
     }
 
     if (input.status) {
-      if (target.systemRole === "admin" && input.status !== "active") {
-        throw new BadRequestException("管理员账号不能停用");
-      }
       data.status = input.status;
+    }
+
+    const removesActiveSuperAdmin =
+      target.systemRole === "super_admin" &&
+      target.status === "active" &&
+      ((input.systemRole !== undefined && input.systemRole !== "super_admin") ||
+        input.status === "disabled");
+
+    if (removesActiveSuperAdmin) {
+      const activeSuperAdminCount = await this.prisma.user.count({
+        where: { systemRole: "super_admin", status: "active" },
+      });
+
+      if (activeSuperAdminCount <= 1) {
+        throw new BadRequestException("必须保留至少一位正常状态的最高管理员");
+      }
     }
 
     if (input.password) {
@@ -528,7 +552,11 @@ export class UsersService {
       where: { id: actorUserId },
     });
 
-    if (actor?.systemRole !== "admin" || actor.status !== "active") {
+    if (
+      !actor ||
+      !isSystemAdmin(actor.systemRole) ||
+      actor.status !== "active"
+    ) {
       throw new ForbiddenException("Only admins can manage users");
     }
 

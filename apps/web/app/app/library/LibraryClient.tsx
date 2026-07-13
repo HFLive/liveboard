@@ -171,16 +171,6 @@ export function LibraryClient() {
           <h1>素材库</h1>
           <p className="muted">集中上传、检索和复用图片与附件资源。</p>
         </div>
-        <div className="page-toolbar">
-          <button
-            className="button"
-            onClick={() => setShowUploadModal(true)}
-            type="button"
-          >
-            <Upload aria-hidden="true" className="button-icon" />
-            上传文件
-          </button>
-        </div>
       </header>
 
       {error ? <p className="error-text">{error}</p> : null}
@@ -211,6 +201,14 @@ export function LibraryClient() {
               />
             </label>
             <div className="toolbar-row">
+              <button
+                className="button"
+                onClick={() => setShowUploadModal(true)}
+                type="button"
+              >
+                <Upload aria-hidden="true" className="button-icon" />
+                上传文件
+              </button>
               <select
                 className="select compact-select"
                 value={kindFilter}

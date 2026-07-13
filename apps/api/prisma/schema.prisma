@@ -8,6 +8,7 @@ datasource db {
 }
 
 enum SystemRole {
+  super_admin
   admin
   member
 }

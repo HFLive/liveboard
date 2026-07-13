@@ -1,4 +1,4 @@
-export type SystemRole = "admin" | "member";
+export type SystemRole = "super_admin" | "admin" | "member";
 
 export type PermissionLevel =
   "owner" | "editor" | "lecturer" | "viewer" | "no_access";

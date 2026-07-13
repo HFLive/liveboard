@@ -826,6 +826,12 @@ export function FileEditor({ fileId }: { fileId: string }) {
             </span>
           </div>
         </div>
+      </section>
+
+      {error ? <p className="error-text">{error}</p> : null}
+      {message ? <p className="success-text">{message}</p> : null}
+
+      <section className="editor-action-bar" aria-label="文件操作">
         <div className="button-row">
           <Link className="button secondary" href={contentPresentation(fileId)}>
             <BookOpen aria-hidden="true" className="button-icon" />
@@ -895,9 +901,6 @@ export function FileEditor({ fileId }: { fileId: string }) {
           </details>
         </div>
       </section>
-
-      {error ? <p className="error-text">{error}</p> : null}
-      {message ? <p className="success-text">{message}</p> : null}
 
       <section className="editor-workspace">
         <div className="editor-document-shell">

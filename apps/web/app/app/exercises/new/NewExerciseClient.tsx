@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  ArrowLeft,
   ArrowDown,
   ArrowUp,
   Check,
@@ -345,15 +346,16 @@ export function NewExerciseClient() {
 
   return (
     <div className="workspace quiz-builder-page">
+      <Link className="page-back-link" href={APP_ROUTES.exercises}>
+        <ArrowLeft aria-hidden="true" />
+        返回测验列表
+      </Link>
       <section className="page-head">
         <div>
           <p className="page-eyebrow">在线测验</p>
           <h1>创建测验</h1>
           <p className="muted">设置开放规则，然后逐题添加内容。</p>
         </div>
-        <Link className="button secondary" href={APP_ROUTES.exercises}>
-          返回测验列表
-        </Link>
       </section>
 
       {error ? (

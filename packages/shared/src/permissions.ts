@@ -1,4 +1,12 @@
-import type { PermissionLevel } from "./types";
+import type { PermissionLevel, SystemRole } from "./types";
+
+export function isSystemAdmin(role: SystemRole): boolean {
+  return role === "super_admin" || role === "admin";
+}
+
+export function isSuperAdmin(role: SystemRole): boolean {
+  return role === "super_admin";
+}
 
 const writeLevels = new Set<PermissionLevel>(["owner", "editor"]);
 

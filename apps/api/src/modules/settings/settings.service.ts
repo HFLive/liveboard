@@ -5,6 +5,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
+import { isSuperAdmin } from "@liveboard/shared";
 import { PrismaService } from "../prisma/prisma.service";
 
 export interface UpdateSystemSettingsInput {
@@ -57,8 +58,10 @@ export class SettingsService {
       where: { id: userId },
     });
 
-    if (user?.systemRole !== "admin" || user.status !== "active") {
-      throw new ForbiddenException("Only admins can manage system settings");
+    if (!user || !isSuperAdmin(user.systemRole) || user.status !== "active") {
+      throw new ForbiddenException(
+        "Only super administrators can manage system settings",
+      );
     }
   }
 

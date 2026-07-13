@@ -45,7 +45,7 @@ export function AppNav() {
     ? displayName.trim().slice(0, 1).toUpperCase() || "L"
     : "…";
   const visibleNavItems =
-    user?.systemRole === "admin"
+    user && ["super_admin", "admin"].includes(user.systemRole)
       ? navItems
       : navItems.filter((item) => item.href !== APP_ROUTES.admin);
 

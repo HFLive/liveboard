@@ -5,7 +5,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { canEdit, canView } from "@liveboard/shared";
+import { canEdit, canView, isSystemAdmin } from "@liveboard/shared";
 import type { FileSummary, FolderNode } from "@liveboard/shared";
 import type { FileStatus, FileType } from "@liveboard/shared";
 import type { ContentBlockType } from "@liveboard/shared";
@@ -729,16 +729,6 @@ export class FilesService {
   }
 
   private async resolveOwnerGroupId(userId: string, workspaceId: string) {
-    const membership = await this.prisma.permissionGroupMember.findFirst({
-      where: { userId, group: { workspaceId } },
-      orderBy: [{ createdAt: "asc" }],
-      select: { groupId: true },
-    });
-
-    if (membership) {
-      return membership.groupId;
-    }
-
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { systemRole: true },
@@ -748,36 +738,21 @@ export class FilesService {
       throw new UnauthorizedException("Missing session");
     }
 
-    if (user.systemRole !== "admin") {
+    if (isSystemAdmin(user.systemRole)) {
+      return null;
+    }
+
+    const membership = await this.prisma.permissionGroupMember.findFirst({
+      where: { userId, group: { workspaceId } },
+      orderBy: [{ createdAt: "asc" }],
+      select: { groupId: true },
+    });
+
+    if (!membership) {
       throw new ForbiddenException("请先将成员加入权限组，再创建顶层位置");
     }
 
-    let group = await this.prisma.permissionGroup.findFirst({
-      where: {
-        workspaceId,
-        name: "管理员",
-      },
-      select: { id: true },
-    });
-
-    if (!group) {
-      group = await this.prisma.permissionGroup.create({
-        data: {
-          workspaceId,
-          name: "管理员",
-          createdById: userId,
-        },
-        select: { id: true },
-      });
-    }
-
-    await this.prisma.permissionGroupMember.upsert({
-      where: { groupId_userId: { groupId: group.id, userId } },
-      update: {},
-      create: { groupId: group.id, userId },
-    });
-
-    return group.id;
+    return membership.groupId;
   }
 
   private toSummary(file: {

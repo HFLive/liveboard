@@ -139,7 +139,7 @@ export function SystemSettingsClient() {
   }
 
   return (
-    <div className="workspace">
+    <div className="workspace system-settings-page">
       <header className="page-head">
         <div>
           <p className="page-eyebrow">管理中心</p>
@@ -154,7 +154,10 @@ export function SystemSettingsClient() {
       {message ? <p className="success-text">{message}</p> : null}
 
       <section className="workbench ai-settings-layout system-settings-layout">
-        <form className="workbench-main form" onSubmit={onSubmit}>
+        <form
+          className="workbench-main form system-settings-form"
+          onSubmit={onSubmit}
+        >
           <div className="panel-head">
             <div>
               <h2>
@@ -168,24 +171,28 @@ export function SystemSettingsClient() {
           </div>
 
           <div className="timezone-setting-card">
-            <div className="timezone-quick-list" aria-label="常用时区">
-              {quickTimeZones.map((option) => (
-                <button
-                  className={`timezone-chip ${
-                    timeZone === option.value ? "active" : ""
-                  }`}
-                  key={option.value}
-                  onClick={() => setTimeZone(option.value)}
-                  type="button"
-                >
-                  <span>{option.label}</span>
-                  <small>{getTimeZoneOffset(option.value)}</small>
-                </button>
-              ))}
+            <div className="timezone-field-group">
+              <span className="timezone-field-label">常用时区</span>
+              <div className="timezone-quick-list" aria-label="常用时区">
+                {quickTimeZones.map((option) => (
+                  <button
+                    aria-pressed={timeZone === option.value}
+                    className={`timezone-chip ${
+                      timeZone === option.value ? "active" : ""
+                    }`}
+                    key={option.value}
+                    onClick={() => setTimeZone(option.value)}
+                    type="button"
+                  >
+                    <span>{option.label}</span>
+                    <small>{getTimeZoneOffset(option.value)}</small>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <label>
-              <span>完整时区列表</span>
+            <label className="timezone-field-group">
+              <span className="timezone-field-label">全部时区</span>
               <select
                 className="select timezone-select"
                 onChange={(event) => setTimeZone(event.target.value)}
@@ -208,7 +215,8 @@ export function SystemSettingsClient() {
             <Clock aria-hidden="true" />
           </div>
 
-          <div className="button-row">
+          <div className="system-settings-actions">
+            <p className="muted">保存后，全站的新页面将使用所选时区。</p>
             <button className="button" type="submit">
               <Save aria-hidden="true" className="button-icon" />
               保存设置

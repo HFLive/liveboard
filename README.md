@@ -45,7 +45,7 @@ pnpm install
 cp .env.example .env
 pnpm infra:up
 pnpm db:generate
-pnpm db:sync
+pnpm db:migrate
 pnpm db:seed
 pnpm dev
 ```
@@ -66,7 +66,7 @@ pnpm dev
 
 | 账号       | 密码                 | 用途       |
 | ---------- | -------------------- | ---------- |
-| `admin`    | `liveboard-admin`    | 管理员     |
+| `admin`    | `liveboard-admin`    | 最高管理员 |
 | `author`   | `liveboard-author`   | 内容维护   |
 | `lecturer` | `liveboard-lecturer` | 授课与批阅 |
 | `learner`  | `liveboard-learner`  | 学习与提交 |
@@ -81,6 +81,18 @@ pnpm dev
 docker compose up --build -d
 docker compose ps
 ```
+
+`migrate` 容器会在 API 启动前执行 `prisma migrate deploy`。首次部署会执行完整的初始 migration，此后只执行尚未应用的增量 migration。迁移失败时 API 和 Web 不会启动。
+
+生产服务器更新推荐使用：
+
+```bash
+pnpm deploy:prod
+```
+
+部署脚本会先检查 `.env` 中的 PostgreSQL、MinIO 和会话密钥，拒绝默认值、空值和过短密钥；同时拒绝带有未提交改动的工作区。检查通过后依次完成 PostgreSQL 备份、`git pull --ff-only`、镜像构建、数据库迁移、服务启动和 API 健康检查。备份默认写入不会被 Git 跟踪的 `backups/`，可通过 `BACKUP_DIR` 修改位置。
+
+> 数据库备份不包含 MinIO 上传文件。生产环境还应对 `minio-data` 配置独立的对象存储备份或快照。
 
 停止全部容器：
 
@@ -98,10 +110,11 @@ pnpm dev:web      # 只启动 Web
 pnpm dev:api      # 只启动 API
 pnpm infra:up     # 启动 PostgreSQL、Redis、MinIO
 pnpm infra:down   # 停止 Compose 服务
+pnpm deploy:prod  # 备份、更新并发布生产版本
 
 pnpm db:generate  # 生成 Prisma Client
-pnpm db:sync      # 本地同步数据库结构
 pnpm db:migrate   # 创建并执行 Prisma migration
+pnpm db:reset     # 重建本地测试数据库并重放 migrations
 pnpm db:seed      # 写入本地演示数据
 
 pnpm format       # 格式化代码
@@ -141,7 +154,7 @@ liveboard/
 
 ## 权限模型
 
-系统角色只有 `admin` 和 `member`。具体资源权限通过权限组授予：
+系统角色分为 `super_admin`、`admin` 和 `member`。最高管理员拥有全站权限，管理员负责内容与成员管理，普通用户的具体资源权限通过权限组授予：
 
 | 权限        | 能力               |
 | ----------- | ------------------ |
@@ -162,6 +175,9 @@ liveboard/
 | `WEB_ORIGIN`                     | 允许携带凭据访问 API 的前端来源 |
 | `NEXT_PUBLIC_API_URL`            | 浏览器访问 API 的公开地址       |
 | `DATABASE_URL`                   | PostgreSQL 连接地址             |
+| `POSTGRES_DB`                    | PostgreSQL 数据库名             |
+| `POSTGRES_USER`                  | PostgreSQL 用户名               |
+| `POSTGRES_PASSWORD`              | PostgreSQL 密码                 |
 | `REDIS_URL`                      | Redis 连接地址                  |
 | `SESSION_SECRET`                 | 会话签名密钥                    |
 | `MINIO_*`                        | MinIO 地址、凭据和 bucket       |
@@ -175,9 +191,9 @@ liveboard/
 - 替换 PostgreSQL、MinIO 和演示账号默认密码。
 - 关闭登录页演示账号提示并重新构建 Web。
 - 使用 HTTPS，避免直接向公网开放数据库、Redis、MinIO 和 API 管理端口。
-- 配置数据库、对象存储和运行时配置的备份。
+- 使用 `pnpm deploy:prod` 在更新前生成数据库备份，并为 MinIO 配置独立备份。
 - 为登录、上传和 AI 接口配置网关限流。
-- 使用 `pnpm db:migrate` 管理正式数据库结构变更。
+- 所有 schema 变更都提交 Prisma migration；生产环境由 `migrate` 服务自动执行 `prisma migrate deploy`，不使用 `db push`。
 
 ## 参与开发
 

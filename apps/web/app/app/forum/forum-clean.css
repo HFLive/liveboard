@@ -97,7 +97,7 @@
 
 .forum-home .forum-feed-toolbar {
   display: grid;
-  grid-template-columns: auto minmax(260px, 1fr) auto auto;
+  grid-template-columns: auto minmax(240px, 1fr) auto auto auto;
   align-items: center;
   gap: 12px;
   min-height: 50px;
@@ -162,6 +162,11 @@
   background: transparent;
   padding: 0 22px 0 4px;
   font-size: 12px;
+}
+
+.forum-home .forum-create-action {
+  min-height: 34px;
+  white-space: nowrap;
 }
 
 .forum-home .forum-thread-list {
@@ -460,7 +465,7 @@
 
 @media (max-width: 980px) {
   .forum-home .forum-feed-toolbar {
-    grid-template-columns: auto minmax(220px, 1fr) auto;
+    grid-template-columns: auto minmax(220px, 1fr) auto auto;
   }
 
   .forum-home .forum-status-filter {
@@ -470,6 +475,10 @@
 
   .forum-home .forum-sort-control {
     grid-column: 3;
+  }
+
+  .forum-home .forum-create-action {
+    grid-column: 4;
   }
 }
 
@@ -502,6 +511,13 @@
   .forum-home .forum-sort-control {
     grid-column: 2;
     grid-row: 1;
+  }
+
+  .forum-home .forum-create-action {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    justify-content: center;
+    width: 100%;
   }
 
   .forum-home .forum-topic {

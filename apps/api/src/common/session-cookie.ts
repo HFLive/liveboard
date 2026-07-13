@@ -1,7 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 const SESSION_COOKIE_VERSION = "v2";
-const LEGACY_SESSION_COOKIE_VERSION = "v1";
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_DEV_SECRET = "liveboard-dev-session-secret";
 
@@ -40,13 +39,6 @@ export function verifySessionCookieValue(
   const parts = value.split(".");
   const [version, userId] = parts;
 
-  if (
-    process.env.NODE_ENV !== "production" &&
-    version === LEGACY_SESSION_COOKIE_VERSION
-  ) {
-    return verifyLegacySession(parts);
-  }
-
   const expiresAt = Number(parts[2]);
   const signature = parts[3];
 
@@ -62,17 +54,6 @@ export function verifySessionCookieValue(
   }
 
   const payload = `${version}.${userId}.${expiresAt}`;
-  return hasValidSignature(payload, signature) ? userId : null;
-}
-
-function verifyLegacySession(parts: string[]) {
-  const [version, userId, signature] = parts;
-
-  if (parts.length !== 3 || !version || !userId || !signature) {
-    return null;
-  }
-
-  const payload = `${version}.${userId}`;
   return hasValidSignature(payload, signature) ? userId : null;
 }
 

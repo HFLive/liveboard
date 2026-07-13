@@ -42,7 +42,6 @@ export function PermissionGroupsClient() {
   const selectedGroup =
     groups.find((group) => group.id === selectedGroupId) ?? groups[0] ?? null;
   const selectedMembers = selectedGroup?.members ?? [];
-  const isAdminGroup = selectedGroup?.name === "管理员";
   const groupMemberUserIds = useMemo(
     () =>
       new Set(selectedGroup?.members?.map((member) => member.user.id) ?? []),
@@ -234,16 +233,6 @@ export function PermissionGroupsClient() {
           <h1>权限组</h1>
           <p className="muted">按职责组织成员，供内容授权时直接选择。</p>
         </div>
-        <div className="page-toolbar">
-          <button
-            className="button"
-            onClick={() => setShowCreateModal(true)}
-            type="button"
-          >
-            <Plus aria-hidden="true" className="button-icon" />
-            新建权限组
-          </button>
-        </div>
       </header>
 
       <AdminSubnav />
@@ -254,6 +243,17 @@ export function PermissionGroupsClient() {
       <section className="workbench permission-groups-layout">
         <aside className="workbench-side sticky-panel">
           <section className="action-panel permission-group-list-panel">
+            <div className="panel-title-row">
+              <h2>权限组列表</h2>
+              <button
+                className="button secondary"
+                onClick={() => setShowCreateModal(true)}
+                type="button"
+              >
+                <Plus aria-hidden="true" className="button-icon" />
+                新建权限组
+              </button>
+            </div>
             <div className="permission-group-search">
               <Search aria-hidden="true" />
               <input
@@ -385,15 +385,8 @@ export function PermissionGroupsClient() {
                         </span>
                         <button
                           className="inline-icon-button"
-                          disabled={
-                            isAdminGroup && member.user.systemRole === "admin"
-                          }
                           onClick={() => void onRemoveMember(member.user.id)}
-                          title={
-                            isAdminGroup && member.user.systemRole === "admin"
-                              ? "管理员账号不能移出管理员权限组"
-                              : "移出权限组"
-                          }
+                          title="移出权限组"
                           type="button"
                         >
                           <X aria-hidden="true" />
@@ -450,12 +443,6 @@ export function PermissionGroupsClient() {
                   <div className="permission-group-danger-row">
                     <button
                       className="button danger permission-group-delete"
-                      disabled={
-                        isAdminGroup &&
-                        selectedMembers.some(
-                          (member) => member.user.systemRole === "admin",
-                        )
-                      }
                       onClick={onDeleteGroup}
                       type="button"
                     >

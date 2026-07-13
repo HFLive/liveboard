@@ -30,6 +30,7 @@ export function setAppTimeZone(timeZone: string) {
 
 export function roleLabel(role: SystemRole) {
   const labels: Record<SystemRole, string> = {
+    super_admin: "最高管理员",
     admin: "管理员",
     member: "普通成员",
   };

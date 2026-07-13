@@ -3,12 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "scripts": {
     "dev": "pnpm --filter @liveboard/shared build && pnpm --parallel --filter @liveboard/web --filter @liveboard/api dev",
     "dev:web": "pnpm --filter @liveboard/shared build && pnpm --filter @liveboard/web dev",
     "dev:api": "pnpm --filter @liveboard/shared build && pnpm --filter @liveboard/api dev",
     "infra:up": "docker compose up -d postgres redis minio",
     "infra:down": "docker compose down",
+    "deploy:prod": "sh scripts/deploy.sh",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
@@ -18,7 +22,7 @@
     "validate": "pnpm format:check && pnpm typecheck && pnpm test && pnpm build",
     "db:generate": "pnpm --filter @liveboard/api db:generate",
     "db:migrate": "pnpm --filter @liveboard/api db:migrate",
-    "db:sync": "pnpm --filter @liveboard/api db:sync",
+    "db:reset": "pnpm --filter @liveboard/api db:reset",
     "db:seed": "pnpm --filter @liveboard/api db:seed"
   },
   "devDependencies": {

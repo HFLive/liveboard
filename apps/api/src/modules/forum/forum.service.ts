@@ -13,6 +13,7 @@ import type {
   ForumThreadSummary,
   UserSummary,
 } from "@liveboard/shared";
+import { isSystemAdmin } from "@liveboard/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import type {
   CreateForumCategoryDto,
@@ -99,7 +100,7 @@ export class ForumService {
 
   async listOverview(userId: string | null) {
     const user = await this.requireActiveUser(userId);
-    const isAdmin = user.systemRole === "admin";
+    const isAdmin = isSystemAdmin(user.systemRole);
     const workspace = await this.getDefaultWorkspace();
     await this.ensureDefaultCategories(workspace.id);
 
@@ -178,7 +179,7 @@ export class ForumService {
 
     if (
       !thread ||
-      (thread.status === "archived" && user.systemRole !== "admin")
+      (thread.status === "archived" && !isSystemAdmin(user.systemRole))
     ) {
       throw new NotFoundException("Forum thread not found");
     }
@@ -308,7 +309,7 @@ export class ForumService {
 
     return this.toPostSummary(post, {
       userId: user.id,
-      isAdmin: user.systemRole === "admin",
+      isAdmin: isSystemAdmin(user.systemRole),
       threadAuthorId: thread.authorId,
       threadStatus: thread.status,
     });
@@ -326,12 +327,12 @@ export class ForumService {
 
     if (
       !existing ||
-      (existing.status === "archived" && user.systemRole !== "admin")
+      (existing.status === "archived" && !isSystemAdmin(user.systemRole))
     ) {
       throw new NotFoundException("Forum thread not found");
     }
 
-    const isAdmin = user.systemRole === "admin";
+    const isAdmin = isSystemAdmin(user.systemRole);
     const isAuthor = existing.authorId === user.id;
 
     if (!isAdmin && !isAuthor) {
@@ -410,7 +411,7 @@ export class ForumService {
       throw new NotFoundException("Forum thread not found");
     }
 
-    if (thread.authorId !== user.id && user.systemRole !== "admin") {
+    if (thread.authorId !== user.id && !isSystemAdmin(user.systemRole)) {
       throw new ForbiddenException("No permission to archive thread");
     }
 
@@ -434,7 +435,7 @@ export class ForumService {
       include: { thread: true },
     });
 
-    const isAdmin = user.systemRole === "admin";
+    const isAdmin = isSystemAdmin(user.systemRole);
 
     if (!post || (post.thread.status === "archived" && !isAdmin)) {
       throw new NotFoundException("Forum post not found");
@@ -478,7 +479,7 @@ export class ForumService {
       },
     });
 
-    const isAdmin = user.systemRole === "admin";
+    const isAdmin = isSystemAdmin(user.systemRole);
 
     if (!post || (post.thread.status === "archived" && !isAdmin)) {
       throw new NotFoundException("Forum post not found");
@@ -686,7 +687,7 @@ export class ForumService {
   private async requireAdmin(userId: string | null) {
     const user = await this.requireActiveUser(userId);
 
-    if (user.systemRole !== "admin") {
+    if (!isSystemAdmin(user.systemRole)) {
       throw new ForbiddenException("Only admins can manage forum settings");
     }
 
@@ -772,7 +773,7 @@ export class ForumService {
     },
     user: ForumUserRecord,
   ): ForumThreadDetail {
-    const isAdmin = user.systemRole === "admin";
+    const isAdmin = isSystemAdmin(user.systemRole);
     const canEdit =
       isAdmin || (thread.author.id === user.id && thread.status === "open");
     const canArchive =
