@@ -10,7 +10,6 @@ import type {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  BookOpen,
   GripVertical,
   Image,
   Link2,
@@ -59,7 +58,7 @@ import {
   fileTypeLabel,
   permissionLabel,
 } from "@/lib/labels";
-import { APP_ROUTES, contentPresentation } from "@/lib/routes";
+import { APP_ROUTES } from "@/lib/routes";
 
 const blockShortcuts: Array<{ command: string; type: ContentBlockType }> = [
   { command: "/h1", type: "heading_1" },
@@ -833,10 +832,6 @@ export function FileEditor({ fileId }: { fileId: string }) {
 
       <section className="editor-action-bar" aria-label="文件操作">
         <div className="button-row">
-          <Link className="button secondary" href={contentPresentation(fileId)}>
-            <BookOpen aria-hidden="true" className="button-icon" />
-            授课模式
-          </Link>
           <button
             className="button secondary"
             onClick={() => setShowAssetModal(true)}

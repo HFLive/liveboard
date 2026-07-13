@@ -637,7 +637,7 @@ export function ContentClient() {
       <header className="page-head">
         <div>
           <p className="page-eyebrow">内容工作区</p>
-          <h1>课程内容</h1>
+          <h1>内容</h1>
           <p className="muted">
             按文件夹组织教学内容，并管理文件权限与授课入口。
           </p>
