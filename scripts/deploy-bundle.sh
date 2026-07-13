@@ -11,8 +11,9 @@ HEALTH_URL=${HEALTH_URL:-"http://127.0.0.1:4000/health"}
 COMPOSE_FILE="$BUNDLE_DIR/docker-compose.yml"
 IMAGES_FILE="$BUNDLE_DIR/images.tar.gz"
 MANIFEST_FILE="$BUNDLE_DIR/manifest.txt"
+NGINX_FILE="$BUNDLE_DIR/nginx.conf"
 
-for command in docker curl sha256sum gzip; do
+for command in docker curl sha256sum gzip od; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "缺少部署依赖：$command" >&2
     exit 1
@@ -32,7 +33,7 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
-for file in "$COMPOSE_FILE" "$IMAGES_FILE" "$MANIFEST_FILE" "$BUNDLE_DIR/SHA256SUMS" "$BUNDLE_DIR/.env.example"; do
+for file in "$COMPOSE_FILE" "$IMAGES_FILE" "$MANIFEST_FILE" "$NGINX_FILE" "$BUNDLE_DIR/SHA256SUMS" "$BUNDLE_DIR/.env.example"; do
   if [ ! -f "$file" ]; then
     echo "发布包不完整，缺少：$file" >&2
     exit 1
@@ -45,8 +46,6 @@ if [ ! -f "$ENV_FILE" ]; then
   cp "$BUNDLE_DIR/.env.example" "$ENV_FILE"
   chmod 600 "$ENV_FILE"
   echo "已创建生产配置：$ENV_FILE"
-  echo "请修改其中的域名和全部密钥，然后重新运行：sh deploy.sh" >&2
-  exit 2
 fi
 
 ln -sf "$ENV_FILE" "$BUNDLE_DIR/.env"
@@ -54,6 +53,48 @@ ln -sf "$ENV_FILE" "$BUNDLE_DIR/.env"
 read_env_value() {
   awk -F= -v key="$1" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$ENV_FILE"
 }
+
+write_env_value() {
+  key=$1
+  value=$2
+  temporary="$ENV_FILE.tmp"
+
+  awk -F= -v key="$key" -v value="$value" '
+    BEGIN { found = 0 }
+    $1 == key { print key "=" value; found = 1; next }
+    { print }
+    END { if (!found) print key "=" value }
+  ' "$ENV_FILE" >"$temporary"
+  mv "$temporary" "$ENV_FILE"
+}
+
+generate_secret() {
+  byte_count=$1
+  od -An -N "$byte_count" -tx1 /dev/urandom | tr -d ' \n'
+}
+
+ensure_generated_secret() {
+  key=$1
+  byte_count=$2
+  value=$(read_env_value "$key")
+
+  case "$value" in
+    "" | liveboard | liveboard-admin | replace-with-*)
+      write_env_value "$key" "$(generate_secret "$byte_count")"
+      echo "已自动生成 ${key}。"
+      ;;
+  esac
+}
+
+ensure_generated_secret POSTGRES_PASSWORD 24
+ensure_generated_secret MINIO_ROOT_PASSWORD 24
+ensure_generated_secret SESSION_SECRET 32
+
+POSTGRES_PASSWORD=$(read_env_value POSTGRES_PASSWORD)
+POSTGRES_USER=$(read_env_value POSTGRES_USER)
+POSTGRES_DB=$(read_env_value POSTGRES_DB)
+write_env_value DATABASE_URL "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
+chmod 600 "$ENV_FILE"
 
 require_secret() {
   key=$1
@@ -76,16 +117,6 @@ require_secret() {
 require_secret POSTGRES_PASSWORD 16
 require_secret MINIO_ROOT_PASSWORD 16
 require_secret SESSION_SECRET 32
-
-for key in API_PUBLIC_URL WEB_ORIGIN; do
-  value=$(read_env_value "$key")
-  case "$value" in
-    "" | *example.com*)
-      echo "$ENV_FILE 中的 $key 尚未配置为实际访问地址。" >&2
-      exit 1
-      ;;
-  esac
-done
 
 if [ "$(read_env_value NODE_ENV)" != "production" ]; then
   echo "$ENV_FILE 中的 NODE_ENV 必须为 production。" >&2
@@ -169,8 +200,9 @@ if [ -z "$VERSION" ]; then
 fi
 
 printf '%s\n' "$VERSION" >"$STATE_DIR/releases/current"
+ln -sfn "$BUNDLE_DIR" "$STATE_DIR/releases/active"
 compose ps
 echo "发布部署完成：$VERSION"
 echo "数据库备份：$BACKUP_FILE"
 echo "发布清单：$MANIFEST_FILE"
-echo "首次安装还需执行：docker compose --project-name liveboard --project-directory $BUNDLE_DIR --file $COMPOSE_FILE exec api node prisma/seed.cjs"
+echo "首次安装还需执行：docker compose --project-name liveboard --project-directory $STATE_DIR/releases/active --file $STATE_DIR/releases/active/docker-compose.yml exec api node prisma/seed.cjs"

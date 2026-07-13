@@ -47,37 +47,6 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ ! -f .env ]; then
-  echo "缺少生产环境配置文件：.env" >&2
-  exit 1
-fi
-
-read_env_value() {
-  awk -F= -v key="$1" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' .env
-}
-
-require_secret() {
-  key=$1
-  minimum_length=$2
-  value=$(read_env_value "$key")
-
-  case "$value" in
-    "" | liveboard | liveboard-admin | replace-with-*)
-      echo ".env 中的 $key 尚未配置为安全值。" >&2
-      exit 1
-      ;;
-  esac
-
-  if [ "${#value}" -lt "$minimum_length" ]; then
-    echo ".env 中的 $key 长度不足，至少需要 $minimum_length 个字符。" >&2
-    exit 1
-  fi
-}
-
-require_secret POSTGRES_PASSWORD 16
-require_secret MINIO_ROOT_PASSWORD 16
-require_secret SESSION_SECRET 32
-
 BUNDLE_ASSET="liveboard-${VERSION}-linux-amd64.tar.gz"
 ASSET="liveboard-${VERSION}-linux-amd64-images.tar.gz"
 COMPOSE_ASSET="liveboard-${VERSION}-compose.yml"
@@ -128,6 +97,38 @@ if download_asset "$BUNDLE_ASSET"; then
 fi
 
 echo "未找到单文件发布包，按 v0.1.0 兼容格式继续部署..."
+
+if [ ! -f .env ]; then
+  echo "v0.1.0 兼容部署需要生产环境配置文件：.env" >&2
+  exit 1
+fi
+
+read_env_value() {
+  awk -F= -v key="$1" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' .env
+}
+
+require_secret() {
+  key=$1
+  minimum_length=$2
+  value=$(read_env_value "$key")
+
+  case "$value" in
+    "" | liveboard | liveboard-admin | replace-with-*)
+      echo ".env 中的 $key 尚未配置为安全值。" >&2
+      exit 1
+      ;;
+  esac
+
+  if [ "${#value}" -lt "$minimum_length" ]; then
+    echo ".env 中的 $key 长度不足，至少需要 $minimum_length 个字符。" >&2
+    exit 1
+  fi
+}
+
+require_secret POSTGRES_PASSWORD 16
+require_secret MINIO_ROOT_PASSWORD 16
+require_secret SESSION_SECRET 32
+
 download_asset SHA256SUMS
 download_asset "$ASSET"
 download_asset "$COMPOSE_ASSET"

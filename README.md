@@ -84,7 +84,7 @@ docker compose ps
 
 `migrate` 容器会在 API 启动前执行 `prisma migrate deploy`。首次部署会执行完整的初始 migration，此后只执行尚未应用的增量 migration。迁移失败时 API 和 Web 不会启动。
 
-Compose 发布到宿主机的端口仅绑定 `127.0.0.1`。生产环境应由宿主机 Nginx、Caddy 或其他网关将公网 HTTPS 请求转发到 Web `127.0.0.1:3000` 和 API `127.0.0.1:4000`，不得直接向公网开放 PostgreSQL、Redis、MinIO、API 或 Web 容器端口。使用同一域名的 `/api/` 反向代理时，将 `NEXT_PUBLIC_API_URL` 设置为 `https://example.com/api`；该变量会在 Web 镜像构建时写入浏览器端代码，修改后必须重新构建 Web 镜像。
+Compose 发布到宿主机的端口仅绑定 `127.0.0.1`。生产环境应由宿主机 Nginx、Caddy 或其他网关反向代理 Web `127.0.0.1:3000` 和 API `127.0.0.1:4000`，不得直接向公网开放 PostgreSQL、Redis、MinIO、API 或 Web 容器端口。Release 镜像使用相对 `/api`，默认可配合包内 Nginx 配置通过服务器 IP 访问。
 
 生产服务器更新推荐使用：
 
@@ -110,26 +110,28 @@ pnpm deploy:prod
 ```bash
 git switch main
 git pull --ff-only
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.1.2
+git push origin v0.1.2
 ```
 
 等待 GitHub Actions 中的 `Release` 工作流成功，并确认对应 Release 只有一个 Linux AMD64 压缩包。
 
 #### 电脑下载后上传到服务器
 
-可以直接在浏览器打开 GitHub Release 页面下载 `liveboard-v0.1.1-linux-amd64.tar.gz`，也可以在电脑的仓库目录执行：
+完整的 Ubuntu 24.04 安装、安全组、上传、启动和升级步骤见 [Ubuntu 24.04 单文件部署教程](./docs/deploy-ubuntu-24.04.md)。
+
+可以直接在浏览器打开 GitHub Release 页面下载 `liveboard-v0.1.2-linux-amd64.tar.gz`，也可以在电脑的仓库目录执行：
 
 ```bash
-gh release download v0.1.1 \
-  --pattern 'liveboard-v0.1.1-linux-amd64.tar.gz' \
-  --dir ~/Downloads/liveboard-v0.1.1
+gh release download v0.1.2 \
+  --pattern 'liveboard-v0.1.2-linux-amd64.tar.gz' \
+  --dir ~/Downloads/liveboard-v0.1.2
 ```
 
 电脑只需向服务器上传这一个文件：
 
 ```bash
-scp ~/Downloads/liveboard-v0.1.1/liveboard-v0.1.1-linux-amd64.tar.gz \
+scp ~/Downloads/liveboard-v0.1.2/liveboard-v0.1.2-linux-amd64.tar.gz \
   root@服务器IP:/opt/
 ```
 
@@ -137,16 +139,21 @@ scp ~/Downloads/liveboard-v0.1.1/liveboard-v0.1.1-linux-amd64.tar.gz \
 
 ```bash
 cd /opt
-tar -xzf liveboard-v0.1.1-linux-amd64.tar.gz
-cd liveboard-v0.1.1-linux-amd64
+tar -xzf liveboard-v0.1.2-linux-amd64.tar.gz
+cd liveboard-v0.1.2-linux-amd64
 sh deploy.sh
 ```
 
-第一次运行会根据包内的生产配置模板创建 `/opt/liveboard/.env` 并停止部署。编辑其中的域名、数据库密码、MinIO 密码和 `SESSION_SECRET`，确认所有 `example.com` 和 `replace-with-*` 默认值均已替换，然后再次运行：
+第一次运行会自动创建 `/opt/liveboard/.env`，并使用 `/dev/urandom` 生成 PostgreSQL 密码、MinIO 密码和 `SESSION_SECRET`。随机值不会输出到终端，配置文件权限为 `600`；用户不需要手工填写密钥或域名，也不需要重复运行部署命令。
+
+使用服务器 IP 访问时，安装并启用包内 Nginx 配置：
 
 ```bash
-nano /opt/liveboard/.env
-sh deploy.sh
+cp nginx.conf /etc/nginx/sites-available/liveboard
+ln -sfn /etc/nginx/sites-available/liveboard /etc/nginx/sites-enabled/liveboard
+rm -f /etc/nginx/sites-enabled/default
+nginx -t
+systemctl reload nginx
 ```
 
 以后升级只需下载并上传新版本的单个压缩包，解压后运行其中的 `deploy.sh`。生产配置、数据库卷和备份继续保存在稳定位置，不会因解压到新的版本目录而丢失。
@@ -158,7 +165,7 @@ sh deploy.sh
 ```bash
 cd /opt/liveboard
 git pull --ff-only
-sh scripts/deploy-release.sh v0.1.1
+sh scripts/deploy-release.sh v0.1.2
 ```
 
 两种方式都会校验包内文件，导入镜像，启动基础设施，备份 PostgreSQL，执行 Prisma migration，更新 API 与 Web，并等待健康检查。数据库备份默认保存在 `/opt/liveboard/backups/`，当前成功版本记录在 `/opt/liveboard/releases/current`。
@@ -168,8 +175,8 @@ sh scripts/deploy-release.sh v0.1.1
 ```bash
 docker compose \
   --project-name liveboard \
-  --project-directory /opt/liveboard-v0.1.1-linux-amd64 \
-  --file /opt/liveboard-v0.1.1-linux-amd64/docker-compose.yml \
+  --project-directory /opt/liveboard/releases/active \
+  --file /opt/liveboard/releases/active/docker-compose.yml \
   exec api node prisma/seed.cjs
 ```
 
@@ -201,7 +208,7 @@ pnpm infra:up     # 启动 PostgreSQL、Redis、MinIO
 pnpm infra:down   # 停止 Compose 服务
 pnpm deploy:prod  # 备份、更新并发布生产版本
 
-sh scripts/deploy-release.sh v0.1.1  # 从 GitHub Release 单文件离线包部署
+sh scripts/deploy-release.sh v0.1.2  # 从 GitHub Release 单文件离线包部署
 
 pnpm db:generate  # 生成 Prisma Client
 pnpm db:migrate   # 创建并执行 Prisma migration
@@ -225,6 +232,7 @@ liveboard/
 ├── packages/
 │   └── shared/              # 前后端共享类型、权限和评分逻辑
 ├── infra/nginx/             # Nginx 示例配置
+├── docs/                    # 部署教程
 ├── docker-compose.yml
 ├── AGENTS.md                # Codex/开发代理工作约定与开发纪要
 └── README.md
