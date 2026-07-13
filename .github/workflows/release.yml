@@ -72,20 +72,23 @@ jobs:
         run: |
           set -euo pipefail
 
-          asset="liveboard-${GITHUB_REF_NAME}-linux-amd64-images.tar.gz"
-          compose="liveboard-${GITHUB_REF_NAME}-compose.yml"
-          manifest="liveboard-${GITHUB_REF_NAME}-manifest.txt"
+          bundle="liveboard-${GITHUB_REF_NAME}-linux-amd64"
+          asset="${bundle}.tar.gz"
+          bundle_dir="dist/${bundle}"
 
-          mkdir -p dist
+          mkdir -p "$bundle_dir"
           docker save \
             postgres:16-alpine \
             redis:7-alpine \
             minio/minio:RELEASE.2024-12-18T13-15-44Z \
             liveboard-api:local \
             liveboard-web:local \
-            | gzip -1 >"dist/${asset}"
+            | gzip -1 >"${bundle_dir}/images.tar.gz"
 
-          cp docker-compose.yml "dist/${compose}"
+          cp docker-compose.yml "${bundle_dir}/docker-compose.yml"
+          cp .env.production.example "${bundle_dir}/.env.example"
+          cp scripts/deploy-bundle.sh "${bundle_dir}/deploy.sh"
+          chmod +x "${bundle_dir}/deploy.sh"
 
           {
             echo "release=${GITHUB_REF_NAME}"
@@ -103,25 +106,28 @@ jobs:
                 --format '{{.RepoTags}} {{.Id}} {{json .RepoDigests}}' \
                 "$image"
             done
-          } >"dist/${manifest}"
+          } >"${bundle_dir}/manifest.txt"
 
           (
-            cd dist
-            sha256sum "$asset" "$compose" "$manifest" >SHA256SUMS
+            cd "$bundle_dir"
+            sha256sum images.tar.gz docker-compose.yml deploy.sh .env.example manifest.txt >SHA256SUMS
           )
 
+          tar -C dist -cf - "$bundle" | gzip -1 >"dist/${asset}"
           size=$(stat -c %s "dist/${asset}")
           if [ "$size" -ge 2147483648 ]; then
-            echo "Release image bundle must stay below GitHub's 2 GiB per-asset limit." >&2
+            echo "Release bundle must stay below GitHub's 2 GiB per-asset limit." >&2
             exit 1
           fi
+
+          rm -rf "$bundle_dir"
 
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            dist/* \
+            "dist/liveboard-${GITHUB_REF_NAME}-linux-amd64.tar.gz" \
             --verify-tag \
             --title "$GITHUB_REF_NAME" \
             --generate-notes

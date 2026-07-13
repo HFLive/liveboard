@@ -102,41 +102,83 @@ pnpm deploy:prod
 
 1. 拉取固定版本的 PostgreSQL、Redis 和 MinIO 运行镜像；
 2. 以 `NEXT_PUBLIC_API_URL=/api` 构建 Linux AMD64 的 API 与 Web 镜像；
-3. 将全部运行镜像导出为 gzip 压缩包；
-4. 附带该版本的 Compose 文件、镜像清单和 SHA256 校验文件；
-5. 创建同名 GitHub Release。
+3. 将全部运行镜像、Compose、环境变量模板、部署脚本、镜像清单和 SHA256 校验打入一个压缩包；
+4. 创建同名 GitHub Release，并只上传 `liveboard-<version>-linux-amd64.tar.gz`。
 
 首次发布前，在 GitHub 仓库的 `Settings > Actions > General > Workflow permissions` 中确认工作流拥有 `Read and write permissions`。合并待发布代码后创建标签：
 
 ```bash
 git switch main
 git pull --ff-only
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
-等待 GitHub Actions 中的 `Release` 工作流成功，并确认对应 Release 包含镜像包、Compose、manifest 和 `SHA256SUMS`。服务器只需保留 Docker Engine、Compose、Git、curl、gzip 和 sha256sum，不需要安装 Node.js 或 pnpm：
+等待 GitHub Actions 中的 `Release` 工作流成功，并确认对应 Release 只有一个 Linux AMD64 压缩包。
+
+#### 电脑下载后上传到服务器
+
+可以直接在浏览器打开 GitHub Release 页面下载 `liveboard-v0.1.1-linux-amd64.tar.gz`，也可以在电脑的仓库目录执行：
+
+```bash
+gh release download v0.1.1 \
+  --pattern 'liveboard-v0.1.1-linux-amd64.tar.gz' \
+  --dir ~/Downloads/liveboard-v0.1.1
+```
+
+电脑只需向服务器上传这一个文件：
+
+```bash
+scp ~/Downloads/liveboard-v0.1.1/liveboard-v0.1.1-linux-amd64.tar.gz \
+  root@服务器IP:/opt/
+```
+
+服务器只需安装 Docker Engine、Docker Compose 插件、curl、tar、gzip 和 sha256sum，不需要 Git、Node.js 或 pnpm，也不需要访问 Docker Hub。解压并运行：
+
+```bash
+cd /opt
+tar -xzf liveboard-v0.1.1-linux-amd64.tar.gz
+cd liveboard-v0.1.1-linux-amd64
+sh deploy.sh
+```
+
+第一次运行会根据包内的生产配置模板创建 `/opt/liveboard/.env` 并停止部署。编辑其中的域名、数据库密码、MinIO 密码和 `SESSION_SECRET`，确认所有 `example.com` 和 `replace-with-*` 默认值均已替换，然后再次运行：
+
+```bash
+nano /opt/liveboard/.env
+sh deploy.sh
+```
+
+以后升级只需下载并上传新版本的单个压缩包，解压后运行其中的 `deploy.sh`。生产配置、数据库卷和备份继续保存在稳定位置，不会因解压到新的版本目录而丢失。
+
+#### 服务器直接下载
+
+网络允许时，仍可在服务器上的仓库目录用辅助脚本下载并部署。新版本只下载一个压缩包；脚本也兼容 `v0.1.0` 的四文件格式：
 
 ```bash
 cd /opt/liveboard
 git pull --ff-only
-sh scripts/deploy-release.sh v0.1.0
+sh scripts/deploy-release.sh v0.1.1
 ```
 
-脚本会下载该版本的 Release 文件，校验 SHA256，导入镜像，启动基础设施，备份 PostgreSQL，执行 Prisma migration，更新 API 与 Web，并等待健康检查。下载文件保存在不会被 Git 跟踪的 `releases/<version>/`，当前成功版本记录在 `releases/current`。
+两种方式都会校验包内文件，导入镜像，启动基础设施，备份 PostgreSQL，执行 Prisma migration，更新 API 与 Web，并等待健康检查。数据库备份默认保存在 `/opt/liveboard/backups/`，当前成功版本记录在 `/opt/liveboard/releases/current`。
 
 首次安装仍需写入默认 workspace 和首位最高管理员：
 
 ```bash
-docker compose exec api node prisma/seed.cjs
+docker compose \
+  --project-name liveboard \
+  --project-directory /opt/liveboard-v0.1.1-linux-amd64 \
+  --file /opt/liveboard-v0.1.1-linux-amd64/docker-compose.yml \
+  exec api node prisma/seed.cjs
 ```
 
 随后立即使用 `admin / liveboard-admin` 登录并修改密码，再删除或停用其他演示账号。生产环境不得重复把 seed 当作常规部署步骤。
 
-应用回滚可以重新部署旧 Release：
+应用回滚可以重新解压并运行旧 Release 包中的 `deploy.sh`，或者在仓库部署模式下执行：
 
 ```bash
-sh scripts/deploy-release.sh v0.0.9
+sh scripts/deploy-release.sh v0.1.0
 ```
 
 每次部署都会先备份 PostgreSQL，但 Prisma migration 不会自动反向回滚；如果新版本已经执行不兼容的数据迁移，应使用经过验证的数据库恢复方案，而不是只切换旧镜像。
@@ -144,7 +186,7 @@ sh scripts/deploy-release.sh v0.0.9
 停止全部容器：
 
 ```bash
-docker compose down
+docker compose --project-name liveboard down
 ```
 
 > Docker Compose 中的 Web 使用生产构建，不支持代码热更新。开发时请仅保留基础设施容器，并使用 `pnpm dev` 启动 Web 与 API。
@@ -159,7 +201,7 @@ pnpm infra:up     # 启动 PostgreSQL、Redis、MinIO
 pnpm infra:down   # 停止 Compose 服务
 pnpm deploy:prod  # 备份、更新并发布生产版本
 
-sh scripts/deploy-release.sh v0.1.0  # 从 GitHub Release 离线镜像包部署
+sh scripts/deploy-release.sh v0.1.1  # 从 GitHub Release 单文件离线包部署
 
 pnpm db:generate  # 生成 Prisma Client
 pnpm db:migrate   # 创建并执行 Prisma migration
