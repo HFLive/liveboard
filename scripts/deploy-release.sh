@@ -27,7 +27,7 @@ case "$VERSION" in
     ;;
 esac
 
-for command in docker curl sha256sum gzip; do
+for command in docker curl sha256sum gzip tar; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "缺少部署依赖：$command" >&2
     exit 1
@@ -78,6 +78,7 @@ require_secret POSTGRES_PASSWORD 16
 require_secret MINIO_ROOT_PASSWORD 16
 require_secret SESSION_SECRET 32
 
+BUNDLE_ASSET="liveboard-${VERSION}-linux-amd64.tar.gz"
 ASSET="liveboard-${VERSION}-linux-amd64-images.tar.gz"
 COMPOSE_ASSET="liveboard-${VERSION}-compose.yml"
 MANIFEST_ASSET="liveboard-${VERSION}-manifest.txt"
@@ -94,17 +95,39 @@ download_asset() {
 
   rm -f "$temporary"
   echo "下载 $name ..."
-  curl \
+  if ! curl \
     --fail \
     --location \
     --retry 5 \
     --retry-all-errors \
     --connect-timeout 20 \
     --output "$temporary" \
-    "$RELEASE_URL/$name"
+    "$RELEASE_URL/$name"; then
+    rm -f "$temporary"
+    return 1
+  fi
   mv "$temporary" "$destination"
 }
 
+if download_asset "$BUNDLE_ASSET"; then
+  echo "解压单文件发布包..."
+  tar -xzf "$VERSION_DIR/$BUNDLE_ASSET" -C "$VERSION_DIR"
+  BUNDLE_DIR="$VERSION_DIR/liveboard-${VERSION}-linux-amd64"
+
+  if [ ! -f "$BUNDLE_DIR/deploy.sh" ]; then
+    echo "发布包结构不正确，缺少：$BUNDLE_DIR/deploy.sh" >&2
+    exit 1
+  fi
+
+  LIVEBOARD_STATE_DIR="$ROOT_DIR" \
+    LIVEBOARD_ENV_FILE="$ROOT_DIR/.env" \
+    BACKUP_DIR="$BACKUP_DIR" \
+    HEALTH_URL="$HEALTH_URL" \
+    sh "$BUNDLE_DIR/deploy.sh"
+  exit 0
+fi
+
+echo "未找到单文件发布包，按 v0.1.0 兼容格式继续部署..."
 download_asset SHA256SUMS
 download_asset "$ASSET"
 download_asset "$COMPOSE_ASSET"

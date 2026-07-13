@@ -139,5 +139,6 @@ UI 修改额外确认：
 - 2026-07-13：新增独立“授课”板块；所有已登录用户可访问并创建课件，课件支持从内容节选段落、排序拼装、嵌套练习与全屏展示；文件编辑页移除直接授课入口。
 - 2026-07-13：生产 Compose 的宿主机端口统一只绑定 `127.0.0.1`，公网访问必须经过反向代理；Web 镜像构建显式传入 `NEXT_PUBLIC_API_URL`，修改公开 API 地址后必须重新构建镜像。
 - 2026-07-13：新增 GitHub Release 离线镜像发布模式。`v*` 标签由 GitHub Actions 构建 Linux AMD64 API/Web，并将全部运行镜像、Compose、manifest 和 SHA256 校验上传到 Release；内地生产服务器使用 `scripts/deploy-release.sh` 下载、校验、导入、备份、迁移和启动，不再直接访问 Docker Hub 或 npm registry。
+- 2026-07-14：GitHub Release 改为只发布一个 `liveboard-<version>-linux-amd64.tar.gz` 自包含部署包，内含运行镜像、Compose、环境变量模板、部署脚本、manifest 和内部 SHA256 校验；用户可在电脑下载后只上传该文件，服务器无需 Git、Node.js、pnpm 或外部镜像仓库。`scripts/deploy-release.sh` 继续兼容 v0.1.0 的四文件格式。
 
 后续纪要只记录会影响未来开发判断的决策、迁移或故障原因，不记录每个微小样式调整。
