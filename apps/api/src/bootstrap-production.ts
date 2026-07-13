@@ -6,6 +6,31 @@ import { DEFAULT_FORUM_CATEGORIES } from "./modules/forum/forum-defaults";
 export type ProductionBootstrapResult =
   { created: false } | { created: true; username: string; password: string };
 
+export function formatProductionBootstrapResult(
+  result: ProductionBootstrapResult,
+  machineReadable = false,
+): string[] {
+  if (!result.created) {
+    return machineReadable
+      ? ["LIVEBOARD_BOOTSTRAP_CREATED=0"]
+      : ["系统已经初始化，跳过首次管理员创建。"];
+  }
+
+  if (machineReadable) {
+    return [
+      "LIVEBOARD_BOOTSTRAP_CREATED=1",
+      `LIVEBOARD_INITIAL_ADMIN_USERNAME=${result.username}`,
+      `LIVEBOARD_INITIAL_ADMIN_PASSWORD=${result.password}`,
+    ];
+  }
+
+  return [
+    "首次管理员已创建，请保存以下凭据并立即修改密码：",
+    `账号：${result.username}`,
+    `密码：${result.password}`,
+  ];
+}
+
 export async function bootstrapProduction(
   prisma: PrismaClient,
   password = randomBytes(18).toString("base64url"),
@@ -68,15 +93,10 @@ async function main() {
 
   try {
     const result = await bootstrapProduction(prisma);
-
-    if (!result.created) {
-      console.log("系统已经初始化，跳过首次管理员创建。");
-      return;
-    }
-
-    console.log("首次管理员已创建，请保存以下凭据并立即修改密码：");
-    console.log(`账号：${result.username}`);
-    console.log(`密码：${result.password}`);
+    const machineReadable = process.argv.includes("--machine-readable");
+    console.log(
+      formatProductionBootstrapResult(result, machineReadable).join("\n"),
+    );
   } finally {
     await prisma.$disconnect();
   }

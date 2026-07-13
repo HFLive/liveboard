@@ -83,7 +83,7 @@ pnpm dev
 liveboard-<version>-linux-amd64.tar.gz
 ```
 
-用户在电脑下载并上传该文件，服务器解压后运行包内 `deploy.sh`。脚本会生成基础密钥、备份 PostgreSQL、执行 migration、等待 API/Web 健康，并在空数据库中创建唯一的随机密码最高管理员。生产过程不运行 demo seed。
+用户在电脑下载并上传该文件，服务器解压后运行包内 `deploy.sh`。脚本会生成基础密钥、备份 PostgreSQL、执行 migration、等待 API/Web 健康，并在空数据库中创建唯一的随机密码最高管理员。首次凭据会在部署总结最后醒目显示，并保存到权限为 `600` 的 `/opt/liveboard/initial-admin-credentials.txt`；修改密码后应删除该文件。生产过程不运行 demo seed。
 
 完整步骤见 [Ubuntu 24.04 单文件部署教程](./docs/deploy-ubuntu-24.04.md)。
 部署路线的取舍、已删除兼容代码和保留边界见 [生产部署链路复盘](./docs/deployment-review.md)。
