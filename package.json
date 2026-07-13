@@ -12,7 +12,6 @@
     "dev:api": "pnpm --filter @liveboard/shared build && pnpm --filter @liveboard/api dev",
     "infra:up": "docker compose up -d postgres redis minio",
     "infra:down": "docker compose down",
-    "deploy:prod": "sh scripts/deploy.sh",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",

@@ -4,6 +4,7 @@ import { CurrentUserId } from "../../common/current-user-id.decorator";
 import {
   createSessionCookieValue,
   SESSION_TTL_MS,
+  shouldUseSecureSessionCookie,
 } from "../../common/session-cookie";
 import { AuthService } from "./auth.service";
 import { ChangePasswordDto, LoginDto, UpdateProfileDto } from "./auth.dto";
@@ -28,7 +29,7 @@ export class AuthController {
       maxAge: SESSION_TTL_MS,
       path: "/",
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: shouldUseSecureSessionCookie(),
     });
 
     return { user };
@@ -39,7 +40,7 @@ export class AuthController {
     res.clearCookie("liveboard_session", {
       path: "/",
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: shouldUseSecureSessionCookie(),
     });
     return { ok: true };
   }

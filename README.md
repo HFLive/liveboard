@@ -71,132 +71,26 @@ pnpm dev
 | `lecturer` | `liveboard-lecturer` | 授课与批阅 |
 | `learner`  | `liveboard-learner`  | 学习与提交 |
 
-这些账号仅用于本地演示。生产环境必须修改或删除默认账号，并将 `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS` 设置为 `false`。
+这些账号仅由本地 demo seed 创建。生产 bootstrap 不会创建它们，Release 构建也会将 `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS` 固定为 `false`。
 
-## Docker 运行
+## 生产部署
 
-启动完整的生产构建：
+生产环境只保留一种发布方式：GitHub Release 单文件包。服务器不拉取源码、不构建镜像，也不直接访问 Docker Hub 或 npm registry。
 
-```bash
-docker compose up --build -d
-docker compose ps
+推送 `v*` 标签后，Release 工作流会构建 Linux AMD64 的 API/Web 和固定版本基础镜像，并生成唯一资产：
+
+```text
+liveboard-<version>-linux-amd64.tar.gz
 ```
 
-`migrate` 容器会在 API 启动前执行 `prisma migrate deploy`。首次部署会执行完整的初始 migration，此后只执行尚未应用的增量 migration。迁移失败时 API 和 Web 不会启动。
+用户在电脑下载并上传该文件，服务器解压后运行包内 `deploy.sh`。脚本会生成基础密钥、备份 PostgreSQL、执行 migration、等待 API/Web 健康，并在空数据库中创建唯一的随机密码最高管理员。生产过程不运行 demo seed。
 
-Compose 发布到宿主机的端口仅绑定 `127.0.0.1`。生产环境应由宿主机 Nginx、Caddy 或其他网关反向代理 Web `127.0.0.1:3000` 和 API `127.0.0.1:4000`，不得直接向公网开放 PostgreSQL、Redis、MinIO、API 或 Web 容器端口。Release 镜像使用相对 `/api`，默认可配合包内 Nginx 配置通过服务器 IP 访问。
+完整步骤见 [Ubuntu 24.04 单文件部署教程](./docs/deploy-ubuntu-24.04.md)。
+部署路线的取舍、已删除兼容代码和保留边界见 [生产部署链路复盘](./docs/deployment-review.md)。
 
-生产服务器更新推荐使用：
+Compose 的 PostgreSQL、Redis、MinIO、API 和 Web 端口只绑定 `127.0.0.1`，公网访问必须经过包内 Nginx 配置。HTTP IP 部署使用 `SESSION_COOKIE_SECURE=false`；改用 HTTPS 时必须设为 `true`。
 
-```bash
-pnpm deploy:prod
-```
-
-部署脚本会先检查 `.env` 中的 PostgreSQL、MinIO 和会话密钥，拒绝默认值、空值和过短密钥；同时拒绝带有未提交改动的工作区。检查通过后依次完成 PostgreSQL 备份、`git pull --ff-only`、镜像构建、数据库迁移、服务启动和 API 健康检查。备份默认写入不会被 Git 跟踪的 `backups/`，可通过 `BACKUP_DIR` 修改位置。
-
-> 数据库备份不包含 MinIO 上传文件。生产环境还应对 `minio-data` 配置独立的对象存储备份或快照。
-
-### GitHub Release 离线镜像部署
-
-中国内地服务器推荐使用 GitHub Release 部署，避免服务器直接访问 Docker Hub、容器镜像仓库和 npm registry。推送 `v` 开头的语义化版本标签后，`.github/workflows/release.yml` 会在 GitHub Actions 中：
-
-1. 拉取固定版本的 PostgreSQL、Redis 和 MinIO 运行镜像；
-2. 以 `NEXT_PUBLIC_API_URL=/api` 构建 Linux AMD64 的 API 与 Web 镜像；
-3. 将全部运行镜像、Compose、环境变量模板、部署脚本、镜像清单和 SHA256 校验打入一个压缩包；
-4. 创建同名 GitHub Release，并只上传 `liveboard-<version>-linux-amd64.tar.gz`。
-
-首次发布前，在 GitHub 仓库的 `Settings > Actions > General > Workflow permissions` 中确认工作流拥有 `Read and write permissions`。合并待发布代码后创建标签：
-
-```bash
-git switch main
-git pull --ff-only
-git tag v0.1.2
-git push origin v0.1.2
-```
-
-等待 GitHub Actions 中的 `Release` 工作流成功，并确认对应 Release 只有一个 Linux AMD64 压缩包。
-
-#### 电脑下载后上传到服务器
-
-完整的 Ubuntu 24.04 安装、安全组、上传、启动和升级步骤见 [Ubuntu 24.04 单文件部署教程](./docs/deploy-ubuntu-24.04.md)。
-
-可以直接在浏览器打开 GitHub Release 页面下载 `liveboard-v0.1.2-linux-amd64.tar.gz`，也可以在电脑的仓库目录执行：
-
-```bash
-gh release download v0.1.2 \
-  --pattern 'liveboard-v0.1.2-linux-amd64.tar.gz' \
-  --dir ~/Downloads/liveboard-v0.1.2
-```
-
-电脑只需向服务器上传这一个文件：
-
-```bash
-scp ~/Downloads/liveboard-v0.1.2/liveboard-v0.1.2-linux-amd64.tar.gz \
-  root@服务器IP:/opt/
-```
-
-服务器只需安装 Docker Engine、Docker Compose 插件、curl、tar、gzip 和 sha256sum，不需要 Git、Node.js 或 pnpm，也不需要访问 Docker Hub。解压并运行：
-
-```bash
-cd /opt
-tar -xzf liveboard-v0.1.2-linux-amd64.tar.gz
-cd liveboard-v0.1.2-linux-amd64
-sh deploy.sh
-```
-
-第一次运行会自动创建 `/opt/liveboard/.env`，并使用 `/dev/urandom` 生成 PostgreSQL 密码、MinIO 密码和 `SESSION_SECRET`。随机值不会输出到终端，配置文件权限为 `600`；用户不需要手工填写密钥或域名，也不需要重复运行部署命令。
-
-使用服务器 IP 访问时，安装并启用包内 Nginx 配置：
-
-```bash
-cp nginx.conf /etc/nginx/sites-available/liveboard
-ln -sfn /etc/nginx/sites-available/liveboard /etc/nginx/sites-enabled/liveboard
-rm -f /etc/nginx/sites-enabled/default
-nginx -t
-systemctl reload nginx
-```
-
-以后升级只需下载并上传新版本的单个压缩包，解压后运行其中的 `deploy.sh`。生产配置、数据库卷和备份继续保存在稳定位置，不会因解压到新的版本目录而丢失。
-
-#### 服务器直接下载
-
-网络允许时，仍可在服务器上的仓库目录用辅助脚本下载并部署。新版本只下载一个压缩包；脚本也兼容 `v0.1.0` 的四文件格式：
-
-```bash
-cd /opt/liveboard
-git pull --ff-only
-sh scripts/deploy-release.sh v0.1.2
-```
-
-两种方式都会校验包内文件，导入镜像，启动基础设施，备份 PostgreSQL，执行 Prisma migration，更新 API 与 Web，并等待健康检查。数据库备份默认保存在 `/opt/liveboard/backups/`，当前成功版本记录在 `/opt/liveboard/releases/current`。
-
-首次安装仍需写入默认 workspace 和首位最高管理员：
-
-```bash
-docker compose \
-  --project-name liveboard \
-  --project-directory /opt/liveboard/releases/active \
-  --file /opt/liveboard/releases/active/docker-compose.yml \
-  exec api node prisma/seed.cjs
-```
-
-随后立即使用 `admin / liveboard-admin` 登录并修改密码，再删除或停用其他演示账号。生产环境不得重复把 seed 当作常规部署步骤。
-
-应用回滚可以重新解压并运行旧 Release 包中的 `deploy.sh`，或者在仓库部署模式下执行：
-
-```bash
-sh scripts/deploy-release.sh v0.1.0
-```
-
-每次部署都会先备份 PostgreSQL，但 Prisma migration 不会自动反向回滚；如果新版本已经执行不兼容的数据迁移，应使用经过验证的数据库恢复方案，而不是只切换旧镜像。
-
-停止全部容器：
-
-```bash
-docker compose --project-name liveboard down
-```
-
-> Docker Compose 中的 Web 使用生产构建，不支持代码热更新。开发时请仅保留基础设施容器，并使用 `pnpm dev` 启动 Web 与 API。
+> PostgreSQL 备份不包含 MinIO 上传文件。生产环境还应为 `minio-data` 配置独立卷快照或对象存储备份。不得使用 `docker compose down -v` 更新或停止服务。
 
 ## 常用命令
 
@@ -206,9 +100,6 @@ pnpm dev:web      # 只启动 Web
 pnpm dev:api      # 只启动 API
 pnpm infra:up     # 启动 PostgreSQL、Redis、MinIO
 pnpm infra:down   # 停止 Compose 服务
-pnpm deploy:prod  # 备份、更新并发布生产版本
-
-sh scripts/deploy-release.sh v0.1.2  # 从 GitHub Release 单文件离线包部署
 
 pnpm db:generate  # 生成 Prisma Client
 pnpm db:migrate   # 创建并执行 Prisma migration
@@ -269,30 +160,30 @@ liveboard/
 
 复制 `.env.example` 后按环境修改。常用变量：
 
-| 变量                             | 说明                            |
-| -------------------------------- | ------------------------------- |
-| `WEB_ORIGIN`                     | 允许携带凭据访问 API 的前端来源 |
-| `NEXT_PUBLIC_API_URL`            | 浏览器访问 API 的公开地址       |
-| `DATABASE_URL`                   | PostgreSQL 连接地址             |
-| `POSTGRES_DB`                    | PostgreSQL 数据库名             |
-| `POSTGRES_USER`                  | PostgreSQL 用户名               |
-| `POSTGRES_PASSWORD`              | PostgreSQL 密码                 |
-| `REDIS_URL`                      | Redis 连接地址                  |
-| `SESSION_SECRET`                 | 会话签名密钥                    |
-| `MINIO_*`                        | MinIO 地址、凭据和 bucket       |
-| `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS` | 是否在登录页显示演示账号        |
+| 变量                             | 说明                             |
+| -------------------------------- | -------------------------------- |
+| `WEB_ORIGIN`                     | 允许携带凭据访问 API 的前端来源  |
+| `NEXT_PUBLIC_API_URL`            | 浏览器访问 API 的公开地址        |
+| `DATABASE_URL`                   | PostgreSQL 连接地址              |
+| `POSTGRES_DB`                    | PostgreSQL 数据库名              |
+| `POSTGRES_USER`                  | PostgreSQL 用户名                |
+| `POSTGRES_PASSWORD`              | PostgreSQL 密码                  |
+| `REDIS_URL`                      | Redis 连接地址                   |
+| `SESSION_SECRET`                 | 会话签名密钥                     |
+| `SESSION_COOKIE_SECURE`          | 是否只通过 HTTPS 发送会话 Cookie |
+| `MINIO_*`                        | MinIO 地址、凭据和 bucket        |
+| `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS` | 是否在登录页显示演示账号         |
 
 不要提交 `.env`、真实密码、API Key、数据库备份或用户上传内容。
 
 ## 生产部署检查
 
-- 使用随机且足够长的 `SESSION_SECRET`。
-- 替换 PostgreSQL、MinIO 和演示账号默认密码。
+- 使用 Release 脚本自动生成的 PostgreSQL、MinIO 和会话密钥。
+- 生产初始化只创建一个随机密码最高管理员，不运行 demo seed。
 - 关闭登录页演示账号提示并重新构建 Web。
 - 使用 HTTPS，避免直接向公网开放数据库、Redis、MinIO 和 API 管理端口。
 - 确认 Compose 发布端口仍只绑定 `127.0.0.1`，公网安全组仅开放 SSH、HTTP 和 HTTPS。
-- 使用 `pnpm deploy:prod` 在更新前生成数据库备份，并为 MinIO 配置独立备份。
-- 中国内地服务器优先使用 GitHub Release 离线镜像部署，避免运行时依赖 Docker Hub。
+- 使用 GitHub Release 单文件包更新，并为 MinIO 配置独立备份。
 - 为登录、上传和 AI 接口配置网关限流。
 - 所有 schema 变更都提交 Prisma migration；生产环境由 `migrate` 服务自动执行 `prisma migrate deploy`，不使用 `db push`。
 
