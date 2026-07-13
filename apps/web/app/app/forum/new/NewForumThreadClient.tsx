@@ -83,17 +83,15 @@ export function NewForumThreadClient() {
 
   return (
     <div className="workspace forum-compose-workspace">
+      <Link className="page-back-link" href={APP_ROUTES.forum}>
+        <ArrowLeft aria-hidden="true" />
+        返回论坛
+      </Link>
       <section className="page-head">
         <div>
           <p className="page-eyebrow">论坛</p>
           <h1>发布主题</h1>
           <p className="muted">写清楚主题和背景，让其他成员更容易参与。</p>
-        </div>
-        <div className="button-row">
-          <Link className="button secondary" href={APP_ROUTES.forum}>
-            <ArrowLeft aria-hidden="true" className="button-icon" />
-            返回论坛
-          </Link>
         </div>
       </section>
 

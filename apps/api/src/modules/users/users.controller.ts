@@ -35,7 +35,7 @@ class CreateUserDto {
   @MinLength(8)
   password!: string;
 
-  @IsIn(["admin", "member"])
+  @IsIn(["super_admin", "admin", "member"])
   systemRole!: SystemRole;
 }
 
@@ -45,7 +45,7 @@ class UpdateUserDto {
   displayName?: string;
 
   @IsOptional()
-  @IsIn(["admin", "member"])
+  @IsIn(["super_admin", "admin", "member"])
   systemRole?: SystemRole;
 
   @IsOptional()
@@ -74,7 +74,7 @@ class ImportUserRowDto {
   @MinLength(8)
   password!: string;
 
-  @IsIn(["admin", "member"])
+  @IsIn(["super_admin", "admin", "member"])
   systemRole!: SystemRole;
 }
 

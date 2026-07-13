@@ -4,6 +4,8 @@ import {
   canManagePermissions,
   canView,
   computeEffectivePermission,
+  isSuperAdmin,
+  isSystemAdmin,
 } from "./permissions";
 
 describe("permissions", () => {
@@ -25,5 +27,13 @@ describe("permissions", () => {
     expect(canEdit("viewer")).toBe(false);
     expect(canEdit("editor")).toBe(true);
     expect(canManagePermissions("owner")).toBe(true);
+  });
+
+  it("separates system administrators from the super administrator", () => {
+    expect(isSystemAdmin("super_admin")).toBe(true);
+    expect(isSystemAdmin("admin")).toBe(true);
+    expect(isSystemAdmin("member")).toBe(false);
+    expect(isSuperAdmin("super_admin")).toBe(true);
+    expect(isSuperAdmin("admin")).toBe(false);
   });
 });

@@ -12,6 +12,7 @@ import {
   canView,
   comparePermissions,
   computeEffectivePermission,
+  isSystemAdmin,
 } from "@liveboard/shared";
 import type { PermissionLevel, PermissionTargetType } from "@liveboard/shared";
 import { PrismaService } from "../prisma/prisma.service";
@@ -192,7 +193,7 @@ export class PermissionsService {
   ): Promise<PermissionLevel | null> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
-    if (user?.systemRole === "admin") {
+    if (user && isSystemAdmin(user.systemRole)) {
       return "owner";
     }
 
@@ -226,7 +227,7 @@ export class PermissionsService {
   ): Promise<PermissionLevel | null> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
-    if (user?.systemRole === "admin") {
+    if (user && isSystemAdmin(user.systemRole)) {
       return "owner";
     }
 
@@ -291,7 +292,7 @@ export class PermissionsService {
       throw new UnauthorizedException("Missing session");
     }
 
-    if (actor.systemRole === "admin") {
+    if (isSystemAdmin(actor.systemRole)) {
       return;
     }
 
@@ -326,7 +327,7 @@ export class PermissionsService {
       throw new UnauthorizedException("Missing session");
     }
 
-    if (actor.systemRole === "admin") {
+    if (isSystemAdmin(actor.systemRole)) {
       return;
     }
 

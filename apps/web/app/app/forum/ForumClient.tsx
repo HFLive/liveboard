@@ -119,10 +119,6 @@ export function ForumClient() {
           <h1>论坛</h1>
           <p>{threads.length} 个主题</p>
         </div>
-        <Link className="button" href={APP_ROUTES.forumNew}>
-          <Plus aria-hidden="true" className="button-icon" />
-          发布主题
-        </Link>
       </header>
 
       {error ? <p className="error-text">{error}</p> : null}
@@ -214,6 +210,13 @@ export function ForumClient() {
                 <option value="replies">回复最多</option>
               </select>
             </label>
+            <Link
+              className="button forum-create-action"
+              href={APP_ROUTES.forumNew}
+            >
+              <Plus aria-hidden="true" className="button-icon" />
+              发布主题
+            </Link>
           </div>
 
           <div className="forum-thread-list">

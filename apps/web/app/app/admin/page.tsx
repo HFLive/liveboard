@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import type { SystemRole } from "@liveboard/shared";
 import {
   Bot,
   Database,
@@ -9,8 +13,17 @@ import {
 } from "lucide-react";
 import { AdminSubnav } from "@/components/admin/AdminSubnav";
 import { APP_ROUTES } from "@/lib/routes";
+import { getMe } from "@/lib/api";
 
 export default function AdminPage() {
+  const [role, setRole] = useState<SystemRole | null>(null);
+
+  useEffect(() => {
+    getMe()
+      .then((result) => setRole(result.user.systemRole))
+      .catch(() => setRole(null));
+  }, []);
+
   return (
     <div className="workspace">
       <header className="page-head">
@@ -52,20 +65,24 @@ export default function AdminPage() {
             <small>维护论坛版块和显示顺序</small>
           </span>
         </Link>
-        <Link className="admin-hub-card" href={APP_ROUTES.adminAi}>
-          <Bot aria-hidden="true" />
-          <span>
-            <strong>AI 设置</strong>
-            <small>配置模型服务和回答范围</small>
-          </span>
-        </Link>
-        <Link className="admin-hub-card" href={APP_ROUTES.adminSettings}>
-          <Settings aria-hidden="true" />
-          <span>
-            <strong>系统设置</strong>
-            <small>设置时区和全站显示</small>
-          </span>
-        </Link>
+        {role === "super_admin" ? (
+          <>
+            <Link className="admin-hub-card" href={APP_ROUTES.adminAi}>
+              <Bot aria-hidden="true" />
+              <span>
+                <strong>AI 设置</strong>
+                <small>配置模型服务和回答范围</small>
+              </span>
+            </Link>
+            <Link className="admin-hub-card" href={APP_ROUTES.adminSettings}>
+              <Settings aria-hidden="true" />
+              <span>
+                <strong>系统设置</strong>
+                <small>设置时区和全站显示</small>
+              </span>
+            </Link>
+          </>
+        ) : null}
       </section>
     </div>
   );

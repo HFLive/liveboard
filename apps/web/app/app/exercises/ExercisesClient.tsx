@@ -68,12 +68,6 @@ export function ExercisesClient() {
           <h1>练习</h1>
           <p className="muted">创建练习、跟踪提交进度并处理待批阅内容。</p>
         </div>
-        <div className="page-toolbar">
-          <Link className="button" href={APP_ROUTES.exercisesNew}>
-            <Plus aria-hidden="true" className="button-icon" />
-            创建练习
-          </Link>
-        </div>
       </header>
 
       {error ? <p className="error-text">{error}</p> : null}
@@ -109,6 +103,10 @@ export function ExercisesClient() {
               练习列表
             </h2>
           </div>
+          <Link className="button" href={APP_ROUTES.exercisesNew}>
+            <Plus aria-hidden="true" className="button-icon" />
+            创建练习
+          </Link>
         </div>
         <div className="list-toolbar">
           <label className="search-field">

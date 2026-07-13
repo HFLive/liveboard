@@ -491,6 +491,10 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
 
   return (
     <div className="workspace forum-workspace">
+      <Link className="page-back-link" href={APP_ROUTES.forum}>
+        <ArrowLeft aria-hidden="true" />
+        返回论坛
+      </Link>
       <section className="page-head">
         <div>
           <p className="page-eyebrow">{thread?.category.name ?? "论坛"}</p>
@@ -500,18 +504,6 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
               ? `${thread.author.displayName} · 创建于 ${formatDateTime(thread.createdAt)} · 最近活跃 ${formatDateTime(thread.lastActivityAt)}`
               : "正在加载主题内容与回复。"}
           </p>
-        </div>
-        <div className="button-row">
-          <Link className="button secondary" href={APP_ROUTES.forum}>
-            <ArrowLeft aria-hidden="true" className="button-icon" />
-            返回论坛
-          </Link>
-          {thread ? (
-            <div className="forum-thread-summary">
-              <strong>{replyCount}</strong>
-              <span>回复</span>
-            </div>
-          ) : null}
         </div>
       </section>
 
@@ -531,6 +523,10 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 ) : null}
                 {statusText}
               </em>
+              <div className="forum-thread-summary">
+                <strong>{replyCount}</strong>
+                <span>回复</span>
+              </div>
             </div>
             {editingThread ? (
               <form className="forum-thread-edit-form" onSubmit={saveThread}>

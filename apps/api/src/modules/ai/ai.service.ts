@@ -6,7 +6,7 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { canView } from "@liveboard/shared";
+import { canView, isSuperAdmin } from "@liveboard/shared";
 import type { Prisma } from "@prisma/client";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -766,8 +766,10 @@ export class AiService {
       where: { id: userId },
     });
 
-    if (user?.systemRole !== "admin" || user.status !== "active") {
-      throw new ForbiddenException("Only admins can manage AI settings");
+    if (!user || !isSuperAdmin(user.systemRole) || user.status !== "active") {
+      throw new ForbiddenException(
+        "Only super administrators can manage AI settings",
+      );
     }
   }
 

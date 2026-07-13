@@ -32,6 +32,10 @@ describe("session cookie", () => {
     ).toBeNull();
   });
 
+  it("rejects the retired v1 session format", () => {
+    expect(verifySessionCookieValue("v1.user-1.signature")).toBeNull();
+  });
+
   it("rejects a session after its server-side expiry", () => {
     const value = createSessionCookieValue("user-1");
     jest.advanceTimersByTime(SESSION_TTL_MS + 1);

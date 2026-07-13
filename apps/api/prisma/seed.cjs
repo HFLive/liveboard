@@ -73,7 +73,7 @@ async function main() {
   const admin = await upsertUser({
     username: "admin",
     displayName: "Admin",
-    systemRole: "admin",
+    systemRole: "super_admin",
     password: "liveboard-admin",
   });
 
@@ -127,12 +127,6 @@ async function main() {
     sortOrder: 30,
   });
 
-  const adminGroup = await upsertPermissionGroup({
-    workspaceId: workspace.id,
-    name: "管理员",
-    description: "系统最高权限成员",
-    createdById: admin.id,
-  });
   const authorGroup = await upsertPermissionGroup({
     workspaceId: workspace.id,
     name: "作者",
@@ -152,7 +146,6 @@ async function main() {
     createdById: admin.id,
   });
 
-  await addGroupMember(adminGroup.id, admin.id);
   await addGroupMember(authorGroup.id, author.id);
   await addGroupMember(lecturerGroup.id, lecturer.id);
   await addGroupMember(learnerGroup.id, learner.id);
@@ -209,12 +202,6 @@ async function main() {
   });
 
   const grants = [
-    {
-      targetType: "workspace",
-      targetId: workspace.id,
-      groupId: adminGroup.id,
-      level: "owner",
-    },
     {
       targetType: "folder",
       targetId: publicFolder.id,

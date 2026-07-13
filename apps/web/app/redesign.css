@@ -5645,6 +5645,85 @@ body,
   min-width: 170px;
 }
 
+/* Page titles identify context; actions live with the content they affect. */
+.page-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.page-back-link:hover {
+  color: var(--text);
+}
+
+.page-back-link svg {
+  width: 15px;
+  height: 15px;
+}
+
+.editor-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  border-block: 1px solid var(--line);
+  padding-block: 10px;
+}
+
+.editor-action-bar .button-row {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.forum-thread-topline .forum-thread-summary {
+  margin-left: auto;
+}
+
+@media (max-width: 760px) {
+  .library-layout .list-toolbar .toolbar-row > .button {
+    grid-column: 1 / -1;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .editor-action-bar {
+    align-items: stretch;
+  }
+
+  .editor-action-bar .button-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .editor-action-bar .button,
+  .editor-action-bar .editor-more-menu {
+    width: 100%;
+  }
+
+  .editor-action-bar .button,
+  .editor-action-bar .editor-more-menu > summary {
+    justify-content: center;
+  }
+
+  .panel-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .panel-head > .button-row {
+    width: 100%;
+  }
+
+  .panel-head > .button-row > * {
+    flex: 1;
+  }
+}
+
 /* Compact permission editor shared by folder and file dialogs. */
 .permission-modal {
   width: min(620px, calc(100vw - 32px));

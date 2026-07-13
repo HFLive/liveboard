@@ -5,6 +5,7 @@ import type { SystemRole, UserSummary } from "@liveboard/shared";
 import { FileUp, Pencil, Plus, X } from "lucide-react";
 import {
   createUser,
+  getMe,
   importUsers as importUsersApi,
   type ImportUsersResult,
   listUsers,
@@ -35,7 +36,7 @@ type ParsedImport = {
 const csvExample =
   "username,displayName,password,systemRole\nli-ming,李明,liveboard123,member\nchen-yan,陈妍,liveboard123,member";
 
-const roleValues = ["admin", "member"] as const;
+const roleValues = ["super_admin", "admin", "member"] as const;
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
@@ -134,7 +135,9 @@ function parseUserImportCsv(text: string): ParsedImport {
     }
 
     if (!roleValues.includes(rawRole as SystemRole)) {
-      errors.push(`第 ${rowNumber} 行系统权限应为 admin 或 member`);
+      errors.push(
+        `第 ${rowNumber} 行系统权限应为 super_admin、admin 或 member`,
+      );
     }
 
     if (
@@ -157,6 +160,7 @@ function parseUserImportCsv(text: string): ParsedImport {
 
 export function UserManagementClient() {
   const [users, setUsers] = useState<UserSummary[]>([]);
+  const [actor, setActor] = useState<UserSummary | null>(null);
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
@@ -173,7 +177,7 @@ export function UserManagementClient() {
   const [error, setError] = useState<string | null>(null);
   const parsedImport = useMemo(() => parseUserImportCsv(csvText), [csvText]);
   const editingUser = users.find((user) => user.id === editingUserId) ?? null;
-  const editingAdminLocked = editingUser?.systemRole === "admin";
+  const actorIsSuperAdmin = actor?.systemRole === "super_admin";
 
   async function loadUsers() {
     const result = await listUsers();
@@ -184,6 +188,9 @@ export function UserManagementClient() {
     loadUsers().catch((caught) => {
       setError(caught instanceof Error ? caught.message : "加载用户失败");
     });
+    getMe()
+      .then((result) => setActor(result.user))
+      .catch(() => setActor(null));
   }, []);
 
   async function onCreateUser(event: FormEvent<HTMLFormElement>) {
@@ -303,26 +310,6 @@ export function UserManagementClient() {
           <h1>成员管理</h1>
           <p className="muted">创建、导入并维护平台成员的账号与权限。</p>
         </div>
-        <div className="page-toolbar">
-          <div className="button-row">
-            <button
-              className="button secondary"
-              onClick={() => setShowImportModal(true)}
-              type="button"
-            >
-              <FileUp aria-hidden="true" className="button-icon" />
-              批量导入
-            </button>
-            <button
-              className="button"
-              onClick={() => setShowCreateUserModal(true)}
-              type="button"
-            >
-              <Plus aria-hidden="true" className="button-icon" />
-              创建用户
-            </button>
-          </div>
-        </div>
       </header>
 
       <AdminSubnav />
@@ -335,6 +322,24 @@ export function UserManagementClient() {
           <div className="panel-head">
             <div>
               <h2>成员列表</h2>
+            </div>
+            <div className="button-row">
+              <button
+                className="button secondary"
+                onClick={() => setShowImportModal(true)}
+                type="button"
+              >
+                <FileUp aria-hidden="true" className="button-icon" />
+                批量导入
+              </button>
+              <button
+                className="button"
+                onClick={() => setShowCreateUserModal(true)}
+                type="button"
+              >
+                <Plus aria-hidden="true" className="button-icon" />
+                创建用户
+              </button>
             </div>
           </div>
           <div className="table-wrap">
@@ -358,14 +363,18 @@ export function UserManagementClient() {
                     <td data-label="系统权限">{roleLabel(user.systemRole)}</td>
                     <td data-label="状态">{userStatusLabel(user.status)}</td>
                     <td data-label="操作">
-                      <button
-                        className="inline-icon-button"
-                        onClick={() => startEdit(user)}
-                        title="编辑成员"
-                        type="button"
-                      >
-                        <Pencil aria-hidden="true" />
-                      </button>
+                      {actorIsSuperAdmin || user.systemRole === "member" ? (
+                        <button
+                          className="inline-icon-button"
+                          onClick={() => startEdit(user)}
+                          title="编辑成员"
+                          type="button"
+                        >
+                          <Pencil aria-hidden="true" />
+                        </button>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -428,7 +437,12 @@ export function UserManagementClient() {
                   }
                 >
                   <option value="member">普通成员</option>
-                  <option value="admin">管理员</option>
+                  {actorIsSuperAdmin ? (
+                    <>
+                      <option value="admin">管理员</option>
+                      <option value="super_admin">最高管理员</option>
+                    </>
+                  ) : null}
                 </select>
               </label>
             </div>
@@ -610,7 +624,6 @@ export function UserManagementClient() {
                   系统权限
                   <select
                     className="select"
-                    disabled={editingAdminLocked}
                     value={editDraft.systemRole}
                     onChange={(event) =>
                       setEditDraft({
@@ -620,14 +633,18 @@ export function UserManagementClient() {
                     }
                   >
                     <option value="member">普通成员</option>
-                    <option value="admin">管理员</option>
+                    {actorIsSuperAdmin ? (
+                      <>
+                        <option value="admin">管理员</option>
+                        <option value="super_admin">最高管理员</option>
+                      </>
+                    ) : null}
                   </select>
                 </label>
                 <label className="label">
                   状态
                   <select
                     className="select"
-                    disabled={editingAdminLocked}
                     value={editDraft.status}
                     onChange={(event) =>
                       setEditDraft({
@@ -641,9 +658,9 @@ export function UserManagementClient() {
                   </select>
                 </label>
               </div>
-              {editingAdminLocked ? (
+              {editingUser.systemRole === "super_admin" ? (
                 <p className="muted">
-                  管理员账号锁定为最高权限，不能降级或停用。
+                  系统必须始终保留至少一位正常状态的最高管理员。
                 </p>
               ) : null}
               <label className="label">

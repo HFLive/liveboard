@@ -136,16 +136,6 @@ export function ForumSettingsClient() {
           <h1>论坛设置</h1>
           <p className="muted">维护论坛版块、展示顺序和内容入口。</p>
         </div>
-        <div className="page-toolbar">
-          <button
-            className="button"
-            onClick={() => setShowCreateModal(true)}
-            type="button"
-          >
-            <Plus aria-hidden="true" className="button-icon" />
-            新建版块
-          </button>
-        </div>
       </header>
 
       <AdminSubnav />
@@ -160,7 +150,17 @@ export function ForumSettingsClient() {
               <MessageSquare aria-hidden="true" className="heading-icon" />
               版块
             </h2>
-            <span className="muted">{categories.length} 个</span>
+            <div className="button-row">
+              <span className="muted">{categories.length} 个</span>
+              <button
+                className="button secondary"
+                onClick={() => setShowCreateModal(true)}
+                type="button"
+              >
+                <Plus aria-hidden="true" className="button-icon" />
+                新建版块
+              </button>
+            </div>
           </div>
 
           <div className="forum-admin-category-list">
