@@ -44,7 +44,9 @@ pnpm dev
 docker compose up --build -d
 ```
 
-生产更新优先使用 `pnpm deploy:prod`。该脚本会先备份 PostgreSQL，再拉取代码、构建镜像并启动 Compose；一次性 `migrate` 服务必须成功完成 Prisma 迁移后，API 和 Web 才能启动。不得使用 `docker compose down -v` 或清理命名卷更新服务。MinIO 需要独立备份或卷快照。
+正式生产部署只使用 GitHub Release 单文件包。服务器不拉取源码、不运行 pnpm、不构建应用镜像，也不直接下载容器镜像；用户在电脑下载 `liveboard-<version>-linux-amd64.tar.gz` 后上传服务器并运行包内 `deploy.sh`。脚本必须在迁移前备份 PostgreSQL，并等待 API 与 Web 都健康后才报告完成。不得使用 `docker compose down -v` 或清理命名卷更新服务。MinIO 需要独立备份或卷快照。
+
+生产首次初始化由 `apps/api/src/bootstrap-production.ts` 自动完成，只创建一个随机密码的最高管理员、默认 workspace 和论坛分类。`apps/api/prisma/seed.cjs` 仅用于本地演示，生产部署不得调用。
 
 `docker-compose.yml` 中的 Web 明确使用 `NODE_ENV=production`。用户要求“开发版本”时，不得只执行 `docker compose up`；应停止 `web`、`api` 容器，保留基础设施，再运行 `pnpm dev`。
 
@@ -103,7 +105,7 @@ docker compose up --build -d
 - 系统角色为 `super_admin`、`admin`、`member`；普通用户的内容能力由权限组和资源授权决定。
 - 后端服务层是权限安全边界。
 - 所有 schema 变更都应提交 Prisma migration，不使用 `db push`；测试数据库需要重建时使用 `pnpm db:reset`。
-- 生产环境必须替换默认 `SESSION_SECRET`、数据库密码、MinIO 凭据和演示账号。
+- Release 部署必须自动生成 `SESSION_SECRET`、数据库密码和 MinIO 凭据。HTTP IP 模式使用 `SESSION_COOKIE_SECURE=false`；配置 HTTPS 后改为 `true`。
 
 ## 验证清单
 
@@ -132,14 +134,12 @@ UI 修改额外确认：
 - 2026-07-12：论坛改为路由独立样式；重做权限组管理与授课界面；修复权限组网格继承导致的截断和右栏错位；内容权限入口统一收进三点菜单；非空文件夹隐藏删除操作；权限弹窗改为紧凑授权面板。
 - 2026-07-12：仓库首次发布至 `HFLive/liveboard`，默认分支为 `main`。
 - 2026-07-12：系统角色拆分为 `super_admin`、`admin`、`member`。最高管理员拥有全站权限并独占系统与 AI 全局设置；管理员可管理文件、成员、权限组、容量和论坛，但不能管理其他管理员；普通用户的内容能力继续由资源权限组授予。系统必须保留至少一位正常状态的最高管理员。
-- 2026-07-12：生产 Compose 增加一次性 `migrate` 服务并在 API 启动前执行 `prisma migrate deploy`；项目以完整初始 migration 为数据库基线，不再使用或兼容 `db push`；`pnpm deploy:prod` 负责数据库备份、代码更新、构建、迁移、启动和健康检查。
+- 2026-07-12：生产 Compose 增加一次性 `migrate` 服务并在 API 启动前执行 `prisma migrate deploy`；项目以完整初始 migration 为数据库基线，不再使用或兼容 `db push`。
 - 2026-07-12：删除旧 `/app/files` 重定向和 v1 会话 Cookie 兼容；系统管理员不再自动加入或创建“管理员”权限组，系统角色与资源权限组保持独立。生产部署脚本会拒绝默认或过短密钥。
 - 2026-07-12：页面主标题区只用于标识页面，不放业务操作按钮；创建、上传、导入、发布和编辑操作应放在对应列表、工具栏或内容工作区，返回操作使用标题上方的轻量返回链接。
 - 2026-07-13：全站操作反馈统一为顶部悬浮通知；成功与错误不再作为内容区色条参与页面布局。
 - 2026-07-13：新增独立“授课”板块；所有已登录用户可访问并创建课件，课件支持从内容节选段落、排序拼装、嵌套练习与全屏展示；文件编辑页移除直接授课入口。
 - 2026-07-13：生产 Compose 的宿主机端口统一只绑定 `127.0.0.1`，公网访问必须经过反向代理；Web 镜像构建显式传入 `NEXT_PUBLIC_API_URL`，修改公开 API 地址后必须重新构建镜像。
-- 2026-07-13：新增 GitHub Release 离线镜像发布模式。`v*` 标签由 GitHub Actions 构建 Linux AMD64 API/Web，并将全部运行镜像、Compose、manifest 和 SHA256 校验上传到 Release；内地生产服务器使用 `scripts/deploy-release.sh` 下载、校验、导入、备份、迁移和启动，不再直接访问 Docker Hub 或 npm registry。
-- 2026-07-14：GitHub Release 改为只发布一个 `liveboard-<version>-linux-amd64.tar.gz` 自包含部署包，内含运行镜像、Compose、环境变量模板、部署脚本、manifest 和内部 SHA256 校验；用户可在电脑下载后只上传该文件，服务器无需 Git、Node.js、pnpm 或外部镜像仓库。`scripts/deploy-release.sh` 继续兼容 v0.1.0 的四文件格式。
-- 2026-07-14：单文件部署包首次运行时使用 `/dev/urandom` 自动生成 PostgreSQL、MinIO 和会话密钥并写入权限为 `600` 的稳定 `.env`，不再要求用户手工创建随机值；发布包使用相对 `/api` 和无域名 Nginx 配置，默认可通过服务器 IP 访问。
+- 2026-07-14：生产发布链路最终收口为单个 `liveboard-<version>-linux-amd64.tar.gz`。删除服务器拉源码构建、服务器下载多个 Release 文件和 v0.1.0 四文件兼容路径；电脑下载上传单包是唯一正式流程。包内脚本自动生成基础密钥、迁移、备份、等待 API/Web 健康并初始化唯一随机密码最高管理员。HTTP IP 与 HTTPS 通过 `SESSION_COOKIE_SECURE` 显式区分。
 
 后续纪要只记录会影响未来开发判断的决策、迁移或故障原因，不记录每个微小样式调整。

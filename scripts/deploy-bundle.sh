@@ -8,6 +8,7 @@ STATE_DIR=${LIVEBOARD_STATE_DIR:-/opt/liveboard}
 ENV_FILE=${LIVEBOARD_ENV_FILE:-"$STATE_DIR/.env"}
 BACKUP_DIR=${BACKUP_DIR:-"$STATE_DIR/backups"}
 HEALTH_URL=${HEALTH_URL:-"http://127.0.0.1:4000/health"}
+WEB_HEALTH_URL=${WEB_HEALTH_URL:-"http://127.0.0.1:3000"}
 COMPOSE_FILE="$BUNDLE_DIR/docker-compose.yml"
 IMAGES_FILE="$BUNDLE_DIR/images.tar.gz"
 MANIFEST_FILE="$BUNDLE_DIR/manifest.txt"
@@ -93,6 +94,10 @@ ensure_generated_secret SESSION_SECRET 32
 POSTGRES_PASSWORD=$(read_env_value POSTGRES_PASSWORD)
 POSTGRES_USER=$(read_env_value POSTGRES_USER)
 POSTGRES_DB=$(read_env_value POSTGRES_DB)
+write_env_value NODE_ENV production
+if [ -z "$(read_env_value SESSION_COOKIE_SECURE)" ]; then
+  write_env_value SESSION_COOKIE_SECURE false
+fi
 write_env_value DATABASE_URL "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
 chmod 600 "$ENV_FILE"
 
@@ -194,6 +199,22 @@ until curl --fail --silent --show-error "$HEALTH_URL" >/dev/null 2>&1; do
   sleep 2
 done
 
+echo "等待 Web 健康检查..."
+attempt=0
+until curl --fail --silent --show-error "$WEB_HEALTH_URL" >/dev/null 2>&1; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 30 ]; then
+    echo "Web 未在 60 秒内通过健康检查。" >&2
+    compose ps
+    compose logs --tail=100 web
+    exit 1
+  fi
+  sleep 2
+done
+
+echo "检查首次生产初始化..."
+compose exec -T api node dist/bootstrap-production.js
+
 VERSION=$(awk -F= '$1 == "release" { print $2; exit }' "$MANIFEST_FILE")
 if [ -z "$VERSION" ]; then
   VERSION=unknown
@@ -205,4 +226,3 @@ compose ps
 echo "发布部署完成：$VERSION"
 echo "数据库备份：$BACKUP_FILE"
 echo "发布清单：$MANIFEST_FILE"
-echo "首次安装还需执行：docker compose --project-name liveboard --project-directory $STATE_DIR/releases/active --file $STATE_DIR/releases/active/docker-compose.yml exec api node prisma/seed.cjs"

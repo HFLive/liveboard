@@ -1,11 +1,14 @@
 import {
   createSessionCookieValue,
   SESSION_TTL_MS,
+  shouldUseSecureSessionCookie,
   verifySessionCookieValue,
 } from "./session-cookie";
 
 describe("session cookie", () => {
   const originalSecret = process.env.SESSION_SECRET;
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalSecureSetting = process.env.SESSION_COOKIE_SECURE;
 
   beforeEach(() => {
     process.env.SESSION_SECRET = "test-session-secret-with-sufficient-length";
@@ -14,7 +17,9 @@ describe("session cookie", () => {
   });
 
   afterEach(() => {
-    process.env.SESSION_SECRET = originalSecret;
+    restoreEnvironmentVariable("SESSION_SECRET", originalSecret);
+    restoreEnvironmentVariable("NODE_ENV", originalNodeEnv);
+    restoreEnvironmentVariable("SESSION_COOKIE_SECURE", originalSecureSetting);
     jest.useRealTimers();
   });
 
@@ -42,4 +47,34 @@ describe("session cookie", () => {
 
     expect(verifySessionCookieValue(value)).toBeNull();
   });
+
+  it("uses secure cookies by default in production", () => {
+    process.env.NODE_ENV = "production";
+    delete process.env.SESSION_COOKIE_SECURE;
+
+    expect(shouldUseSecureSessionCookie()).toBe(true);
+  });
+
+  it("allows an explicit insecure cookie for HTTP-only deployments", () => {
+    process.env.NODE_ENV = "production";
+    process.env.SESSION_COOKIE_SECURE = "false";
+
+    expect(shouldUseSecureSessionCookie()).toBe(false);
+  });
+
+  it("allows secure cookies to be forced outside production", () => {
+    process.env.NODE_ENV = "development";
+    process.env.SESSION_COOKIE_SECURE = "true";
+
+    expect(shouldUseSecureSessionCookie()).toBe(true);
+  });
 });
+
+function restoreEnvironmentVariable(key: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+
+  process.env[key] = value;
+}
