@@ -96,6 +96,51 @@ pnpm deploy:prod
 
 > 数据库备份不包含 MinIO 上传文件。生产环境还应对 `minio-data` 配置独立的对象存储备份或快照。
 
+### GitHub Release 离线镜像部署
+
+中国内地服务器推荐使用 GitHub Release 部署，避免服务器直接访问 Docker Hub、容器镜像仓库和 npm registry。推送 `v` 开头的语义化版本标签后，`.github/workflows/release.yml` 会在 GitHub Actions 中：
+
+1. 拉取固定版本的 PostgreSQL、Redis 和 MinIO 运行镜像；
+2. 以 `NEXT_PUBLIC_API_URL=/api` 构建 Linux AMD64 的 API 与 Web 镜像；
+3. 将全部运行镜像导出为 gzip 压缩包；
+4. 附带该版本的 Compose 文件、镜像清单和 SHA256 校验文件；
+5. 创建同名 GitHub Release。
+
+首次发布前，在 GitHub 仓库的 `Settings > Actions > General > Workflow permissions` 中确认工作流拥有 `Read and write permissions`。合并待发布代码后创建标签：
+
+```bash
+git switch main
+git pull --ff-only
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+等待 GitHub Actions 中的 `Release` 工作流成功，并确认对应 Release 包含镜像包、Compose、manifest 和 `SHA256SUMS`。服务器只需保留 Docker Engine、Compose、Git、curl、gzip 和 sha256sum，不需要安装 Node.js 或 pnpm：
+
+```bash
+cd /opt/liveboard
+git pull --ff-only
+sh scripts/deploy-release.sh v0.1.0
+```
+
+脚本会下载该版本的 Release 文件，校验 SHA256，导入镜像，启动基础设施，备份 PostgreSQL，执行 Prisma migration，更新 API 与 Web，并等待健康检查。下载文件保存在不会被 Git 跟踪的 `releases/<version>/`，当前成功版本记录在 `releases/current`。
+
+首次安装仍需写入默认 workspace 和首位最高管理员：
+
+```bash
+docker compose exec api node prisma/seed.cjs
+```
+
+随后立即使用 `admin / liveboard-admin` 登录并修改密码，再删除或停用其他演示账号。生产环境不得重复把 seed 当作常规部署步骤。
+
+应用回滚可以重新部署旧 Release：
+
+```bash
+sh scripts/deploy-release.sh v0.0.9
+```
+
+每次部署都会先备份 PostgreSQL，但 Prisma migration 不会自动反向回滚；如果新版本已经执行不兼容的数据迁移，应使用经过验证的数据库恢复方案，而不是只切换旧镜像。
+
 停止全部容器：
 
 ```bash
@@ -113,6 +158,8 @@ pnpm dev:api      # 只启动 API
 pnpm infra:up     # 启动 PostgreSQL、Redis、MinIO
 pnpm infra:down   # 停止 Compose 服务
 pnpm deploy:prod  # 备份、更新并发布生产版本
+
+sh scripts/deploy-release.sh v0.1.0  # 从 GitHub Release 离线镜像包部署
 
 pnpm db:generate  # 生成 Prisma Client
 pnpm db:migrate   # 创建并执行 Prisma migration
@@ -195,6 +242,7 @@ liveboard/
 - 使用 HTTPS，避免直接向公网开放数据库、Redis、MinIO 和 API 管理端口。
 - 确认 Compose 发布端口仍只绑定 `127.0.0.1`，公网安全组仅开放 SSH、HTTP 和 HTTPS。
 - 使用 `pnpm deploy:prod` 在更新前生成数据库备份，并为 MinIO 配置独立备份。
+- 中国内地服务器优先使用 GitHub Release 离线镜像部署，避免运行时依赖 Docker Hub。
 - 为登录、上传和 AI 接口配置网关限流。
 - 所有 schema 变更都提交 Prisma migration；生产环境由 `migrate` 服务自动执行 `prisma migrate deploy`，不使用 `db push`。
 
