@@ -13,14 +13,19 @@ import { PrismaService } from "../prisma/prisma.service";
 
 interface UpdateAiSettingsInput {
   enabled?: boolean;
+  maxContextFiles?: number;
+  maxContextChars?: number;
+}
+
+interface AiProviderConfigInput {
+  name?: string;
   providerName?: string;
   baseUrl?: string;
   model?: string;
   apiKey?: string;
-  temperature?: number;
-  maxContextFiles?: number;
-  maxContextChars?: number;
 }
+
+const AI_COMPLETION_TEMPERATURE = 0.2;
 
 interface AskAiInput {
   message: string;
@@ -93,7 +98,8 @@ export class AiService {
   async getSettings(userId: string | null) {
     await this.ensureAdmin(userId);
     const settings = await this.getOrCreateSettings();
-    return this.toPublicSettings(settings);
+    const configs = await this.listStoredConfigs(settings.workspaceId);
+    return this.toPublicSettings(settings, configs);
   }
 
   async getAvailability(userId: string | null) {
@@ -102,8 +108,9 @@ export class AiService {
     }
 
     const settings = await this.getOrCreateSettings();
+    const activeConfig = settings.activeConfig;
     const configured = Boolean(
-      settings.baseUrl && settings.model && settings.apiKey,
+      activeConfig?.baseUrl && activeConfig.model && activeConfig.apiKey,
     );
     const available = settings.enabled && configured;
 
@@ -129,29 +136,6 @@ export class AiService {
       data.enabled = input.enabled;
     }
 
-    if (input.providerName !== undefined) {
-      data.providerName = input.providerName.trim() || "OpenAI Compatible";
-    }
-
-    if (input.baseUrl !== undefined) {
-      data.baseUrl = normalizeBaseUrl(input.baseUrl);
-    }
-
-    if (input.model !== undefined) {
-      data.model = input.model.trim();
-    }
-
-    if (input.apiKey !== undefined) {
-      const nextKey = input.apiKey.trim();
-      if (nextKey && nextKey !== "********") {
-        data.apiKey = nextKey;
-      }
-    }
-
-    if (input.temperature !== undefined) {
-      data.temperature = input.temperature;
-    }
-
     if (input.maxContextFiles !== undefined) {
       data.maxContextFiles = input.maxContextFiles;
     }
@@ -165,9 +149,102 @@ export class AiService {
     const updated = await this.prisma.aiSettings.update({
       where: { id: settings.id },
       data,
+      include: { activeConfig: true },
     });
 
-    return this.toPublicSettings(updated);
+    const configs = await this.listStoredConfigs(settings.workspaceId);
+    return this.toPublicSettings(updated, configs);
+  }
+
+  async createProviderConfig(
+    userId: string | null,
+    input: Required<AiProviderConfigInput>,
+  ) {
+    await this.ensureAdmin(userId);
+    const workspace = await this.getDefaultWorkspace();
+    const name = normalizeConfigName(input.name);
+    await this.ensureUniqueConfigName(workspace.id, name);
+
+    const config = await this.prisma.aiProviderConfig.create({
+      data: {
+        workspaceId: workspace.id,
+        name,
+        providerName: normalizeProviderName(input.providerName),
+        baseUrl: normalizeBaseUrl(input.baseUrl),
+        model: normalizeModel(input.model),
+        apiKey: normalizeApiKey(input.apiKey, true),
+      },
+    });
+
+    return this.toPublicProviderConfig(config);
+  }
+
+  async updateProviderConfig(
+    userId: string | null,
+    configId: string,
+    input: AiProviderConfigInput,
+  ) {
+    await this.ensureAdmin(userId);
+    const config = await this.getWorkspaceConfig(configId);
+    const data: Prisma.AiProviderConfigUpdateInput = {};
+
+    if (input.name !== undefined) {
+      const name = normalizeConfigName(input.name);
+      await this.ensureUniqueConfigName(config.workspaceId, name, config.id);
+      data.name = name;
+    }
+
+    if (input.providerName !== undefined) {
+      data.providerName = normalizeProviderName(input.providerName);
+    }
+
+    if (input.baseUrl !== undefined) {
+      data.baseUrl = normalizeBaseUrl(input.baseUrl);
+    }
+
+    if (input.model !== undefined) {
+      data.model = normalizeModel(input.model);
+    }
+
+    if (input.apiKey !== undefined && input.apiKey.trim()) {
+      data.apiKey = normalizeApiKey(input.apiKey, true);
+    }
+
+    const updated = await this.prisma.aiProviderConfig.update({
+      where: { id: config.id },
+      data,
+    });
+
+    return this.toPublicProviderConfig(updated);
+  }
+
+  async activateProviderConfig(userId: string | null, configId: string) {
+    await this.ensureAdmin(userId);
+    const config = await this.getWorkspaceConfig(configId);
+    ensureCompleteConfig(config);
+    const settings = await this.getOrCreateSettings();
+
+    const updated = await this.prisma.aiSettings.update({
+      where: { id: settings.id },
+      data: { activeConfigId: config.id, updatedById: userId },
+      include: { activeConfig: true },
+    });
+    const configs = await this.listStoredConfigs(settings.workspaceId);
+
+    return this.toPublicSettings(updated, configs);
+  }
+
+  async deleteProviderConfig(userId: string | null, configId: string) {
+    await this.ensureAdmin(userId);
+    const config = await this.getWorkspaceConfig(configId);
+    const settings = await this.getOrCreateSettings();
+
+    if (settings.activeConfigId === config.id) {
+      throw new BadRequestException("请先切换当前配置，再删除该配置");
+    }
+
+    await this.prisma.aiProviderConfig.delete({ where: { id: config.id } });
+    return { ok: true };
   }
 
   async listConversations(userId: string | null) {
@@ -293,12 +370,17 @@ export class AiService {
     }
 
     const settings = await this.getOrCreateSettings();
+    const activeConfig = settings.activeConfig;
 
     if (!settings.enabled) {
       throw new ServiceUnavailableException("AI 助手尚未启用");
     }
 
-    if (!settings.baseUrl || !settings.model || !settings.apiKey) {
+    if (!activeConfig) {
+      throw new ServiceUnavailableException("尚未选择 AI 配置，请联系管理员");
+    }
+
+    if (!activeConfig.baseUrl || !activeConfig.model || !activeConfig.apiKey) {
       throw new ServiceUnavailableException("AI 配置不完整，请联系管理员");
     }
 
@@ -319,10 +401,10 @@ export class AiService {
 
     return {
       settings: {
-        baseUrl: settings.baseUrl,
-        model: settings.model,
-        apiKey: settings.apiKey,
-        temperature: settings.temperature,
+        baseUrl: activeConfig.baseUrl,
+        model: activeConfig.model,
+        apiKey: activeConfig.apiKey,
+        temperature: AI_COMPLETION_TEMPERATURE,
       },
       question,
       contextText,
@@ -580,7 +662,7 @@ export class AiService {
         },
         body: JSON.stringify({
           model: settings.model,
-          temperature: 0.2,
+          temperature: AI_COMPLETION_TEMPERATURE,
           stream: false,
           messages: [
             {
@@ -754,7 +836,47 @@ export class AiService {
       where: { workspaceId: workspace.id },
       update: {},
       create: { workspaceId: workspace.id },
+      include: { activeConfig: true },
     });
+  }
+
+  private async listStoredConfigs(workspaceId: string) {
+    return this.prisma.aiProviderConfig.findMany({
+      where: { workspaceId },
+      orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
+    });
+  }
+
+  private async getWorkspaceConfig(configId: string) {
+    const workspace = await this.getDefaultWorkspace();
+    const config = await this.prisma.aiProviderConfig.findFirst({
+      where: { id: configId, workspaceId: workspace.id },
+    });
+
+    if (!config) {
+      throw new BadRequestException("AI 配置不存在");
+    }
+
+    return config;
+  }
+
+  private async ensureUniqueConfigName(
+    workspaceId: string,
+    name: string,
+    excludeId?: string,
+  ) {
+    const duplicate = await this.prisma.aiProviderConfig.findFirst({
+      where: {
+        workspaceId,
+        name,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (duplicate) {
+      throw new BadRequestException("配置名称已存在");
+    }
   }
 
   private async ensureAdmin(userId: string | null) {
@@ -773,28 +895,68 @@ export class AiService {
     }
   }
 
-  private toPublicSettings(settings: {
-    enabled: boolean;
+  private toPublicSettings(
+    settings: {
+      enabled: boolean;
+      activeConfigId: string | null;
+      activeConfig: {
+        id: string;
+        name: string;
+        providerName: string;
+        baseUrl: string;
+        model: string;
+        apiKey: string;
+        createdAt: Date;
+        updatedAt: Date;
+      } | null;
+      maxContextFiles: number;
+      maxContextChars: number;
+      updatedAt: Date;
+    },
+    configs: Array<{
+      id: string;
+      name: string;
+      providerName: string;
+      baseUrl: string;
+      model: string;
+      apiKey: string;
+      createdAt: Date;
+      updatedAt: Date;
+    }>,
+  ) {
+    return {
+      enabled: settings.enabled,
+      activeConfigId: settings.activeConfigId,
+      activeConfig: settings.activeConfig
+        ? this.toPublicProviderConfig(settings.activeConfig)
+        : null,
+      configs: configs.map((config) => this.toPublicProviderConfig(config)),
+      maxContextFiles: settings.maxContextFiles,
+      maxContextChars: settings.maxContextChars,
+      updatedAt: settings.updatedAt.toISOString(),
+    };
+  }
+
+  private toPublicProviderConfig(config: {
+    id: string;
+    name: string;
     providerName: string;
     baseUrl: string;
     model: string;
     apiKey: string;
-    temperature: number;
-    maxContextFiles: number;
-    maxContextChars: number;
+    createdAt: Date;
     updatedAt: Date;
   }) {
     return {
-      enabled: settings.enabled,
-      providerName: settings.providerName,
-      baseUrl: settings.baseUrl,
-      model: settings.model,
-      apiKeyConfigured: Boolean(settings.apiKey),
-      apiKeyPreview: maskApiKey(settings.apiKey),
-      temperature: settings.temperature,
-      maxContextFiles: settings.maxContextFiles,
-      maxContextChars: settings.maxContextChars,
-      updatedAt: settings.updatedAt.toISOString(),
+      id: config.id,
+      name: config.name,
+      providerName: config.providerName,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      apiKeyConfigured: Boolean(config.apiKey),
+      apiKeyPreview: maskApiKey(config.apiKey),
+      createdAt: config.createdAt.toISOString(),
+      updatedAt: config.updatedAt.toISOString(),
     };
   }
 
@@ -853,11 +1015,53 @@ export class AiService {
   }
 }
 
+function normalizeConfigName(value: string) {
+  const name = value.trim();
+  if (!name) {
+    throw new BadRequestException("请输入配置名称");
+  }
+  return name;
+}
+
+function normalizeProviderName(value: string) {
+  const providerName = value.trim();
+  if (!providerName) {
+    throw new BadRequestException("请选择 AI 服务商");
+  }
+  return providerName;
+}
+
+function normalizeModel(value: string) {
+  const model = value.trim();
+  if (!model) {
+    throw new BadRequestException("请输入模型 ID");
+  }
+  return model;
+}
+
+function normalizeApiKey(value: string, required: boolean) {
+  const apiKey = value.trim();
+  if (required && !apiKey) {
+    throw new BadRequestException("请输入 API Key");
+  }
+  return apiKey;
+}
+
+function ensureCompleteConfig(config: {
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+}) {
+  if (!config.baseUrl || !config.model || !config.apiKey) {
+    throw new BadRequestException("AI 配置不完整，请先补全并保存");
+  }
+}
+
 function normalizeBaseUrl(value: string) {
   const trimmed = value.trim();
 
   if (!trimmed) {
-    return "";
+    throw new BadRequestException("请输入 AI 服务地址");
   }
 
   let parsed: URL;

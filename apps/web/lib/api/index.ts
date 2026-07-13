@@ -209,14 +209,23 @@ export function updateSystemSettings(input: Partial<{ timeZone: string }>) {
   });
 }
 
-export interface AiSettings {
-  enabled: boolean;
+export interface AiProviderConfig {
+  id: string;
+  name: string;
   providerName: string;
   baseUrl: string;
   model: string;
   apiKeyConfigured: boolean;
   apiKeyPreview: string;
-  temperature: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiSettings {
+  enabled: boolean;
+  activeConfigId: string | null;
+  activeConfig: AiProviderConfig | null;
+  configs: AiProviderConfig[];
   maxContextFiles: number;
   maxContextChars: number;
   updatedAt: string;
@@ -229,11 +238,6 @@ export function getAiSettings() {
 export function updateAiSettings(
   input: Partial<{
     enabled: boolean;
-    providerName: string;
-    baseUrl: string;
-    model: string;
-    apiKey: string;
-    temperature: number;
     maxContextFiles: number;
     maxContextChars: number;
   }>,
@@ -241,6 +245,49 @@ export function updateAiSettings(
   return request<{ settings: AiSettings }>("/admin/ai/settings", {
     method: "PATCH",
     body: JSON.stringify(input),
+  });
+}
+
+export interface AiProviderConfigInput {
+  name: string;
+  providerName: string;
+  baseUrl: string;
+  model: string;
+  apiKey?: string;
+}
+
+export function createAiProviderConfig(
+  input: AiProviderConfigInput & { apiKey: string },
+) {
+  return request<{ config: AiProviderConfig }>("/admin/ai/configs", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAiProviderConfig(
+  configId: string,
+  input: AiProviderConfigInput,
+) {
+  return request<{ config: AiProviderConfig }>(
+    `/admin/ai/configs/${configId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function activateAiProviderConfig(configId: string) {
+  return request<{ settings: AiSettings }>(
+    `/admin/ai/configs/${configId}/activate`,
+    { method: "POST" },
+  );
+}
+
+export function deleteAiProviderConfig(configId: string) {
+  return request<{ ok: true }>(`/admin/ai/configs/${configId}`, {
+    method: "DELETE",
   });
 }
 

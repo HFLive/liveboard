@@ -13,7 +13,6 @@ import type { Response } from "express";
 import {
   IsBoolean,
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   Max,
@@ -29,28 +28,6 @@ class UpdateAiSettingsDto {
   enabled?: boolean;
 
   @IsOptional()
-  @IsString()
-  providerName?: string;
-
-  @IsOptional()
-  @IsString()
-  baseUrl?: string;
-
-  @IsOptional()
-  @IsString()
-  model?: string;
-
-  @IsOptional()
-  @IsString()
-  apiKey?: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(2)
-  temperature?: number;
-
-  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(20)
@@ -61,6 +38,54 @@ class UpdateAiSettingsDto {
   @Min(1000)
   @Max(40000)
   maxContextChars?: number;
+}
+
+class CreateAiProviderConfigDto {
+  @IsString()
+  @MinLength(1)
+  name!: string;
+
+  @IsString()
+  @MinLength(1)
+  providerName!: string;
+
+  @IsString()
+  @MinLength(1)
+  baseUrl!: string;
+
+  @IsString()
+  @MinLength(1)
+  model!: string;
+
+  @IsString()
+  @MinLength(1)
+  apiKey!: string;
+}
+
+class UpdateAiProviderConfigDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  providerName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  baseUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  model?: string;
+
+  @IsOptional()
+  @IsString()
+  apiKey?: string;
 }
 
 class AskAiDto {
@@ -88,6 +113,46 @@ export class AiController {
     @Body() body: UpdateAiSettingsDto,
   ) {
     return { settings: await this.aiService.updateSettings(userId, body) };
+  }
+
+  @Post("admin/ai/configs")
+  async createProviderConfig(
+    @CurrentUserId() userId: string | null,
+    @Body() body: CreateAiProviderConfigDto,
+  ) {
+    return {
+      config: await this.aiService.createProviderConfig(userId, body),
+    };
+  }
+
+  @Patch("admin/ai/configs/:id")
+  async updateProviderConfig(
+    @CurrentUserId() userId: string | null,
+    @Param("id") configId: string,
+    @Body() body: UpdateAiProviderConfigDto,
+  ) {
+    return {
+      config: await this.aiService.updateProviderConfig(userId, configId, body),
+    };
+  }
+
+  @Post("admin/ai/configs/:id/activate")
+  @HttpCode(200)
+  async activateProviderConfig(
+    @CurrentUserId() userId: string | null,
+    @Param("id") configId: string,
+  ) {
+    return {
+      settings: await this.aiService.activateProviderConfig(userId, configId),
+    };
+  }
+
+  @Delete("admin/ai/configs/:id")
+  async deleteProviderConfig(
+    @CurrentUserId() userId: string | null,
+    @Param("id") configId: string,
+  ) {
+    return this.aiService.deleteProviderConfig(userId, configId);
   }
 
   @Get("ai/status")

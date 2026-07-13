@@ -77,26 +77,26 @@ enum ForumThreadStatus {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  username     String     @unique
-  displayName  String
-  passwordHash String
-  systemRole   SystemRole
-  status       UserStatus @default(active)
-  storageQuotaBytes Int    @default(536870912)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id                String     @id @default(cuid())
+  username          String     @unique
+  displayName       String
+  passwordHash      String
+  systemRole        SystemRole
+  status            UserStatus @default(active)
+  storageQuotaBytes Int        @default(536870912)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
-  createdFolders Folder[]          @relation("FolderCreatedBy")
-  createdFiles   File[]            @relation("FileCreatedBy")
-  updatedFiles   File[]            @relation("FileUpdatedBy")
-  grants         PermissionGrant[] @relation("PermissionUser")
+  createdFolders             Folder[]                @relation("FolderCreatedBy")
+  createdFiles               File[]                  @relation("FileCreatedBy")
+  updatedFiles               File[]                  @relation("FileUpdatedBy")
+  grants                     PermissionGrant[]       @relation("PermissionUser")
   permissionGroupMemberships PermissionGroupMember[]
-  createdPermissionGroups PermissionGroup[] @relation("PermissionGroupCreatedBy")
-  submissions    Submission[]
-  aiConversations AiConversation[]
-  forumThreads   ForumThread[] @relation("ForumThreadAuthor")
-  forumPosts     ForumPost[]   @relation("ForumPostAuthor")
+  createdPermissionGroups    PermissionGroup[]       @relation("PermissionGroupCreatedBy")
+  submissions                Submission[]
+  aiConversations            AiConversation[]
+  forumThreads               ForumThread[]           @relation("ForumThreadAuthor")
+  forumPosts                 ForumPost[]             @relation("ForumPostAuthor")
 }
 
 model Workspace {
@@ -107,15 +107,16 @@ model Workspace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  folders Folder[]
-  files   File[]
-  grants  PermissionGrant[]
-  permissionGroups PermissionGroup[]
-  assets  FileAsset[]
-  aiSettings AiSettings?
-  aiConversations AiConversation[]
-  forumCategories ForumCategory[]
-  forumThreads ForumThread[]
+  folders           Folder[]
+  files             File[]
+  grants            PermissionGrant[]
+  permissionGroups  PermissionGroup[]
+  assets            FileAsset[]
+  aiSettings        AiSettings?
+  aiProviderConfigs AiProviderConfig[]
+  aiConversations   AiConversation[]
+  forumCategories   ForumCategory[]
+  forumThreads      ForumThread[]
 }
 
 model ForumCategory {
@@ -164,12 +165,12 @@ model ForumPost {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  thread ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  parent ForumPost?  @relation("ForumPostReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies ForumPost[] @relation("ForumPostReplies")
-  replyTo ForumPost? @relation("ForumPostReplyTargets", fields: [replyToId], references: [id], onDelete: SetNull)
+  thread          ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  parent          ForumPost?  @relation("ForumPostReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies         ForumPost[] @relation("ForumPostReplies")
+  replyTo         ForumPost?  @relation("ForumPostReplyTargets", fields: [replyToId], references: [id], onDelete: SetNull)
   targetedReplies ForumPost[] @relation("ForumPostReplyTargets")
-  author User        @relation("ForumPostAuthor", fields: [authorId], references: [id])
+  author          User        @relation("ForumPostAuthor", fields: [authorId], references: [id])
 
   @@index([threadId, createdAt])
   @@index([parentId, createdAt])
@@ -187,10 +188,10 @@ model Folder {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id])
-  parent    Folder?   @relation("FolderTree", fields: [parentId], references: [id])
-  children  Folder[]  @relation("FolderTree")
-  createdBy User      @relation("FolderCreatedBy", fields: [createdById], references: [id])
+  workspace Workspace   @relation(fields: [workspaceId], references: [id])
+  parent    Folder?     @relation("FolderTree", fields: [parentId], references: [id])
+  children  Folder[]    @relation("FolderTree")
+  createdBy User        @relation("FolderCreatedBy", fields: [createdById], references: [id])
   files     File[]
   assets    FileAsset[]
 
@@ -235,8 +236,8 @@ model PermissionGrant {
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id])
-  user      User?     @relation("PermissionUser", fields: [userId], references: [id])
+  workspace Workspace        @relation(fields: [workspaceId], references: [id])
+  user      User?            @relation("PermissionUser", fields: [userId], references: [id])
   group     PermissionGroup? @relation(fields: [groupId], references: [id])
 
   @@unique([targetType, targetId, userId])
@@ -253,8 +254,8 @@ model PermissionGroup {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id])
-  createdBy User      @relation("PermissionGroupCreatedBy", fields: [createdById], references: [id])
+  workspace Workspace               @relation(fields: [workspaceId], references: [id])
+  createdBy User                    @relation("PermissionGroupCreatedBy", fields: [createdById], references: [id])
   members   PermissionGroupMember[]
   grants    PermissionGrant[]
 
@@ -324,7 +325,7 @@ model Question {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
-  exerciseSet ExerciseSet       @relation(fields: [exerciseSetId], references: [id])
+  exerciseSet ExerciseSet        @relation(fields: [exerciseSetId], references: [id])
   answers     SubmissionAnswer[]
 }
 
@@ -385,18 +386,33 @@ model AiSettings {
   id              String   @id @default(cuid())
   workspaceId     String   @unique
   enabled         Boolean  @default(false)
-  providerName    String   @default("OpenAI Compatible")
-  baseUrl         String   @default("")
-  model           String   @default("")
-  apiKey          String   @default("")
-  temperature     Float    @default(0.2)
+  activeConfigId  String?  @unique
   maxContextFiles Int      @default(6)
   maxContextChars Int      @default(12000)
   updatedById     String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id])
+  activeConfig AiProviderConfig? @relation("ActiveAiConfig", fields: [activeConfigId], references: [id], onDelete: SetNull)
+}
+
+model AiProviderConfig {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  name         String
+  providerName String
+  baseUrl      String
+  model        String
+  apiKey       String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspace         Workspace   @relation(fields: [workspaceId], references: [id])
+  activeForSettings AiSettings? @relation("ActiveAiConfig")
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, updatedAt])
 }
 
 model AiConversation {

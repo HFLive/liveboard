@@ -1,0 +1,379 @@
+.ai-settings-page {
+  min-width: 0;
+}
+
+.ai-settings-page .ai-settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 38px;
+  width: min(900px, 100%);
+  min-width: 0;
+}
+
+.ai-settings-page .ai-assistant-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  min-width: 0;
+  padding: 6px 0;
+}
+
+.ai-settings-page .ai-section-copy,
+.ai-settings-page .ai-config-section-head > div {
+  min-width: 0;
+}
+
+.ai-settings-page .ai-section-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.ai-settings-page .ai-section-title > svg {
+  width: 19px;
+  height: 19px;
+  color: var(--accent);
+}
+
+.ai-settings-page .ai-section-title h2,
+.ai-settings-page .ai-config-section-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+}
+
+.ai-settings-page .ai-section-title > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.ai-settings-page .ai-section-title > span.is-on {
+  color: var(--accent-dark);
+}
+
+.ai-settings-page .ai-section-copy > p,
+.ai-settings-page .ai-config-section-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.ai-settings-page .ai-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.ai-settings-page .ai-compact-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.ai-settings-page .ai-compact-switch input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.ai-settings-page .ai-config-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+.ai-settings-page .ai-config-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  min-width: 0;
+}
+
+.ai-settings-page .ai-config-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
+}
+
+.ai-settings-page .ai-config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-width: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
+  padding: 15px 2px;
+}
+
+.ai-settings-page .ai-config-row-main {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ai-settings-page .ai-config-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.ai-settings-page .ai-config-dot.active {
+  background: var(--accent);
+}
+
+.ai-settings-page .ai-config-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ai-settings-page .ai-config-name strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-settings-page .ai-config-name span {
+  flex: 0 0 auto;
+  color: var(--accent-dark);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.ai-settings-page .ai-config-row-main p {
+  overflow: hidden;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-settings-page .ai-config-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.ai-settings-page .ai-config-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 2px;
+}
+
+.ai-settings-page .ai-config-empty p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ai-settings-page .ai-policy-note {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  max-width: 720px;
+  color: var(--muted);
+}
+
+.ai-settings-page .ai-policy-note svg {
+  width: 17px;
+  height: 17px;
+  color: var(--accent);
+}
+
+.ai-settings-page .ai-policy-note p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.ai-settings-page .modal-head > div {
+  min-width: 0;
+}
+
+.ai-settings-page .modal-head p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ai-settings-page .ai-context-modal {
+  width: min(500px, 100%);
+}
+
+.ai-settings-page .ai-context-fields,
+.ai-settings-page .ai-config-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  min-width: 0;
+}
+
+.ai-settings-page .ai-config-modal {
+  width: min(680px, 100%);
+}
+
+.ai-settings-page .ai-config-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-settings-page .ai-config-modal-title h2 {
+  min-width: 0;
+}
+
+.ai-settings-page .ai-active-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  color: var(--accent-dark);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.ai-settings-page .ai-active-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.ai-settings-page .ai-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  min-width: 0;
+}
+
+.ai-settings-page .label {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.ai-settings-page .input,
+.ai-settings-page .select {
+  width: 100%;
+  min-width: 0;
+}
+
+.ai-settings-page .field-hint {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 450;
+  line-height: 1.5;
+}
+
+.ai-settings-page .ai-managed-endpoint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+  padding: 10px 12px;
+}
+
+.ai-settings-page .ai-managed-endpoint span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ai-settings-page .ai-managed-endpoint code {
+  min-width: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-settings-page .ai-config-modal-foot {
+  justify-content: space-between;
+}
+
+.ai-settings-page .ai-config-modal-foot > .button-row {
+  margin-left: 0;
+}
+
+@media (max-width: 680px) {
+  .ai-settings-page .ai-assistant-summary,
+  .ai-settings-page .ai-config-section-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ai-settings-page .ai-summary-actions {
+    justify-content: space-between;
+  }
+
+  .ai-settings-page .ai-config-section-head .button {
+    align-self: flex-start;
+  }
+
+  .ai-settings-page .ai-provider-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .ai-settings-page .ai-settings-layout {
+    gap: 32px;
+  }
+
+  .ai-settings-page .ai-config-row {
+    align-items: flex-start;
+  }
+
+  .ai-settings-page .ai-config-row-actions .button {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .ai-settings-page .ai-config-modal-foot {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .ai-settings-page .ai-config-modal-foot > div,
+  .ai-settings-page .ai-config-modal-foot .button-row,
+  .ai-settings-page .ai-config-modal-foot .button {
+    width: 100%;
+  }
+
+  .ai-settings-page .ai-managed-endpoint {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ai-settings-page .ai-managed-endpoint code {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+}
