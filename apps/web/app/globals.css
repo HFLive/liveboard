@@ -406,56 +406,6 @@ p.muted {
   line-height: 1.55;
 }
 
-.error-text,
-.success-text {
-  position: fixed;
-  z-index: 1200;
-  top: 18px;
-  left: 50%;
-  width: min(520px, calc(100vw - 32px));
-  margin: 0;
-  border: 1px solid var(--line);
-  border-left: 4px solid;
-  border-radius: var(--radius-lg);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-md);
-  padding: 12px 14px;
-  transform: translateX(-50%);
-  animation: toast-lifecycle 4.2s ease-in-out forwards;
-  pointer-events: none;
-}
-
-.error-text {
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-.success-text {
-  border-color: var(--accent);
-  color: var(--accent-dark);
-}
-
-@keyframes toast-lifecycle {
-  0% {
-    opacity: 0;
-    visibility: visible;
-    transform: translate(-50%, -16px);
-  }
-
-  6%,
-  82% {
-    opacity: 1;
-    visibility: visible;
-    transform: translate(-50%, 0);
-  }
-
-  100% {
-    opacity: 0;
-    visibility: hidden;
-    transform: translate(-50%, -10px);
-  }
-}
-
 .metric-strip {
   display: flex;
   flex-wrap: wrap;
