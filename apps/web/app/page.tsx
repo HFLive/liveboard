@@ -59,7 +59,7 @@ export default function HomePage() {
                   <span>成员权限</span>
                 </aside>
                 <div className="scene-content">
-                  <div className="scene-path">课程内容 / 第一讲教案</div>
+                  <div className="scene-path">内容 / 第一讲教案</div>
                   <div className="scene-document-head">
                     <h2>第一讲：直播基础</h2>
                     <span>已发布</span>

@@ -201,7 +201,9 @@ export class ExercisesService {
       exerciseSet.fileId,
     );
 
-    if (!canView(level)) {
+    if (!(
+      canView(level) || (await this.hasTeachingDeckAccess(exerciseSetId))
+    )) {
       throw new ForbiddenException("No permission to view exercise set");
     }
 
@@ -253,7 +255,9 @@ export class ExercisesService {
       exerciseSet.fileId,
     );
 
-    if (!canView(level)) {
+    if (!(
+      canView(level) || (await this.hasTeachingDeckAccess(exerciseSetId))
+    )) {
       throw new ForbiddenException("No permission to submit exercise");
     }
 
@@ -408,7 +412,9 @@ export class ExercisesService {
       exerciseSet.fileId,
     );
 
-    if (!canView(level)) {
+    if (!(
+      canView(level) || (await this.hasTeachingDeckAccess(exerciseSetId))
+    )) {
       throw new ForbiddenException("No permission to view submissions");
     }
 
@@ -541,6 +547,14 @@ export class ExercisesService {
         include: { answers: true },
       });
     });
+  }
+
+  private async hasTeachingDeckAccess(exerciseSetId: string) {
+    return (
+      (await this.prisma.teachingDeckItem.count({
+        where: { exerciseSetId },
+      })) > 0
+    );
   }
 
   private validateQuestion(

@@ -83,6 +83,18 @@ export interface FileSummary {
   updatedAt: string;
 }
 
+export type TeachingDeckItemType = "content_block" | "exercise";
+
+export interface TeachingDeckSummary {
+  id: string;
+  title: string;
+  itemCount: number;
+  createdBy: UserSummary;
+  canEdit: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ForumCategorySummary {
   id: string;
   name: string;

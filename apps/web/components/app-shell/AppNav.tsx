@@ -9,6 +9,7 @@ import {
   Database,
   Files,
   MessageSquare,
+  Presentation,
   Settings,
   Users,
 } from "lucide-react";
@@ -20,7 +21,8 @@ import { LogoutButton } from "./LogoutButton";
 
 const navItems = [
   { href: APP_ROUTES.ai, label: "AI 助手", Icon: Bot },
-  { href: APP_ROUTES.content, label: "课程内容", Icon: Files },
+  { href: APP_ROUTES.content, label: "内容", Icon: Files },
+  { href: APP_ROUTES.teaching, label: "授课", Icon: Presentation },
   { href: APP_ROUTES.library, label: "素材库", Icon: Database },
   { href: APP_ROUTES.exercises, label: "练习", Icon: ClipboardList },
   { href: APP_ROUTES.forum, label: "论坛", Icon: MessageSquare },
@@ -37,7 +39,8 @@ function isActive(pathname: string, href: string) {
 
 export function AppNav() {
   const pathname = usePathname();
-  const isPresentationRoute = /^\/app\/content\/[^/]+\/present$/.test(pathname);
+  const isPresentationRoute =
+    /^\/app\/(?:content\/[^/]+|teaching\/[^/]+)\/present$/.test(pathname);
   const [user, setUser] = useState<UserSummary | null>(null);
   const [userLoaded, setUserLoaded] = useState(false);
   const displayName = userLoaded ? (user?.displayName ?? "未登录") : "账户信息";

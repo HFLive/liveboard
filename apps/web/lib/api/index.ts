@@ -12,6 +12,8 @@ import type {
   PermissionTargetType,
   QuestionType,
   SystemRole,
+  TeachingDeckSummary,
+  TeachingDeckItemType,
   UserSummary,
 } from "@liveboard/shared";
 import { API_URL, ApiError, request } from "./client";
@@ -869,6 +871,68 @@ export function createFile(input: {
   return request<{ file: FileSummary }>("/files", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export interface TeachingDeckItemInput {
+  type: TeachingDeckItemType;
+  sourceBlockId?: string;
+  exerciseSetId?: string;
+}
+
+export interface TeachingDeckItem {
+  id: string;
+  type: TeachingDeckItemType;
+  sortOrder: number;
+  sourceFileId: string | null;
+  sourceBlockId: string | null;
+  sourceFileTitle: string | null;
+  block: ContentBlock | null;
+  exerciseSetId: string | null;
+  exerciseTitle: string | null;
+}
+
+export interface TeachingDeckDetail {
+  id: string;
+  title: string;
+  createdBy: UserSummary;
+  canEdit: boolean;
+  createdAt: string;
+  updatedAt: string;
+  items: TeachingDeckItem[];
+}
+
+export function listTeachingDecks() {
+  return request<{ decks: TeachingDeckSummary[] }>("/teaching-decks");
+}
+
+export function getTeachingDeck(id: string) {
+  return request<{ deck: TeachingDeckDetail }>(`/teaching-decks/${id}`);
+}
+
+export function createTeachingDeck(input: {
+  title: string;
+  items: TeachingDeckItemInput[];
+}) {
+  return request<{ deck: TeachingDeckDetail }>("/teaching-decks", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateTeachingDeck(
+  id: string,
+  input: { title?: string; items?: TeachingDeckItemInput[] },
+) {
+  return request<{ deck: TeachingDeckDetail }>(`/teaching-decks/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteTeachingDeck(id: string) {
+  return request<{ ok: boolean }>(`/teaching-decks/${id}`, {
+    method: "DELETE",
   });
 }
 

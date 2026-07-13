@@ -97,6 +97,7 @@ model User {
   aiConversations            AiConversation[]
   forumThreads               ForumThread[]           @relation("ForumThreadAuthor")
   forumPosts                 ForumPost[]             @relation("ForumPostAuthor")
+  teachingDecks              TeachingDeck[]          @relation("TeachingDeckCreatedBy")
 }
 
 model Workspace {
@@ -117,6 +118,7 @@ model Workspace {
   aiConversations   AiConversation[]
   forumCategories   ForumCategory[]
   forumThreads      ForumThread[]
+  teachingDecks     TeachingDeck[]
 }
 
 model ForumCategory {
@@ -220,6 +222,7 @@ model File {
   blocks    ContentBlock[]
   exercise  ExerciseSet?
   assets    FileAsset[]
+  teachingDeckItems TeachingDeckItem[] @relation("TeachingDeckItemSourceFile")
 
   @@index([folderId, status, updatedAt])
 }
@@ -294,6 +297,7 @@ model ContentBlock {
   file   File           @relation(fields: [fileId], references: [id])
   parent ContentBlock?  @relation("BlockTree", fields: [parentBlockId], references: [id])
   child  ContentBlock[] @relation("BlockTree")
+  teachingDeckItems TeachingDeckItem[] @relation("TeachingDeckItemSourceBlock")
 
   @@index([fileId, sortOrder])
 }
@@ -311,6 +315,46 @@ model ExerciseSet {
   file        File         @relation(fields: [fileId], references: [id])
   questions   Question[]
   submissions Submission[]
+  teachingDeckItems TeachingDeckItem[]
+}
+
+model TeachingDeck {
+  id          String   @id @default(cuid())
+  workspaceId String
+  title       String
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace          @relation(fields: [workspaceId], references: [id])
+  createdBy User               @relation("TeachingDeckCreatedBy", fields: [createdById], references: [id])
+  items     TeachingDeckItem[]
+
+  @@index([workspaceId, updatedAt])
+  @@index([createdById])
+}
+
+model TeachingDeckItem {
+  id            String   @id @default(cuid())
+  deckId        String
+  type          String
+  sortOrder     Int      @default(0)
+  sourceFileId  String?
+  sourceBlockId String?
+  exerciseSetId String?
+  snapshotJson  Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  deck        TeachingDeck  @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  sourceFile  File?         @relation("TeachingDeckItemSourceFile", fields: [sourceFileId], references: [id], onDelete: SetNull)
+  sourceBlock ContentBlock? @relation("TeachingDeckItemSourceBlock", fields: [sourceBlockId], references: [id], onDelete: SetNull)
+  exerciseSet ExerciseSet?  @relation(fields: [exerciseSetId], references: [id], onDelete: SetNull)
+
+  @@index([deckId, sortOrder])
+  @@index([sourceFileId])
+  @@index([sourceBlockId])
+  @@index([exerciseSetId])
 }
 
 model Question {

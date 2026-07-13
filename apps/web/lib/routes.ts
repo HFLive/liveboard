@@ -11,6 +11,8 @@ export const APP_ROUTES = {
   library: staticRoute("/app/library"),
   exercises: staticRoute("/app/exercises"),
   exercisesNew: staticRoute("/app/exercises/new"),
+  teaching: staticRoute("/app/teaching"),
+  teachingNew: staticRoute("/app/teaching/new"),
   forum: staticRoute("/app/forum"),
   forumNew: staticRoute("/app/forum/new"),
   admin: staticRoute("/app/admin"),
@@ -37,6 +39,14 @@ export function contentPresentation(fileId: string): Route {
 
 export function exerciseDetail(exerciseSetId: string): Route {
   return `/app/exercises/${routeSegment(exerciseSetId)}` as Route;
+}
+
+export function teachingEdit(deckId: string): Route {
+  return `/app/teaching/${routeSegment(deckId)}/edit` as Route;
+}
+
+export function teachingPresent(deckId: string): Route {
+  return `/app/teaching/${routeSegment(deckId)}/present` as Route;
 }
 
 export function exerciseSubmissions(exerciseSetId: string): Route {

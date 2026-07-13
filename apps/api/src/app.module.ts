@@ -10,6 +10,7 @@ import { PermissionsModule } from "./modules/permissions/permissions.module";
 import { PrismaModule } from "./modules/prisma/prisma.module";
 import { SettingsModule } from "./modules/settings/settings.module";
 import { UsersModule } from "./modules/users/users.module";
+import { TeachingModule } from "./modules/teaching/teaching.module";
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { UsersModule } from "./modules/users/users.module";
     ForumModule,
     SettingsModule,
     AiModule,
+    TeachingModule,
   ],
 })
 export class AppModule {}
