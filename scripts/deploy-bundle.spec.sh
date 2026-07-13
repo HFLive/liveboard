@@ -87,7 +87,11 @@ grep -q '^密码：test-random-password$' "$CREDENTIALS_FILE"
 grep -q '首次管理员凭据（请立即保存）' "$TEST_DIR/first-run.log"
 grep -q '^密码：test-random-password$' "$TEST_DIR/first-run.log"
 
-MODE=$(stat -f '%Lp' "$CREDENTIALS_FILE" 2>/dev/null || stat -c '%a' "$CREDENTIALS_FILE")
+if stat -c '%a' "$CREDENTIALS_FILE" >/dev/null 2>&1; then
+  MODE=$(stat -c '%a' "$CREDENTIALS_FILE")
+else
+  MODE=$(stat -f '%Lp' "$CREDENTIALS_FILE")
+fi
 test "$MODE" = "600"
 BEFORE=$(cksum "$CREDENTIALS_FILE")
 
