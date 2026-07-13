@@ -84,6 +84,8 @@ docker compose ps
 
 `migrate` 容器会在 API 启动前执行 `prisma migrate deploy`。首次部署会执行完整的初始 migration，此后只执行尚未应用的增量 migration。迁移失败时 API 和 Web 不会启动。
 
+Compose 发布到宿主机的端口仅绑定 `127.0.0.1`。生产环境应由宿主机 Nginx、Caddy 或其他网关将公网 HTTPS 请求转发到 Web `127.0.0.1:3000` 和 API `127.0.0.1:4000`，不得直接向公网开放 PostgreSQL、Redis、MinIO、API 或 Web 容器端口。使用同一域名的 `/api/` 反向代理时，将 `NEXT_PUBLIC_API_URL` 设置为 `https://example.com/api`；该变量会在 Web 镜像构建时写入浏览器端代码，修改后必须重新构建 Web 镜像。
+
 生产服务器更新推荐使用：
 
 ```bash
@@ -191,6 +193,7 @@ liveboard/
 - 替换 PostgreSQL、MinIO 和演示账号默认密码。
 - 关闭登录页演示账号提示并重新构建 Web。
 - 使用 HTTPS，避免直接向公网开放数据库、Redis、MinIO 和 API 管理端口。
+- 确认 Compose 发布端口仍只绑定 `127.0.0.1`，公网安全组仅开放 SSH、HTTP 和 HTTPS。
 - 使用 `pnpm deploy:prod` 在更新前生成数据库备份，并为 MinIO 配置独立备份。
 - 为登录、上传和 AI 接口配置网关限流。
 - 所有 schema 变更都提交 Prisma migration；生产环境由 `migrate` 服务自动执行 `prisma migrate deploy`，不使用 `db push`。
