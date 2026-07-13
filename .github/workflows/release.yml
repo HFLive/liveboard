@@ -87,6 +87,7 @@ jobs:
 
           cp docker-compose.yml "${bundle_dir}/docker-compose.yml"
           cp .env.production.example "${bundle_dir}/.env.example"
+          cp infra/nginx/liveboard.conf "${bundle_dir}/nginx.conf"
           cp scripts/deploy-bundle.sh "${bundle_dir}/deploy.sh"
           chmod +x "${bundle_dir}/deploy.sh"
 
@@ -110,7 +111,7 @@ jobs:
 
           (
             cd "$bundle_dir"
-            sha256sum images.tar.gz docker-compose.yml deploy.sh .env.example manifest.txt >SHA256SUMS
+            sha256sum images.tar.gz docker-compose.yml deploy.sh nginx.conf .env.example manifest.txt >SHA256SUMS
           )
 
           tar -C dist -cf - "$bundle" | gzip -1 >"dist/${asset}"
