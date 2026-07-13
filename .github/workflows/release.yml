@@ -1,0 +1,127 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate
+        run: pnpm validate
+
+      - name: Validate release tag
+        shell: bash
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tags must look like v1.2.3 or v1.2.3-rc.1." >&2
+            exit 1
+          fi
+
+      - name: Pull runtime images
+        run: |
+          docker pull --platform linux/amd64 postgres:16-alpine
+          docker pull --platform linux/amd64 redis:7-alpine
+          docker pull --platform linux/amd64 minio/minio:RELEASE.2024-12-18T13-15-44Z
+
+      - name: Build application images
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            --file apps/api/Dockerfile \
+            --tag liveboard-api:local \
+            .
+          docker build \
+            --platform linux/amd64 \
+            --build-arg NEXT_PUBLIC_API_URL=/api \
+            --build-arg NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=false \
+            --file apps/web/Dockerfile \
+            --tag liveboard-web:local \
+            .
+
+      - name: Package release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          asset="liveboard-${GITHUB_REF_NAME}-linux-amd64-images.tar.gz"
+          compose="liveboard-${GITHUB_REF_NAME}-compose.yml"
+          manifest="liveboard-${GITHUB_REF_NAME}-manifest.txt"
+
+          mkdir -p dist
+          docker save \
+            postgres:16-alpine \
+            redis:7-alpine \
+            minio/minio:RELEASE.2024-12-18T13-15-44Z \
+            liveboard-api:local \
+            liveboard-web:local \
+            | gzip -1 >"dist/${asset}"
+
+          cp docker-compose.yml "dist/${compose}"
+
+          {
+            echo "release=${GITHUB_REF_NAME}"
+            echo "commit=${GITHUB_SHA}"
+            echo "platform=linux/amd64"
+            echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            for image in \
+              postgres:16-alpine \
+              redis:7-alpine \
+              minio/minio:RELEASE.2024-12-18T13-15-44Z \
+              liveboard-api:local \
+              liveboard-web:local; do
+              docker image inspect \
+                --format '{{.RepoTags}} {{.Id}} {{json .RepoDigests}}' \
+                "$image"
+            done
+          } >"dist/${manifest}"
+
+          (
+            cd dist
+            sha256sum "$asset" "$compose" "$manifest" >SHA256SUMS
+          )
+
+          size=$(stat -c %s "dist/${asset}")
+          if [ "$size" -ge 2147483648 ]; then
+            echo "Release image bundle must stay below GitHub's 2 GiB per-asset limit." >&2
+            exit 1
+          fi
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/* \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
