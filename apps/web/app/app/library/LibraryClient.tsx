@@ -4,9 +4,9 @@ import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import {
   Download,
   File,
-  Grid2X2,
   Image,
-  List,
+  LayoutGrid,
+  Rows3,
   Search,
   Trash2,
   Upload,
@@ -230,22 +230,29 @@ export function LibraryClient() {
                 <option value="name">按名称</option>
                 <option value="references">按引用数</option>
               </select>
-              <div className="segmented-control" aria-label="视图">
+              <div
+                className="segmented-control library-view-toggle"
+                aria-label="素材展示方式"
+              >
                 <button
+                  aria-label="网格视图"
+                  aria-pressed={view === "grid"}
                   className={view === "grid" ? "active" : ""}
                   onClick={() => setView("grid")}
-                  title="网格"
+                  title="网格视图"
                   type="button"
                 >
-                  <Grid2X2 aria-hidden="true" />
+                  <LayoutGrid aria-hidden="true" strokeWidth={1.8} />
                 </button>
                 <button
+                  aria-label="列表视图"
+                  aria-pressed={view === "list"}
                   className={view === "list" ? "active" : ""}
                   onClick={() => setView("list")}
-                  title="列表"
+                  title="列表视图"
                   type="button"
                 >
-                  <List aria-hidden="true" />
+                  <Rows3 aria-hidden="true" strokeWidth={1.8} />
                 </button>
               </div>
             </div>
@@ -520,7 +527,7 @@ export function LibraryClient() {
 
 function LibraryEmpty({ assetsCount }: { assetsCount: number }) {
   return (
-    <div className="empty-panel">
+    <div className="empty-panel asset-empty">
       <strong>{assetsCount === 0 ? "网盘为空" : "没有匹配的文件"}</strong>
       <span>
         {assetsCount === 0

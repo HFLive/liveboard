@@ -1,0 +1,245 @@
+/* Public home owns its responsive layout here so later global redesign rules
+   cannot restore desktop grid constraints on narrow screens. */
+
+@media (max-width: 960px) {
+  .marketing-page {
+    overflow-x: clip;
+  }
+
+  .marketing-page .marketing-hero {
+    min-height: auto;
+  }
+
+  .marketing-page .marketing-hero-inner {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 42px;
+    width: min(100% - 40px, 720px);
+    padding: 42px 0 64px;
+  }
+
+  .marketing-page .marketing-copy,
+  .marketing-page .marketing-scene {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .marketing-page .marketing-copy p:not(.marketing-kicker) {
+    width: min(560px, 100%);
+    overflow-wrap: break-word;
+    word-break: normal;
+    writing-mode: horizontal-tb;
+  }
+
+  .marketing-page .marketing-feature-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .marketing-page .marketing-nav,
+  .marketing-page .marketing-hero-inner,
+  .marketing-page .marketing-section,
+  .marketing-page .marketing-cta {
+    width: calc(100% - 32px);
+  }
+
+  .marketing-page .marketing-nav {
+    padding: 16px 0;
+  }
+
+  .marketing-page .marketing-brand {
+    gap: 9px;
+  }
+
+  .marketing-page .marketing-brand span {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  .marketing-page .marketing-brand strong {
+    font-size: 15px;
+  }
+
+  .marketing-page .marketing-nav-link {
+    display: none;
+  }
+
+  .marketing-page .marketing-login-link {
+    min-height: 36px;
+    padding: 0 13px;
+  }
+
+  .marketing-page .marketing-hero-inner {
+    gap: 32px;
+    padding: 34px 0 48px;
+  }
+
+  .marketing-page .marketing-copy h1 {
+    max-width: 100%;
+    font-size: clamp(48px, 15vw, 64px);
+    line-height: 0.96;
+    letter-spacing: -0.05em;
+  }
+
+  .marketing-page .marketing-copy p:not(.marketing-kicker) {
+    margin-top: 18px;
+    font-size: 16px;
+    line-height: 1.65;
+  }
+
+  .marketing-page .marketing-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 24px;
+  }
+
+  .marketing-page .marketing-actions > * {
+    width: 100%;
+  }
+
+  .marketing-page .scene-window-main {
+    width: 100%;
+    min-height: 300px;
+    height: 300px;
+    border-radius: 16px;
+  }
+
+  .marketing-page .scene-window-bar {
+    padding: 10px;
+  }
+
+  .marketing-page .scene-window-bar span {
+    width: 8px;
+    height: 8px;
+  }
+
+  .marketing-page .scene-app {
+    grid-template-columns: 92px minmax(0, 1fr);
+    min-width: 0;
+  }
+
+  .marketing-page .scene-app aside {
+    gap: 5px;
+    min-width: 0;
+    padding: 11px 9px;
+    font-size: 10px;
+  }
+
+  .marketing-page .scene-app aside b {
+    margin-bottom: 5px;
+    font-size: 11px;
+  }
+
+  .marketing-page .scene-app aside span {
+    padding: 7px 6px;
+    white-space: nowrap;
+  }
+
+  .marketing-page .scene-content {
+    min-width: 0;
+    gap: 9px;
+    overflow: hidden;
+    padding: 13px 12px;
+  }
+
+  .marketing-page .scene-path,
+  .marketing-page .scene-document-meta {
+    overflow: hidden;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .marketing-page .scene-document-head {
+    min-width: 0;
+    gap: 8px;
+    margin-top: 2px;
+  }
+
+  .marketing-page .scene-document-head h2 {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 17px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .marketing-page .scene-document-head span {
+    flex: 0 0 auto;
+    padding: 4px 6px;
+    font-size: 9px;
+  }
+
+  .marketing-page .scene-note {
+    gap: 4px;
+    padding: 10px 11px;
+  }
+
+  .marketing-page .scene-note strong,
+  .marketing-page .scene-note p,
+  .marketing-page .scene-outline span {
+    font-size: 10px;
+  }
+
+  .marketing-page .scene-note p {
+    display: -webkit-box;
+    overflow: hidden;
+    line-height: 1.45;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .marketing-page .scene-outline span {
+    padding: 7px 1px;
+  }
+
+  .marketing-page .marketing-section {
+    padding: 54px 0;
+  }
+
+  .marketing-page .marketing-section-head {
+    margin-bottom: 20px;
+  }
+
+  .marketing-page .marketing-feature-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .marketing-page .marketing-feature-grid article {
+    min-height: 0;
+    gap: 10px;
+    padding: 20px;
+  }
+
+  .marketing-page .marketing-feature-grid h3 {
+    margin-top: 4px;
+  }
+
+  .marketing-page .marketing-cta {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 38px 0 48px;
+  }
+
+  .marketing-page .marketing-cta .home-primary-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 380px) {
+  .marketing-page .marketing-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .marketing-page .scene-app {
+    grid-template-columns: 82px minmax(0, 1fr);
+  }
+
+  .marketing-page .scene-app aside span {
+    padding-inline: 4px;
+  }
+}
