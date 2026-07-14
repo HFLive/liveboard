@@ -882,6 +882,66 @@ export function createFile(input: {
   });
 }
 
+export interface MarkdownImportResult {
+  file: FileSummary;
+  warnings: string[];
+  blockCount: number;
+}
+
+export async function importMarkdown(input: { folderId: string; file: File }) {
+  const formData = new FormData();
+  formData.set("folderId", input.folderId);
+  formData.set("file", input.file);
+
+  const response = await fetch(`${API_URL}/files/import/markdown`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  if (!response.ok) {
+    redirectToLoginOnUnauthorized(response.status, "/files/import/markdown");
+    const body = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    const message = Array.isArray(body?.message)
+      ? body.message.join("；")
+      : body?.message;
+    throw new ApiError(message ?? "导入 Markdown 失败", response.status);
+  }
+
+  return (await response.json()) as MarkdownImportResult;
+}
+
+export async function downloadMarkdown(fileId: string) {
+  const path = `/files/${fileId}/export/markdown`;
+  const response = await fetch(`${API_URL}${path}`, {
+    credentials: "include",
+  });
+  if (!response.ok) {
+    redirectToLoginOnUnauthorized(response.status, path);
+    const body = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    const message = Array.isArray(body?.message)
+      ? body.message.join("；")
+      : body?.message;
+    throw new ApiError(message ?? "导出 Markdown 失败", response.status);
+  }
+
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const encodedFilename = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  let filename = "content.md";
+  if (encodedFilename) {
+    try {
+      filename = decodeURIComponent(encodedFilename);
+    } catch {
+      filename = "content.md";
+    }
+  }
+
+  return { blob: await response.blob(), filename };
+}
+
 export interface TeachingDeckItemInput {
   type: TeachingDeckItemType;
   sourceBlockId?: string;

@@ -12,6 +12,15 @@ import type { ContentBlockType } from "@liveboard/shared";
 import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { PermissionsService } from "../permissions/permissions.service";
+import {
+  decodeMarkdown,
+  exportMarkdown,
+  markdownDownloadFilename,
+  markdownTitleFromFilename,
+  MAX_MARKDOWN_BLOCKS,
+  MAX_MARKDOWN_SIZE_BYTES,
+  parseMarkdown,
+} from "./markdown";
 
 export interface CreateFolderInput {
   name: string;
@@ -54,6 +63,13 @@ export interface ReferenceBlocksInput {
 
 export interface ReorderBlocksInput {
   blockIds: string[];
+}
+
+export interface ImportMarkdownInput {
+  folderId: string;
+  originalname: string;
+  size: number;
+  buffer: Buffer;
 }
 
 @Injectable()
@@ -369,6 +385,106 @@ export class FilesService {
     });
   }
 
+  async importMarkdown(userId: string | null, input: ImportMarkdownInput) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+    if (!input.folderId) {
+      throw new BadRequestException("请选择导入位置");
+    }
+    if (!input.originalname) {
+      throw new BadRequestException("请选择 Markdown 文件");
+    }
+    if (!/\.md$/i.test(input.originalname)) {
+      throw new BadRequestException("只支持上传 .md 文件");
+    }
+    if (input.size <= 0 || input.buffer.length === 0) {
+      throw new BadRequestException("Markdown 文件不能为空");
+    }
+    if (
+      input.size > MAX_MARKDOWN_SIZE_BYTES ||
+      input.buffer.length > MAX_MARKDOWN_SIZE_BYTES
+    ) {
+      throw new BadRequestException("Markdown 文件不能超过 2 MB");
+    }
+
+    const permission = await this.permissions.getEffectiveLevelForFolder(
+      userId,
+      input.folderId,
+    );
+    if (!canEdit(permission) && permission !== "lecturer") {
+      throw new ForbiddenException("No permission to create file here");
+    }
+
+    const folder = await this.prisma.folder.findUnique({
+      where: { id: input.folderId },
+    });
+    if (!folder) {
+      throw new NotFoundException("Folder not found");
+    }
+
+    let markdown: string;
+    try {
+      markdown = decodeMarkdown(input.buffer);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "无法读取 Markdown 文件",
+      );
+    }
+    const parsed = parseMarkdown(markdown);
+    if (parsed.blocks.length > MAX_MARKDOWN_BLOCKS) {
+      throw new BadRequestException(
+        `Markdown 内容块不能超过 ${MAX_MARKDOWN_BLOCKS} 个`,
+      );
+    }
+
+    const file = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.file.create({
+        data: {
+          workspaceId: folder.workspaceId,
+          folderId: folder.id,
+          title: markdownTitleFromFilename(input.originalname),
+          type: "doc",
+          createdById: userId,
+          updatedById: userId,
+        },
+      });
+      if (parsed.blocks.length > 0) {
+        await tx.contentBlock.createMany({
+          data: parsed.blocks.map((block, index) => ({
+            fileId: created.id,
+            type: block.type,
+            dataJson: block.dataJson as Prisma.InputJsonValue,
+            sortOrder: (index + 1) * 10,
+            createdById: userId,
+            updatedById: userId,
+          })),
+        });
+      }
+      return created;
+    });
+
+    return {
+      file: this.toSummary(file),
+      warnings: parsed.warnings,
+      blockCount: parsed.blocks.length,
+    };
+  }
+
+  async exportMarkdown(userId: string | null, fileId: string) {
+    const file = await this.getFile(userId, fileId);
+    const blocks = await this.prisma.contentBlock.findMany({
+      where: { fileId },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      select: { type: true, dataJson: true },
+    });
+
+    return {
+      filename: markdownDownloadFilename(file.title),
+      content: exportMarkdown(blocks),
+    };
+  }
+
   async updateFile(
     userId: string | null,
     fileId: string,
@@ -494,6 +610,7 @@ export class FilesService {
       throw new ForbiddenException("No permission to edit file");
     }
 
+    this.assertValidStructuredBlock(input.type, input.dataJson);
     await this.assertCanReferenceAsset(
       userId,
       fileId,
@@ -690,6 +807,10 @@ export class FilesService {
       throw new ForbiddenException("No permission to edit block");
     }
 
+    this.assertValidStructuredBlock(
+      input.type ?? (block.type as ContentBlockType),
+      input.dataJson,
+    );
     await this.assertCanReferenceAsset(
       userId,
       block.fileId,
@@ -900,6 +1021,42 @@ export class FilesService {
         : null;
     if (!canEdit(sourceLevel)) {
       throw new ForbiddenException("No permission to reference asset");
+    }
+  }
+
+  private assertValidStructuredBlock(
+    type: ContentBlockType,
+    dataJson: unknown,
+  ) {
+    if (!dataJson || typeof dataJson !== "object" || Array.isArray(dataJson)) {
+      throw new BadRequestException("内容块数据格式无效");
+    }
+
+    const data = dataJson as Record<string, unknown>;
+    if (type === "math") {
+      if (typeof data.text !== "string" || data.text.length > 50_000) {
+        throw new BadRequestException("数学公式必须是 50000 字符以内的文本");
+      }
+      return;
+    }
+
+    if (type !== "table") return;
+    if (
+      !Array.isArray(data.rows) ||
+      data.rows.length < 1 ||
+      data.rows.length > 50
+    ) {
+      throw new BadRequestException("表格必须包含 1 至 50 行");
+    }
+    for (const row of data.rows) {
+      if (!Array.isArray(row) || row.length < 1 || row.length > 20) {
+        throw new BadRequestException("表格每行必须包含 1 至 20 列");
+      }
+      if (
+        row.some((cell) => typeof cell !== "string" || cell.length > 10_000)
+      ) {
+        throw new BadRequestException("表格单元格必须是 10000 字符以内的文本");
+      }
     }
   }
 
