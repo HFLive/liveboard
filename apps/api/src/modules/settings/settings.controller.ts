@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Patch } from "@nestjs/common";
 import { IsOptional, IsString } from "class-validator";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
+import { Public } from "../../common/public.decorator";
 import { SettingsService } from "./settings.service";
 
 class UpdateSystemSettingsDto {
@@ -14,6 +15,7 @@ export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
   @Get("settings/public")
+  @Public()
   async publicSettings() {
     return { settings: await this.settingsService.getPublicSettings() };
   }

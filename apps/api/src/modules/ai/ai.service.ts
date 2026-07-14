@@ -10,6 +10,7 @@ import { canView, isSuperAdmin } from "@liveboard/shared";
 import type { Prisma } from "@prisma/client";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { AiSecretService } from "./ai-secret.service";
 
 interface UpdateAiSettingsInput {
   enabled?: boolean;
@@ -93,6 +94,7 @@ export class AiService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly permissions: PermissionsService,
+    private readonly secrets: AiSecretService,
   ) {}
 
   async getSettings(userId: string | null) {
@@ -172,7 +174,7 @@ export class AiService {
         providerName: normalizeProviderName(input.providerName),
         baseUrl: normalizeBaseUrl(input.baseUrl),
         model: normalizeModel(input.model),
-        apiKey: normalizeApiKey(input.apiKey, true),
+        apiKey: this.secrets.encrypt(normalizeApiKey(input.apiKey, true)),
       },
     });
 
@@ -207,7 +209,7 @@ export class AiService {
     }
 
     if (input.apiKey !== undefined && input.apiKey.trim()) {
-      data.apiKey = normalizeApiKey(input.apiKey, true);
+      data.apiKey = this.secrets.encrypt(normalizeApiKey(input.apiKey, true));
     }
 
     const updated = await this.prisma.aiProviderConfig.update({
@@ -425,12 +427,14 @@ export class AiService {
   async streamChatCompletion(
     prepared: PreparedAiQuestion,
     onDelta: (delta: string) => void,
+    signal?: AbortSignal,
   ) {
     await this.callChatCompletionStream(
       prepared.settings,
       prepared.question,
       prepared.contextText,
       onDelta,
+      signal,
     );
   }
 
@@ -439,6 +443,7 @@ export class AiService {
     question: string,
     conversationId?: string,
     titleSettings?: AiCompletionSettings,
+    signal?: AbortSignal,
   ): Promise<PreparedConversationTurn> {
     if (!userId) {
       throw new UnauthorizedException("Missing session");
@@ -447,7 +452,7 @@ export class AiService {
     const workspace = await this.getDefaultWorkspace();
     const generatedTitle = conversationId
       ? null
-      : await this.generateConversationTitle(question, titleSettings);
+      : await this.generateConversationTitle(question, titleSettings, signal);
     const conversation = conversationId
       ? await this.getOwnedConversation(userId, conversationId)
       : await this.prisma.aiConversation.create({
@@ -468,7 +473,7 @@ export class AiService {
 
     const nextTitle =
       conversation.title === "新的对话"
-        ? await this.generateConversationTitle(question, titleSettings)
+        ? await this.generateConversationTitle(question, titleSettings, signal)
         : conversation.title;
     const updatedConversation = await this.prisma.aiConversation.update({
       where: { id: conversation.id },
@@ -510,32 +515,38 @@ export class AiService {
     question: string,
     options: { maxFiles: number; maxChars: number },
   ): Promise<ContextFile[]> {
-    const files = await this.prisma.file.findMany({
+    const candidates = await this.prisma.file.findMany({
       where: { status: { not: "archived" } },
-      include: {
-        blocks: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
-      },
+      select: { id: true, status: true },
       orderBy: [{ updatedAt: "desc" }],
       take: 80,
     });
 
     const keywords = tokenize(question);
     const visible: ContextFile[] = [];
+    const permissionLevels = await this.permissions.getEffectiveLevelsForFiles(
+      userId,
+      candidates.map((file) => file.id),
+    );
+    const visibleIds = candidates
+      .filter((file) => {
+        const permission = permissionLevels.get(file.id) ?? null;
+        return (
+          canView(permission) &&
+          !(file.status === "draft" && permission === "viewer")
+        );
+      })
+      .map((file) => file.id);
+    if (visibleIds.length === 0) return [];
+
+    const files = await this.prisma.file.findMany({
+      where: { id: { in: visibleIds } },
+      include: {
+        blocks: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
+      },
+    });
 
     for (const file of files) {
-      const permission = await this.permissions.getEffectiveLevelForFile(
-        userId,
-        file.id,
-      );
-
-      if (!canView(permission)) {
-        continue;
-      }
-
-      if (file.status === "draft" && permission === "viewer") {
-        continue;
-      }
-
       const blocks = file.blocks
         .map((block) => ({
           id: block.id,
@@ -628,6 +639,7 @@ export class AiService {
   private async generateConversationTitle(
     question: string,
     settings?: AiCompletionSettings,
+    signal?: AbortSignal,
   ) {
     const fallback = buildFallbackConversationTitle(question);
 
@@ -639,6 +651,7 @@ export class AiService {
       const title = await this.callConversationTitleCompletion(
         settings,
         question,
+        signal,
       );
       return sanitizeAiConversationTitle(title) || fallback;
     } catch {
@@ -649,6 +662,7 @@ export class AiService {
   private async callConversationTitleCompletion(
     settings: AiCompletionSettings,
     question: string,
+    signal?: AbortSignal,
   ) {
     const endpoint = buildChatCompletionEndpoint(settings.baseUrl);
     let response: Response;
@@ -681,7 +695,9 @@ export class AiService {
           ],
           ...getProviderSpecificBody(settings.baseUrl, settings.model),
         }),
-        signal: AbortSignal.timeout(30_000),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(30_000)])
+          : AbortSignal.timeout(30_000),
       });
     } catch {
       throw new ServiceUnavailableException("无法连接 AI 服务");
@@ -713,6 +729,7 @@ export class AiService {
     question: string,
     contextText: string,
     onDelta: (delta: string) => void,
+    signal?: AbortSignal,
   ) {
     const endpoint = buildChatCompletionEndpoint(settings.baseUrl);
     const response = await this.fetchChatCompletion(
@@ -721,6 +738,7 @@ export class AiService {
       question,
       contextText,
       true,
+      signal,
     );
 
     if (!response.body) {
@@ -779,6 +797,7 @@ export class AiService {
     question: string,
     contextText: string,
     stream: boolean,
+    signal?: AbortSignal,
   ) {
     const systemPrompt = [
       "你是 LiveBoard 的教学资料助手。",
@@ -813,7 +832,9 @@ export class AiService {
           ],
           ...getProviderSpecificBody(settings.baseUrl, settings.model),
         }),
-        signal: AbortSignal.timeout(120_000),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(120_000)])
+          : AbortSignal.timeout(120_000),
       });
     } catch {
       throw new ServiceUnavailableException("无法连接 AI 服务");
@@ -832,19 +853,28 @@ export class AiService {
   private async getOrCreateSettings() {
     const workspace = await this.getDefaultWorkspace();
 
-    return this.prisma.aiSettings.upsert({
+    const settings = await this.prisma.aiSettings.upsert({
       where: { workspaceId: workspace.id },
       update: {},
       create: { workspaceId: workspace.id },
       include: { activeConfig: true },
     });
+    if (settings.activeConfig) {
+      settings.activeConfig = await this.decryptAndMigrateConfig(
+        settings.activeConfig,
+      );
+    }
+    return settings;
   }
 
   private async listStoredConfigs(workspaceId: string) {
-    return this.prisma.aiProviderConfig.findMany({
+    const configs = await this.prisma.aiProviderConfig.findMany({
       where: { workspaceId },
       orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
     });
+    return Promise.all(
+      configs.map((config) => this.decryptAndMigrateConfig(config)),
+    );
   }
 
   private async getWorkspaceConfig(configId: string) {
@@ -857,7 +887,20 @@ export class AiService {
       throw new BadRequestException("AI 配置不存在");
     }
 
-    return config;
+    return this.decryptAndMigrateConfig(config);
+  }
+
+  private async decryptAndMigrateConfig<
+    T extends { id: string; apiKey: string },
+  >(config: T): Promise<T> {
+    const plaintext = this.secrets.decrypt(config.apiKey);
+    if (!this.secrets.isEncrypted(config.apiKey) && plaintext) {
+      await this.prisma.aiProviderConfig.update({
+        where: { id: config.id },
+        data: { apiKey: this.secrets.encrypt(plaintext) },
+      });
+    }
+    return { ...config, apiKey: plaintext };
   }
 
   private async ensureUniqueConfigName(

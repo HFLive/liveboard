@@ -14,6 +14,8 @@ export function LogoutButton() {
 
     try {
       await logout();
+    } catch {
+      // The local session is discarded by navigation even if the API is offline.
     } finally {
       router.replace("/");
       router.refresh();

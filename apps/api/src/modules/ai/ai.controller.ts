@@ -7,20 +7,23 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   Res,
 } from "@nestjs/common";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import {
   IsBoolean,
   IsInt,
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   MinLength,
 } from "class-validator";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import { AiService } from "./ai.service";
+import { AiRateLimitService } from "./ai-rate-limit.service";
 
 class UpdateAiSettingsDto {
   @IsOptional()
@@ -91,6 +94,7 @@ class UpdateAiProviderConfigDto {
 class AskAiDto {
   @IsString()
   @MinLength(1)
+  @MaxLength(8000)
   message!: string;
 
   @IsOptional()
@@ -100,7 +104,10 @@ class AskAiDto {
 
 @Controller()
 export class AiController {
-  constructor(private readonly aiService: AiService) {}
+  constructor(
+    private readonly aiService: AiService,
+    private readonly rateLimit: AiRateLimitService,
+  ) {}
 
   @Get("admin/ai/settings")
   async getSettings(@CurrentUserId() userId: string | null) {
@@ -189,7 +196,12 @@ export class AiController {
   @Post("ai/ask")
   @HttpCode(200)
   async ask(@CurrentUserId() userId: string | null, @Body() body: AskAiDto) {
-    return this.aiService.ask(userId, body);
+    const release = await this.rateLimit.acquire(userId);
+    try {
+      return await this.aiService.ask(userId, body);
+    } finally {
+      await release();
+    }
   }
 
   @Post("ai/ask/stream")
@@ -197,73 +209,100 @@ export class AiController {
   async askStream(
     @CurrentUserId() userId: string | null,
     @Body() body: AskAiDto,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
-    const prepared = await this.aiService.prepareQuestion(userId, body.message);
-    const turn = await this.aiService.createConversationTurn(
-      userId,
-      prepared.question,
-      body.conversationId,
-      prepared.settings,
-    );
-
-    res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders?.();
-
-    writeStreamEvent(res, {
-      type: "conversation",
-      conversation: {
-        id: turn.conversation.id,
-        title: turn.conversation.title,
-        createdAt: turn.conversation.createdAt.toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      userMessage: {
-        id: turn.userMessage.id,
-        role: "user",
-        content: turn.userMessage.content,
-        createdAt: turn.userMessage.createdAt.toISOString(),
-      },
-    });
-    writeStreamEvent(res, { type: "sources", sources: prepared.sources });
-
-    let answer = "";
+    const release = await this.rateLimit.acquire(userId);
+    const abortController = new AbortController();
+    const abortOnDisconnect = () => {
+      if (!res.writableEnded) abortController.abort();
+    };
+    req.once("aborted", abortOnDisconnect);
+    res.once("close", abortOnDisconnect);
     try {
-      await this.aiService.streamChatCompletion(prepared, (delta) => {
-        answer += delta;
-        writeStreamEvent(res, { type: "delta", delta });
-      });
-      const assistantMessage = await this.aiService.saveAssistantMessage(
-        turn.conversation.id,
-        answer,
-        prepared.sources,
+      const prepared = await this.aiService.prepareQuestion(
+        userId,
+        body.message,
       );
+      const turn = await this.aiService.createConversationTurn(
+        userId,
+        prepared.question,
+        body.conversationId,
+        prepared.settings,
+        abortController.signal,
+      );
+
+      res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders?.();
+
       writeStreamEvent(res, {
-        type: "message",
-        message: {
-          id: assistantMessage.id,
-          role: assistantMessage.role,
-          content: assistantMessage.content,
-          sources: prepared.sources,
-          createdAt: assistantMessage.createdAt.toISOString(),
+        type: "conversation",
+        conversation: {
+          id: turn.conversation.id,
+          title: turn.conversation.title,
+          createdAt: turn.conversation.createdAt.toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        userMessage: {
+          id: turn.userMessage.id,
+          role: "user",
+          content: turn.userMessage.content,
+          createdAt: turn.userMessage.createdAt.toISOString(),
         },
       });
-      writeStreamEvent(res, { type: "done" });
-    } catch (caught) {
-      if (answer) {
-        await this.aiService.saveAssistantMessage(
+      writeStreamEvent(res, { type: "sources", sources: prepared.sources });
+
+      let answer = "";
+      try {
+        await this.aiService.streamChatCompletion(
+          prepared,
+          (delta) => {
+            answer += delta;
+            if (!res.destroyed) writeStreamEvent(res, { type: "delta", delta });
+          },
+          abortController.signal,
+        );
+        const assistantMessage = await this.aiService.saveAssistantMessage(
           turn.conversation.id,
-          `${answer}\n\n（生成中断）`,
+          answer,
           prepared.sources,
         );
+        if (!res.destroyed) {
+          writeStreamEvent(res, {
+            type: "message",
+            message: {
+              id: assistantMessage.id,
+              role: assistantMessage.role,
+              content: assistantMessage.content,
+              sources: prepared.sources,
+              createdAt: assistantMessage.createdAt.toISOString(),
+            },
+          });
+          writeStreamEvent(res, { type: "done" });
+        }
+      } catch (caught) {
+        if (answer) {
+          await this.aiService.saveAssistantMessage(
+            turn.conversation.id,
+            `${answer}\n\n（生成中断）`,
+            prepared.sources,
+          );
+        }
+        if (!res.destroyed) {
+          const message =
+            caught instanceof Error ? caught.message : "AI 流式请求失败";
+          writeStreamEvent(res, { type: "error", message });
+        }
+      } finally {
+        if (!res.destroyed && !res.writableEnded) res.end();
       }
-      const message =
-        caught instanceof Error ? caught.message : "AI 流式请求失败";
-      writeStreamEvent(res, { type: "error", message });
     } finally {
-      res.end();
+      req.off("aborted", abortOnDisconnect);
+      res.off("close", abortOnDisconnect);
+      await release();
     }
   }
 }

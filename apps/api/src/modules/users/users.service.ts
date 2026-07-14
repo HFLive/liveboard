@@ -15,6 +15,7 @@ import {
 import type { PermissionGroupSummary } from "@liveboard/shared";
 import type { PermissionTargetType } from "@liveboard/shared";
 import argon2 from "argon2";
+import { Prisma } from "@prisma/client";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -484,6 +485,7 @@ export class UsersService {
       status?: UserSummary["status"];
       passwordHash?: string;
       storageQuotaBytes?: number;
+      sessionVersion?: { increment: number };
     } = {};
 
     if (typeof input.displayName === "string") {
@@ -511,18 +513,16 @@ export class UsersService {
       ((input.systemRole !== undefined && input.systemRole !== "super_admin") ||
         input.status === "disabled");
 
-    if (removesActiveSuperAdmin) {
-      const activeSuperAdminCount = await this.prisma.user.count({
-        where: { systemRole: "super_admin", status: "active" },
-      });
-
-      if (activeSuperAdminCount <= 1) {
-        throw new BadRequestException("必须保留至少一位正常状态的最高管理员");
-      }
-    }
-
     if (input.password) {
       data.passwordHash = await argon2.hash(input.password);
+    }
+
+    if (
+      input.password ||
+      (input.status !== undefined && input.status !== target.status) ||
+      (input.systemRole !== undefined && input.systemRole !== target.systemRole)
+    ) {
+      data.sessionVersion = { increment: 1 };
     }
 
     if (input.storageQuotaBytes !== undefined) {
@@ -535,11 +535,41 @@ export class UsersService {
       data.storageQuotaBytes = input.storageQuotaBytes;
     }
 
-    const updated = await this.prisma.user.update({
-      where: { id: target.id },
-      data,
-    });
+    let updated: typeof target | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        updated = await this.prisma.$transaction(
+          async (tx) => {
+            if (removesActiveSuperAdmin) {
+              const activeSuperAdminCount = await tx.user.count({
+                where: { systemRole: "super_admin", status: "active" },
+              });
+              if (activeSuperAdminCount <= 1) {
+                throw new BadRequestException(
+                  "必须保留至少一位正常状态的最高管理员",
+                );
+              }
+            }
+            return tx.user.update({ where: { id: target.id }, data });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        break;
+      } catch (caught) {
+        if (
+          attempt < 2 &&
+          caught instanceof Prisma.PrismaClientKnownRequestError &&
+          caught.code === "P2034"
+        ) {
+          continue;
+        }
+        throw caught;
+      }
+    }
 
+    if (!updated) {
+      throw new ConflictException("用户状态同时发生了变化，请重试");
+    }
     return this.toSummary(updated);
   }
 

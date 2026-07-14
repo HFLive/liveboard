@@ -105,6 +105,12 @@ docker compose up --build -d
 
 - 系统角色为 `super_admin`、`admin`、`member`；普通用户的内容能力由权限组和资源授权决定。
 - 后端服务层是权限安全边界。
+- 非公开 API 统一通过全局活动用户守卫校验账号状态和 `sessionVersion`；停用账号、修改密码或管理员重置关键账号属性后，旧会话必须立即失效。
+- 登录失败次数使用 Redis 计数，`TRUST_PROXY_HOPS` 必须与 API 前实际可信代理层数一致，避免直接信任客户端伪造的转发头。
+- 上传内容不得以内联方式提供 SVG；只有经过文件头识别的 PNG、JPEG、GIF 和 WebP 可以内联，其他类型强制下载并使用 `nosniff`。
+- AI 服务商 API Key 使用 `AI_ENCRYPTION_KEY` 进行 AES-GCM 加密后存入数据库；生产部署必须保留该密钥，否则已有配置无法解密。
+- AI 请求由 Redis 实施单用户窗口限流和并发限制；流式请求在浏览器断开后必须取消上游请求。Nginx 必须关闭 API 代理缓冲并保留长于模型请求的读取超时。
+- 图片和附件区块写入 `assetId` 时，服务端必须校验附件工作区和重新引用权限；归档文件中的旧区块不得继续授予附件下载权限。
 - 所有 schema 变更都应提交 Prisma migration，不使用 `db push`；测试数据库需要重建时使用 `pnpm db:reset`。
 - Release 部署必须自动生成 `SESSION_SECRET`、数据库密码和 MinIO 凭据。HTTP IP 模式使用 `SESSION_COOKIE_SECURE=false`；配置 HTTPS 后改为 `true`。
 
@@ -142,6 +148,8 @@ UI 修改额外确认：
 - 2026-07-13：新增独立“授课”板块；所有已登录用户可访问并创建课件，课件支持从内容节选段落、排序拼装、嵌套练习与全屏展示；文件编辑页移除直接授课入口。
 - 2026-07-13：生产 Compose 的宿主机端口统一只绑定 `127.0.0.1`，公网访问必须经过反向代理；Web 镜像构建显式传入 `NEXT_PUBLIC_API_URL`，修改公开 API 地址后必须重新构建镜像。
 - 2026-07-14：生产发布链路最终收口为单个 `liveboard-<version>-linux-amd64.tar.gz`。删除服务器拉源码构建、服务器下载多个 Release 文件和 v0.1.0 四文件兼容路径；电脑下载上传单包是唯一正式流程。包内脚本自动生成基础密钥、迁移、备份、等待 API/Web 健康并初始化唯一随机密码最高管理员。HTTP IP 与 HTTPS 通过 `SESSION_COOKIE_SECURE` 显式区分。
+- 2026-07-14：发布前安全复盘收口附件重新引用授权、单次提交和最高管理员并发不变量、上传容量事务、AI 单用户限流与断开取消。API 健康检查改为实际探测 PostgreSQL、Redis、MinIO；部署备份默认保留最近 10 份；普通 PR 必须构建生产镜像并运行真实基础设施健康冒烟测试。
+- 2026-07-14：统一非公开 API 的活动用户与会话版本校验，账号停用和密码变更可撤销旧会话；登录限流改为 Redis 共享计数。上传禁止 SVG 并按文件头限制可内联图片，AI API Key 改为 AES-GCM 加密存储；资源权限与练习列表改为批量查询，API/Web 容器使用非 root 用户运行。
 - 2026-07-14：首次生产初始化的随机管理员凭据必须在部署总结末尾醒目显示，并保存到仅 root 可读的 `/opt/liveboard/initial-admin-credentials.txt`；升级沿用已有管理员，不能生成或覆盖密码。
 - 2026-07-14：`apps/web/next-env.d.ts` 改为忽略的 Next.js 生成文件，Web typecheck 先执行 `next typegen`，避免开发与生产构建因 `.next-dev` / `.next` 路径不同反复污染 Git 工作区。
 

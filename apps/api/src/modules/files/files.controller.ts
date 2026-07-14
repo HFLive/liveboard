@@ -17,7 +17,12 @@ import { IsArray, IsIn, IsObject, IsOptional, IsString } from "class-validator";
 import type { FileType } from "@liveboard/shared";
 import type { ContentBlockType } from "@liveboard/shared";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
-import { AssetsService, UploadedAssetFile } from "./assets.service";
+import {
+  AssetsService,
+  isSafeInlineAssetMime,
+  MAX_ASSET_SIZE_BYTES,
+  type UploadedAssetFile,
+} from "./assets.service";
 import { FilesService } from "./files.service";
 
 class CreateFolderDto {
@@ -261,7 +266,11 @@ export class FilesController {
   }
 
   @Post("assets/upload")
-  @UseInterceptors(FileInterceptor("file"))
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: { fileSize: MAX_ASSET_SIZE_BYTES, files: 1 },
+    }),
+  )
   async uploadAsset(
     @CurrentUserId() userId: string | null,
     @Body() body: UploadAssetDto,
@@ -298,11 +307,17 @@ export class FilesController {
       assetId,
     );
 
-    res.setHeader("Content-Type", asset.mimeType);
+    const inline = isSafeInlineAssetMime(asset.mimeType);
+    res.setHeader(
+      "Content-Type",
+      inline ? asset.mimeType : "application/octet-stream",
+    );
     res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    if (!inline) res.setHeader("Content-Security-Policy", "sandbox");
     res.setHeader(
       "Content-Disposition",
-      `${asset.mimeType.startsWith("image/") ? "inline" : "attachment"}; filename="${encodeURIComponent(asset.filename)}"`,
+      `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(asset.filename)}"`,
     );
     stream.pipe(res);
   }

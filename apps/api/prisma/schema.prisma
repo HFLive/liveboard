@@ -81,6 +81,7 @@ model User {
   username          String     @unique
   displayName       String
   passwordHash      String
+  sessionVersion    Int        @default(0)
   systemRole        SystemRole
   status            UserStatus @default(active)
   storageQuotaBytes Int        @default(536870912)

@@ -83,7 +83,7 @@ pnpm dev
 liveboard-<version>-linux-amd64.tar.gz
 ```
 
-用户在电脑下载并上传该文件，服务器解压后运行包内 `deploy.sh`。脚本会生成基础密钥、备份 PostgreSQL、执行 migration、等待 API/Web 健康，并在空数据库中创建唯一的随机密码最高管理员。首次凭据会在部署总结最后醒目显示，并保存到权限为 `600` 的 `/opt/liveboard/initial-admin-credentials.txt`；修改密码后应删除该文件。生产过程不运行 demo seed。
+用户在电脑下载并上传该文件，服务器解压后运行包内 `deploy.sh`。脚本会生成基础密钥、备份 PostgreSQL、执行 migration、等待 API/Web 健康，并在空数据库中创建唯一的随机密码最高管理员。API 健康检查会实际探测 PostgreSQL、Redis 和 MinIO。PostgreSQL 备份默认保留最近 10 份，可通过 `BACKUP_RETENTION_COUNT` 调整。首次凭据会在部署总结最后醒目显示，并保存到权限为 `600` 的 `/opt/liveboard/initial-admin-credentials.txt`；修改密码后应删除该文件。生产过程不运行 demo seed。
 
 完整步骤见 [Ubuntu 24.04 单文件部署教程](./docs/deploy-ubuntu-24.04.md)。
 部署路线的取舍、已删除兼容代码和保留边界见 [生产部署链路复盘](./docs/deployment-review.md)。
@@ -169,7 +169,13 @@ liveboard/
 | `POSTGRES_USER`                  | PostgreSQL 用户名                |
 | `POSTGRES_PASSWORD`              | PostgreSQL 密码                  |
 | `REDIS_URL`                      | Redis 连接地址                   |
+| `TRUST_PROXY_HOPS`               | API 前可信反向代理层数           |
 | `SESSION_SECRET`                 | 会话签名密钥                     |
+| `AI_ENCRYPTION_KEY`              | 数据库内 AI API Key 加密密钥     |
+| `AI_RATE_LIMIT_MAX_REQUESTS`     | 单用户 AI 限流窗口内最大请求数   |
+| `AI_RATE_LIMIT_WINDOW_SECONDS`   | AI 限流窗口秒数                  |
+| `AI_MAX_CONCURRENT_PER_USER`     | 单用户 AI 最大并发请求数         |
+| `BACKUP_RETENTION_COUNT`         | 保留的 PostgreSQL 部署备份数量   |
 | `SESSION_COOKIE_SECURE`          | 是否只通过 HTTPS 发送会话 Cookie |
 | `MINIO_*`                        | MinIO 地址、凭据和 bucket        |
 | `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS` | 是否在登录页显示演示账号         |
@@ -178,13 +184,13 @@ liveboard/
 
 ## 生产部署检查
 
-- 使用 Release 脚本自动生成的 PostgreSQL、MinIO 和会话密钥。
+- 使用 Release 脚本自动生成的 PostgreSQL、MinIO、会话和 AI 加密密钥。
 - 生产初始化只创建一个随机密码最高管理员，不运行 demo seed。
 - 关闭登录页演示账号提示并重新构建 Web。
 - 使用 HTTPS，避免直接向公网开放数据库、Redis、MinIO 和 API 管理端口。
 - 确认 Compose 发布端口仍只绑定 `127.0.0.1`，公网安全组仅开放 SSH、HTTP 和 HTTPS。
 - 使用 GitHub Release 单文件包更新，并为 MinIO 配置独立备份。
-- 为登录、上传和 AI 接口配置网关限流。
+- 根据用户规模调整内置 AI 限流参数；公网入口仍建议增加网关级总量保护。
 - 所有 schema 变更都提交 Prisma migration；生产环境由 `migrate` 服务自动执行 `prisma migrate deploy`，不使用 `db push`。
 
 ## 参与开发

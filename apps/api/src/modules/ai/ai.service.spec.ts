@@ -1,6 +1,7 @@
 import type { PermissionsService } from "../permissions/permissions.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import { AiService } from "./ai.service";
+import type { AiSecretService } from "./ai-secret.service";
 
 describe("AiService", () => {
   const config = {
@@ -37,14 +38,21 @@ describe("AiService", () => {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    file: { findMany: jest.fn() },
   };
+  const permissions = { getEffectiveLevelsForFiles: jest.fn() };
   let service: AiService;
 
   beforeEach(() => {
     jest.resetAllMocks();
     service = new AiService(
       prisma as unknown as PrismaService,
-      {} as PermissionsService,
+      permissions as unknown as PermissionsService,
+      {
+        encrypt: (value: string) => `encrypted:${value}`,
+        decrypt: (value: string) => value,
+        isEncrypted: () => true,
+      } as unknown as AiSecretService,
     );
     prisma.user.findUnique.mockResolvedValue({
       id: "admin-1",
@@ -56,6 +64,7 @@ describe("AiService", () => {
     prisma.aiSettings.update.mockResolvedValue(settings);
     prisma.aiProviderConfig.findFirst.mockResolvedValue(config);
     prisma.aiProviderConfig.findMany.mockResolvedValue([config]);
+    permissions.getEffectiveLevelsForFiles.mockResolvedValue(new Map());
   });
 
   it("uses the system temperature for the active configuration", async () => {
@@ -76,6 +85,32 @@ describe("AiService", () => {
         model: config.model,
         temperature: 0.2,
       }),
+    );
+  });
+
+  it("resolves AI context permissions in one batch", async () => {
+    prisma.file.findMany.mockResolvedValue([
+      {
+        id: "file-1",
+        title: "课程介绍",
+        type: "doc",
+        status: "published",
+        updatedAt: new Date("2026-01-01T00:00:00Z"),
+        blocks: [
+          { id: "block-1", type: "paragraph", dataJson: { text: "重点" } },
+        ],
+      },
+    ]);
+    permissions.getEffectiveLevelsForFiles.mockResolvedValue(
+      new Map([["file-1", "viewer"]]),
+    );
+
+    const prepared = await service.prepareQuestion("user-1", "课程重点");
+
+    expect(prepared.sources).toHaveLength(1);
+    expect(permissions.getEffectiveLevelsForFiles).toHaveBeenCalledWith(
+      "user-1",
+      ["file-1"],
     );
   });
 

@@ -25,24 +25,32 @@ function messageFrom(reason: unknown) {
   return "";
 }
 
-function isChunkLoadFailure(reason: unknown) {
+export function isChunkLoadFailure(reason: unknown) {
   return /Loading chunk .* failed|ChunkLoadError|CSS_CHUNK_LOAD_FAILED|Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(
     messageFrom(reason),
   );
 }
 
-function reloadOnce() {
-  const key = `${reloadPrefix}:${window.location.pathname}`;
+export function markChunkReload(
+  pathname: string,
+  storage: Pick<Storage, "getItem" | "setItem">,
+) {
+  const key = `${reloadPrefix}:${pathname}`;
 
   try {
-    if (window.sessionStorage.getItem(key) === "1") {
-      return;
+    if (storage.getItem(key) === "1") {
+      return false;
     }
 
-    window.sessionStorage.setItem(key, "1");
+    storage.setItem(key, "1");
+    return true;
   } catch {
-    return;
+    return false;
   }
+}
+
+function reloadOnce() {
+  if (!markChunkReload(window.location.pathname, window.sessionStorage)) return;
 
   window.location.reload();
 }

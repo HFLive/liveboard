@@ -24,13 +24,16 @@ describe("session cookie", () => {
   });
 
   it("accepts a valid signed session", () => {
-    const value = createSessionCookieValue("user-1");
+    const value = createSessionCookieValue("user-1", 3);
 
-    expect(verifySessionCookieValue(value)).toBe("user-1");
+    expect(verifySessionCookieValue(value)).toEqual({
+      userId: "user-1",
+      sessionVersion: 3,
+    });
   });
 
   it("rejects a modified session", () => {
-    const value = createSessionCookieValue("user-1");
+    const value = createSessionCookieValue("user-1", 3);
 
     expect(
       verifySessionCookieValue(value.replace("user-1", "user-2")),
@@ -41,8 +44,12 @@ describe("session cookie", () => {
     expect(verifySessionCookieValue("v1.user-1.signature")).toBeNull();
   });
 
+  it("rejects the retired v2 session format", () => {
+    expect(verifySessionCookieValue("v2.user-1.123.signature")).toBeNull();
+  });
+
   it("rejects a session after its server-side expiry", () => {
-    const value = createSessionCookieValue("user-1");
+    const value = createSessionCookieValue("user-1", 3);
     jest.advanceTimersByTime(SESSION_TTL_MS + 1);
 
     expect(verifySessionCookieValue(value)).toBeNull();

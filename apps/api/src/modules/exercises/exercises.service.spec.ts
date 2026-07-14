@@ -6,6 +6,7 @@ describe("ExercisesService", () => {
   const permissions = {
     getEffectiveLevelForFile: jest.fn(),
     getEffectiveLevelForFolder: jest.fn(),
+    getEffectiveLevelsForFiles: jest.fn(),
   };
   const prisma = {
     folder: {
@@ -13,10 +14,12 @@ describe("ExercisesService", () => {
     },
     exerciseSet: {
       create: jest.fn(),
+      findMany: jest.fn(),
       findUnique: jest.fn(),
     },
     submission: {
       findUnique: jest.fn(),
+      groupBy: jest.fn(),
     },
     $transaction: jest.fn(),
   };
@@ -28,6 +31,44 @@ describe("ExercisesService", () => {
       prisma as unknown as PrismaService,
       permissions as unknown as PermissionsService,
     );
+  });
+
+  it("lists quizzes with aggregated submissions and batched permissions", async () => {
+    const updatedAt = new Date("2026-07-14T00:00:00Z");
+    prisma.exerciseSet.findMany.mockResolvedValue([
+      {
+        id: "exercise-1",
+        fileId: "file-1",
+        file: { title: "章节练习" },
+        _count: { questions: 3, submissions: 12 },
+        submissions: [{ status: "graded", score: 8, maxScore: 10 }],
+        openAt: null,
+        dueAt: null,
+        updatedAt,
+      },
+    ]);
+    prisma.submission.groupBy.mockResolvedValue([
+      { exerciseSetId: "exercise-1", _count: { _all: 2 } },
+    ]);
+    permissions.getEffectiveLevelsForFiles.mockResolvedValue(
+      new Map([["file-1", "viewer"]]),
+    );
+
+    const result = await service.listExerciseSets("learner-1");
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        questionCount: 3,
+        submissionCount: 12,
+        pendingReviewCount: 2,
+        latestSubmissionStatus: "graded",
+      }),
+    ]);
+    expect(permissions.getEffectiveLevelsForFiles).toHaveBeenCalledWith(
+      "learner-1",
+      ["file-1"],
+    );
+    expect(permissions.getEffectiveLevelForFile).not.toHaveBeenCalled();
   });
 
   it("does not expose correct answers to a learner before submission", async () => {
@@ -131,6 +172,49 @@ describe("ExercisesService", () => {
     const result = await service.getExerciseSet("learner-1", "exercise-1");
 
     expect(result.questions[0]).toHaveProperty("answerJson", "A");
+  });
+
+  it("rechecks single-submission eligibility inside a serializable transaction", async () => {
+    permissions.getEffectiveLevelForFile.mockResolvedValue("viewer");
+    prisma.exerciseSet.findUnique.mockResolvedValue({
+      id: "exercise-1",
+      fileId: "file-1",
+      file: { title: "练习" },
+      openAt: null,
+      dueAt: null,
+      allowMultipleSubmissions: false,
+      submissions: [],
+      questions: [
+        {
+          id: "question-1",
+          type: "true_false",
+          answerJson: true,
+          score: 2,
+        },
+      ],
+    });
+    const transaction = {
+      submission: {
+        count: jest.fn().mockResolvedValue(0),
+        create: jest.fn().mockResolvedValue({
+          id: "submission-1",
+          answers: [],
+        }),
+      },
+    };
+    prisma.$transaction.mockImplementation((callback) => callback(transaction));
+
+    await service.submitExercise("learner-1", "exercise-1", {
+      answers: [{ questionId: "question-1", answerJson: true }],
+    });
+
+    expect(transaction.submission.count).toHaveBeenCalledWith({
+      where: { exerciseSetId: "exercise-1", userId: "learner-1" },
+    });
+    expect(prisma.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ isolationLevel: "Serializable" }),
+    );
   });
 
   it("rejects grading an answer that belongs to another submission", async () => {
