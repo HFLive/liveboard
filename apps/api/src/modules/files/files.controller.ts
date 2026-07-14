@@ -24,6 +24,7 @@ import {
   type UploadedAssetFile,
 } from "./assets.service";
 import { FilesService } from "./files.service";
+import { MAX_MARKDOWN_SIZE_BYTES } from "./markdown";
 
 class CreateFolderDto {
   @IsString()
@@ -70,6 +71,9 @@ class CreateBlockDto {
     "heading_1",
     "heading_2",
     "heading_3",
+    "heading_4",
+    "heading_5",
+    "heading_6",
     "paragraph",
     "bulleted_list",
     "numbered_list",
@@ -81,6 +85,8 @@ class CreateBlockDto {
     "divider",
     "reference",
     "question",
+    "table",
+    "math",
   ])
   type!: ContentBlockType;
 
@@ -94,6 +100,9 @@ class UpdateBlockDto {
     "heading_1",
     "heading_2",
     "heading_3",
+    "heading_4",
+    "heading_5",
+    "heading_6",
     "paragraph",
     "bulleted_list",
     "numbered_list",
@@ -105,6 +114,8 @@ class UpdateBlockDto {
     "divider",
     "reference",
     "question",
+    "table",
+    "math",
   ])
   type?: ContentBlockType;
 
@@ -132,6 +143,18 @@ class UploadAssetDto {
   @IsOptional()
   @IsString()
   fileId?: string;
+}
+
+class ImportMarkdownDto {
+  @IsString()
+  folderId!: string;
+}
+
+interface UploadedMarkdownFile {
+  originalname: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
 }
 
 @Controller()
@@ -199,6 +222,51 @@ export class FilesController {
     @Body() body: CreateFileDto,
   ) {
     return { file: await this.filesService.createFile(userId, body) };
+  }
+
+  @Post("files/import/markdown")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: { fileSize: MAX_MARKDOWN_SIZE_BYTES, files: 1 },
+    }),
+  )
+  async importMarkdown(
+    @CurrentUserId() userId: string | null,
+    @Body() body: ImportMarkdownDto,
+    @UploadedFile() file?: UploadedMarkdownFile,
+  ) {
+    if (!file) {
+      return this.filesService.importMarkdown(userId, {
+        folderId: body.folderId,
+        originalname: "",
+        size: 0,
+        buffer: Buffer.alloc(0),
+      });
+    }
+
+    return this.filesService.importMarkdown(userId, {
+      folderId: body.folderId,
+      originalname: file.originalname,
+      size: file.size,
+      buffer: file.buffer,
+    });
+  }
+
+  @Get("files/:id/export/markdown")
+  async exportMarkdown(
+    @CurrentUserId() userId: string | null,
+    @Param("id") fileId: string,
+    @Res() response: Response,
+  ) {
+    const result = await this.filesService.exportMarkdown(userId, fileId);
+    const encodedFilename = encodeURIComponent(result.filename);
+    response.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    response.setHeader(
+      "Content-Disposition",
+      `attachment; filename="content.md"; filename*=UTF-8''${encodedFilename}`,
+    );
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.send(result.content);
   }
 
   @Patch("files/:id")

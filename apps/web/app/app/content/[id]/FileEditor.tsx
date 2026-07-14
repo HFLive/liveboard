@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ContentBlockType,
   FileSummary,
@@ -10,6 +10,7 @@ import type {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Upload,
   GripVertical,
   Image,
   Link2,
@@ -27,6 +28,7 @@ import {
   deletePermissionGrant,
   deleteBlock,
   deleteFile,
+  downloadMarkdown,
   FileDetail,
   getFile,
   listAssignablePermissionGroups,
@@ -51,6 +53,8 @@ import {
   getBlockDataString,
   getBlockLabel,
   getBlockText,
+  getTableRows,
+  RenderBlockContent,
 } from "./ContentBlockRenderer";
 import {
   assetTypeLabel,
@@ -64,12 +68,17 @@ const blockShortcuts: Array<{ command: string; type: ContentBlockType }> = [
   { command: "/h1", type: "heading_1" },
   { command: "/h2", type: "heading_2" },
   { command: "/h3", type: "heading_3" },
+  { command: "/h4", type: "heading_4" },
+  { command: "/h5", type: "heading_5" },
+  { command: "/h6", type: "heading_6" },
   { command: "/p", type: "paragraph" },
   { command: "/quote", type: "quote" },
   { command: "/code", type: "code" },
   { command: "/todo", type: "todo" },
   { command: "/ul", type: "bulleted_list" },
   { command: "/ol", type: "numbered_list" },
+  { command: "/table", type: "table" },
+  { command: "/math", type: "math" },
 ];
 
 function getImageWidth(block: ContentBlock) {
@@ -87,7 +96,7 @@ function getBlockRows(type: ContentBlockType) {
     return 4;
   }
 
-  if (["heading_1", "heading_2", "heading_3"].includes(type)) {
+  if (/^heading_[1-6]$/.test(type)) {
     return 1;
   }
 
@@ -96,6 +105,226 @@ function getBlockRows(type: ContentBlockType) {
   }
 
   return 2;
+}
+
+export function RichTextBlockEditor({
+  block,
+  onChange,
+  onSave,
+}: {
+  block: ContentBlock;
+  onChange: (text: string) => void;
+  onSave: () => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const text = getBlockText(block);
+
+  function wrapSelection(before: string, after = before, fallback = "文字") {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selection = text.slice(start, end) || fallback;
+    const next = `${text.slice(0, start)}${before}${selection}${after}${text.slice(end)}`;
+    onChange(next);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(
+        start + before.length,
+        start + before.length + selection.length,
+      );
+    });
+  }
+
+  function insertLink() {
+    const href = window.prompt(
+      "输入链接地址（http、https、mailto 或站内 / 路径）",
+      "https://",
+    );
+    if (!href) return;
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selection = text.slice(start, end) || "链接文字";
+    const next = `${text.slice(0, start)}[${selection}](${href})${text.slice(end)}`;
+    onChange(next);
+  }
+
+  return (
+    <div className="rich-text-editor">
+      <div className="inline-format-toolbar" aria-label="富文本格式">
+        <button
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => wrapSelection("**")}
+          type="button"
+        >
+          <strong>B</strong>
+          <span>加粗</span>
+        </button>
+        <button
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => wrapSelection("*")}
+          type="button"
+        >
+          <em>I</em>
+          <span>斜体</span>
+        </button>
+        <button
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => wrapSelection("~~")}
+          type="button"
+        >
+          <del>S</del>
+          <span>删除线</span>
+        </button>
+        <button
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => wrapSelection("`")}
+          type="button"
+        >
+          <code>&lt;/&gt;</code>
+          <span>行内代码</span>
+        </button>
+        <button
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={insertLink}
+          type="button"
+        >
+          ↗<span>链接</span>
+        </button>
+        <button
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => wrapSelection("$", "$", "x^2")}
+          type="button"
+        >
+          ∑<span>行内公式</span>
+        </button>
+      </div>
+      <textarea
+        className={`doc-block-input ${block.type}`}
+        onBlur={onSave}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={getBlockLabel(block.type)}
+        ref={textareaRef}
+        rows={getBlockRows(block.type)}
+        value={text}
+      />
+    </div>
+  );
+}
+
+export function TableBlockEditor({
+  block,
+  onChange,
+  onSave,
+}: {
+  block: ContentBlock;
+  onChange: (rows: string[][]) => void;
+  onSave: () => void;
+}) {
+  const rows = getTableRows(block);
+  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+  const normalized = rows.map((row) =>
+    Array.from({ length: columnCount }, (_, index) => row[index] ?? ""),
+  );
+
+  function updateCell(rowIndex: number, columnIndex: number, value: string) {
+    onChange(
+      normalized.map((row, index) =>
+        index === rowIndex
+          ? row.map((cell, cellIndex) =>
+              cellIndex === columnIndex ? value : cell,
+            )
+          : row,
+      ),
+    );
+  }
+
+  return (
+    <div
+      className="table-block-editor"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onSave();
+      }}
+    >
+      <div className="table-editor-scroll">
+        <table>
+          <tbody>
+            {normalized.map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                {row.map((cell, columnIndex) => (
+                  <td key={columnIndex}>
+                    <input
+                      aria-label={`第 ${rowIndex + 1} 行第 ${columnIndex + 1} 列`}
+                      onChange={(event) =>
+                        updateCell(rowIndex, columnIndex, event.target.value)
+                      }
+                      value={cell}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="table-editor-actions">
+        <span>首行作为表头</span>
+        <button
+          disabled={normalized.length >= 50}
+          onClick={() => onChange([...normalized, Array(columnCount).fill("")])}
+          type="button"
+        >
+          添加行
+        </button>
+        <button
+          disabled={columnCount >= 20}
+          onClick={() => onChange(normalized.map((row) => [...row, ""]))}
+          type="button"
+        >
+          添加列
+        </button>
+        <button
+          disabled={normalized.length <= 1}
+          onClick={() => onChange(normalized.slice(0, -1))}
+          type="button"
+        >
+          删除末行
+        </button>
+        <button
+          disabled={columnCount <= 1}
+          onClick={() => onChange(normalized.map((row) => row.slice(0, -1)))}
+          type="button"
+        >
+          删除末列
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function DocumentPreview({
+  blocks,
+  title,
+}: {
+  blocks: ContentBlock[];
+  title: string;
+}) {
+  return (
+    <article className="editor-preview-document">
+      <h1 className="editor-preview-title">{title || "未命名内容"}</h1>
+      {blocks.length > 0 ? (
+        blocks.map((block) => (
+          <div className="editor-preview-block" key={block.id}>
+            <RenderBlockContent block={block} />
+          </div>
+        ))
+      ) : (
+        <div className="empty-state">添加内容块后，这里会显示最终效果。</div>
+      )}
+    </article>
+  );
 }
 
 export function FileEditor({ fileId }: { fileId: string }) {
@@ -346,6 +575,26 @@ export function FileEditor({ fileId }: { fileId: string }) {
     }
   }
 
+  async function onDownloadMarkdown() {
+    setError(null);
+    setMessage(null);
+
+    try {
+      const result = await downloadMarkdown(fileId);
+      const url = URL.createObjectURL(result.blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = result.filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setMessage("Markdown 已下载");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "导出 Markdown 失败");
+    }
+  }
+
   async function onInsertAsset(asset: FileAssetSummary) {
     setError(null);
     setMessage(null);
@@ -428,7 +677,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
   }
 
   async function onUpdateBlock(block: ContentBlock, text: string) {
-    patchBlockData(block, { text });
+    patchBlockData(block, { text, inlineFormat: "markdown" });
   }
 
   async function onUpdateBlockType(
@@ -439,16 +688,16 @@ export function FileEditor({ fileId }: { fileId: string }) {
     setMessage(null);
 
     const currentData = asBlockData(block.dataJson);
-    const nextData =
-      type === "divider"
-        ? {}
-        : {
-            ...currentData,
-            text:
-              typeof currentData.text === "string"
-                ? currentData.text
-                : getBlockText(block),
-          };
+    const nextData = ["divider", "table", "math"].includes(type)
+      ? buildBlockData(type, getBlockText(block))
+      : {
+          ...currentData,
+          text:
+            typeof currentData.text === "string"
+              ? currentData.text
+              : getBlockText(block),
+          inlineFormat: "markdown",
+        };
 
     setBlocks((current) =>
       current.map((item) =>
@@ -775,6 +1024,41 @@ export function FileEditor({ fileId }: { fileId: string }) {
       );
     }
 
+    if (block.type === "table") {
+      return (
+        <TableBlockEditor
+          block={block}
+          onChange={(rows) => patchBlockData(block, { rows, hasHeader: true })}
+          onSave={() => void onSaveBlock(block)}
+        />
+      );
+    }
+
+    if (block.type === "math") {
+      return (
+        <textarea
+          className="doc-block-input math"
+          onBlur={() => void onSaveBlock(block)}
+          onChange={(event) =>
+            patchBlockData(block, { text: event.target.value, display: true })
+          }
+          placeholder="输入 LaTeX 公式，例如 E = mc^2"
+          rows={3}
+          value={getBlockText(block)}
+        />
+      );
+    }
+
+    if (block.type !== "code") {
+      return (
+        <RichTextBlockEditor
+          block={block}
+          onChange={(text) => void onUpdateBlock(block, text)}
+          onSave={() => void onSaveBlock(block)}
+        />
+      );
+    }
+
     return (
       <textarea
         className={
@@ -872,6 +1156,18 @@ export function FileEditor({ fileId }: { fileId: string }) {
                   event.currentTarget
                     .closest("details")
                     ?.removeAttribute("open");
+                  void onDownloadMarkdown();
+                }}
+                type="button"
+              >
+                <Upload aria-hidden="true" />
+                导出 Markdown
+              </button>
+              <button
+                onClick={(event) => {
+                  event.currentTarget
+                    .closest("details")
+                    ?.removeAttribute("open");
                   setShowPermissions(true);
                 }}
                 type="button"
@@ -898,147 +1194,171 @@ export function FileEditor({ fileId }: { fileId: string }) {
       </section>
 
       <section className="editor-workspace">
-        <div className="editor-document-shell">
-          <div className="document-editor">
-            {blocks.map((block) => (
-              <article
-                className={`doc-block ${draggingBlockId === block.id ? "dragging" : ""} ${
-                  dragOverBlockId === block.id && draggingBlockId !== block.id
-                    ? "drop-target"
-                    : ""
-                }`}
-                key={block.id}
-                onDragOver={(event) => event.preventDefault()}
-                onDragEnter={() => {
-                  if (draggingBlockId && draggingBlockId !== block.id) {
-                    setDragOverBlockId(block.id);
-                  }
-                }}
-                onDrop={() => {
-                  if (draggingBlockId) {
-                    moveBlock(draggingBlockId, block.id);
-                    setDraggingBlockId(null);
-                  }
-                }}
-              >
-                <div className="doc-block-controls" data-menu-root="true">
-                  <span
-                    className="drag-handle"
-                    draggable
-                    onDragEnd={() => {
-                      setDraggingBlockId(null);
-                      setDragOverBlockId(null);
-                    }}
-                    onDragStart={() => {
-                      setDraggingBlockId(block.id);
-                      setDragOverBlockId(null);
-                    }}
-                    title="拖动排序"
-                  >
-                    <GripVertical aria-hidden="true" />
-                  </span>
-                  <button
-                    className="icon-button subtle"
-                    onClick={(event) =>
-                      toggleBlockMenu(block.id, event.currentTarget)
-                    }
-                    title="内容块操作"
-                    type="button"
-                  >
-                    <MoreHorizontal aria-hidden="true" />
-                  </button>
-                </div>
-                <div className="doc-block-body">
-                  <div className="doc-block-toolbar">
-                    <select
-                      className="block-type-select"
-                      title="内容块类型"
-                      value={block.type}
-                      onChange={(event) =>
-                        void onUpdateBlockType(
-                          block,
-                          event.target.value as ContentBlockType,
-                        )
+        <div className="editor-split">
+          <section
+            className="editor-pane editor-format-pane"
+            aria-label="格式编辑"
+          >
+            <header className="editor-pane-head">
+              <strong>格式编辑</strong>
+              <span>选择区块类型并编辑内容</span>
+            </header>
+            <div className="editor-document-shell">
+              <div className="document-editor">
+                {blocks.map((block) => (
+                  <article
+                    className={`doc-block ${draggingBlockId === block.id ? "dragging" : ""} ${
+                      dragOverBlockId === block.id &&
+                      draggingBlockId !== block.id
+                        ? "drop-target"
+                        : ""
+                    }`}
+                    key={block.id}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDragEnter={() => {
+                      if (draggingBlockId && draggingBlockId !== block.id) {
+                        setDragOverBlockId(block.id);
                       }
-                    >
-                      {blockTypeOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {renderBlockEditor(block)}
-                </div>
-              </article>
-            ))}
-            {blocks.length === 0 ? (
-              <div className="empty-state">这个文件还没有内容块。</div>
-            ) : null}
-            <form className="doc-add-block" onSubmit={onAddBlock}>
-              <select
-                className="select"
-                value={newType}
-                onChange={(event) =>
-                  setNewType(event.target.value as ContentBlockType)
-                }
-              >
-                {blockTypeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
+                    }}
+                    onDrop={() => {
+                      if (draggingBlockId) {
+                        moveBlock(draggingBlockId, block.id);
+                        setDraggingBlockId(null);
+                      }
+                    }}
+                  >
+                    <div className="doc-block-controls" data-menu-root="true">
+                      <span
+                        className="drag-handle"
+                        draggable
+                        onDragEnd={() => {
+                          setDraggingBlockId(null);
+                          setDragOverBlockId(null);
+                        }}
+                        onDragStart={() => {
+                          setDraggingBlockId(block.id);
+                          setDragOverBlockId(null);
+                        }}
+                        title="拖动排序"
+                      >
+                        <GripVertical aria-hidden="true" />
+                      </span>
+                      <button
+                        className="icon-button subtle"
+                        onClick={(event) =>
+                          toggleBlockMenu(block.id, event.currentTarget)
+                        }
+                        title="内容块操作"
+                        type="button"
+                      >
+                        <MoreHorizontal aria-hidden="true" />
+                      </button>
+                    </div>
+                    <div className="doc-block-body">
+                      <div className="doc-block-toolbar">
+                        <select
+                          className="block-type-select"
+                          title="内容块类型"
+                          value={block.type}
+                          onChange={(event) =>
+                            void onUpdateBlockType(
+                              block,
+                              event.target.value as ContentBlockType,
+                            )
+                          }
+                        >
+                          {blockTypeOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {renderBlockEditor(block)}
+                    </div>
+                  </article>
                 ))}
-              </select>
-              {newType === "divider" ? null : (
-                <textarea
-                  className="doc-new-block-input"
-                  onChange={(event) => onNewTextChange(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (
-                      (event.metaKey || event.ctrlKey) &&
-                      event.key === "Enter"
-                    ) {
-                      event.currentTarget.form?.requestSubmit();
+                {blocks.length === 0 ? (
+                  <div className="empty-state">这个文件还没有内容块。</div>
+                ) : null}
+                <form className="doc-add-block" onSubmit={onAddBlock}>
+                  <select
+                    className="select"
+                    value={newType}
+                    onChange={(event) =>
+                      setNewType(event.target.value as ContentBlockType)
                     }
-                  }}
-                  placeholder="输入新内容，试试 /h1 /h2 /code /quote /todo /hr"
-                  rows={3}
-                  value={newText}
-                />
-              )}
-              <button className="button secondary" type="submit">
-                <Plus aria-hidden="true" className="button-icon" />
-                添加块
-              </button>
-            </form>
-            {openBlockMenu && menuBlock ? (
-              <div
-                className="context-menu floating-block-menu"
-                data-menu-root="true"
-                style={{ left: openBlockMenu.x, top: openBlockMenu.y }}
-              >
-                <button
-                  onClick={() => {
-                    setOpenBlockMenu(null);
-                    void onSaveBlock(menuBlock);
-                  }}
-                  type="button"
-                >
-                  保存
-                </button>
-                <button
-                  className="danger"
-                  onClick={() => {
-                    setOpenBlockMenu(null);
-                    void onDeleteBlock(menuBlock);
-                  }}
-                  type="button"
-                >
-                  删除
-                </button>
+                  >
+                    {blockTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {["divider", "table"].includes(newType) ? null : (
+                    <textarea
+                      className="doc-new-block-input"
+                      onChange={(event) => onNewTextChange(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (
+                          (event.metaKey || event.ctrlKey) &&
+                          event.key === "Enter"
+                        ) {
+                          event.currentTarget.form?.requestSubmit();
+                        }
+                      }}
+                      placeholder="输入新内容，试试 /h1…/h6 /table /math /code /quote /todo /hr"
+                      rows={3}
+                      value={newText}
+                    />
+                  )}
+                  <button className="button secondary" type="submit">
+                    <Plus aria-hidden="true" className="button-icon" />
+                    添加块
+                  </button>
+                </form>
+                {openBlockMenu && menuBlock ? (
+                  <div
+                    className="context-menu floating-block-menu"
+                    data-menu-root="true"
+                    style={{ left: openBlockMenu.x, top: openBlockMenu.y }}
+                  >
+                    <button
+                      onClick={() => {
+                        setOpenBlockMenu(null);
+                        void onSaveBlock(menuBlock);
+                      }}
+                      type="button"
+                    >
+                      保存
+                    </button>
+                    <button
+                      className="danger"
+                      onClick={() => {
+                        setOpenBlockMenu(null);
+                        void onDeleteBlock(menuBlock);
+                      }}
+                      type="button"
+                    >
+                      删除
+                    </button>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
+            </div>
+          </section>
+          <aside
+            className="editor-pane editor-preview-pane"
+            aria-label="格式预览"
+          >
+            <header className="editor-pane-head">
+              <strong>格式预览</strong>
+              <span>内容修改会在这里即时呈现</span>
+            </header>
+            <div className="editor-preview-scroll">
+              <DocumentPreview blocks={blocks} title={titleInput} />
+            </div>
+          </aside>
         </div>
       </section>
 

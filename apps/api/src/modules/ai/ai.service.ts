@@ -1309,6 +1309,19 @@ function parseSources(value: unknown): AiSourceSummary[] {
 }
 
 function blockToText(type: string, dataJson: unknown) {
+  if (
+    type === "table" &&
+    dataJson &&
+    typeof dataJson === "object" &&
+    "rows" in dataJson &&
+    Array.isArray(dataJson.rows)
+  ) {
+    return dataJson.rows
+      .filter(Array.isArray)
+      .map((row) => row.map((cell) => String(cell ?? "")).join(" | "))
+      .join("\n");
+  }
+
   const text = getText(dataJson);
 
   if (!text) {

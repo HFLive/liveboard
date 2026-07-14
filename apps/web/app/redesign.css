@@ -5671,7 +5671,9 @@ body,
   z-index: 40;
   top: calc(100% + 6px);
   right: 0;
+  left: auto;
   min-width: 170px;
+  max-width: calc(100vw - 24px);
 }
 
 /* Page titles identify context; actions live with the content they affect. */
@@ -5699,8 +5701,6 @@ body,
   align-items: center;
   justify-content: flex-end;
   min-width: 0;
-  border-block: 1px solid var(--line);
-  padding-block: 10px;
 }
 
 .editor-action-bar .button-row {
@@ -5737,6 +5737,11 @@ body,
   .editor-action-bar .button,
   .editor-action-bar .editor-more-menu > summary {
     justify-content: center;
+  }
+
+  .editor-more-menu > .context-menu {
+    right: auto;
+    left: 0;
   }
 
   .panel-head {

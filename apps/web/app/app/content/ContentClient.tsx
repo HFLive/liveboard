@@ -30,6 +30,7 @@ import {
   deleteFolder,
   deletePermissionGrant,
   getFolderTree,
+  importMarkdown,
   listAssignablePermissionGroups,
   listFiles,
   listPermissionGrants,
@@ -45,6 +46,7 @@ import {
   permissionLabel,
 } from "@/lib/labels";
 import { contentDetail, contentPresentation } from "@/lib/routes";
+import { MarkdownImportButton } from "./MarkdownImportButton";
 
 type FlatFolderNode = FolderNode & { depth: number };
 type FloatingMenuState = {
@@ -295,6 +297,29 @@ export function ContentClient() {
       await selectFolder(activeFolderId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "创建文件失败");
+    }
+  }
+
+  async function onImportMarkdown(file: File) {
+    setError(null);
+    setMessage(null);
+
+    if (!activeFolderId) {
+      setError("请先选择文件夹");
+      return;
+    }
+
+    try {
+      const result = await importMarkdown({ folderId: activeFolderId, file });
+      const warningText = result.warnings.length
+        ? `；注意：${result.warnings.join("；")}`
+        : "";
+      setMessage(
+        `“${result.file.title}”已导入，共 ${result.blockCount} 个内容块${warningText}`,
+      );
+      await selectFolder(activeFolderId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "导入 Markdown 失败");
     }
   }
 
@@ -875,6 +900,10 @@ export function ContentClient() {
               </div>
             </div>
             <div className="toolbar-row">
+              <MarkdownImportButton
+                disabled={!activeFolderId}
+                onImport={onImportMarkdown}
+              />
               <button
                 className="button secondary"
                 onClick={() => setShowCreateFile((current) => !current)}

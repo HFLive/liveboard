@@ -102,6 +102,9 @@ importers:
       "@liveboard/shared":
         specifier: workspace:*
         version: link:../../packages/shared
+      katex:
+        specifier: ^0.17.0
+        version: 0.17.0
       lucide-react:
         specifier: ^1.21.0
         version: 1.23.0(react@19.2.7)
@@ -3215,6 +3218,13 @@ packages:
       }
     engines: { node: ">= 6" }
 
+  commander@8.3.0:
+    resolution:
+      {
+        integrity: sha512-OkTL9umf+He2DZkUq8f8J9of7yL6RJKI24dVITBmNfZBmri9zYZQrKkuXiKhyfPSu8tUhnVBB1iKXevvnlR4Ww==,
+      }
+    engines: { node: ">= 12" }
+
   comment-json@5.0.0:
     resolution:
       {
@@ -5197,6 +5207,13 @@ packages:
         integrity: sha512-ZZow9HBI5O6EPgSJLUb8n2NKgmVWTwCvHGwFuJlMjvLFqlGG6pjirPhtdsseaLZjSibD8eegzmYpUZwoIlj2cQ==,
       }
     engines: { node: ">=4.0" }
+
+  katex@0.17.0:
+    resolution:
+      {
+        integrity: sha512-Vdw0ATsQ9V+LuegM/BTwQqV/6cTl5lbGcIrU+BCgLxyf6bo38ybOr372tuSIxir3CN720flu1meYR6XzNMwQnw==,
+      }
+    hasBin: true
 
   keyv@4.5.4:
     resolution:
@@ -9616,6 +9633,8 @@ snapshots:
 
   commander@4.1.1: {}
 
+  commander@8.3.0: {}
+
   comment-json@5.0.0:
     dependencies:
       array-timsort: 1.0.3
@@ -11144,6 +11163,10 @@ snapshots:
       array.prototype.flat: 1.3.3
       object.assign: 4.1.7
       object.values: 1.2.1
+
+  katex@0.17.0:
+    dependencies:
+      commander: 8.3.0
 
   keyv@4.5.4:
     dependencies:

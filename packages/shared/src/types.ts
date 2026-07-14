@@ -14,6 +14,9 @@ export type ContentBlockType =
   | "heading_1"
   | "heading_2"
   | "heading_3"
+  | "heading_4"
+  | "heading_5"
+  | "heading_6"
   | "paragraph"
   | "bulleted_list"
   | "numbered_list"
@@ -24,7 +27,9 @@ export type ContentBlockType =
   | "attachment"
   | "divider"
   | "reference"
-  | "question";
+  | "question"
+  | "table"
+  | "math";
 
 export type QuestionType =
   | "single_choice"
