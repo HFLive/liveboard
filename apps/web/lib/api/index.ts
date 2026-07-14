@@ -597,12 +597,31 @@ export interface PermissionGrantSummary {
   group?: PermissionGroupSummary | null;
 }
 
+export interface InheritedPermissionGrantSummary extends PermissionGrantSummary {
+  inheritedFrom: {
+    targetType: PermissionTargetType;
+    targetId: string;
+    targetName: string;
+  };
+}
+
+export interface PermissionGrantListResponse {
+  grants: PermissionGrantSummary[];
+  inheritedGrants: InheritedPermissionGrantSummary[];
+}
+
+export function getDefaultPermissionWorkspace() {
+  return request<{ workspace: { id: string; name: string } }>(
+    "/permissions/workspace-default",
+  );
+}
+
 export function listPermissionGrants(
   targetType: PermissionTargetType,
   targetId: string,
 ) {
   const search = new URLSearchParams({ targetType, targetId });
-  return request<{ grants: PermissionGrantSummary[] }>(
+  return request<PermissionGrantListResponse>(
     `/permissions?${search.toString()}`,
   );
 }

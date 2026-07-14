@@ -3420,6 +3420,21 @@ p.muted {
   font-size: 13px;
 }
 
+.inline-rename-file {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 360px) auto auto;
+  gap: 8px;
+  align-items: center;
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+  padding: 10px;
+}
+
+.inline-rename-file span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .compact-input {
   min-height: 32px;
   padding: 6px 8px;
@@ -6509,6 +6524,11 @@ p.muted {
   .responsive-table .inline-icon-button {
     width: 40px;
     height: 40px;
+  }
+
+  .inline-move-file,
+  .inline-rename-file {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .tree-item {

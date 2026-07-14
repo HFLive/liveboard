@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   Users,
 } from "lucide-react";
 import { APP_ROUTES } from "@/lib/routes";
@@ -36,6 +37,11 @@ const adminNavItems = [
     href: APP_ROUTES.adminGroups,
     label: "权限组",
     icon: ShieldCheck,
+  },
+  {
+    href: APP_ROUTES.adminContentPermissions,
+    label: "内容权限",
+    icon: SlidersHorizontal,
   },
   {
     href: APP_ROUTES.adminForum,

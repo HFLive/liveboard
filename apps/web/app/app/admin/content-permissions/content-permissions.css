@@ -1,0 +1,131 @@
+.content-permissions-workspace {
+  min-width: 0;
+}
+
+.content-permission-overview,
+.content-permission-panel {
+  width: min(880px, 100%);
+}
+
+.content-permission-overview {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 22px;
+  border: 1px solid var(--line);
+  background: #f7f6f3;
+  padding: 18px 20px;
+}
+
+.content-permission-overview > svg {
+  width: 24px;
+  height: 24px;
+  margin-top: 2px;
+  color: #776b4f;
+}
+
+.content-permission-overview h2,
+.content-permission-panel h2,
+.content-permission-overview p,
+.content-permission-head p {
+  margin: 0;
+}
+
+.content-permission-overview h2,
+.content-permission-panel h2 {
+  font-size: 16px;
+}
+
+.content-permission-overview p,
+.content-permission-head p {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.content-permission-panel {
+  margin-top: 18px;
+  border-top: 1px solid var(--line-strong);
+}
+
+.content-permission-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 2px 14px;
+}
+
+.content-permission-head > span {
+  flex: 0 0 auto;
+  border: 0;
+  background: #efede8;
+  color: var(--muted);
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.content-permission-list {
+  border-top: 1px solid var(--line);
+}
+
+.content-permission-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 14px 2px;
+}
+
+.content-permission-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.content-permission-row strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content-permission-row span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content-permission-row label,
+.content-permission-row .select {
+  width: 100%;
+  min-width: 0;
+}
+
+.content-permission-list > .empty-panel.compact {
+  border: 0;
+  background: transparent;
+}
+
+@media (max-width: 620px) {
+  .content-permission-overview {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  .content-permission-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 14px 0;
+  }
+
+  .content-permission-row span {
+    white-space: normal;
+  }
+}

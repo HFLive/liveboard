@@ -5789,6 +5789,31 @@ body,
   padding: 20px 22px 24px;
 }
 
+.permission-modal .permission-inheritance-summary {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-left: 3px solid #8a9a82;
+  background: #f4f6f2;
+  padding: 11px 13px;
+}
+
+.permission-modal .permission-inheritance-summary.has-overrides {
+  border-left-color: #b58a4a;
+  background: #faf6ee;
+}
+
+.permission-modal .permission-inheritance-summary strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.permission-modal .permission-inheritance-summary span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .permission-modal .permission-panel > .panel-title-row {
   min-height: 32px;
   margin-bottom: 10px;
@@ -5857,6 +5882,12 @@ body,
   font-size: 14px;
 }
 
+.permission-modal .grant-member small {
+  overflow: visible;
+  line-height: 1.45;
+  white-space: normal;
+}
+
 .permission-modal .grant-select {
   width: 112px;
   min-height: 34px;
@@ -5869,6 +5900,27 @@ body,
   height: 30px;
   border: 0;
   background: transparent;
+}
+
+.permission-modal .permission-inherited-section {
+  margin-top: 24px;
+}
+
+.permission-modal .permission-inherited-section > .panel-title-row {
+  margin-bottom: 8px;
+}
+
+.permission-modal .inherited-grant-list {
+  margin-top: 0;
+}
+
+.permission-modal .grant-row.inherited {
+  grid-template-columns: minmax(0, 1fr) 112px;
+}
+
+.permission-modal .grant-row.inherited .grant-level {
+  justify-self: stretch;
+  text-align: center;
 }
 
 .permission-modal .grant-list > .empty-panel.compact {

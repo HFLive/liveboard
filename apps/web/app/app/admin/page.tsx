@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   Users,
 } from "lucide-react";
 import { AdminSubnav } from "@/components/admin/AdminSubnav";
@@ -56,6 +57,16 @@ export default function AdminPage() {
           <span>
             <strong>权限组</strong>
             <small>维护成员分组和资料授权</small>
+          </span>
+        </Link>
+        <Link
+          className="admin-hub-card"
+          href={APP_ROUTES.adminContentPermissions}
+        >
+          <SlidersHorizontal aria-hidden="true" />
+          <span>
+            <strong>内容默认权限</strong>
+            <small>设置顶层文件夹继承的基础权限</small>
           </span>
         </Link>
         <Link className="admin-hub-card" href={APP_ROUTES.adminForum}>

@@ -339,8 +339,8 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
             </div>
           </label>
           <div className="panel-head">
-            <h2>课件页面</h2>
-            <span className="muted">按顺序逐页展示</span>
+            <h2>课件内容</h2>
+            <span className="muted">按顺序排列，展示时自动分页</span>
           </div>
           <div className="teaching-item-list">
             {items.map((item, index) => (
