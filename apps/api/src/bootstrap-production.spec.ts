@@ -1,5 +1,8 @@
 import type { PrismaClient } from "@prisma/client";
-import { bootstrapProduction } from "./bootstrap-production";
+import {
+  bootstrapProduction,
+  formatProductionBootstrapResult,
+} from "./bootstrap-production";
 
 function createPrismaMock(options?: {
   existingSuperAdmin?: boolean;
@@ -79,5 +82,26 @@ describe("production bootstrap", () => {
       "数据库中已有用户，但没有正常状态的最高管理员",
     );
     expect(mocks.prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("formats stable machine-readable credentials for the deploy script", () => {
+    expect(
+      formatProductionBootstrapResult(
+        {
+          created: true,
+          username: "admin",
+          password: "generated-password",
+        },
+        true,
+      ),
+    ).toEqual([
+      "LIVEBOARD_BOOTSTRAP_CREATED=1",
+      "LIVEBOARD_INITIAL_ADMIN_USERNAME=admin",
+      "LIVEBOARD_INITIAL_ADMIN_PASSWORD=generated-password",
+    ]);
+
+    expect(formatProductionBootstrapResult({ created: false }, true)).toEqual([
+      "LIVEBOARD_BOOTSTRAP_CREATED=0",
+    ]);
   });
 });

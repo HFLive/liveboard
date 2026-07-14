@@ -13,6 +13,8 @@ COMPOSE_FILE="$BUNDLE_DIR/docker-compose.yml"
 IMAGES_FILE="$BUNDLE_DIR/images.tar.gz"
 MANIFEST_FILE="$BUNDLE_DIR/manifest.txt"
 NGINX_FILE="$BUNDLE_DIR/nginx.conf"
+INITIAL_ADMIN_CREDENTIALS_FILE="$STATE_DIR/initial-admin-credentials.txt"
+INITIAL_ADMIN_CREATED=false
 
 for command in docker curl sha256sum gzip od; do
   if ! command -v "$command" >/dev/null 2>&1; then
@@ -213,7 +215,39 @@ until curl --fail --silent --show-error "$WEB_HEALTH_URL" >/dev/null 2>&1; do
 done
 
 echo "检查首次生产初始化..."
-compose exec -T api node dist/bootstrap-production.js
+BOOTSTRAP_OUTPUT=$(compose exec -T api node dist/bootstrap-production.js --machine-readable)
+BOOTSTRAP_CREATED=$(printf '%s\n' "$BOOTSTRAP_OUTPUT" | awk -F= '$1 == "LIVEBOARD_BOOTSTRAP_CREATED" { print $2; exit }')
+
+case "$BOOTSTRAP_CREATED" in
+  0)
+    echo "系统已经初始化，沿用现有管理员账号和密码。"
+    ;;
+  1)
+    INITIAL_ADMIN_USERNAME=$(printf '%s\n' "$BOOTSTRAP_OUTPUT" | awk -F= '$1 == "LIVEBOARD_INITIAL_ADMIN_USERNAME" { sub(/^[^=]*=/, ""); print; exit }')
+    INITIAL_ADMIN_PASSWORD=$(printf '%s\n' "$BOOTSTRAP_OUTPUT" | awk -F= '$1 == "LIVEBOARD_INITIAL_ADMIN_PASSWORD" { sub(/^[^=]*=/, ""); print; exit }')
+
+    if [ -z "$INITIAL_ADMIN_USERNAME" ] || [ -z "$INITIAL_ADMIN_PASSWORD" ]; then
+      echo "首次管理员已经创建，但未能读取初始化凭据；已停止部署。" >&2
+      exit 1
+    fi
+
+    {
+      echo "LiveBoard 首次管理员凭据"
+      echo "账号：${INITIAL_ADMIN_USERNAME}"
+      echo "密码：${INITIAL_ADMIN_PASSWORD}"
+      echo
+      echo "首次登录并修改密码后，请删除本文件："
+      echo "rm -f ${INITIAL_ADMIN_CREDENTIALS_FILE}"
+    } >"$INITIAL_ADMIN_CREDENTIALS_FILE"
+    chmod 600 "$INITIAL_ADMIN_CREDENTIALS_FILE"
+    INITIAL_ADMIN_CREATED=true
+    echo "首次管理员已经创建，凭据已保存到 ${INITIAL_ADMIN_CREDENTIALS_FILE}。"
+    ;;
+  *)
+    echo "无法识别首次生产初始化结果：$BOOTSTRAP_OUTPUT" >&2
+    exit 1
+    ;;
+esac
 
 VERSION=$(awk -F= '$1 == "release" { print $2; exit }' "$MANIFEST_FILE")
 if [ -z "$VERSION" ]; then
@@ -226,3 +260,12 @@ compose ps
 echo "发布部署完成：$VERSION"
 echo "数据库备份：$BACKUP_FILE"
 echo "发布清单：$MANIFEST_FILE"
+
+if [ "$INITIAL_ADMIN_CREATED" = true ]; then
+  echo
+  echo "============================================================"
+  echo "首次管理员凭据（请立即保存）"
+  echo "============================================================"
+  cat "$INITIAL_ADMIN_CREDENTIALS_FILE"
+  echo "============================================================"
+fi

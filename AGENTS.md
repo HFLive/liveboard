@@ -46,7 +46,7 @@ docker compose up --build -d
 
 正式生产部署只使用 GitHub Release 单文件包。服务器不拉取源码、不运行 pnpm、不构建应用镜像，也不直接下载容器镜像；用户在电脑下载 `liveboard-<version>-linux-amd64.tar.gz` 后上传服务器并运行包内 `deploy.sh`。脚本必须在迁移前备份 PostgreSQL，并等待 API 与 Web 都健康后才报告完成。不得使用 `docker compose down -v` 或清理命名卷更新服务。MinIO 需要独立备份或卷快照。
 
-生产首次初始化由 `apps/api/src/bootstrap-production.ts` 自动完成，只创建一个随机密码的最高管理员、默认 workspace 和论坛分类。`apps/api/prisma/seed.cjs` 仅用于本地演示，生产部署不得调用。
+生产首次初始化由 `apps/api/src/bootstrap-production.ts` 自动完成，只创建一个随机密码的最高管理员、默认 workspace 和论坛分类。部署脚本必须在最终总结中醒目显示首次凭据，并将其保存到权限为 `600` 的 `/opt/liveboard/initial-admin-credentials.txt`；用户修改密码后应删除该文件。升级不得生成或覆盖管理员密码。`apps/api/prisma/seed.cjs` 仅用于本地演示，生产部署不得调用。
 
 `docker-compose.yml` 中的 Web 明确使用 `NODE_ENV=production`。用户要求“开发版本”时，不得只执行 `docker compose up`；应停止 `web`、`api` 容器，保留基础设施，再运行 `pnpm dev`。
 
@@ -141,5 +141,6 @@ UI 修改额外确认：
 - 2026-07-13：新增独立“授课”板块；所有已登录用户可访问并创建课件，课件支持从内容节选段落、排序拼装、嵌套练习与全屏展示；文件编辑页移除直接授课入口。
 - 2026-07-13：生产 Compose 的宿主机端口统一只绑定 `127.0.0.1`，公网访问必须经过反向代理；Web 镜像构建显式传入 `NEXT_PUBLIC_API_URL`，修改公开 API 地址后必须重新构建镜像。
 - 2026-07-14：生产发布链路最终收口为单个 `liveboard-<version>-linux-amd64.tar.gz`。删除服务器拉源码构建、服务器下载多个 Release 文件和 v0.1.0 四文件兼容路径；电脑下载上传单包是唯一正式流程。包内脚本自动生成基础密钥、迁移、备份、等待 API/Web 健康并初始化唯一随机密码最高管理员。HTTP IP 与 HTTPS 通过 `SESSION_COOKIE_SECURE` 显式区分。
+- 2026-07-14：首次生产初始化的随机管理员凭据必须在部署总结末尾醒目显示，并保存到仅 root 可读的 `/opt/liveboard/initial-admin-credentials.txt`；升级沿用已有管理员，不能生成或覆盖密码。
 
 后续纪要只记录会影响未来开发判断的决策、迁移或故障原因，不记录每个微小样式调整。
