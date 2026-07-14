@@ -14,7 +14,6 @@ import {
   Check,
   Copy,
   History,
-  MessageSquareText,
   MoreHorizontal,
   Plus,
   Search,
@@ -126,6 +125,16 @@ export function AiAssistantClient() {
   }, [messages, asking]);
 
   useEffect(() => {
+    const textarea = questionInputRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+  }, [question]);
+
+  useEffect(() => {
     function closeHistoryMenu(event: MouseEvent) {
       const target = event.target;
 
@@ -176,15 +185,20 @@ export function AiAssistantClient() {
     };
     const assistantMessageId = `assistant-${Date.now()}`;
 
-    setMessages((current) => [
-      ...current,
-      userMessage,
-      {
-        id: assistantMessageId,
-        role: "assistant",
-        content: "",
-      },
-    ]);
+    setMessages((current) => {
+      const nextMessages: ChatMessage[] = [
+        userMessage,
+        {
+          id: assistantMessageId,
+          role: "assistant",
+          content: "",
+        },
+      ];
+
+      return current.length === 1 && current[0]?.id === welcomeMessage.id
+        ? nextMessages
+        : [...current, ...nextMessages];
+    });
     setQuestion("");
     setAiError(null);
     setAsking(true);
@@ -533,10 +547,9 @@ export function AiAssistantClient() {
 
         <section className="ai-chat-panel" aria-label="AI 对话">
           <header className="ai-chat-toolbar">
-            <div>
-              <span>当前对话</span>
-              <strong>{activeConversation?.title ?? "新对话"}</strong>
-            </div>
+            <strong title={activeConversation?.title ?? "新对话"}>
+              {activeConversation?.title ?? "新对话"}
+            </strong>
             <div className="ai-chat-toolbar-actions">
               <button
                 className="button secondary ai-history-toggle"
@@ -558,71 +571,85 @@ export function AiAssistantClient() {
             </div>
           </header>
           <div className="home-ai-messages" ref={messagesContainerRef}>
-            {messages.map((message) => (
-              <article
-                className={
-                  message.role === "user"
-                    ? "chat-bubble user"
-                    : "chat-bubble assistant"
-                }
-                key={message.id}
-              >
-                <div className="chat-message-head">
-                  <div className="chat-role">
-                    {message.role === "user" ? (
-                      <MessageSquareText aria-hidden="true" />
-                    ) : (
-                      <Sparkles aria-hidden="true" />
-                    )}
-                    <span>
-                      {message.role === "user" ? "你" : "LiveBoard AI"}
-                    </span>
-                  </div>
-                  {message.content.trim() ? (
+            {hasOnlyWelcome ? (
+              <div className="ai-welcome">
+                <span className="ai-welcome-mark" aria-hidden="true">
+                  <Sparkles />
+                </span>
+                <div>
+                  <h2>从资料中查找答案</h2>
+                  <p>{welcomeMessage.content}</p>
+                </div>
+                <div className="ai-suggestion-list" aria-label="推荐提问">
+                  {promptSuggestions.map((suggestion) => (
                     <button
-                      className="chat-copy-button"
-                      onClick={() => void onCopyMessage(message)}
-                      title="复制消息"
+                      disabled={asking || !aiStatus?.available}
+                      key={suggestion}
+                      onClick={() => onUseSuggestion(suggestion)}
                       type="button"
                     >
-                      {copiedMessageId === message.id ? (
-                        <Check aria-hidden="true" />
-                      ) : (
-                        <Copy aria-hidden="true" />
-                      )}
-                      <span>
-                        {copiedMessageId === message.id ? "已复制" : "复制"}
-                      </span>
+                      {suggestion}
                     </button>
-                  ) : null}
+                  ))}
                 </div>
-                <MarkdownContent
-                  content={
-                    message.content ||
-                    (message.role === "assistant"
-                      ? "正在检索资料并生成回答..."
-                      : "")
-                  }
-                />
-                {message.sources && message.sources.length > 0 ? (
-                  <SourceList sources={message.sources} />
-                ) : null}
-              </article>
-            ))}
-            {hasOnlyWelcome ? (
-              <div className="ai-suggestion-list" aria-label="推荐提问">
-                {promptSuggestions.map((suggestion) => (
-                  <button
-                    disabled={asking || !aiStatus?.available}
-                    key={suggestion}
-                    onClick={() => onUseSuggestion(suggestion)}
-                    type="button"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
               </div>
-            ) : null}
+            ) : (
+              messages.map((message) => (
+                <article
+                  className={
+                    message.role === "user"
+                      ? "chat-bubble user"
+                      : "chat-bubble assistant"
+                  }
+                  data-role={message.role}
+                  key={message.id}
+                >
+                  <div className="chat-message-head">
+                    {message.role === "assistant" ? (
+                      <div className="chat-role">
+                        <span className="chat-role-mark" aria-hidden="true">
+                          <Sparkles />
+                        </span>
+                        <span>LiveBoard</span>
+                      </div>
+                    ) : null}
+                    {message.content.trim() ? (
+                      <button
+                        aria-label={`复制${
+                          message.role === "user" ? "问题" : "回答"
+                        }`}
+                        className="chat-copy-button"
+                        onClick={() => void onCopyMessage(message)}
+                        title="复制消息"
+                        type="button"
+                      >
+                        {copiedMessageId === message.id ? (
+                          <Check aria-hidden="true" />
+                        ) : (
+                          <Copy aria-hidden="true" />
+                        )}
+                        <span>
+                          {copiedMessageId === message.id ? "已复制" : "复制"}
+                        </span>
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="chat-message-body">
+                    <MarkdownContent
+                      content={
+                        message.content ||
+                        (message.role === "assistant"
+                          ? "正在检索资料并生成回答..."
+                          : "")
+                      }
+                    />
+                  </div>
+                  {message.sources && message.sources.length > 0 ? (
+                    <SourceList sources={message.sources} />
+                  ) : null}
+                </article>
+              ))
+            )}
           </div>
 
           {aiUnavailableReason ? (
@@ -635,19 +662,24 @@ export function AiAssistantClient() {
               ref={questionInputRef}
               onChange={(event) => setQuestion(event.target.value)}
               onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
                   event.currentTarget.form?.requestSubmit();
                 }
               }}
               placeholder="询问资料中的专业问题..."
-              rows={3}
+              rows={1}
               value={question}
             />
             <div className="composer-foot">
               <span className="composer-meta">
                 {question.trim().length > 0
                   ? `${question.trim().length} 字`
-                  : "Ctrl/⌘ + Enter 发送"}
+                  : "Enter 发送 · Shift + Enter 换行"}
               </span>
               <div className="composer-actions">
                 {asking ? (

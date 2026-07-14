@@ -6,6 +6,7 @@ import {
   Presentation,
   ShieldCheck,
 } from "lucide-react";
+import "./home.css";
 
 export default function HomePage() {
   return (

@@ -10,7 +10,6 @@ import {
   Files,
   MessageSquare,
   Presentation,
-  Settings,
   Users,
 } from "lucide-react";
 import type { UserSummary } from "@liveboard/shared";
@@ -20,7 +19,7 @@ import { APP_ROUTES } from "@/lib/routes";
 import { LogoutButton } from "./LogoutButton";
 
 const navItems = [
-  { href: APP_ROUTES.ai, label: "AI 助手", Icon: Bot },
+  { href: APP_ROUTES.ai, label: "AI", Icon: Bot },
   { href: APP_ROUTES.content, label: "内容", Icon: Files },
   { href: APP_ROUTES.teaching, label: "授课", Icon: Presentation },
   { href: APP_ROUTES.library, label: "素材库", Icon: Database },
@@ -89,16 +88,18 @@ export function AppNav() {
 
   return (
     <aside className="app-rail">
-      <Link className="rail-brand" href={APP_ROUTES.root}>
-        <span className="rail-mark">LB</span>
-        <span className="rail-brand-copy">
-          <strong>LiveBoard</strong>
-          <small>教学工作台</small>
+      <Link
+        aria-label="LiveBoard 首页"
+        className="rail-brand"
+        href={APP_ROUTES.root}
+        title="LiveBoard 首页"
+      >
+        <span className="rail-mark" aria-hidden="true">
+          LB
         </span>
       </Link>
 
       <nav className="rail-nav" aria-label="主导航">
-        <span className="rail-section-label">工作区</span>
         {visibleNavItems.map((item) => {
           const Icon = item.Icon;
           const active = isActive(pathname, item.href);
@@ -119,7 +120,18 @@ export function AppNav() {
       </nav>
 
       <div className="rail-footer">
-        <div className="rail-user">
+        <Link
+          aria-current={
+            isActive(pathname, APP_ROUTES.profile) ? "page" : undefined
+          }
+          className={
+            isActive(pathname, APP_ROUTES.profile)
+              ? "rail-user active"
+              : "rail-user"
+          }
+          href={APP_ROUTES.profile}
+          title="个人设置"
+        >
           <span className="rail-avatar" aria-hidden="true">
             {userInitial}
           </span>
@@ -133,20 +145,6 @@ export function AppNav() {
                 : "加载中…"}
             </small>
           </span>
-        </div>
-        <Link
-          aria-current={
-            isActive(pathname, APP_ROUTES.profile) ? "page" : undefined
-          }
-          className={
-            isActive(pathname, APP_ROUTES.profile)
-              ? "rail-account-link active"
-              : "rail-account-link"
-          }
-          href={APP_ROUTES.profile}
-        >
-          <Settings aria-hidden="true" className="rail-icon" />
-          个人设置
         </Link>
         <LogoutButton />
       </div>

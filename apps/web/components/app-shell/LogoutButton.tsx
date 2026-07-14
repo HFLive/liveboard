@@ -26,14 +26,13 @@ export function LogoutButton() {
   return (
     <button
       aria-label={loading ? "正在退出" : "退出登录"}
-      className="nav-button"
+      className="nav-button rail-logout-button"
       disabled={loading}
       onClick={onLogout}
       title={loading ? "正在退出" : "退出登录"}
       type="button"
     >
       <LogOut aria-hidden="true" className="rail-icon" />
-      <span>{loading ? "退出中" : "退出"}</span>
     </button>
   );
 }
