@@ -44,7 +44,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Validate Compose configuration
-        run: docker compose config --quiet
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
 
       - name: Build API image
         run: docker build --file apps/api/Dockerfile --tag liveboard-api:ci .
