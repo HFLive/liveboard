@@ -45,6 +45,29 @@ describe("FilesController Markdown endpoints", () => {
     });
   });
 
+  it("restores UTF-8 Markdown filenames decoded as Latin-1 by multipart", async () => {
+    filesService.importMarkdown.mockResolvedValue({
+      file: { id: "file-1" },
+      warnings: [],
+      blockCount: 1,
+    });
+    const file = {
+      originalname: "ä½ å¥½.md",
+      mimetype: "text/markdown",
+      size: 8,
+      buffer: Buffer.from("# 标题"),
+    };
+
+    await controller.importMarkdown("user-1", { folderId: "folder-1" }, file);
+
+    expect(filesService.importMarkdown).toHaveBeenCalledWith("user-1", {
+      folderId: "folder-1",
+      originalname: "你好.md",
+      size: 8,
+      buffer: file.buffer,
+    });
+  });
+
   it("sets a UTF-8 attachment filename and nosniff on export", async () => {
     filesService.exportMarkdown.mockResolvedValue({
       filename: "第一讲.md",

@@ -32,6 +32,16 @@ class UpsertPermissionDto {
 export class PermissionsController {
   constructor(private readonly permissionsService: PermissionsService) {}
 
+  @Get("workspace-default")
+  async workspaceDefault(@CurrentUserId() actorUserId: string | null) {
+    return {
+      workspace:
+        await this.permissionsService.getDefaultWorkspaceForPermissions(
+          actorUserId,
+        ),
+    };
+  }
+
   @Get("effective")
   @Public()
   effective(
@@ -55,13 +65,11 @@ export class PermissionsController {
     @Query("targetType") targetType: PermissionTargetType,
     @Query("targetId") targetId: string,
   ) {
-    return {
-      grants: await this.permissionsService.listGrants(
-        actorUserId,
-        targetType,
-        targetId,
-      ),
-    };
+    return this.permissionsService.listGrants(
+      actorUserId,
+      targetType,
+      targetId,
+    );
   }
 
   @Post()

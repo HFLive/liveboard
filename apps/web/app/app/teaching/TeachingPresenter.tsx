@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ChevronLeft,
@@ -21,6 +21,7 @@ import {
 } from "@/lib/api";
 import { APP_ROUTES, teachingEdit } from "@/lib/routes";
 import { RenderBlockContent } from "../content/[id]/ContentBlockRenderer";
+import { buildTeachingSlides } from "./teachingSlides";
 
 type AnswerValue = string | string[] | boolean;
 
@@ -31,6 +32,10 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const slides = useMemo(
+    () => buildTeachingSlides(deck?.items ?? []),
+    [deck?.items],
+  );
 
   useEffect(() => {
     getTeachingDeck(deckId)
@@ -59,7 +64,7 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
       ) {
         event.preventDefault();
         setActiveIndex((current) =>
-          Math.min(current + 1, Math.max((deck?.items.length ?? 1) - 1, 0)),
+          Math.min(current + 1, Math.max(slides.length - 1, 0)),
         );
       }
       if (event.key === "ArrowLeft" || event.key === "PageUp") {
@@ -67,14 +72,13 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
         setActiveIndex((current) => Math.max(current - 1, 0));
       }
       if (event.key === "Home") setActiveIndex(0);
-      if (event.key === "End")
-        setActiveIndex(Math.max((deck?.items.length ?? 1) - 1, 0));
+      if (event.key === "End") setActiveIndex(Math.max(slides.length - 1, 0));
       if (event.key === "Escape" && focusMode && !document.fullscreenElement)
         setFocusMode(false);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [deck?.items.length, focusMode]);
+  }, [focusMode, slides.length]);
 
   useEffect(() => {
     function onFullscreenChange() {
@@ -86,6 +90,12 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
     return () =>
       document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
+
+  useEffect(() => {
+    setActiveIndex((current) =>
+      Math.min(current, Math.max(slides.length - 1, 0)),
+    );
+  }, [slides.length]);
 
   async function toggleFullscreen() {
     if (document.fullscreenElement || focusMode) {
@@ -101,9 +111,8 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
     }
   }
 
-  const items = deck?.items ?? [];
-  const activeItem =
-    items[Math.min(activeIndex, Math.max(items.length - 1, 0))];
+  const activeSlide =
+    slides[Math.min(activeIndex, Math.max(slides.length - 1, 0))];
   const full = isFullscreen || focusMode;
 
   return (
@@ -112,7 +121,9 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
         <div>
           <h1>{deck?.title ?? "课件"}</h1>
           <span>
-            {items.length ? `${activeIndex + 1} / ${items.length}` : "正在加载"}
+            {slides.length
+              ? `${activeIndex + 1} / ${slides.length}`
+              : "正在加载"}
           </span>
         </div>
         <div className="button-row">
@@ -154,16 +165,16 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
       </header>
       {error ? <p className="error-text">{error}</p> : null}
       <section className="teaching-presenter-stage" ref={stageRef}>
-        <div className="teaching-slide-source">
-          {activeItem?.type === "content_block"
-            ? activeItem.sourceFileTitle
-            : "课堂练习"}
-        </div>
+        <div className="teaching-slide-source">{activeSlide?.sourceLabel}</div>
         <article
-          className={`teaching-slide ${activeItem?.type === "exercise" ? "exercise-slide" : ""}`}
+          className={`teaching-slide ${activeSlide ? `${activeSlide.kind}-slide` : ""}`}
         >
-          {activeItem ? (
-            <SlideContent item={activeItem} />
+          {activeSlide ? (
+            activeSlide.items.map((item) => (
+              <div className="teaching-slide-block" key={item.id}>
+                <SlideContent item={item} />
+              </div>
+            ))
           ) : (
             <p className="muted">课件暂无内容。</p>
           )}
@@ -182,16 +193,16 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
           <div className="teaching-progress">
             <span
               style={{
-                width: `${items.length ? ((activeIndex + 1) / items.length) * 100 : 0}%`,
+                width: `${slides.length ? ((activeIndex + 1) / slides.length) * 100 : 0}%`,
               }}
             />
           </div>
           <button
             aria-label="下一页"
-            disabled={!items.length || activeIndex >= items.length - 1}
+            disabled={!slides.length || activeIndex >= slides.length - 1}
             onClick={() =>
               setActiveIndex((current) =>
-                Math.min(current + 1, items.length - 1),
+                Math.min(current + 1, slides.length - 1),
               )
             }
             type="button"

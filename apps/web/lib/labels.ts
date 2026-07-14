@@ -40,11 +40,11 @@ export function roleLabel(role: SystemRole) {
 
 export function permissionLabel(level: PermissionLevel | null | undefined) {
   const labels: Record<PermissionLevel, string> = {
-    owner: "所有者",
+    owner: "可管理",
     editor: "可编辑",
     lecturer: "可授课",
     viewer: "可查看",
-    no_access: "无访问权限",
+    no_access: "禁止访问",
   };
 
   return level ? (labels[level] ?? level) : "-";

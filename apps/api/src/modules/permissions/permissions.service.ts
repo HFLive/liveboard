@@ -45,6 +45,30 @@ export class PermissionsService {
     };
   }
 
+  async getDefaultWorkspaceForPermissions(actorUserId: string | null) {
+    if (!actorUserId) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    const actor = await this.requireActiveUser(actorUserId);
+    if (!isSystemAdmin(actor.systemRole)) {
+      throw new ForbiddenException(
+        "Only system administrators can manage workspace permissions",
+      );
+    }
+
+    const workspace = await this.prisma.workspace.findFirst({
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true },
+    });
+
+    if (!workspace) {
+      throw new NotFoundException("Workspace not found");
+    }
+
+    return workspace;
+  }
+
   async listGrants(
     actorUserId: string | null,
     targetType: PermissionTargetType,
@@ -86,7 +110,7 @@ export class PermissionsService {
       orderBy: [{ createdAt: "asc" }],
     });
 
-    return grants.map((grant) => ({
+    const directGrants = grants.map((grant) => ({
       ...grant,
       group: grant.group
         ? {
@@ -97,6 +121,14 @@ export class PermissionsService {
           }
         : null,
     }));
+
+    return {
+      grants: directGrants,
+      inheritedGrants: await this.listInheritedGroupGrants(
+        targetType,
+        targetId,
+      ),
+    };
   }
 
   async upsertGrant(actorUserId: string | null, input: UpsertPermissionInput) {
@@ -372,6 +404,155 @@ export class PermissionsService {
     return file.workspaceId;
   }
 
+  private async listInheritedGroupGrants(
+    targetType: PermissionTargetType,
+    targetId: string,
+  ) {
+    const sources = await this.getInheritedGrantSources(targetType, targetId);
+
+    if (sources.length === 0) {
+      return [];
+    }
+
+    const sourceByKey = new Map(
+      sources.map((source, index) => [
+        `${source.targetType}:${source.targetId}`,
+        { ...source, index },
+      ]),
+    );
+    const grants = await this.prisma.permissionGrant.findMany({
+      where: {
+        groupId: { not: null },
+        OR: sources.map((source) => ({
+          targetType: source.targetType,
+          targetId: source.targetId,
+        })),
+      },
+      include: {
+        group: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            _count: { select: { members: true } },
+          },
+        },
+      },
+    });
+    const orderedGrants = grants.sort((left, right) => {
+      const leftSource = sourceByKey.get(`${left.targetType}:${left.targetId}`);
+      const rightSource = sourceByKey.get(
+        `${right.targetType}:${right.targetId}`,
+      );
+      return (leftSource?.index ?? 0) - (rightSource?.index ?? 0);
+    });
+    const inheritedByGroup = new Map<
+      string,
+      (typeof orderedGrants)[number] & {
+        inheritedFrom: (typeof sources)[number];
+      }
+    >();
+
+    for (const grant of orderedGrants) {
+      if (!grant.groupId || !grant.group) continue;
+      const source = sourceByKey.get(`${grant.targetType}:${grant.targetId}`);
+      if (!source) continue;
+      const current = inheritedByGroup.get(grant.groupId);
+      const nextLevel = computeEffectivePermission(
+        current?.level ?? null,
+        grant.level,
+      );
+
+      if (!current || nextLevel !== current.level) {
+        inheritedByGroup.set(grant.groupId, {
+          ...grant,
+          level: nextLevel ?? grant.level,
+          inheritedFrom: {
+            targetType: source.targetType,
+            targetId: source.targetId,
+            targetName: source.targetName,
+          },
+        });
+      }
+    }
+
+    return [...inheritedByGroup.values()].map((grant) => ({
+      ...grant,
+      group: {
+        id: grant.group!.id,
+        name: grant.group!.name,
+        description: grant.group!.description,
+        memberCount: grant.group!._count.members,
+      },
+    }));
+  }
+
+  private async getInheritedGrantSources(
+    targetType: PermissionTargetType,
+    targetId: string,
+  ): Promise<
+    Array<{
+      targetType: PermissionTargetType;
+      targetId: string;
+      targetName: string;
+    }>
+  > {
+    if (targetType === "workspace") {
+      return [];
+    }
+
+    const target =
+      targetType === "folder"
+        ? await this.prisma.folder.findUnique({
+            where: { id: targetId },
+            select: { workspaceId: true, parentId: true },
+          })
+        : await this.prisma.file.findUnique({
+            where: { id: targetId },
+            select: { workspaceId: true, folderId: true },
+          });
+
+    if (!target) {
+      throw new NotFoundException(
+        targetType === "folder" ? "Folder not found" : "File not found",
+      );
+    }
+
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: target.workspaceId },
+      select: { id: true, name: true },
+    });
+    if (!workspace) {
+      throw new NotFoundException("Workspace not found");
+    }
+
+    const parentFolderId =
+      "parentId" in target ? target.parentId : target.folderId;
+    const folderPath = parentFolderId
+      ? await this.getFolderPath(parentFolderId)
+      : [];
+    const folderNames = await this.prisma.folder.findMany({
+      where: { id: { in: folderPath.map((folder) => folder.id) } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(
+      folderNames.map((folder) => [folder.id, folder.name]),
+    );
+
+    return [
+      {
+        targetType: "workspace",
+        targetId: workspace.id,
+        targetName: workspace.name,
+      },
+      ...folderPath.map((folder) => ({
+        targetType: "folder" as const,
+        targetId: folder.id,
+        targetName: nameById.get(folder.id) ?? "上级文件夹",
+      })),
+    ];
+  }
+
   private async assertCanManageGrant(
     actorUserId: string,
     targetType: PermissionTargetType,
@@ -384,11 +565,9 @@ export class PermissionsService {
     }
 
     if (targetType === "workspace") {
-      const grant = await this.findGrant(actorUserId, "workspace", targetId);
-      if (grant?.level === "owner") {
-        return;
-      }
-      throw new ForbiddenException("No permission to manage workspace grants");
+      throw new ForbiddenException(
+        "Only system administrators can manage workspace grants",
+      );
     }
 
     const level =
@@ -413,11 +592,9 @@ export class PermissionsService {
     }
 
     if (targetType === "workspace") {
-      const grant = await this.findGrant(actorUserId, "workspace", targetId);
-      if (canView(grant?.level ?? null)) {
-        return;
-      }
-      throw new ForbiddenException("No permission to view workspace grants");
+      throw new ForbiddenException(
+        "Only system administrators can view workspace grants",
+      );
     }
 
     const level =

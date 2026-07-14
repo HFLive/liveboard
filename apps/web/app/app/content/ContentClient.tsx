@@ -13,6 +13,7 @@ import {
   Presentation,
   Pencil,
   Plus,
+  RotateCcw,
   Trash2,
   Users,
 } from "lucide-react";
@@ -34,6 +35,7 @@ import {
   listAssignablePermissionGroups,
   listFiles,
   listPermissionGrants,
+  InheritedPermissionGrantSummary,
   PermissionGrantSummary,
   updateFile,
   updateFolder,
@@ -61,6 +63,7 @@ type PermissionTarget = {
   type: "folder" | "file";
   id: string;
   name: string;
+  isRoot?: boolean;
 };
 
 function flattenFolders(folders: FolderNode[], depth = 0): FlatFolderNode[] {
@@ -89,6 +92,8 @@ export function ContentClient() {
   const [folderMoveTargetId, setFolderMoveTargetId] = useState("");
   const [movingFileId, setMovingFileId] = useState<string | null>(null);
   const [moveTargetFolderId, setMoveTargetFolderId] = useState("");
+  const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
+  const [fileRename, setFileRename] = useState("");
   const [showCreateFile, setShowCreateFile] = useState(false);
   const [showPermissions, setShowPermissions] = useState(false);
   const [permissionTarget, setPermissionTarget] =
@@ -100,6 +105,9 @@ export function ContentClient() {
   const [fileType, setFileType] = useState<FileType>("doc");
   const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
   const [grants, setGrants] = useState<PermissionGrantSummary[]>([]);
+  const [inheritedGrants, setInheritedGrants] = useState<
+    InheritedPermissionGrantSummary[]
+  >([]);
   const [canManageGrants, setCanManageGrants] = useState(false);
   const [grantGroupId, setGrantGroupId] = useState("");
   const [grantLevel, setGrantLevel] = useState<PermissionLevel>("viewer");
@@ -137,6 +145,19 @@ export function ContentClient() {
       ),
     [groupGrants, groups],
   );
+  const inheritedFallbackByGroupId = useMemo(
+    () =>
+      new Map(inheritedGrants.map((grant) => [grant.groupId, grant] as const)),
+    [inheritedGrants],
+  );
+  const visibleInheritedGrants = useMemo(
+    () =>
+      inheritedGrants.filter(
+        (grant) =>
+          !groupGrants.some((direct) => direct.groupId === grant.groupId),
+      ),
+    [groupGrants, inheritedGrants],
+  );
 
   async function load() {
     const folderResult = await getFolderTree();
@@ -160,6 +181,7 @@ export function ContentClient() {
         loadAssignableGroups(selectedFolderId),
       ]);
       setGrants(grantResult.grants);
+      setInheritedGrants(grantResult.inheritedGrants);
     } else {
       setGroups([]);
       setGrantGroupId("");
@@ -198,6 +220,7 @@ export function ContentClient() {
       ]);
       setPermissionTarget(target);
       setGrants(grantResult.grants);
+      setInheritedGrants(grantResult.inheritedGrants);
       setGroups(groupResult.groups);
       setGrantGroupId(groupResult.groups[0]?.id ?? "");
       setCanManageGrants(true);
@@ -253,6 +276,7 @@ export function ContentClient() {
     ]);
     setFiles(fileResult.files);
     setGrants(grantResult.grants);
+    setInheritedGrants(grantResult.inheritedGrants);
   }
 
   async function onCreateFolder(event: FormEvent<HTMLFormElement>) {
@@ -351,6 +375,14 @@ export function ContentClient() {
 
     setMovingFileId(file.id);
     setMoveTargetFolderId(fallbackFolder);
+    setRenamingFileId(null);
+    setOpenFileMenu(null);
+  }
+
+  function beginRenameFile(file: FileSummary) {
+    setRenamingFileId(file.id);
+    setFileRename(file.title);
+    setMovingFileId(null);
     setOpenFileMenu(null);
   }
 
@@ -399,7 +431,7 @@ export function ContentClient() {
 
       return {
         id: fileId,
-        ...getFloatingMenuPosition(button, 5),
+        ...getFloatingMenuPosition(button, 6),
       };
     });
   }
@@ -523,6 +555,42 @@ export function ContentClient() {
     }
   }
 
+  async function onRenameFile(
+    event: FormEvent<HTMLFormElement>,
+    file: FileSummary,
+  ) {
+    event.preventDefault();
+    setError(null);
+    setMessage(null);
+
+    const title = fileRename.trim();
+
+    if (!title) {
+      setError("文件名不能为空");
+      return;
+    }
+
+    if (title === file.title) {
+      setRenamingFileId(null);
+      setFileRename("");
+      return;
+    }
+
+    try {
+      await updateFile({ fileId: file.id, title });
+      setRenamingFileId(null);
+      setFileRename("");
+      setMessage("文件已重命名");
+
+      if (activeFolderId) {
+        const fileResult = await listFiles(activeFolderId);
+        setFiles(fileResult.files);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "重命名文件失败");
+    }
+  }
+
   async function onRenameFolder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -599,6 +667,7 @@ export function ContentClient() {
         permissionTarget.id,
       );
       setGrants(grantResult.grants);
+      setInheritedGrants(grantResult.inheritedGrants);
       setMessage("权限已保存");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存权限失败");
@@ -621,7 +690,8 @@ export function ContentClient() {
         permissionTarget.id,
       );
       setGrants(grantResult.grants);
-      setMessage("授权已移除");
+      setInheritedGrants(grantResult.inheritedGrants);
+      setMessage("已恢复继承上级权限");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "移除授权失败");
     }
@@ -651,6 +721,7 @@ export function ContentClient() {
         permissionTarget.id,
       );
       setGrants(grantResult.grants);
+      setInheritedGrants(grantResult.inheritedGrants);
       setMessage("权限已更新");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "更新权限失败");
@@ -792,6 +863,7 @@ export function ContentClient() {
                               type: "folder",
                               id: folder.id,
                               name: folder.name,
+                              isRoot: folder.parentId === null,
                             })
                           }
                           type="button"
@@ -966,6 +1038,13 @@ export function ContentClient() {
                                 授课模式
                               </Link>
                               <button
+                                onClick={() => beginRenameFile(file)}
+                                type="button"
+                              >
+                                <Pencil aria-hidden="true" />
+                                重命名
+                              </button>
+                              <button
                                 onClick={() => beginMoveFile(file)}
                                 type="button"
                               >
@@ -1001,6 +1080,39 @@ export function ContentClient() {
                         </div>
                       </td>
                     </tr>
+                    {renamingFileId === file.id ? (
+                      <tr>
+                        <td colSpan={5}>
+                          <form
+                            className="inline-rename-file"
+                            onSubmit={(event) => void onRenameFile(event, file)}
+                          >
+                            <span>文件名</span>
+                            <input
+                              autoFocus
+                              className="input"
+                              value={fileRename}
+                              onChange={(event) =>
+                                setFileRename(event.target.value)
+                              }
+                            />
+                            <button className="button secondary" type="submit">
+                              保存
+                            </button>
+                            <button
+                              className="button secondary"
+                              onClick={() => {
+                                setRenamingFileId(null);
+                                setFileRename("");
+                              }}
+                              type="button"
+                            >
+                              取消
+                            </button>
+                          </form>
+                        </td>
+                      </tr>
+                    ) : null}
                     {movingFileId === file.id ? (
                       <tr>
                         <td colSpan={5}>
@@ -1089,12 +1201,30 @@ export function ContentClient() {
               </button>
             </div>
             <div className="modal-body permission-panel">
+              <div
+                className={`permission-inheritance-summary ${groupGrants.length > 0 ? "has-overrides" : ""}`}
+              >
+                <strong>
+                  {groupGrants.length > 0
+                    ? "包含例外权限"
+                    : permissionTarget?.isRoot
+                      ? "沿用内容默认权限"
+                      : "沿用上级权限"}
+                </strong>
+                <span>
+                  {groupGrants.length > 0
+                    ? `当前${permissionTarget?.type === "file" ? "文件" : "文件夹"}为 ${groupGrants.length} 个权限组单独设置；其他权限继续从上级继承。`
+                    : permissionTarget?.isRoot
+                      ? "当前顶层文件夹没有单独设置，权限会随管理中心的内容默认权限自动变化。"
+                      : `当前${permissionTarget?.type === "file" ? "文件" : "文件夹"}没有单独设置，权限会随上级文件夹自动变化。`}
+                </span>
+              </div>
               <div className="panel-title-row">
                 <h2>
                   <Users aria-hidden="true" className="heading-icon" />
-                  直接授权
+                  当前项目的例外
                 </h2>
-                <span className="badge">{groupGrants.length} 个组授权</span>
+                <span className="badge">{groupGrants.length} 项</span>
               </div>
               {canManageGrants ? (
                 <form
@@ -1127,8 +1257,8 @@ export function ContentClient() {
                     <option value="viewer">可查看</option>
                     <option value="lecturer">可授课</option>
                     <option value="editor">可编辑</option>
-                    <option value="owner">所有者</option>
-                    <option value="no_access">无访问权限</option>
+                    <option value="owner">可管理</option>
+                    <option value="no_access">禁止访问</option>
                   </select>
                   <button
                     className="button"
@@ -1137,7 +1267,7 @@ export function ContentClient() {
                     }
                     type="submit"
                   >
-                    授权
+                    添加例外
                   </button>
                 </form>
               ) : (
@@ -1153,7 +1283,12 @@ export function ContentClient() {
                       }
                     >
                       <strong>{grant.group?.name}</strong>
-                      <small>{grant.group?.memberCount ?? 0} 人</small>
+                      <small>
+                        {grant.group?.memberCount ?? 0} 人 · 当前项目单独设置
+                        {inheritedFallbackByGroupId.get(grant.groupId)
+                          ? `，恢复后为${permissionLabel(inheritedFallbackByGroupId.get(grant.groupId)?.level)}（来自「${inheritedFallbackByGroupId.get(grant.groupId)?.inheritedFrom.targetName}」）`
+                          : "，恢复后不再从上级获得权限"}
+                      </small>
                     </span>
                     {canManageGrants ? (
                       <select
@@ -1169,8 +1304,8 @@ export function ContentClient() {
                         <option value="viewer">可查看</option>
                         <option value="lecturer">可授课</option>
                         <option value="editor">可编辑</option>
-                        <option value="owner">所有者</option>
-                        <option value="no_access">无访问权限</option>
+                        <option value="owner">可管理</option>
+                        <option value="no_access">禁止访问</option>
                       </select>
                     ) : (
                       <span className="grant-level">
@@ -1182,20 +1317,54 @@ export function ContentClient() {
                         className="inline-icon-button"
                         onClick={() => void onDeleteGrant(grant.id)}
                         type="button"
-                        title="移除授权"
+                        title="恢复继承"
                       >
-                        <X aria-hidden="true" />
+                        <RotateCcw aria-hidden="true" />
                       </button>
                     ) : null}
                   </div>
                 ))}
                 {groupGrants.length === 0 ? (
                   <div className="empty-panel compact">
-                    <strong>没有组授权</strong>
-                    <span>成员会继续使用上级位置继承下来的权限组。</span>
+                    <strong>没有例外权限</strong>
+                    <span>
+                      {permissionTarget?.isRoot
+                        ? "全部权限都沿用管理中心的内容默认权限。"
+                        : "全部权限都沿用上级；通常只需在文件夹层统一管理。"}
+                    </span>
                   </div>
                 ) : null}
               </div>
+              {visibleInheritedGrants.length > 0 ? (
+                <section className="permission-inherited-section">
+                  <div className="panel-title-row">
+                    <h2>
+                      {permissionTarget?.isRoot
+                        ? "从内容默认权限继承"
+                        : "从上级继承"}
+                    </h2>
+                    <span className="badge">
+                      {visibleInheritedGrants.length} 项
+                    </span>
+                  </div>
+                  <div className="grant-list inherited-grant-list">
+                    {visibleInheritedGrants.map((grant) => (
+                      <div className="grant-row inherited" key={grant.id}>
+                        <span className="grant-member">
+                          <strong>{grant.group?.name ?? "权限组"}</strong>
+                          <small>
+                            {grant.group?.memberCount ?? 0} 人 · 来自「
+                            {grant.inheritedFrom.targetName}」
+                          </small>
+                        </span>
+                        <span className="grant-level">
+                          {permissionLabel(grant.level)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
             </div>
           </section>
         </div>

@@ -78,8 +78,8 @@ export function TeachingClient() {
               <div className="teaching-deck-main">
                 <Link href={teachingPresent(deck.id)}>{deck.title}</Link>
                 <span>
-                  {deck.itemCount} 页 · {deck.createdBy.displayName} · 更新于{" "}
-                  {formatDateTime(deck.updatedAt)}
+                  {deck.itemCount} 个内容块 · {deck.createdBy.displayName} ·
+                  更新于 {formatDateTime(deck.updatedAt)}
                 </span>
               </div>
               <div className="teaching-deck-actions">
