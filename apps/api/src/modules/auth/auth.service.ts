@@ -11,25 +11,30 @@ import argon2 from "argon2";
 import { randomUUID } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import type { ChangePasswordDto, UpdateProfileDto } from "./auth.dto";
+import { LoginRateLimitService } from "./login-rate-limit.service";
 
 @Injectable()
 export class AuthService {
   private readonly dummyPasswordHash = argon2.hash(randomUUID());
-  private readonly loginAttempts = new Map<
-    string,
-    { count: number; windowStartedAt: number; blockedUntil: number }
-  >();
-
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly loginRateLimit: LoginRateLimitService,
+  ) {}
 
   async validateLogin(
     username: string,
     password: string,
     clientAddress = "unknown",
-  ): Promise<UserSummary> {
+  ): Promise<{ user: UserSummary; sessionVersion: number }> {
     const normalizedUsername = username.trim();
-    const attemptKey = `${clientAddress}:${normalizedUsername.toLowerCase()}`;
-    this.assertLoginAllowed(attemptKey);
+    if (
+      await this.loginRateLimit.isBlocked(clientAddress, normalizedUsername)
+    ) {
+      throw new HttpException(
+        "登录尝试过多，请稍后再试",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
 
     const user = await this.prisma.user.findUnique({
       where: { username: normalizedUsername },
@@ -40,55 +45,15 @@ export class AuthService {
     );
 
     if (!user || user.status !== "active" || !passwordMatches) {
-      this.recordFailedLogin(attemptKey);
+      await this.loginRateLimit.recordFailure(
+        clientAddress,
+        normalizedUsername,
+      );
       throw new UnauthorizedException("Invalid credentials");
     }
 
-    this.loginAttempts.delete(attemptKey);
-    return this.toSummary(user);
-  }
-
-  private assertLoginAllowed(key: string) {
-    const attempt = this.loginAttempts.get(key);
-
-    if (!attempt) {
-      return;
-    }
-
-    if (attempt.blockedUntil > Date.now()) {
-      throw new HttpException(
-        "登录尝试过多，请稍后再试",
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    if (Date.now() - attempt.windowStartedAt >= 15 * 60 * 1000) {
-      this.loginAttempts.delete(key);
-    }
-  }
-
-  private recordFailedLogin(key: string) {
-    const now = Date.now();
-    const previous = this.loginAttempts.get(key);
-    const withinWindow = Boolean(
-      previous && now - previous.windowStartedAt < 15 * 60 * 1000,
-    );
-    const count = withinWindow && previous ? previous.count + 1 : 1;
-
-    this.loginAttempts.set(key, {
-      count,
-      windowStartedAt:
-        withinWindow && previous ? previous.windowStartedAt : now,
-      blockedUntil: count >= 8 ? now + 15 * 60 * 1000 : 0,
-    });
-
-    if (this.loginAttempts.size > 1000) {
-      for (const [attemptKey, attempt] of this.loginAttempts) {
-        if (now - attempt.windowStartedAt >= 15 * 60 * 1000) {
-          this.loginAttempts.delete(attemptKey);
-        }
-      }
-    }
+    await this.loginRateLimit.clear(clientAddress, normalizedUsername);
+    return { user: this.toSummary(user), sessionVersion: user.sessionVersion };
   }
 
   async getCurrentUser(userId: string | null): Promise<UserSummary> {
@@ -137,10 +102,16 @@ export class AuthService {
       throw new UnauthorizedException("当前密码不正确");
     }
 
-    await this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: await argon2.hash(input.newPassword) },
+      data: {
+        passwordHash: await argon2.hash(input.newPassword),
+        sessionVersion: { increment: 1 },
+      },
+      select: { id: true, sessionVersion: true },
     });
+
+    return { userId: updated.id, sessionVersion: updated.sessionVersion };
   }
 
   private async requireActiveUser(userId: string | null) {

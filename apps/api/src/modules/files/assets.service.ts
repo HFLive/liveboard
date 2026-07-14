@@ -11,6 +11,7 @@ import { canEdit } from "@liveboard/shared";
 import { Client } from "minio";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
+import { Prisma } from "@prisma/client";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -24,6 +25,18 @@ export interface UploadedAssetFile {
 export interface UploadAssetInput {
   folderId?: string;
   fileId?: string;
+}
+
+export const MAX_ASSET_SIZE_BYTES = 50 * 1024 * 1024;
+const SAFE_INLINE_IMAGE_MIMES = new Set([
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+export function isSafeInlineAssetMime(mimeType: string) {
+  return SAFE_INLINE_IMAGE_MIMES.has(mimeType);
 }
 
 @Injectable()
@@ -76,12 +89,13 @@ export class AssetsService {
       throw new BadRequestException("请选择要上传的文件");
     }
 
-    if (file.size > 50 * 1024 * 1024) {
+    if (file.size > MAX_ASSET_SIZE_BYTES) {
       throw new BadRequestException("文件不能超过 50MB");
     }
 
+    const mimeType = normalizeAssetMimeType(file);
+
     const context = await this.resolveUploadContext(userId, input);
-    await this.assertStorageQuota(userId, file.size);
     await this.ensureBucket();
 
     const safeName = sanitizeFilename(file.originalname);
@@ -89,28 +103,31 @@ export class AssetsService {
       .toISOString()
       .slice(0, 10)}/${randomUUID()}-${safeName}`;
 
-    await this.minio.putObject(
-      this.bucket,
+    const asset = await this.reserveAssetWithinQuota(userId, file.size, {
+      workspaceId: context.workspaceId,
+      folderId: context.folderId,
+      fileId: context.fileId,
       storageKey,
-      file.buffer,
-      file.size,
-      {
-        "Content-Type": file.mimetype || "application/octet-stream",
-      },
-    );
-
-    const asset = await this.prisma.fileAsset.create({
-      data: {
-        workspaceId: context.workspaceId,
-        folderId: context.folderId,
-        fileId: context.fileId,
-        storageKey,
-        filename: safeName,
-        mimeType: file.mimetype || "application/octet-stream",
-        sizeBytes: file.size,
-        uploadedBy: userId,
-      },
+      filename: safeName,
+      mimeType,
+      sizeBytes: file.size,
+      uploadedBy: userId,
     });
+
+    try {
+      await this.minio.putObject(
+        this.bucket,
+        storageKey,
+        file.buffer,
+        file.size,
+        { "Content-Type": mimeType },
+      );
+    } catch (caught) {
+      await this.prisma.fileAsset
+        .delete({ where: { id: asset.id } })
+        .catch(() => undefined);
+      throw caught;
+    }
 
     return {
       ...asset,
@@ -201,9 +218,7 @@ export class AssetsService {
       });
     }
 
-    await this.minio
-      .removeObject(this.bucket, asset.storageKey)
-      .catch(() => undefined);
+    await this.minio.removeObject(this.bucket, asset.storageKey);
     await this.prisma.fileAsset.delete({
       where: { id: asset.id },
     });
@@ -340,6 +355,7 @@ export class AssetsService {
     const blocks = await this.prisma.contentBlock.findMany({
       where: {
         type: { in: ["image", "attachment"] },
+        file: { status: { not: "archived" } },
         OR: assetIds.map((assetId) => ({
           dataJson: { path: ["assetId"], equals: assetId },
         })),
@@ -389,27 +405,49 @@ export class AssetsService {
     }
   }
 
-  private async assertStorageQuota(userId: string, incomingBytes: number) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { storageQuotaBytes: true },
-    });
+  private async reserveAssetWithinQuota(
+    userId: string,
+    incomingBytes: number,
+    data: Prisma.FileAssetUncheckedCreateInput,
+  ) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(
+          async (tx) => {
+            const user = await tx.user.findUnique({
+              where: { id: userId },
+              select: { storageQuotaBytes: true },
+            });
+            if (!user) throw new UnauthorizedException("Missing session");
 
-    if (!user) {
-      throw new UnauthorizedException("Missing session");
+            const usage = await tx.fileAsset.aggregate({
+              where: { uploadedBy: userId },
+              _sum: { sizeBytes: true },
+            });
+            if (
+              (usage._sum.sizeBytes ?? 0) + incomingBytes >
+              user.storageQuotaBytes
+            ) {
+              throw new BadRequestException(
+                `网盘容量不足，当前上限为 ${formatStorageSize(user.storageQuotaBytes)}`,
+              );
+            }
+            return tx.fileAsset.create({ data });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (caught) {
+        if (
+          attempt < 2 &&
+          caught instanceof Prisma.PrismaClientKnownRequestError &&
+          caught.code === "P2034"
+        ) {
+          continue;
+        }
+        throw caught;
+      }
     }
-
-    const usage = await this.prisma.fileAsset.aggregate({
-      where: { uploadedBy: userId },
-      _sum: { sizeBytes: true },
-    });
-    const usedBytes = usage._sum.sizeBytes ?? 0;
-
-    if (usedBytes + incomingBytes > user.storageQuotaBytes) {
-      throw new BadRequestException(
-        `网盘容量不足，当前上限为 ${formatStorageSize(user.storageQuotaBytes)}`,
-      );
-    }
+    throw new ConflictException("Upload conflicted with another request");
   }
 
   private getAssetUrl(assetId: string) {
@@ -425,6 +463,53 @@ function sanitizeFilename(filename: string) {
   return (filename || "asset")
     .replace(/[^\w.\-\u4e00-\u9fa5]+/g, "_")
     .slice(0, 120);
+}
+
+export function normalizeAssetMimeType(file: UploadedAssetFile) {
+  const filename = file.originalname.toLowerCase();
+  const declaredMime = file.mimetype.trim().toLowerCase();
+  const prefix = file.buffer.subarray(0, 1024).toString("utf8").trimStart();
+  if (
+    filename.endsWith(".svg") ||
+    declaredMime === "image/svg+xml" ||
+    /^(?:<\?xml[^>]*>\s*)?<svg[\s>]/i.test(prefix)
+  ) {
+    throw new BadRequestException("不支持上传 SVG 文件");
+  }
+
+  const detectedImage = detectSafeRasterMime(file.buffer);
+  if (detectedImage) return detectedImage;
+  if (declaredMime.startsWith("image/")) return "application/octet-stream";
+  return /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(declaredMime)
+    ? declaredMime
+    : "application/octet-stream";
+}
+
+function detectSafeRasterMime(buffer: Buffer) {
+  if (
+    buffer.length >= 8 &&
+    buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  ) {
+    return "image/png";
+  }
+  if (
+    buffer.length >= 3 &&
+    buffer[0] === 0xff &&
+    buffer[1] === 0xd8 &&
+    buffer[2] === 0xff
+  ) {
+    return "image/jpeg";
+  }
+  const signature = buffer.subarray(0, 6).toString("ascii");
+  if (signature === "GIF87a" || signature === "GIF89a") return "image/gif";
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

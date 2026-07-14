@@ -11,6 +11,7 @@ import { isPermissionLevel } from "@liveboard/shared";
 import type { PermissionLevel, PermissionTargetType } from "@liveboard/shared";
 import { IsIn, IsString } from "class-validator";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
+import { Public } from "../../common/public.decorator";
 import { PermissionsService } from "./permissions.service";
 
 class UpsertPermissionDto {
@@ -32,6 +33,7 @@ export class PermissionsController {
   constructor(private readonly permissionsService: PermissionsService) {}
 
   @Get("effective")
+  @Public()
   effective(
     @Query("inherited") inherited?: string,
     @Query("explicit") explicit?: string,

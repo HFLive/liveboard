@@ -7,6 +7,8 @@ BUNDLE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 STATE_DIR=${LIVEBOARD_STATE_DIR:-/opt/liveboard}
 ENV_FILE=${LIVEBOARD_ENV_FILE:-"$STATE_DIR/.env"}
 BACKUP_DIR=${BACKUP_DIR:-"$STATE_DIR/backups"}
+BACKUP_RETENTION_OVERRIDE=${BACKUP_RETENTION_COUNT+x}
+BACKUP_RETENTION_COUNT=${BACKUP_RETENTION_COUNT:-10}
 HEALTH_URL=${HEALTH_URL:-"http://127.0.0.1:4000/health"}
 WEB_HEALTH_URL=${WEB_HEALTH_URL:-"http://127.0.0.1:3000"}
 COMPOSE_FILE="$BUNDLE_DIR/docker-compose.yml"
@@ -57,6 +59,20 @@ read_env_value() {
   awk -F= -v key="$1" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$ENV_FILE"
 }
 
+if [ "$BACKUP_RETENTION_OVERRIDE" != x ]; then
+  configured_retention=$(read_env_value BACKUP_RETENTION_COUNT)
+  if [ -n "$configured_retention" ]; then
+    BACKUP_RETENTION_COUNT=$configured_retention
+  fi
+fi
+
+case "$BACKUP_RETENTION_COUNT" in
+  '' | *[!0-9]* | 0)
+    echo "BACKUP_RETENTION_COUNT 必须是正整数。" >&2
+    exit 1
+    ;;
+esac
+
 write_env_value() {
   key=$1
   value=$2
@@ -92,6 +108,7 @@ ensure_generated_secret() {
 ensure_generated_secret POSTGRES_PASSWORD 24
 ensure_generated_secret MINIO_ROOT_PASSWORD 24
 ensure_generated_secret SESSION_SECRET 32
+ensure_generated_secret AI_ENCRYPTION_KEY 32
 
 POSTGRES_PASSWORD=$(read_env_value POSTGRES_PASSWORD)
 POSTGRES_USER=$(read_env_value POSTGRES_USER)
@@ -124,6 +141,7 @@ require_secret() {
 require_secret POSTGRES_PASSWORD 16
 require_secret MINIO_ROOT_PASSWORD 16
 require_secret SESSION_SECRET 32
+require_secret AI_ENCRYPTION_KEY 32
 
 if [ "$(read_env_value NODE_ENV)" != "production" ]; then
   echo "$ENV_FILE 中的 NODE_ENV 必须为 production。" >&2
@@ -184,6 +202,13 @@ if [ ! -s "$BACKUP_FILE" ]; then
   echo "数据库备份为空，已停止部署。" >&2
   exit 1
 fi
+
+find "$BACKUP_DIR" -type f -name 'postgres-*.dump' -print \
+  | sort -r \
+  | awk -v keep="$BACKUP_RETENTION_COUNT" 'NR > keep' \
+  | while IFS= read -r expired_backup; do
+      rm -f "$expired_backup"
+    done
 
 echo "执行数据库迁移并更新应用服务..."
 compose up -d --no-build --force-recreate migrate api web

@@ -16,7 +16,12 @@ import type {
   TeachingDeckItemType,
   UserSummary,
 } from "@liveboard/shared";
-import { API_URL, ApiError, request } from "./client";
+import {
+  API_URL,
+  ApiError,
+  redirectToLoginOnUnauthorized,
+  request,
+} from "./client";
 
 export { ApiError } from "./client";
 
@@ -489,6 +494,7 @@ export async function askAiStream(
   });
 
   if (!response.ok) {
+    redirectToLoginOnUnauthorized(response.status, "/ai/ask/stream");
     const body = (await response.json().catch(() => null)) as {
       message?: string;
     } | null;
@@ -766,6 +772,7 @@ export async function uploadAsset(input: {
   });
 
   if (!response.ok) {
+    redirectToLoginOnUnauthorized(response.status, "/assets/upload");
     const body = (await response.json().catch(() => null)) as {
       message?: string;
     } | null;
@@ -786,6 +793,7 @@ export async function deleteLibraryAsset(assetId: string) {
   });
 
   if (!response.ok) {
+    redirectToLoginOnUnauthorized(response.status, `/assets/${assetId}`);
     const body = (await response.json().catch(() => null)) as {
       message?:
         string | { message?: string; references?: AssetReferenceSummary[] };

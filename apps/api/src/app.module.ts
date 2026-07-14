@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { APP_GUARD } from "@nestjs/core";
+import { ActiveUserGuard } from "./common/active-user.guard";
 import { AiModule } from "./modules/ai/ai.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { ExercisesModule } from "./modules/exercises/exercises.module";
@@ -27,5 +29,6 @@ import { TeachingModule } from "./modules/teaching/teaching.module";
     AiModule,
     TeachingModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ActiveUserGuard }],
 })
 export class AppModule {}

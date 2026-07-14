@@ -16,15 +16,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.7.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -34,3 +34,78 @@ jobs:
 
       - name: Validate
         run: pnpm validate
+
+  container-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate Compose configuration
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+
+      - name: Build API image
+        run: docker build --file apps/api/Dockerfile --tag liveboard-api:ci .
+
+      - name: Build Web image
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL=/api \
+            --build-arg NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=false \
+            --file apps/web/Dockerfile \
+            --tag liveboard-web:ci \
+            .
+
+  integration-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start infrastructure
+        run: |
+          cp .env.example .env
+          docker compose up -d postgres redis minio
+
+      - name: Migrate and build API
+        run: |
+          pnpm --filter @liveboard/shared build
+          pnpm --filter @liveboard/api exec dotenv -e ../../.env -- prisma migrate deploy --schema prisma/schema.prisma
+          pnpm --filter @liveboard/api build
+
+      - name: Verify dependency-aware health endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @liveboard/api exec dotenv -e ../../.env -- node dist/main.js > /tmp/liveboard-api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4000/health | grep -q '"minio":"ok"'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/liveboard-api.log
+          docker compose ps
+          exit 1

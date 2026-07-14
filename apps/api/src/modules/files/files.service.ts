@@ -74,12 +74,13 @@ export class FilesService {
     });
 
     const nodes = new Map<string, FolderNode>();
+    const permissions = await this.permissions.getEffectiveLevelsForFolders(
+      userId,
+      folders.map((folder) => folder.id),
+    );
 
     for (const folder of folders) {
-      const permission = await this.permissions.getEffectiveLevelForFolder(
-        userId,
-        folder.id,
-      );
+      const permission = permissions.get(folder.id) ?? null;
 
       if (!canView(permission)) {
         continue;
@@ -125,12 +126,13 @@ export class FilesService {
     });
 
     const visibleFiles: FileSummary[] = [];
+    const permissions = await this.permissions.getEffectiveLevelsForFiles(
+      userId,
+      files.map((file) => file.id),
+    );
 
     for (const file of files) {
-      const permission = await this.permissions.getEffectiveLevelForFile(
-        userId,
-        file.id,
-      );
+      const permission = permissions.get(file.id) ?? null;
 
       if (!canView(permission)) {
         continue;
@@ -151,7 +153,7 @@ export class FilesService {
       throw new UnauthorizedException("Missing session");
     }
 
-    const workspace = await this.getDefaultWorkspace();
+    let workspace = await this.getDefaultWorkspace();
     let parentPermission = null;
 
     if (input.parentId) {
@@ -163,30 +165,45 @@ export class FilesService {
       if (!canEdit(parentPermission)) {
         throw new ForbiddenException("No permission to create folder here");
       }
+
+      const parent = await this.prisma.folder.findUnique({
+        where: { id: input.parentId },
+        select: { workspace: true },
+      });
+      if (!parent) {
+        throw new NotFoundException("Folder not found");
+      }
+      workspace = parent.workspace;
     }
     const ownerGroupId = input.parentId
       ? null
       : await this.resolveOwnerGroupId(userId, workspace.id);
 
-    const folder = await this.prisma.folder.create({
-      data: {
-        workspaceId: workspace.id,
-        parentId: input.parentId ?? null,
-        name: input.name,
-        createdById: userId,
-      },
-    });
-
-    if (ownerGroupId) {
-      await this.permissions.upsertGrantUnchecked(userId, workspace.id, {
-        targetType: "folder",
-        targetId: folder.id,
-        groupId: ownerGroupId,
-        level: "owner",
+    return this.prisma.$transaction(async (tx) => {
+      const folder = await tx.folder.create({
+        data: {
+          workspaceId: workspace.id,
+          parentId: input.parentId ?? null,
+          name: input.name,
+          createdById: userId,
+        },
       });
-    }
 
-    return folder;
+      if (ownerGroupId) {
+        await tx.permissionGrant.create({
+          data: {
+            workspaceId: workspace.id,
+            createdById: userId,
+            targetType: "folder",
+            targetId: folder.id,
+            groupId: ownerGroupId,
+            level: "owner",
+          },
+        });
+      }
+
+      return folder;
+    });
   }
 
   async updateFolder(
@@ -209,6 +226,14 @@ export class FilesService {
 
     if (!canEdit(permission)) {
       throw new ForbiddenException("No permission to rename folder");
+    }
+
+    const folder = await this.prisma.folder.findUnique({
+      where: { id: folderId },
+      select: { workspaceId: true },
+    });
+    if (!folder) {
+      throw new NotFoundException("Folder not found");
     }
 
     const data: { name?: string; parentId?: string | null } = {};
@@ -234,6 +259,14 @@ export class FilesService {
 
         if (!canEdit(targetPermission)) {
           throw new ForbiddenException("No permission to move folder here");
+        }
+
+        const target = await this.prisma.folder.findUnique({
+          where: { id: parentId },
+          select: { workspaceId: true },
+        });
+        if (!target || target.workspaceId !== folder.workspaceId) {
+          throw new BadRequestException("不能将文件夹移动到其他工作区");
         }
 
         const targetPath = await this.getFolderPath(parentId);
@@ -281,12 +314,22 @@ export class FilesService {
       throw new BadRequestException("Only empty folders can be deleted");
     }
 
-    await this.prisma.permissionGrant.deleteMany({
-      where: { targetType: "folder", targetId: folderId },
-    });
-
-    await this.prisma.folder.delete({
-      where: { id: folderId },
+    await this.prisma.$transaction(async (tx) => {
+      const current = await tx.folder.findUnique({
+        where: { id: folderId },
+        include: {
+          children: { select: { id: true }, take: 1 },
+          files: { select: { id: true }, take: 1 },
+        },
+      });
+      if (!current) throw new NotFoundException("Folder not found");
+      if (current.children.length > 0 || current.files.length > 0) {
+        throw new BadRequestException("Only empty folders can be deleted");
+      }
+      await tx.permissionGrant.deleteMany({
+        where: { targetType: "folder", targetId: folderId },
+      });
+      await tx.folder.delete({ where: { id: folderId } });
     });
 
     return { ok: true };
@@ -357,6 +400,23 @@ export class FilesService {
 
       if (!canEdit(targetPermission) && targetPermission !== "lecturer") {
         throw new ForbiddenException("No permission to move file here");
+      }
+
+      const [file, targetFolder] = await Promise.all([
+        this.prisma.file.findUnique({
+          where: { id: fileId },
+          select: { workspaceId: true },
+        }),
+        this.prisma.folder.findUnique({
+          where: { id: input.folderId },
+          select: { workspaceId: true },
+        }),
+      ]);
+      if (!file || !targetFolder) {
+        throw new NotFoundException("File or folder not found");
+      }
+      if (file.workspaceId !== targetFolder.workspaceId) {
+        throw new BadRequestException("不能将文件移动到其他工作区");
       }
     }
 
@@ -434,26 +494,35 @@ export class FilesService {
       throw new ForbiddenException("No permission to edit file");
     }
 
-    const maxBlock = await this.prisma.contentBlock.findFirst({
-      where: { fileId },
-      orderBy: { sortOrder: "desc" },
-      select: { sortOrder: true },
+    await this.assertCanReferenceAsset(
+      userId,
+      fileId,
+      input.type,
+      input.dataJson,
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      const maxBlock = await tx.contentBlock.findFirst({
+        where: { fileId },
+        orderBy: { sortOrder: "desc" },
+        select: { sortOrder: true },
+      });
+      const block = await tx.contentBlock.create({
+        data: {
+          fileId,
+          type: input.type,
+          dataJson: input.dataJson as Prisma.InputJsonValue,
+          sortOrder: (maxBlock?.sortOrder ?? 0) + 10,
+          createdById: userId,
+          updatedById: userId,
+        },
+      });
+      await tx.file.update({
+        where: { id: fileId },
+        data: { version: { increment: 1 }, updatedById: userId },
+      });
+      return block;
     });
-
-    const block = await this.prisma.contentBlock.create({
-      data: {
-        fileId,
-        type: input.type,
-        dataJson: input.dataJson as Prisma.InputJsonValue,
-        sortOrder: (maxBlock?.sortOrder ?? 0) + 10,
-        createdById: userId,
-        updatedById: userId,
-      },
-    });
-
-    await this.bumpFileVersion(fileId, userId);
-
-    return block;
   }
 
   async referenceBlocks(
@@ -491,51 +560,51 @@ export class FilesService {
       throw new NotFoundException("Source block not found");
     }
 
+    const sourcePermissions = await this.permissions.getEffectiveLevelsForFiles(
+      userId,
+      orderedBlocks.map((block) => block.fileId),
+    );
     for (const block of orderedBlocks) {
-      const sourcePermission = await this.permissions.getEffectiveLevelForFile(
-        userId,
-        block.fileId,
-      );
-
-      if (!canView(sourcePermission)) {
+      if (!canView(sourcePermissions.get(block.fileId) ?? null)) {
         throw new ForbiddenException("No permission to reference source block");
       }
     }
 
-    const maxBlock = await this.prisma.contentBlock.findFirst({
-      where: { fileId },
-      orderBy: { sortOrder: "desc" },
-      select: { sortOrder: true },
-    });
-    const startOrder = maxBlock?.sortOrder ?? 0;
-
-    const created = [];
-
-    for (const [index, block] of orderedBlocks.entries()) {
-      created.push(
-        await this.prisma.contentBlock.create({
-          data: {
-            fileId,
-            type: "reference",
-            sortOrder: startOrder + (index + 1) * 10,
-            dataJson: {
-              text: getBlockText(block.dataJson),
-              sourceFileTitle: block.file.title,
-              sourceBlockType: block.type,
+    return this.prisma.$transaction(async (tx) => {
+      const maxBlock = await tx.contentBlock.findFirst({
+        where: { fileId },
+        orderBy: { sortOrder: "desc" },
+        select: { sortOrder: true },
+      });
+      const startOrder = maxBlock?.sortOrder ?? 0;
+      const created = [];
+      for (const [index, block] of orderedBlocks.entries()) {
+        created.push(
+          await tx.contentBlock.create({
+            data: {
+              fileId,
+              type: "reference",
+              sortOrder: startOrder + (index + 1) * 10,
+              dataJson: {
+                text: getBlockText(block.dataJson),
+                sourceFileTitle: block.file.title,
+                sourceBlockType: block.type,
+              },
+              sourceFileId: block.fileId,
+              sourceBlockId: block.id,
+              referenceMode: "snapshot",
+              createdById: userId,
+              updatedById: userId,
             },
-            sourceFileId: block.fileId,
-            sourceBlockId: block.id,
-            referenceMode: "snapshot",
-            createdById: userId,
-            updatedById: userId,
-          },
-        }),
-      );
-    }
-
-    await this.bumpFileVersion(fileId, userId);
-
-    return created;
+          }),
+        );
+      }
+      await tx.file.update({
+        where: { id: fileId },
+        data: { version: { increment: 1 }, updatedById: userId },
+      });
+      return created;
+    });
   }
 
   async reorderBlocks(
@@ -571,19 +640,23 @@ export class FilesService {
       throw new BadRequestException("Invalid block order");
     }
 
-    await this.prisma.$transaction(
-      input.blockIds.map((blockId, index) =>
-        this.prisma.contentBlock.update({
-          where: { id: blockId },
-          data: {
-            sortOrder: (index + 1) * 10,
-            updatedById: userId,
-          },
-        }),
-      ),
-    );
-
-    await this.bumpFileVersion(fileId, userId);
+    await this.prisma.$transaction(async (tx) => {
+      await Promise.all(
+        input.blockIds.map((blockId, index) =>
+          tx.contentBlock.update({
+            where: { id: blockId },
+            data: {
+              sortOrder: (index + 1) * 10,
+              updatedById: userId,
+            },
+          }),
+        ),
+      );
+      await tx.file.update({
+        where: { id: fileId },
+        data: { version: { increment: 1 }, updatedById: userId },
+      });
+    });
 
     return this.prisma.contentBlock.findMany({
       where: { fileId },
@@ -617,18 +690,28 @@ export class FilesService {
       throw new ForbiddenException("No permission to edit block");
     }
 
-    const updated = await this.prisma.contentBlock.update({
-      where: { id: blockId },
-      data: {
-        ...(input.type ? { type: input.type } : {}),
-        dataJson: input.dataJson as Prisma.InputJsonValue,
-        updatedById: userId,
-      },
+    await this.assertCanReferenceAsset(
+      userId,
+      block.fileId,
+      input.type ?? (block.type as ContentBlockType),
+      input.dataJson,
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.contentBlock.update({
+        where: { id: blockId },
+        data: {
+          ...(input.type ? { type: input.type } : {}),
+          dataJson: input.dataJson as Prisma.InputJsonValue,
+          updatedById: userId,
+        },
+      });
+      await tx.file.update({
+        where: { id: block.fileId },
+        data: { version: { increment: 1 }, updatedById: userId },
+      });
+      return updated;
     });
-
-    await this.bumpFileVersion(block.fileId, userId);
-
-    return updated;
   }
 
   async deleteBlock(userId: string | null, blockId: string) {
@@ -653,11 +736,13 @@ export class FilesService {
       throw new ForbiddenException("No permission to delete block");
     }
 
-    await this.prisma.contentBlock.delete({
-      where: { id: blockId },
-    });
-
-    await this.bumpFileVersion(block.fileId, userId);
+    await this.prisma.$transaction([
+      this.prisma.contentBlock.delete({ where: { id: blockId } }),
+      this.prisma.file.update({
+        where: { id: block.fileId },
+        data: { version: { increment: 1 }, updatedById: userId },
+      }),
+    ]);
 
     return { ok: true };
   }
@@ -783,6 +868,41 @@ export class FilesService {
     });
   }
 
+  private async assertCanReferenceAsset(
+    userId: string,
+    fileId: string,
+    type: ContentBlockType,
+    dataJson: unknown,
+  ) {
+    if (type !== "image" && type !== "attachment") return;
+    const assetId = getStringField(dataJson, "assetId");
+    if (!assetId) return;
+
+    const [file, asset] = await Promise.all([
+      this.prisma.file.findUnique({
+        where: { id: fileId },
+        select: { workspaceId: true },
+      }),
+      this.prisma.fileAsset.findUnique({ where: { id: assetId } }),
+    ]);
+    if (!file || !asset || asset.workspaceId !== file.workspaceId) {
+      throw new BadRequestException("附件不存在或不属于当前工作区");
+    }
+    if (asset.uploadedBy === userId) return;
+
+    const sourceLevel = asset.fileId
+      ? await this.permissions.getEffectiveLevelForFile(userId, asset.fileId)
+      : asset.folderId
+        ? await this.permissions.getEffectiveLevelForFolder(
+            userId,
+            asset.folderId,
+          )
+        : null;
+    if (!canEdit(sourceLevel)) {
+      throw new ForbiddenException("No permission to reference asset");
+    }
+  }
+
   private async getFolderPath(folderId: string) {
     const path: Array<{ id: string; parentId: string | null }> = [];
     let currentId: string | null = folderId;
@@ -817,4 +937,10 @@ function getBlockText(value: unknown) {
   }
 
   return "";
+}
+
+function getStringField(value: unknown, field: string) {
+  if (!value || typeof value !== "object" || !(field in value)) return null;
+  const result = (value as Record<string, unknown>)[field];
+  return typeof result === "string" && result ? result : null;
 }

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -7,7 +8,7 @@ import {
 } from "@nestjs/common";
 import { gradeQuestion, canLecture, canView } from "@liveboard/shared";
 import type { QuestionType } from "@liveboard/shared";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type {
@@ -28,54 +29,57 @@ export class ExercisesService {
       throw new UnauthorizedException("Missing session");
     }
 
-    const exerciseSets = await this.prisma.exerciseSet.findMany({
-      include: {
-        file: true,
-        questions: {
-          select: { id: true },
-        },
-        submissions: {
-          select: {
-            id: true,
-            userId: true,
-            status: true,
-            score: true,
-            maxScore: true,
-            submittedAt: true,
+    const [exerciseSets, pendingCounts] = await Promise.all([
+      this.prisma.exerciseSet.findMany({
+        include: {
+          file: true,
+          _count: { select: { questions: true, submissions: true } },
+          submissions: {
+            where: { userId },
+            select: {
+              status: true,
+              score: true,
+              maxScore: true,
+            },
+            orderBy: { submittedAt: "desc" },
+            take: 1,
           },
-          orderBy: { submittedAt: "desc" },
         },
-      },
-      orderBy: { updatedAt: "desc" },
-    });
+        orderBy: { updatedAt: "desc" },
+      }),
+      this.prisma.submission.groupBy({
+        by: ["exerciseSetId"],
+        where: { status: { in: ["submitted", "needs_manual_review"] } },
+        _count: { _all: true },
+      }),
+    ]);
+    const pendingByExerciseSet = new Map(
+      pendingCounts.map((item) => [item.exerciseSetId, item._count._all]),
+    );
+    const permissions = await this.permissions.getEffectiveLevelsForFiles(
+      userId,
+      exerciseSets.map((exerciseSet) => exerciseSet.fileId),
+    );
 
     const visible = [];
 
     for (const exerciseSet of exerciseSets) {
-      const level = await this.permissions.getEffectiveLevelForFile(
-        userId,
-        exerciseSet.fileId,
-      );
+      const level = permissions.get(exerciseSet.fileId) ?? null;
 
       if (!canView(level)) {
         continue;
       }
 
-      const latestSubmission = exerciseSet.submissions.find(
-        (submission) => submission.userId === userId,
-      );
-      const pendingReviewCount = exerciseSet.submissions.filter((submission) =>
-        ["submitted", "needs_manual_review"].includes(submission.status),
-      ).length;
+      const latestSubmission = exerciseSet.submissions[0];
 
       visible.push({
         id: exerciseSet.id,
         fileId: exerciseSet.fileId,
         title: exerciseSet.file.title,
-        questionCount: exerciseSet.questions.length,
+        questionCount: exerciseSet._count.questions,
         canManage: canLecture(level),
-        submissionCount: exerciseSet.submissions.length,
-        pendingReviewCount,
+        submissionCount: exerciseSet._count.submissions,
+        pendingReviewCount: pendingByExerciseSet.get(exerciseSet.id) ?? 0,
         openAt: exerciseSet.openAt?.toISOString() ?? null,
         dueAt: exerciseSet.dueAt?.toISOString() ?? null,
         updatedAt: exerciseSet.updatedAt.toISOString(),
@@ -325,20 +329,49 @@ export class ExercisesService {
       };
     });
 
-    return this.prisma.submission.create({
-      data: {
-        exerciseSetId,
-        userId,
-        status: needsManualReview ? "needs_manual_review" : "auto_graded",
-        score: needsManualReview ? null : totalScore,
-        maxScore,
-        submittedAt: new Date(),
-        answers: {
-          create: answerCreates,
-        },
-      },
-      include: { answers: true },
-    });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(
+          async (tx) => {
+            if (!exerciseSet.allowMultipleSubmissions) {
+              const existing = await tx.submission.count({
+                where: { exerciseSetId, userId },
+              });
+              if (existing > 0) {
+                throw new ForbiddenException(
+                  "Multiple submissions are not allowed",
+                );
+              }
+            }
+            return tx.submission.create({
+              data: {
+                exerciseSetId,
+                userId,
+                status: needsManualReview
+                  ? "needs_manual_review"
+                  : "auto_graded",
+                score: needsManualReview ? null : totalScore,
+                maxScore,
+                submittedAt: new Date(),
+                answers: { create: answerCreates },
+              },
+              include: { answers: true },
+            });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (caught) {
+        if (
+          attempt < 2 &&
+          caught instanceof Prisma.PrismaClientKnownRequestError &&
+          caught.code === "P2034"
+        ) {
+          continue;
+        }
+        throw caught;
+      }
+    }
+    throw new ConflictException("提交同时发生了变化，请重试");
   }
 
   async listSubmissions(userId: string | null, exerciseSetId: string) {

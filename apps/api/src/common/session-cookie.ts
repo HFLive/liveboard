@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-const SESSION_COOKIE_VERSION = "v2";
+const SESSION_COOKIE_VERSION = "v3";
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_DEV_SECRET = "liveboard-dev-session-secret";
 
@@ -37,15 +37,23 @@ function sign(value: string) {
     .digest("base64url");
 }
 
-export function createSessionCookieValue(userId: string) {
+export interface SessionCookiePayload {
+  userId: string;
+  sessionVersion: number;
+}
+
+export function createSessionCookieValue(
+  userId: string,
+  sessionVersion: number,
+) {
   const expiresAt = Date.now() + SESSION_TTL_MS;
-  const payload = `${SESSION_COOKIE_VERSION}.${userId}.${expiresAt}`;
+  const payload = `${SESSION_COOKIE_VERSION}.${userId}.${sessionVersion}.${expiresAt}`;
   return `${payload}.${sign(payload)}`;
 }
 
 export function verifySessionCookieValue(
   value: string | undefined,
-): string | null {
+): SessionCookiePayload | null {
   if (!value) {
     return null;
   }
@@ -53,22 +61,27 @@ export function verifySessionCookieValue(
   const parts = value.split(".");
   const [version, userId] = parts;
 
-  const expiresAt = Number(parts[2]);
-  const signature = parts[3];
+  const sessionVersion = Number(parts[2]);
+  const expiresAt = Number(parts[3]);
+  const signature = parts[4];
 
   if (
-    parts.length !== 4 ||
+    parts.length !== 5 ||
     version !== SESSION_COOKIE_VERSION ||
     !userId ||
     !signature ||
+    !Number.isSafeInteger(sessionVersion) ||
+    sessionVersion < 0 ||
     !Number.isSafeInteger(expiresAt) ||
     expiresAt <= Date.now()
   ) {
     return null;
   }
 
-  const payload = `${version}.${userId}.${expiresAt}`;
-  return hasValidSignature(payload, signature) ? userId : null;
+  const payload = `${version}.${userId}.${sessionVersion}.${expiresAt}`;
+  return hasValidSignature(payload, signature)
+    ? { userId, sessionVersion }
+    : null;
 }
 
 function hasValidSignature(payload: string, signature: string) {

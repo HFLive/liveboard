@@ -11,6 +11,16 @@ export class ApiError extends Error {
   }
 }
 
+export function shouldRedirectToLogin(status: number, path: string) {
+  return status === 401 && path !== "/auth/login";
+}
+
+export function redirectToLoginOnUnauthorized(status: number, path: string) {
+  if (shouldRedirectToLogin(status, path) && typeof window !== "undefined") {
+    window.location.replace("/login?reason=session-expired");
+  }
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -29,13 +39,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ? body.message.join("；")
       : body?.message;
 
-    if (
-      response.status === 401 &&
-      path !== "/auth/login" &&
-      typeof window !== "undefined"
-    ) {
-      window.location.replace("/login?reason=session-expired");
-    }
+    redirectToLoginOnUnauthorized(response.status, path);
 
     throw new ApiError(message ?? "Request failed", response.status);
   }

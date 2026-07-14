@@ -80,6 +80,13 @@ chmod +x "$BIN_DIR/docker" "$BIN_DIR/curl" "$BIN_DIR/sha256sum" "$BIN_DIR/gzip" 
 
 PATH="$BIN_DIR:$PATH" LIVEBOARD_STATE_DIR="$STATE_DIR" sh "$BUNDLE_DIR/deploy.sh" >"$TEST_DIR/first-run.log"
 
+ENV_FILE="$STATE_DIR/.env"
+test -f "$ENV_FILE"
+grep -q '^AI_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef$' "$ENV_FILE"
+grep -q '^TRUST_PROXY_HOPS=1$' "$ENV_FILE"
+grep -q '^BACKUP_RETENTION_COUNT=10$' "$ENV_FILE"
+ENV_BEFORE=$(cksum "$ENV_FILE")
+
 CREDENTIALS_FILE="$STATE_DIR/initial-admin-credentials.txt"
 test -f "$CREDENTIALS_FILE"
 grep -q '^账号：admin$' "$CREDENTIALS_FILE"
@@ -95,11 +102,18 @@ fi
 test "$MODE" = "600"
 BEFORE=$(cksum "$CREDENTIALS_FILE")
 
+for index in 01 02 03 04 05 06 07 08 09 10 11; do
+  printf '%s\n' old >"$STATE_DIR/backups/postgres-20000101-0000${index}.dump"
+done
+
 PATH="$BIN_DIR:$PATH" LIVEBOARD_STATE_DIR="$STATE_DIR" sh "$BUNDLE_DIR/deploy.sh" >"$TEST_DIR/second-run.log"
 
 AFTER=$(cksum "$CREDENTIALS_FILE")
 test "$BEFORE" = "$AFTER"
+ENV_AFTER=$(cksum "$ENV_FILE")
+test "$ENV_BEFORE" = "$ENV_AFTER"
 grep -q '沿用现有管理员账号和密码' "$TEST_DIR/second-run.log"
+test "$(find "$STATE_DIR/backups" -type f -name 'postgres-*.dump' | wc -l | tr -d ' ')" = "10"
 if grep -q '^密码：test-random-password$' "$TEST_DIR/second-run.log"; then
   echo "重复部署不应再次显示首次管理员密码。" >&2
   exit 1

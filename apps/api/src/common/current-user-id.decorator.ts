@@ -1,12 +1,9 @@
 import { createParamDecorator, ExecutionContext } from "@nestjs/common";
-import type { Request } from "express";
-import { verifySessionCookieValue } from "./session-cookie";
+import type { AuthenticatedRequest } from "./active-user.guard";
 
 export const CurrentUserId = createParamDecorator(
   (_data: unknown, context: ExecutionContext): string | null => {
-    const request = context.switchToHttp().getRequest<Request>();
-    const cookies = request.cookies as
-      Record<string, string | undefined> | undefined;
-    return verifySessionCookieValue(cookies?.liveboard_session);
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    return request.currentUserId ?? null;
   },
 );

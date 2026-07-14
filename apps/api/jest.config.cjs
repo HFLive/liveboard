@@ -3,10 +3,18 @@ module.exports = {
   rootDir: ".",
   testRegex: ".*\\.spec\\.ts$",
   transform: {
-    "^.+\\.(t|j)s$": "ts-jest",
+    "^.+\\.ts$": "ts-jest",
   },
   passWithNoTests: true,
-  collectCoverageFrom: ["src/**/*.(t|j)s"],
+  collectCoverageFrom: ["src/**/*.ts"],
   coverageDirectory: "coverage",
+  coverageThreshold: {
+    global: {
+      statements: 30,
+      branches: 22,
+      functions: 34,
+      lines: 30,
+    },
+  },
   testEnvironment: "node",
 };
