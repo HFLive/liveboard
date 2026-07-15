@@ -38,6 +38,7 @@ describe("AiService", () => {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    aiConversation: { findUnique: jest.fn() },
     file: { findMany: jest.fn() },
   };
   const permissions = { getEffectiveLevelsForFiles: jest.fn() };
@@ -111,6 +112,59 @@ describe("AiService", () => {
     expect(permissions.getEffectiveLevelsForFiles).toHaveBeenCalledWith(
       "user-1",
       ["file-1"],
+    );
+  });
+
+  it("marks deleted and inaccessible historical sources as unavailable", async () => {
+    prisma.aiConversation.findUnique.mockResolvedValue({
+      id: "conversation-1",
+      userId: "user-1",
+      title: "历史对话",
+      createdAt: new Date("2026-07-15T00:00:00Z"),
+      updatedAt: new Date("2026-07-15T00:00:00Z"),
+      messages: [
+        {
+          id: "message-1",
+          role: "assistant",
+          content: "回答",
+          createdAt: new Date("2026-07-15T00:00:00Z"),
+          sourcesJson: [
+            { id: "file-1", title: "可查看", type: "doc", updatedAt: "" },
+            { id: "file-2", title: "无权限", type: "doc", updatedAt: "" },
+            { id: "file-3", title: "已删除", type: "doc", updatedAt: "" },
+          ],
+        },
+      ],
+    });
+    prisma.file.findMany.mockResolvedValue([
+      { id: "file-1", status: "published" },
+      { id: "file-2", status: "draft" },
+    ]);
+    permissions.getEffectiveLevelsForFiles.mockResolvedValue(
+      new Map([
+        ["file-1", "viewer"],
+        ["file-2", "viewer"],
+      ]),
+    );
+
+    const conversation = await service.getConversation(
+      "user-1",
+      "conversation-1",
+    );
+
+    expect(
+      conversation.messages[0]?.sources.map((source) => ({
+        id: source.id,
+        unavailable: source.unavailable,
+      })),
+    ).toEqual([
+      { id: "file-1", unavailable: undefined },
+      { id: "file-2", unavailable: true },
+      { id: "file-3", unavailable: true },
+    ]);
+    expect(permissions.getEffectiveLevelsForFiles).toHaveBeenCalledWith(
+      "user-1",
+      ["file-1", "file-2"],
     );
   });
 

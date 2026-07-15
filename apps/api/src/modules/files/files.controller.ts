@@ -13,7 +13,14 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
-import { IsArray, IsIn, IsObject, IsOptional, IsString } from "class-validator";
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsObject,
+  IsOptional,
+  IsString,
+} from "class-validator";
 import type { FileType } from "@liveboard/shared";
 import type { ContentBlockType } from "@liveboard/shared";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
@@ -54,6 +61,14 @@ class UpdateFolderDto {
   @IsOptional()
   @IsString()
   parentId?: string | null;
+}
+
+class DeleteFolderDto {
+  @IsBoolean()
+  recursive!: boolean;
+
+  @IsString()
+  confirmationName!: string;
 }
 
 class UpdateFileDto {
@@ -198,8 +213,9 @@ export class FilesController {
   async deleteFolder(
     @CurrentUserId() userId: string | null,
     @Param("id") folderId: string,
+    @Body() body: DeleteFolderDto,
   ) {
-    return this.filesService.deleteFolder(userId, folderId);
+    return this.filesService.deleteFolder(userId, folderId, body);
   }
 
   @Get("files")
@@ -387,7 +403,10 @@ export class FilesController {
       inline ? asset.mimeType : "application/octet-stream",
     );
     res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    res.setHeader(
+      "Cross-Origin-Resource-Policy",
+      inline ? "same-site" : "same-origin",
+    );
     if (!inline) res.setHeader("Content-Security-Policy", "sandbox");
     res.setHeader(
       "Content-Disposition",

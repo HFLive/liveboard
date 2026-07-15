@@ -4,6 +4,9 @@ import { FilesController } from "./files.controller";
 import type { FilesService } from "./files.service";
 
 describe("FilesController Markdown endpoints", () => {
+  const assetsService = {
+    getAssetForDownload: jest.fn(),
+  };
   const filesService = {
     importMarkdown: jest.fn(),
     exportMarkdown: jest.fn(),
@@ -17,8 +20,59 @@ describe("FilesController Markdown endpoints", () => {
   beforeEach(() => {
     jest.resetAllMocks();
     controller = new FilesController(
-      {} as AssetsService,
+      assetsService as unknown as AssetsService,
       filesService as unknown as FilesService,
+    );
+  });
+
+  it("allows safe images to render across the local Web and API origins", async () => {
+    const stream = { pipe: jest.fn() };
+    assetsService.getAssetForDownload.mockResolvedValue({
+      asset: { filename: "preview.png", mimeType: "image/png" },
+      stream,
+    });
+
+    await controller.getAsset(
+      "user-1",
+      "asset-1",
+      response as unknown as Response,
+    );
+
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Cross-Origin-Resource-Policy",
+      "same-site",
+    );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Content-Disposition",
+      'inline; filename="preview.png"',
+    );
+    expect(stream.pipe).toHaveBeenCalledWith(response);
+  });
+
+  it("keeps download-only attachments restricted to the same origin", async () => {
+    const stream = { pipe: jest.fn() };
+    assetsService.getAssetForDownload.mockResolvedValue({
+      asset: { filename: "notes.pdf", mimeType: "application/pdf" },
+      stream,
+    });
+
+    await controller.getAsset(
+      "user-1",
+      "asset-1",
+      response as unknown as Response,
+    );
+
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Cross-Origin-Resource-Policy",
+      "same-origin",
+    );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Content-Disposition",
+      'attachment; filename="notes.pdf"',
+    );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Content-Security-Policy",
+      "sandbox",
     );
   });
 

@@ -11,7 +11,6 @@ import {
 } from "react";
 import {
   Check,
-  ChevronDown,
   Copy,
   MoreHorizontal,
   PanelLeft,
@@ -698,27 +697,15 @@ function SourceList({ sources }: { sources: AiSourceSummary[] }) {
   return (
     <div className="chat-sources">
       {sources.map((source) => (
-        <details className="chat-source-detail" key={source.id}>
-          <summary>
-            <Link href={contentDetail(source.id)}>{source.title}</Link>
-            <ChevronDown
-              aria-hidden="true"
-              className="chat-source-toggle-icon"
-            />
-          </summary>
-          {source.blocks && source.blocks.length > 0 ? (
-            <div className="source-block-list">
-              {source.blocks.map((block) => (
-                <Link href={contentDetail(source.id)} key={block.id}>
-                  <small>{blockTypeLabel(block.type)}</small>
-                  <span>{block.text}</span>
-                </Link>
-              ))}
-            </div>
+        <Fragment key={source.id}>
+          {source.unavailable ? (
+            <span className="chat-source-link unavailable">文件不存在</span>
           ) : (
-            <p>本次回答参考了该文件。</p>
+            <Link className="chat-source-link" href={contentDetail(source.id)}>
+              {source.title}
+            </Link>
           )}
-        </details>
+        </Fragment>
       ))}
     </div>
   );
@@ -964,29 +951,4 @@ function renderLineBreaks(text: string, keyPrefix: number) {
       {part}
     </Fragment>
   ));
-}
-
-function blockTypeLabel(type: string) {
-  const labels: Record<string, string> = {
-    heading: "标题",
-    heading_1: "一级标题",
-    heading_2: "二级标题",
-    heading_3: "三级标题",
-    heading_4: "四级标题",
-    heading_5: "五级标题",
-    heading_6: "六级标题",
-    paragraph: "段落",
-    list: "列表",
-    bullet_list: "列表",
-    ordered_list: "有序列表",
-    code: "代码",
-    table: "表格",
-    math: "数学公式",
-    image: "图片",
-    attachment: "附件",
-    reference: "引用",
-    question: "题目",
-  };
-
-  return labels[type] ?? type;
 }

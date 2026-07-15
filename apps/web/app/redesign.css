@@ -30,10 +30,10 @@
   --focus-ring: rgba(183, 121, 31, 0.24);
   --warning: #a66a16;
   --warning-soft: #fff6df;
-  --radius-xs: 6px;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-xs: 8px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
   --radius-xl: 20px;
   --radius-pill: 999px;
   --shadow-xs: 0 1px 2px rgba(40, 35, 28, 0.04);
@@ -641,7 +641,7 @@ button:disabled {
   border-bottom: 0;
 }
 
-.table tr:hover td {
+.table tr:hover td:not(.empty-cell) {
   background: #f8faf8;
 }
 
@@ -3341,6 +3341,25 @@ body,
   letter-spacing: -0.018em;
 }
 
+/* App pages use their navigation and panel headings for context. Keep only
+   functional controls from legacy page headers, plus the editable file title. */
+.workspace > .page-head:not(:has(.title-input)) > div:first-child {
+  display: none;
+}
+
+.workspace > .page-head:not(:has(.title-input)):not(:has(> .button-row)) {
+  display: none;
+}
+
+.workspace > .page-head:not(:has(.title-input)):has(> .button-row) {
+  justify-content: flex-end;
+  min-height: 0;
+}
+
+.workspace > .forum-page-header {
+  display: none;
+}
+
 .button,
 .home-primary-button,
 .login-submit {
@@ -3444,7 +3463,7 @@ body,
   background: #eeeae2;
 }
 
-.table tr:hover td,
+.table tr:hover td:not(.empty-cell),
 .tree-item:hover,
 .asset-list-row:hover,
 .forum-thread-row:hover,
@@ -6258,4 +6277,735 @@ body .success-text::before {
     visibility: hidden;
     transform: translateX(-50%);
   }
+}
+
+/* Compact density for every application workspace except the AI chat.
+   Resize the components themselves; never scale the page canvas. */
+.workspace:not(.ai-workspace) {
+  gap: 15px;
+  width: min(1440px, 100%);
+}
+
+.app-main:has(.workspace:not(.ai-workspace)) {
+  background: var(--bg);
+}
+
+.workspace:not(.ai-workspace) :is(.workbench, .grid, .form) {
+  gap: 11px;
+}
+
+.workspace:not(.ai-workspace) .button-row {
+  gap: 6px;
+}
+
+.workspace:not(.ai-workspace) :is(.button, .button.secondary, .button.danger) {
+  min-height: 31px;
+  border-radius: 10px;
+  padding: 0 11px;
+  font-size: 13px;
+}
+
+.workspace:not(.ai-workspace) :is(.icon-button, .inline-icon-button) {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+}
+
+.workspace:not(.ai-workspace) .icon-button.subtle {
+  width: 26px;
+  height: 26px;
+}
+
+.workspace:not(.ai-workspace) :is(.input, .select, .textarea, .table-input) {
+  min-height: 31px;
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.workspace:not(.ai-workspace) .label {
+  gap: 5px;
+  font-size: 13px;
+}
+
+.workspace:not(.ai-workspace) :is(.search-field, .permission-group-search) {
+  min-height: 29px;
+  border-radius: 10px;
+}
+
+.workspace:not(.ai-workspace) .search-field input {
+  min-height: 30px;
+  font-size: 13px;
+}
+
+.workspace:not(.ai-workspace) .segmented-control {
+  gap: 2px;
+  border-radius: 10px;
+  padding: 2px;
+}
+
+.workspace:not(.ai-workspace) .segmented-control button {
+  min-height: 28px;
+  border-radius: 8px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.workspace:not(.ai-workspace)
+  :is(.badge, .publish-state-badge, .forum-status-badge) {
+  padding: 3px 6px;
+  font-size: 10px;
+}
+
+.workspace:not(.ai-workspace) .panel-head {
+  min-height: 46px;
+  padding: 9px 11px;
+}
+
+.workspace:not(.ai-workspace)
+  :is(.panel-head h2, .action-panel h2, .section h2) {
+  font-size: 14px;
+}
+
+.workspace:not(.ai-workspace) .panel-title-row {
+  min-height: 26px;
+}
+
+.workspace:not(.ai-workspace) .action-panel {
+  gap: 10px;
+  padding: 13px;
+}
+
+.workspace:not(.ai-workspace) .action-row {
+  padding: 8px;
+}
+
+.workspace:not(.ai-workspace) .card {
+  padding: 14px;
+}
+
+.workspace:not(.ai-workspace) .list-toolbar {
+  min-height: 45px;
+  padding: 8px 10px;
+}
+
+.workspace:not(.ai-workspace) .metric-strip {
+  gap: 6px;
+}
+
+.workspace:not(.ai-workspace) .metric {
+  gap: 6px;
+  min-height: 59px;
+  padding: 10px 11px;
+}
+
+.workspace:not(.ai-workspace) .metric span {
+  font-size: 10px;
+}
+
+.workspace:not(.ai-workspace) .metric strong {
+  font-size: 18px;
+}
+
+.workspace:not(.ai-workspace) .table :is(th, td) {
+  padding: 9px 10px;
+}
+
+.workspace:not(.ai-workspace) .table th {
+  font-size: 11px;
+}
+
+.workspace:not(.ai-workspace) .table td {
+  font-size: 13px;
+}
+
+.workspace:not(.ai-workspace) .table-action {
+  min-height: 28px;
+  border-radius: 6px;
+  padding: 0 7px;
+  font-size: 12px;
+}
+
+.workspace:not(.ai-workspace) .empty-panel {
+  gap: 6px;
+  padding: 34px 14px;
+}
+
+.workspace:not(.ai-workspace) .empty-panel strong {
+  font-size: 14px;
+}
+
+.workspace:not(.ai-workspace) .context-menu {
+  min-width: 124px;
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.workspace:not(.ai-workspace) .context-menu :is(button, a) {
+  min-height: 28px;
+  border-radius: 8px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
+.workspace:not(.ai-workspace) .modal-backdrop {
+  padding: 14px;
+}
+
+.workspace:not(.ai-workspace) .modal-panel {
+  width: min(430px, 100%);
+  border-radius: 18px;
+}
+
+.workspace:not(.ai-workspace) :is(.modal-head, .modal-foot) {
+  padding: 13px 14px;
+}
+
+.workspace:not(.ai-workspace) .modal-head h2 {
+  font-size: 15px;
+}
+
+.workspace:not(.ai-workspace) .modal-body {
+  gap: 11px;
+  padding: 14px;
+}
+
+.workspace:not(.ai-workspace)
+  :is(.notice-box, .import-preview, .publish-summary, .settings-preview-panel) {
+  padding: 9px;
+}
+
+.workspace:not(.ai-workspace) .permission-modal {
+  width: min(434px, calc(100vw - 24px));
+}
+
+.workspace:not(.ai-workspace) .permission-modal .modal-head {
+  min-height: 52px;
+}
+
+.workspace:not(.ai-workspace) .permission-modal .modal-body.permission-panel {
+  padding: 14px 15px 17px;
+}
+
+.workspace:not(.ai-workspace) .permission-modal .permission-add-row {
+  gap: 6px;
+  padding: 7px;
+}
+
+.workspace:not(.ai-workspace) .permission-modal .grant-row {
+  gap: 7px;
+  min-height: 40px;
+  padding: 7px 2px;
+}
+
+.workspace:not(.ai-workspace) :is(.error-text, .success-text) {
+  gap: 6px;
+  min-width: min(210px, calc(100vw - 18px));
+  max-width: min(322px, calc(100vw - 18px));
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 11px;
+}
+
+/* The management landing page uses dedicated cards instead of the shared
+   card component, so compact its own navigation and hub tiles explicitly. */
+.workspace:not(.ai-workspace) .admin-subnav {
+  gap: 3px;
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.workspace:not(.ai-workspace) .admin-subnav a {
+  min-height: 30px;
+  border-radius: 8px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.workspace:not(.ai-workspace) .admin-hub-card {
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 66px;
+  padding: 12px 6px;
+}
+
+.workspace:not(.ai-workspace) .admin-hub-card:nth-child(odd) {
+  padding-right: 17px;
+}
+
+.workspace:not(.ai-workspace) .admin-hub-card:nth-child(even) {
+  padding-left: 17px;
+}
+
+.workspace:not(.ai-workspace) .admin-hub-card > svg {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  padding: 4px;
+}
+
+.workspace:not(.ai-workspace) .admin-hub-card span {
+  gap: 5px;
+}
+
+.workspace:not(.ai-workspace) .admin-hub-card strong {
+  font-size: 14px;
+}
+
+.workspace:not(.ai-workspace) .admin-hub-card small {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Dense workbench visual language: one clear filled primary action, tonal
+   secondary actions, and borderless inline controls on continuous surfaces. */
+.workspace:not(.ai-workspace) :is(.button, .button.secondary, .button.danger) {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.workspace:not(.ai-workspace) .button {
+  background: #2e2b26;
+  color: #fff;
+}
+
+.workspace:not(.ai-workspace) .button:hover:not(:disabled) {
+  border-color: transparent;
+  background: #1e1c19;
+}
+
+.workspace:not(.ai-workspace) .button.secondary {
+  border-color: transparent;
+  background: #eeebe5;
+  color: var(--text-soft);
+}
+
+.workspace:not(.ai-workspace) .button.secondary:hover:not(:disabled) {
+  border-color: transparent;
+  background: #e3dfd7;
+  color: var(--text);
+}
+
+.workspace:not(.ai-workspace) .button.danger {
+  border-color: transparent;
+  background: #f8e9e7;
+  color: #a23d37;
+}
+
+.workspace:not(.ai-workspace) .button.danger:hover:not(:disabled) {
+  border-color: transparent;
+  background: #f2dcd9;
+  color: #842f2a;
+}
+
+.workspace:not(.ai-workspace)
+  :is(.icon-button, .icon-button.subtle, .inline-icon-button) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.workspace:not(.ai-workspace)
+  :is(.icon-button, .icon-button.subtle, .inline-icon-button):hover:not(
+    :disabled
+  ) {
+  border-color: transparent;
+  background: #eeebe5;
+}
+
+.workspace:not(.ai-workspace) .table-action {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.workspace:not(.ai-workspace) .table-action:hover:not(:disabled) {
+  border-color: transparent;
+  background: #eeebe5;
+  color: var(--text);
+}
+
+.workspace:not(.ai-workspace) :is(.input, .select, .textarea, .table-input) {
+  border-color: transparent;
+  background: #f3f1ec;
+  box-shadow: none;
+}
+
+.workspace:not(.ai-workspace)
+  :is(.input, .select, .textarea, .table-input):hover {
+  border-color: transparent;
+  background: #eeebe5;
+}
+
+.workspace:not(.ai-workspace)
+  :is(.input, .select, .textarea, .table-input):focus {
+  border-color: #b58a4a;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(181, 138, 74, 0.14);
+}
+
+.workspace:not(.ai-workspace) :is(.search-field, .permission-group-search) {
+  border-color: transparent;
+  background: #eeebe5;
+  box-shadow: none;
+}
+
+.workspace:not(.ai-workspace) input[placeholder^="搜索"]:not(:focus) {
+  background: #eeebe5;
+}
+
+.workspace:not(.ai-workspace)
+  :is(.search-field, .permission-group-search):focus-within {
+  border-color: #b58a4a;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(181, 138, 74, 0.14);
+}
+
+.workspace:not(.ai-workspace)
+  :is(
+    .workbench-main,
+    .folder-panel,
+    .action-panel,
+    .card,
+    .surface,
+    .asset-detail-panel,
+    .forum-category-panel,
+    .forum-feed,
+    .forum-thread-detail,
+    .forum-new-shell,
+    .permission-group-detail
+  ) {
+  border: 1px solid #d8d5ce;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Keep rectangular header and content fills inside the panel's rounded frame.
+   Do not clip the panel itself: row menus still need to escape its bounds. */
+.workspace:not(.ai-workspace)
+  :is(
+    .workbench-main,
+    .folder-panel,
+    .action-panel,
+    .card,
+    .surface,
+    .asset-detail-panel,
+    .forum-category-panel,
+    .forum-feed,
+    .forum-thread-detail,
+    .forum-new-shell,
+    .permission-group-detail
+  )
+  > :first-child {
+  border-top-left-radius: 13px;
+  border-top-right-radius: 13px;
+}
+
+.workspace:not(.ai-workspace)
+  :is(
+    .workbench-main,
+    .folder-panel,
+    .action-panel,
+    .card,
+    .surface,
+    .asset-detail-panel,
+    .forum-category-panel,
+    .forum-feed,
+    .forum-thread-detail,
+    .forum-new-shell,
+    .permission-group-detail
+  )
+  > :last-child {
+  border-bottom-right-radius: 13px;
+  border-bottom-left-radius: 13px;
+}
+
+.workspace:not(.ai-workspace)
+  :is(.workbench-main, .folder-panel, .forum-feed, .forum-thread-detail) {
+  background: transparent;
+}
+
+.workspace:not(.ai-workspace) :is(.card, .action-panel, .surface) {
+  background: transparent;
+}
+
+.workspace:not(.ai-workspace) :is(.panel-head, .list-toolbar) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.workspace:not(.ai-workspace) .admin-subnav {
+  border-color: transparent;
+  background: #eeebe5;
+  box-shadow: none;
+}
+
+.workspace:not(.ai-workspace) .admin-subnav a {
+  border-color: transparent;
+}
+
+.workspace:not(.ai-workspace) .admin-hub-grid {
+  background: transparent;
+}
+
+.workspace:not(.ai-workspace) .admin-hub-card {
+  box-shadow: none;
+}
+
+.workspace:not(.ai-workspace) .modal-panel {
+  border-color: transparent;
+}
+
+.workspace:not(.ai-workspace) .library-view-toggle {
+  border-color: transparent;
+  background: #eeebe5;
+}
+
+.workspace:not(.ai-workspace) .library-view-toggle button.active {
+  box-shadow: none;
+}
+
+.workspace:not(.ai-workspace)
+  :is(
+    .folder-create-form,
+    .tree-inline-form,
+    .inline-create-file,
+    .folder-create-card
+  ) {
+  border-color: transparent;
+  background: #f3f1ec;
+}
+
+.workspace:not(.ai-workspace) .forum-category-picker button {
+  min-height: 50px;
+  border-color: transparent;
+  border-radius: 10px;
+  background: #f3f1ec;
+  padding: 8px 9px;
+}
+
+.workspace:not(.ai-workspace) .forum-category-picker button:hover {
+  border-color: transparent;
+  background: #eeebe5;
+}
+
+.workspace:not(.ai-workspace) .forum-category-picker button.active {
+  border-color: transparent;
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.workspace:not(.ai-workspace) .asset-card {
+  border-color: transparent;
+  border-radius: 12px;
+  background: #faf8f4;
+}
+
+.workspace:not(.ai-workspace) .asset-card:hover {
+  border-color: transparent;
+  background: #f3f1ec;
+  box-shadow: none;
+  transform: none;
+}
+
+.workspace:not(.ai-workspace) .asset-card.active {
+  border-color: transparent;
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.workspace:not(.ai-workspace)
+  :is(.switch-row, .timezone-chip, .reference-option, .library-picker-row) {
+  border-color: transparent;
+  background: #f3f1ec;
+}
+
+.workspace:not(.ai-workspace)
+  :is(
+    .files-layout,
+    .library-layout,
+    .permission-groups-layout,
+    .admin-layout,
+    .profile-layout
+  ) {
+  gap: 11px;
+}
+
+.workspace:not(.ai-workspace) .file-tree {
+  gap: 1px;
+  padding: 6px;
+}
+
+.workspace:not(.ai-workspace) .tree-item {
+  min-height: 29px;
+  border-radius: 8px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+.workspace:not(.ai-workspace) .asset-grid {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+  padding: 11px;
+}
+
+.workspace:not(.ai-workspace) .asset-info {
+  padding: 9px;
+}
+
+.workspace:not(.ai-workspace) .asset-actions {
+  padding: 6px 8px;
+}
+
+.workspace:not(.ai-workspace) .asset-list {
+  padding: 6px;
+}
+
+.workspace:not(.ai-workspace) .asset-list-row {
+  min-height: 41px;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.workspace:not(.ai-workspace) .group-list-item {
+  min-height: 38px;
+  border-radius: 8px;
+}
+
+.workspace:not(.ai-workspace) .permission-group-hero {
+  padding: 17px;
+}
+
+.workspace:not(.ai-workspace)
+  :is(.permission-group-settings, .permission-group-members) {
+  padding: 15px 17px;
+}
+
+/* Repeated structural rows share one quiet neutral fill. Yellow is reserved
+   for actual selection and emphasis instead of decorative hierarchy. */
+.workspace:not(.ai-workspace) .panel-head {
+  border-bottom: 1px solid #d8d5ce;
+  background: #f4f2ee;
+}
+
+.workspace:not(.ai-workspace) .list-toolbar {
+  border-bottom: 1px solid #d8d5ce;
+  background: #f4f2ee;
+}
+
+/* Toolbar selects and secondary actions are peers, so they use one fill. */
+.workspace:not(.ai-workspace) :is(.panel-head, .list-toolbar) .select {
+  background: #eeebe5;
+}
+
+.workspace:not(.ai-workspace) .table {
+  background: var(--bg);
+}
+
+.workspace:not(.ai-workspace) .table :is(th, td) {
+  border-bottom-color: #d8d5ce;
+}
+
+.workspace:not(.ai-workspace) .table th {
+  background: #f4f2ee;
+  color: var(--muted);
+}
+
+.workspace:not(.ai-workspace) .table td {
+  background: var(--bg);
+}
+
+.workspace:not(.ai-workspace) .table tr:hover td:not(.empty-cell) {
+  background: #f0eee8;
+}
+
+/* Empty rows are status content, not interactive list items. Keep them on the
+   page background even when the pointer is over the table row. */
+.workspace:not(.ai-workspace) .table .empty-cell,
+.workspace:not(.ai-workspace) .table tr:hover .empty-cell {
+  background: var(--bg);
+}
+
+/* All status filters and compact view switches follow the forum control:
+   no shared tray, quiet standalone options, and one soft active item. */
+.workspace:not(.ai-workspace) .segmented-control {
+  gap: 1px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.workspace:not(.ai-workspace) .segmented-control button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 9px;
+  box-shadow: none;
+}
+
+.workspace:not(.ai-workspace) .segmented-control button:hover:not(:disabled) {
+  background: #eeebe5;
+  color: var(--text-soft);
+}
+
+.workspace:not(.ai-workspace) .segmented-control button.active {
+  background: #e9e7e2;
+  color: var(--text);
+  box-shadow: none;
+}
+
+.workspace:not(.ai-workspace) .library-view-toggle {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.workspace:not(.ai-workspace) .library-view-toggle button.active {
+  background: #e9e7e2;
+  box-shadow: none;
+}
+
+.workspace:not(.ai-workspace)
+  :is(
+    .tree-item,
+    .asset-list-row,
+    .group-list-item,
+    .submission-row,
+    .forum-topic,
+    .teaching-deck-row
+  ):not(.active):not(:hover) {
+  background: transparent;
+}
+
+/* Interactive list rows use the same hover fill as the document table.
+   Selected rows keep their own active-state color. */
+.workspace:not(.ai-workspace)
+  :is(
+    .tree-item,
+    .asset-card,
+    .asset-list-row,
+    .group-list-item,
+    .submission-row,
+    .forum-thread-row,
+    .forum-topic,
+    .teaching-deck-row
+  ):not(.active):hover,
+.workspace:not(.ai-workspace) .permission-member-candidates button:hover {
+  background: #f0eee8;
+}
+
+/* The deck row owns the hover fill, so the last row—not only its list
+   wrapper—must follow the panel's lower inner corners. */
+.workspace:not(.ai-workspace)
+  .teaching-list-panel
+  > .teaching-deck-list:last-child
+  > .teaching-deck-row:last-child {
+  border-radius: 0 0 13px 13px;
 }

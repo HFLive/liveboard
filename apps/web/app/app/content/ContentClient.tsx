@@ -64,6 +64,13 @@ type PermissionTarget = {
   name: string;
   isRoot?: boolean;
 };
+type DeleteFolderTarget = {
+  id: string;
+  name: string;
+  descendantCount: number;
+  fileCount: number;
+};
+type ContentSortMode = "name" | "updated" | "type";
 
 function flattenFolders(folders: FolderNode[], depth = 0): FlatFolderNode[] {
   return folders.flatMap((folder) => [
@@ -112,11 +119,54 @@ export function ContentClient() {
   const [grantLevel, setGrantLevel] = useState<PermissionLevel>("viewer");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deleteFolderTarget, setDeleteFolderTarget] =
+    useState<DeleteFolderTarget | null>(null);
+  const [deleteFolderStep, setDeleteFolderStep] = useState<1 | 2>(1);
+  const [deleteFolderConfirmation, setDeleteFolderConfirmation] = useState("");
+  const [isDeletingFolder, setIsDeletingFolder] = useState(false);
+  const [contentSortMode, setContentSortMode] =
+    useState<ContentSortMode>("updated");
 
   const flatFolders = useMemo(() => flattenFolders(folders), [folders]);
   const activeFolder = flatFolders.find(
     (folder) => folder.id === activeFolderId,
   );
+  const sortedChildFolders = useMemo(() => {
+    const children = [...(activeFolder?.children ?? [])];
+
+    return children.sort((left, right) => {
+      if (contentSortMode === "updated") {
+        return (
+          new Date(right.updatedAt).getTime() -
+          new Date(left.updatedAt).getTime()
+        );
+      }
+
+      return left.name.localeCompare(right.name, "zh-CN");
+    });
+  }, [activeFolder?.children, contentSortMode]);
+  const sortedFiles = useMemo(() => {
+    const nextFiles = [...files];
+
+    return nextFiles.sort((left, right) => {
+      if (contentSortMode === "updated") {
+        return (
+          new Date(right.updatedAt).getTime() -
+          new Date(left.updatedAt).getTime()
+        );
+      }
+
+      if (contentSortMode === "type") {
+        const typeComparison = fileTypeLabel(left.type).localeCompare(
+          fileTypeLabel(right.type),
+          "zh-CN",
+        );
+        if (typeComparison !== 0) return typeComparison;
+      }
+
+      return left.title.localeCompare(right.title, "zh-CN");
+    });
+  }, [contentSortMode, files]);
   const activeFolderPath = useMemo(() => {
     if (!activeFolderId) {
       return [];
@@ -350,7 +400,7 @@ export function ContentClient() {
     setError(null);
     setMessage(null);
 
-    if (!window.confirm(`确定删除“${file.title}”吗？`)) {
+    if (!window.confirm(`永久删除“${file.title}”？此操作无法撤销。`)) {
       return;
     }
 
@@ -413,10 +463,7 @@ export function ContentClient() {
 
       return {
         id: folder.id,
-        ...getFloatingMenuPosition(
-          button,
-          folder.children.length === 0 && folder.fileCount === 0 ? 5 : 4,
-        ),
+        ...getFloatingMenuPosition(button, 5),
       };
     });
   }
@@ -613,28 +660,57 @@ export function ContentClient() {
     }
   }
 
-  async function onDeleteFolder(folderId: string) {
+  function beginDeleteFolder(folder: FlatFolderNode) {
+    const descendants = getFolderDescendantIds(folder.id);
+    const subtreeIds = new Set([folder.id, ...descendants]);
+    const subtreeFileCount = flatFolders.reduce(
+      (count, item) =>
+        subtreeIds.has(item.id) ? count + item.fileCount : count,
+      0,
+    );
+
+    setDeleteFolderTarget({
+      id: folder.id,
+      name: folder.name,
+      descendantCount: descendants.size,
+      fileCount: subtreeFileCount,
+    });
+    setDeleteFolderStep(1);
+    setDeleteFolderConfirmation("");
+    setOpenFolderMenu(null);
+  }
+
+  function closeDeleteFolderDialog() {
+    if (isDeletingFolder) return;
+    setDeleteFolderTarget(null);
+    setDeleteFolderStep(1);
+    setDeleteFolderConfirmation("");
+  }
+
+  async function onDeleteFolder() {
+    if (!deleteFolderTarget) return;
+
     setError(null);
     setMessage(null);
-
-    if (!window.confirm("确定删除这个空文件夹吗？")) {
-      return;
-    }
+    setIsDeletingFolder(true);
 
     try {
-      await deleteFolder(folderId);
+      await deleteFolder(deleteFolderTarget.id, deleteFolderTarget.name);
       setOpenFolderMenu(null);
-      if (folderId === activeFolderId) {
+      const removedFolderIds = getFolderDescendantIds(deleteFolderTarget.id);
+      removedFolderIds.add(deleteFolderTarget.id);
+      if (activeFolderId && removedFolderIds.has(activeFolderId)) {
         setActiveFolderId(null);
       }
-      setMessage("文件夹已删除");
+      setDeleteFolderTarget(null);
+      setDeleteFolderStep(1);
+      setDeleteFolderConfirmation("");
+      setMessage("文件夹及其中的内容已删除");
       await load();
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "删除文件夹失败，请确认文件夹为空",
-      );
+      setError(caught instanceof Error ? caught.message : "删除文件夹失败");
+    } finally {
+      setIsDeletingFolder(false);
     }
   }
 
@@ -868,17 +944,14 @@ export function ContentClient() {
                           <Users aria-hidden="true" />
                           权限设置
                         </button>
-                        {folder.children.length === 0 &&
-                        folder.fileCount === 0 ? (
-                          <button
-                            className="danger"
-                            onClick={() => void onDeleteFolder(folder.id)}
-                            type="button"
-                          >
-                            <Trash2 aria-hidden="true" />
-                            删除空文件夹
-                          </button>
-                        ) : null}
+                        <button
+                          className="danger"
+                          onClick={() => beginDeleteFolder(folder)}
+                          type="button"
+                        >
+                          <Trash2 aria-hidden="true" />
+                          删除文件夹
+                        </button>
                       </div>
                     ) : null}
                   </div>
@@ -969,6 +1042,20 @@ export function ContentClient() {
               </div>
             </div>
             <div className="toolbar-row">
+              <label className="content-sort-control">
+                <span>排序</span>
+                <select
+                  className="select"
+                  onChange={(event) =>
+                    setContentSortMode(event.target.value as ContentSortMode)
+                  }
+                  value={contentSortMode}
+                >
+                  <option value="updated">最近更新</option>
+                  <option value="name">名称</option>
+                  <option value="type">类型</option>
+                </select>
+              </label>
               <MarkdownImportButton
                 disabled={!activeFolderId}
                 onImport={onImportMarkdown}
@@ -995,7 +1082,35 @@ export function ContentClient() {
                 </tr>
               </thead>
               <tbody>
-                {files.map((file) => (
+                {sortedChildFolders.map((folder) => (
+                  <tr className="content-folder-row" key={folder.id}>
+                    <td data-label="文件名">
+                      <button
+                        className="content-folder-link"
+                        onClick={() => void selectFolder(folder.id)}
+                        type="button"
+                      >
+                        <Folder aria-hidden="true" />
+                        {folder.name}
+                      </button>
+                    </td>
+                    <td data-label="类型">文件夹</td>
+                    <td data-label="状态">—</td>
+                    <td data-label="最近更新">
+                      {formatDateTime(folder.updatedAt)}
+                    </td>
+                    <td data-label="操作">
+                      <button
+                        className="table-action"
+                        onClick={() => void selectFolder(folder.id)}
+                        type="button"
+                      >
+                        打开
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {sortedFiles.map((file) => (
                   <Fragment key={file.id}>
                     <tr>
                       <td data-label="文件名">
@@ -1144,8 +1259,8 @@ export function ContentClient() {
                     ) : null}
                   </Fragment>
                 ))}
-                {files.length === 0 ? (
-                  <tr>
+                {sortedChildFolders.length === 0 && sortedFiles.length === 0 ? (
+                  <tr className="content-empty-row">
                     <td className="empty-cell" colSpan={5}>
                       <div className="empty-panel">
                         <strong>当前文件夹还没有文件</strong>
@@ -1358,6 +1473,100 @@ export function ContentClient() {
                   </div>
                 </section>
               ) : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {deleteFolderTarget ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="delete-folder-title"
+            aria-modal="true"
+            className="modal-panel folder-delete-modal"
+            role="dialog"
+          >
+            <div className="modal-head">
+              <h2 id="delete-folder-title">
+                {deleteFolderStep === 1 ? "删除文件夹？" : "再次确认删除"}
+              </h2>
+              <button
+                className="icon-button subtle"
+                disabled={isDeletingFolder}
+                onClick={closeDeleteFolderDialog}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body">
+              {deleteFolderStep === 1 ? (
+                <>
+                  <div className="folder-delete-warning">
+                    <strong>此操作无法撤销</strong>
+                    <span>
+                      {`将永久删除“${deleteFolderTarget.name}”以及其中的${deleteFolderTarget.descendantCount}个子文件夹和${deleteFolderTarget.fileCount}个文档。`}
+                    </span>
+                  </div>
+                  <p className="muted">
+                    上传的附件会保留在文件库中，但会解除与被删除文档的归属关系。
+                  </p>
+                </>
+              ) : (
+                <label className="label">
+                  输入文件夹名称“{deleteFolderTarget.name}”以确认
+                  <input
+                    autoFocus
+                    className="input"
+                    disabled={isDeletingFolder}
+                    value={deleteFolderConfirmation}
+                    onChange={(event) =>
+                      setDeleteFolderConfirmation(event.target.value)
+                    }
+                  />
+                </label>
+              )}
+            </div>
+            <div className="modal-foot">
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  disabled={isDeletingFolder}
+                  onClick={
+                    deleteFolderStep === 1
+                      ? closeDeleteFolderDialog
+                      : () => {
+                          setDeleteFolderStep(1);
+                          setDeleteFolderConfirmation("");
+                        }
+                  }
+                  type="button"
+                >
+                  {deleteFolderStep === 1 ? "取消" : "返回"}
+                </button>
+                {deleteFolderStep === 1 ? (
+                  <button
+                    className="button danger"
+                    onClick={() => setDeleteFolderStep(2)}
+                    type="button"
+                  >
+                    继续删除
+                  </button>
+                ) : (
+                  <button
+                    className="button danger"
+                    disabled={
+                      isDeletingFolder ||
+                      deleteFolderConfirmation !== deleteFolderTarget.name
+                    }
+                    onClick={() => void onDeleteFolder()}
+                    type="button"
+                  >
+                    {isDeletingFolder ? "正在删除…" : "永久删除"}
+                  </button>
+                )}
+              </div>
             </div>
           </section>
         </div>

@@ -5,11 +5,27 @@
 
 .teaching-list-panel {
   overflow: visible;
+  border: 1px solid #d8d5ce;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.teaching-list-panel .list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
 }
 
 .teaching-deck-list {
   display: flex;
   flex-direction: column;
+}
+
+.teaching-list-panel .search-field {
+  width: min(420px, 100%);
 }
 
 .teaching-deck-row {
@@ -18,8 +34,12 @@
   justify-content: space-between;
   gap: 20px;
   min-width: 0;
-  padding: 16px 18px;
-  border-top: 1px solid var(--line);
+  padding: 14px;
+  border: 0;
+}
+
+.teaching-deck-row + .teaching-deck-row {
+  border-top: 1px solid #d8d5ce;
 }
 
 .teaching-deck-main {
@@ -33,6 +53,7 @@
 .teaching-deck-main > a {
   overflow: hidden;
   color: var(--ink);
+  font-size: 17px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -40,7 +61,7 @@
 
 .teaching-deck-main > span {
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 14px;
 }
 
 .teaching-deck-actions,
@@ -659,6 +680,16 @@
 }
 
 @media (max-width: 560px) {
+  .teaching-list-panel .list-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .teaching-list-panel .search-field,
+  .teaching-list-panel .list-toolbar > .button {
+    width: 100%;
+  }
+
   .teaching-deck-row {
     flex-direction: column;
   }

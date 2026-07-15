@@ -3633,7 +3633,7 @@ p.muted {
   font-weight: 700;
 }
 
-.table tr:hover td {
+.table tr:hover td:not(.empty-cell) {
   background: color-mix(in srgb, var(--panel-soft) 72%, #fff 28%);
 }
 
