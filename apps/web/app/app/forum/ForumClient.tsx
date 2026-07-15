@@ -9,11 +9,18 @@ import type {
 } from "@liveboard/shared";
 import { listForumOverview } from "@/lib/api";
 import { APP_ROUTES, forumThread } from "@/lib/routes";
+import { SortIconSelect } from "@/components/SortIconSelect";
 import { ForumUserAvatar } from "./ForumUserAvatar";
 
 type CategoryFilter = "all" | string;
 type StatusFilter = "all" | "open" | "locked" | "archived";
 type SortMode = "activity" | "newest" | "replies";
+
+const SORT_OPTIONS = [
+  { value: "activity", label: "最近活跃" },
+  { value: "newest", label: "最新发布" },
+  { value: "replies", label: "回复最多" },
+] as const;
 
 const relativeTime = new Intl.RelativeTimeFormat("zh-CN", { numeric: "auto" });
 
@@ -187,20 +194,12 @@ export function ForumClient() {
                 </button>
               ))}
             </div>
-            <label className="forum-sort-control">
-              <span>排序</span>
-              <select
-                className="select"
-                onChange={(event) =>
-                  setSortMode(event.target.value as SortMode)
-                }
-                value={sortMode}
-              >
-                <option value="activity">最近活跃</option>
-                <option value="newest">最新发布</option>
-                <option value="replies">回复最多</option>
-              </select>
-            </label>
+            <SortIconSelect
+              className="forum-sort-control"
+              onChange={setSortMode}
+              options={SORT_OPTIONS}
+              value={sortMode}
+            />
             <Link
               className="button forum-create-action"
               href={APP_ROUTES.forumNew}

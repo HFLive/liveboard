@@ -1,0 +1,23 @@
+/* Keep file selection quiet and structural. Large brand-tinted cards made the
+   library feel visually separate from the other dense workspaces. */
+.workspace.library-workspace .asset-card.active {
+  border-color: #c8c2b7;
+  background: #f0eee8;
+  box-shadow: none;
+}
+
+.workspace.library-workspace .asset-card.active:hover {
+  border-color: #b9b2a7;
+  background: #ece9e2;
+  box-shadow: none;
+}
+
+.workspace.library-workspace .asset-list-row.active {
+  background: #e9e7e2;
+  color: var(--text);
+  box-shadow: none;
+}
+
+.workspace.library-workspace .asset-list-row.active:hover {
+  background: #e5e2dc;
+}
