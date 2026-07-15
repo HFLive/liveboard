@@ -117,7 +117,7 @@ export function ForumClient() {
       <header className="forum-page-header">
         <div>
           <h1>论坛</h1>
-          <p>{threads.length} 个主题</p>
+          <p>{threads.length} 个帖子</p>
         </div>
       </header>
 
@@ -135,7 +135,7 @@ export function ForumClient() {
               type="button"
             >
               <span>
-                <strong>全部主题</strong>
+                <strong>全部帖子</strong>
                 <small>浏览论坛中的所有内容</small>
               </span>
               <em>{threads.length}</em>
@@ -160,7 +160,7 @@ export function ForumClient() {
         <section className="forum-feed">
           <div className="forum-feed-head forum-feed-toolbar">
             <div className="forum-feed-title">
-              <h2>{activeCategory?.name ?? "全部主题"}</h2>
+              <h2>{activeCategory?.name ?? "全部帖子"}</h2>
               <span>
                 {loading ? "正在加载" : `${filteredThreads.length} 个结果`}
               </span>
@@ -176,7 +176,7 @@ export function ForumClient() {
             </label>
             <div
               className="segmented-control forum-status-filter"
-              aria-label="主题状态"
+              aria-label="帖子状态"
             >
               {(
                 [
@@ -215,7 +215,7 @@ export function ForumClient() {
               href={APP_ROUTES.forumNew}
             >
               <Plus aria-hidden="true" className="button-icon" />
-              发布主题
+              发帖
             </Link>
           </div>
 
@@ -271,11 +271,11 @@ export function ForumClient() {
             {!loading && filteredThreads.length === 0 ? (
               <div className="empty-panel">
                 <strong>
-                  {threads.length === 0 ? "论坛还没有主题" : "没有匹配的主题"}
+                  {threads.length === 0 ? "论坛还没有帖子" : "没有匹配的帖子"}
                 </strong>
                 <span>
                   {threads.length === 0
-                    ? "发布第一个主题，开始交流。"
+                    ? "发第一个帖子，开始交流。"
                     : "调整搜索词或筛选条件。"}
                 </span>
                 {hasFilters ? (
@@ -288,7 +288,7 @@ export function ForumClient() {
                   </button>
                 ) : (
                   <Link className="button secondary" href={APP_ROUTES.forumNew}>
-                    发布主题
+                    发帖
                   </Link>
                 )}
               </div>

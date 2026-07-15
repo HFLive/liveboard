@@ -10,11 +10,11 @@ import {
   useState,
 } from "react";
 import {
-  Bot,
   Check,
+  ChevronDown,
   Copy,
-  History,
   MoreHorizontal,
+  PanelLeft,
   Plus,
   Search,
   Send,
@@ -408,6 +408,7 @@ export function AiAssistantClient() {
           className={
             mobileHistoryOpen ? "ai-sidebar mobile-open" : "ai-sidebar"
           }
+          id="ai-history-drawer"
           aria-label="AI 历史记录"
         >
           <div className="ai-brand-panel">
@@ -428,7 +429,6 @@ export function AiAssistantClient() {
                   : "连接中"
               }
             >
-              <Bot aria-hidden="true" />
               <span
                 className={
                   aiStatus
@@ -441,33 +441,34 @@ export function AiAssistantClient() {
             </div>
           </div>
 
-          <div className="ai-sidebar-head">
-            <div>
-              <h2>历史对话</h2>
-              <span>{filteredConversations.length} 条</span>
-            </div>
+          <div className="ai-sidebar-primary">
             <button
               className={
                 activeConversationId
-                  ? "history-new-button"
-                  : "history-new-button active"
+                  ? "ai-sidebar-new"
+                  : "ai-sidebar-new active"
               }
               disabled={asking}
               onClick={onNewConversation}
               type="button"
             >
               <Plus aria-hidden="true" />
-              新对话
+              <span>新对话</span>
             </button>
+            <label className="ai-history-search">
+              <Search aria-hidden="true" />
+              <input
+                onChange={(event) => setHistoryQuery(event.target.value)}
+                placeholder="搜索对话"
+                value={historyQuery}
+              />
+            </label>
           </div>
-          <label className="ai-history-search">
-            <Search aria-hidden="true" />
-            <input
-              onChange={(event) => setHistoryQuery(event.target.value)}
-              placeholder="搜索历史"
-              value={historyQuery}
-            />
-          </label>
+
+          <div className="ai-sidebar-head">
+            <h2>最近对话</h2>
+            <span>{filteredConversations.length} 条</span>
+          </div>
           <div className="history-list">
             {historyGroups.map((group) => (
               <section className="history-group" key={group.label}>
@@ -547,27 +548,20 @@ export function AiAssistantClient() {
 
         <section className="ai-chat-panel" aria-label="AI 对话">
           <header className="ai-chat-toolbar">
-            <strong title={activeConversation?.title ?? "新对话"}>
-              {activeConversation?.title ?? "新对话"}
-            </strong>
-            <div className="ai-chat-toolbar-actions">
+            <div className="ai-chat-title">
               <button
-                className="button secondary ai-history-toggle"
+                aria-controls="ai-history-drawer"
+                aria-expanded={mobileHistoryOpen}
+                aria-label="打开历史对话"
+                className="ai-sidebar-toggle"
                 onClick={() => setMobileHistoryOpen(true)}
                 type="button"
               >
-                <History aria-hidden="true" className="button-icon" />
-                历史
+                <PanelLeft aria-hidden="true" />
               </button>
-              <button
-                className="button secondary"
-                disabled={asking || !activeConversationId}
-                onClick={onNewConversation}
-                type="button"
-              >
-                <Plus aria-hidden="true" className="button-icon" />
-                新对话
-              </button>
+              <strong title={activeConversation?.title ?? "新对话"}>
+                {activeConversation?.title ?? "新对话"}
+              </strong>
             </div>
           </header>
           <div className="home-ai-messages" ref={messagesContainerRef}>
@@ -604,15 +598,20 @@ export function AiAssistantClient() {
                   data-role={message.role}
                   key={message.id}
                 >
+                  <div className="chat-message-body">
+                    <MarkdownContent
+                      content={
+                        message.content ||
+                        (message.role === "assistant"
+                          ? "正在检索资料并生成回答..."
+                          : "")
+                      }
+                    />
+                  </div>
+                  {message.sources && message.sources.length > 0 ? (
+                    <SourceList sources={message.sources} />
+                  ) : null}
                   <div className="chat-message-head">
-                    {message.role === "assistant" ? (
-                      <div className="chat-role">
-                        <span className="chat-role-mark" aria-hidden="true">
-                          <Sparkles />
-                        </span>
-                        <span>LiveBoard</span>
-                      </div>
-                    ) : null}
                     {message.content.trim() ? (
                       <button
                         aria-label={`复制${
@@ -634,19 +633,6 @@ export function AiAssistantClient() {
                       </button>
                     ) : null}
                   </div>
-                  <div className="chat-message-body">
-                    <MarkdownContent
-                      content={
-                        message.content ||
-                        (message.role === "assistant"
-                          ? "正在检索资料并生成回答..."
-                          : "")
-                      }
-                    />
-                  </div>
-                  {message.sources && message.sources.length > 0 ? (
-                    <SourceList sources={message.sources} />
-                  ) : null}
                 </article>
               ))
             )}
@@ -676,11 +662,6 @@ export function AiAssistantClient() {
               value={question}
             />
             <div className="composer-foot">
-              <span className="composer-meta">
-                {question.trim().length > 0
-                  ? `${question.trim().length} 字`
-                  : "Enter 发送 · Shift + Enter 换行"}
-              </span>
               <div className="composer-actions">
                 {asking ? (
                   <button
@@ -693,16 +674,20 @@ export function AiAssistantClient() {
                   </button>
                 ) : null}
                 <button
-                  className="button"
+                  aria-label="发送消息"
+                  className="button composer-send-button"
                   disabled={asking || !question.trim() || !aiStatus?.available}
                   type="submit"
                 >
                   <Send aria-hidden="true" className="button-icon" />
-                  发送
+                  <span>发送</span>
                 </button>
               </div>
             </div>
           </form>
+          <p className="ai-disclaimer">
+            AI 生成内容可能有误，请核对引用的资料。
+          </p>
         </section>
       </section>
     </div>
@@ -712,11 +697,14 @@ export function AiAssistantClient() {
 function SourceList({ sources }: { sources: AiSourceSummary[] }) {
   return (
     <div className="chat-sources">
-      <span>参考资料（{sources.length}）</span>
       {sources.map((source) => (
         <details className="chat-source-detail" key={source.id}>
           <summary>
             <Link href={contentDetail(source.id)}>{source.title}</Link>
+            <ChevronDown
+              aria-hidden="true"
+              className="chat-source-toggle-icon"
+            />
           </summary>
           {source.blocks && source.blocks.length > 0 ? (
             <div className="source-block-list">

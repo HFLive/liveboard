@@ -109,7 +109,7 @@ export function ForumSettingsClient() {
     if (
       !selectedCategory ||
       !window.confirm(
-        `确定删除「${selectedCategory.name}」吗？已有主题的版块不能删除。`,
+        `确定删除「${selectedCategory.name}」吗？已有帖子的版块不能删除。`,
       )
     ) {
       return;

@@ -245,7 +245,7 @@ export class ForumService {
     }
 
     if (thread.status === "locked") {
-      throw new ForbiddenException("该主题已锁定，不能继续回复");
+      throw new ForbiddenException("该帖子已锁定，不能继续回复");
     }
 
     const parentPost = input.parentId
@@ -323,7 +323,7 @@ export class ForumService {
     }
 
     if (["locked", "archived"].includes(existing.status) && !isAdmin) {
-      throw new ForbiddenException("该主题已锁定，不能编辑");
+      throw new ForbiddenException("该帖子已锁定，不能编辑");
     }
 
     const data: {
@@ -429,7 +429,7 @@ export class ForumService {
     }
 
     if (post.thread.status === "locked" && !isAdmin) {
-      throw new ForbiddenException("该主题已锁定，不能编辑回复");
+      throw new ForbiddenException("该帖子已锁定，不能编辑回复");
     }
 
     const updated = await this.prisma.forumPost.update({
@@ -476,7 +476,7 @@ export class ForumService {
     }
 
     if (post.thread.status === "locked" && !isAdmin) {
-      throw new ForbiddenException("该主题已锁定，不能删除回复");
+      throw new ForbiddenException("该帖子已锁定，不能删除回复");
     }
 
     if (isFirstPost) {
@@ -588,7 +588,7 @@ export class ForumService {
     });
 
     if (threadCount > 0) {
-      throw new ConflictException("该版块已有主题，不能删除");
+      throw new ConflictException("该版块已有帖子，不能删除");
     }
 
     await this.prisma.forumCategory.delete({ where: { id: categoryId } });
@@ -599,11 +599,11 @@ export class ForumService {
     const title = value.trim().replace(/\s+/g, " ");
 
     if (!title) {
-      throw new BadRequestException("主题标题不能为空");
+      throw new BadRequestException("帖子标题不能为空");
     }
 
     if (title.length > 120) {
-      throw new BadRequestException("主题标题不能超过 120 个字");
+      throw new BadRequestException("帖子标题不能超过 120 个字");
     }
 
     return title;
