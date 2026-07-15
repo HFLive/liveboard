@@ -68,7 +68,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       })
       .catch((caught) => {
         if (mounted) {
-          setError(caught instanceof Error ? caught.message : "加载主题失败");
+          setError(caught instanceof Error ? caught.message : "加载帖子失败");
         }
       })
       .finally(() => {
@@ -151,7 +151,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       setThread(result.thread);
       setEditingThread(false);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "保存主题失败");
+      setError(caught instanceof Error ? caught.message : "保存帖子失败");
     } finally {
       setActionLoading(false);
     }
@@ -169,7 +169,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       const result = await updateForumThread(thread.id, { status });
       setThread(result.thread);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "更新主题状态失败");
+      setError(caught instanceof Error ? caught.message : "更新帖子状态失败");
     } finally {
       setActionLoading(false);
     }
@@ -182,7 +182,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
   async function archiveThread() {
     if (
       !thread ||
-      !window.confirm("归档后普通成员将看不到这个主题，确定继续吗？")
+      !window.confirm("归档后普通成员将看不到这个帖子，确定继续吗？")
     ) {
       return;
     }
@@ -194,7 +194,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       await deleteForumThread(thread.id);
       router.push(APP_ROUTES.forum);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "归档主题失败");
+      setError(caught instanceof Error ? caught.message : "归档帖子失败");
       setActionLoading(false);
     }
   }
@@ -232,7 +232,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
 
   async function removePost(postId: string, isFirstPost: boolean) {
     const message = isFirstPost
-      ? "删除第一楼会归档整个主题，确定继续吗？"
+      ? "删除第一楼会归档整个帖子，确定继续吗？"
       : "确定删除这条回复吗？";
 
     if (!window.confirm(message)) {
@@ -498,11 +498,11 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       <section className="page-head">
         <div>
           <p className="page-eyebrow">{thread?.category.name ?? "论坛"}</p>
-          <h1>{thread?.title ?? "主题详情"}</h1>
+          <h1>{thread?.title ?? "帖子详情"}</h1>
           <p className="muted">
             {thread
               ? `${thread.author.displayName} · 创建于 ${formatDateTime(thread.createdAt)} · 最近活跃 ${formatDateTime(thread.lastActivityAt)}`
-              : "正在加载主题内容与回复。"}
+              : "正在加载帖子内容与回复。"}
           </p>
         </div>
       </section>
@@ -513,7 +513,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
         <section className="forum-thread-detail surface">
           <header className="forum-thread-top">
             <div className="forum-thread-topline">
-              <span>主题状态</span>
+              <span>帖子状态</span>
               <em className={`forum-status-badge ${thread.status}`}>
                 {thread.status === "locked" ? (
                   <Lock aria-hidden="true" />
@@ -578,7 +578,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                   type="button"
                 >
                   <Pencil aria-hidden="true" className="button-icon" />
-                  编辑主题
+                  编辑帖子
                 </button>
               ) : null}
               {thread.canModerate ? (
@@ -917,14 +917,14 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 <Lock aria-hidden="true" />
               )}
               {thread.status === "archived"
-                ? "主题已归档，仅管理员可查看和恢复。"
-                : "主题已锁定，暂不能继续回复。"}
+                ? "帖子已归档，仅管理员可查看和恢复。"
+                : "帖子已锁定，暂不能继续回复。"}
             </div>
           )}
         </section>
       ) : !loading ? (
         <section className="empty-panel surface">
-          <strong>没有找到这个主题</strong>
+          <strong>没有找到这个帖子</strong>
           <span>可能已被归档，或链接已经失效。</span>
           <Link className="button secondary" href={APP_ROUTES.forum}>
             返回论坛

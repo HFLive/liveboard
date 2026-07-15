@@ -66,7 +66,7 @@ export function NewForumThreadClient() {
 
       router.push(forumThread(result.thread.id));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "创建主题失败");
+      setError(caught instanceof Error ? caught.message : "发帖失败");
       setSubmitting(false);
     }
   }
@@ -90,14 +90,14 @@ export function NewForumThreadClient() {
       <section className="page-head">
         <div>
           <p className="page-eyebrow">论坛</p>
-          <h1>发布主题</h1>
-          <p className="muted">写清楚主题和背景，让其他成员更容易参与。</p>
+          <h1>发帖</h1>
+          <p className="muted">写清楚内容和背景，让其他成员更容易参与。</p>
         </div>
       </section>
 
       {error ? <p className="error-text">{error}</p> : null}
 
-      <section className="forum-compose-layout" aria-label="发布论坛主题">
+      <section className="forum-compose-layout" aria-label="论坛发帖">
         <form
           className="forum-new-shell forum-new-form surface"
           onSubmit={handleSubmit}
@@ -136,7 +136,7 @@ export function NewForumThreadClient() {
               autoFocus
               className="input"
               maxLength={120}
-              placeholder="一句话说清楚问题或主题"
+              placeholder="一句话说清楚问题或观点"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
@@ -169,7 +169,9 @@ export function NewForumThreadClient() {
         <aside className="forum-compose-guide surface">
           <span>发布到</span>
           <strong>{selectedCategory?.name ?? "尚未选择版块"}</strong>
-          <p>{selectedCategory?.description ?? "请选择与主题最相关的版块。"}</p>
+          <p>
+            {selectedCategory?.description ?? "请选择与帖子内容最相关的版块。"}
+          </p>
           <div>
             <h2>更容易获得回复</h2>
             <ul>
