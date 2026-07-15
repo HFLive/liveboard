@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   contentDetail,
-  contentPresentation,
+  contentEdit,
   exerciseDetail,
   exerciseSubmissions,
   forumThread,
@@ -12,7 +12,7 @@ import {
 describe("dynamic application routes", () => {
   it.each([
     [contentDetail, "/app/content/a%2Fb%20c"],
-    [contentPresentation, "/app/content/a%2Fb%20c/present"],
+    [contentEdit, "/app/content/a%2Fb%20c/edit"],
     [exerciseDetail, "/app/exercises/a%2Fb%20c"],
     [exerciseSubmissions, "/app/exercises/a%2Fb%20c/submissions"],
     [forumThread, "/app/forum/a%2Fb%20c"],

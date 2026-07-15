@@ -231,7 +231,7 @@ export function PermissionGroupsClient() {
       <header className="page-head">
         <div>
           <h1>权限组</h1>
-          <p className="muted">按职责组织成员，供内容授权时直接选择。</p>
+          <p className="muted">按职责组织成员，供文档授权时直接选择。</p>
         </div>
       </header>
 
@@ -397,7 +397,7 @@ export function PermissionGroupsClient() {
                       <div className="empty-panel compact">
                         <Users aria-hidden="true" />
                         <strong>组内暂无成员</strong>
-                        <span>添加成员后即可用这个组授权内容。</span>
+                        <span>添加成员后即可用这个组授权文档。</span>
                       </div>
                     ) : null}
                     {selectedMembers.length > 0 &&

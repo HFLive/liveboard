@@ -40,7 +40,7 @@ const adminNavItems = [
   },
   {
     href: APP_ROUTES.adminContentPermissions,
-    label: "内容权限",
+    label: "文档权限",
     icon: SlidersHorizontal,
   },
   {

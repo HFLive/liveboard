@@ -81,6 +81,9 @@ model User {
   username          String     @unique
   displayName       String
   passwordHash      String
+  avatarStorageKey  String?
+  avatarMimeType    String?
+  avatarUpdatedAt   DateTime?
   sessionVersion    Int        @default(0)
   systemRole        SystemRole
   status            UserStatus @default(active)
@@ -216,13 +219,13 @@ model File {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  workspace Workspace      @relation(fields: [workspaceId], references: [id])
-  folder    Folder         @relation(fields: [folderId], references: [id])
-  createdBy User           @relation("FileCreatedBy", fields: [createdById], references: [id])
-  updatedBy User           @relation("FileUpdatedBy", fields: [updatedById], references: [id])
-  blocks    ContentBlock[]
-  exercise  ExerciseSet?
-  assets    FileAsset[]
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id])
+  folder            Folder             @relation(fields: [folderId], references: [id])
+  createdBy         User               @relation("FileCreatedBy", fields: [createdById], references: [id])
+  updatedBy         User               @relation("FileUpdatedBy", fields: [updatedById], references: [id])
+  blocks            ContentBlock[]
+  exercise          ExerciseSet?
+  assets            FileAsset[]
   teachingDeckItems TeachingDeckItem[] @relation("TeachingDeckItemSourceFile")
 
   @@index([folderId, status, updatedAt])
@@ -295,9 +298,9 @@ model ContentBlock {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  file   File           @relation(fields: [fileId], references: [id])
-  parent ContentBlock?  @relation("BlockTree", fields: [parentBlockId], references: [id])
-  child  ContentBlock[] @relation("BlockTree")
+  file              File               @relation(fields: [fileId], references: [id])
+  parent            ContentBlock?      @relation("BlockTree", fields: [parentBlockId], references: [id])
+  child             ContentBlock[]     @relation("BlockTree")
   teachingDeckItems TeachingDeckItem[] @relation("TeachingDeckItemSourceBlock")
 
   @@index([fileId, sortOrder])
@@ -313,9 +316,9 @@ model ExerciseSet {
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
-  file        File         @relation(fields: [fileId], references: [id])
-  questions   Question[]
-  submissions Submission[]
+  file              File               @relation(fields: [fileId], references: [id])
+  questions         Question[]
+  submissions       Submission[]
   teachingDeckItems TeachingDeckItem[]
 }
 

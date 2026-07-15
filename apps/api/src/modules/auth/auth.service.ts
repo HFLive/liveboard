@@ -6,20 +6,63 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import type { UserSummary } from "@liveboard/shared";
 import argon2 from "argon2";
+import { Client } from "minio";
 import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
 import { PrismaService } from "../prisma/prisma.service";
 import type { ChangePasswordDto, UpdateProfileDto } from "./auth.dto";
 import { LoginRateLimitService } from "./login-rate-limit.service";
 
+export interface UploadedAvatarFile {
+  originalname: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+}
+
+export const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024;
+const AVATAR_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
 @Injectable()
 export class AuthService {
   private readonly dummyPasswordHash = argon2.hash(randomUUID());
+  private readonly minio: Client;
+  private readonly bucket: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly loginRateLimit: LoginRateLimitService,
-  ) {}
+    private readonly config: ConfigService,
+  ) {
+    this.bucket = this.config.get<string>("MINIO_BUCKET", "liveboard-assets");
+    const accessKey = this.config.get<string>("MINIO_ROOT_USER", "liveboard");
+    const secretKey = this.config.get<string>(
+      "MINIO_ROOT_PASSWORD",
+      "replace-with-a-strong-password",
+    );
+
+    if (
+      process.env.NODE_ENV === "production" &&
+      (!accessKey ||
+        !secretKey ||
+        secretKey === "replace-with-a-strong-password")
+    ) {
+      throw new Error(
+        "Secure MinIO credentials must be configured in production",
+      );
+    }
+
+    this.minio = new Client({
+      endPoint: this.config.get<string>("MINIO_ENDPOINT", "localhost"),
+      port: this.config.get<number>("MINIO_PORT", 9000),
+      useSSL: this.config.get<string>("MINIO_USE_SSL", "false") === "true",
+      accessKey,
+      secretKey,
+    });
+  }
 
   async validateLogin(
     username: string,
@@ -91,6 +134,89 @@ export class AuthService {
     return this.toSummary(updated);
   }
 
+  async updateAvatar(
+    userId: string | null,
+    file: UploadedAvatarFile | undefined,
+  ): Promise<UserSummary> {
+    const user = await this.requireActiveUser(userId);
+
+    if (!file) {
+      throw new BadRequestException("请选择头像图片");
+    }
+
+    if (file.size > MAX_AVATAR_SIZE_BYTES) {
+      throw new BadRequestException("头像图片不能超过 2MB");
+    }
+
+    const mimeType = normalizeAvatarMimeType(file);
+    const storageKey = `avatars/${user.id}/${randomUUID()}.${avatarExtension(mimeType)}`;
+
+    await this.ensureBucket();
+    await this.minio.putObject(
+      this.bucket,
+      storageKey,
+      file.buffer,
+      file.size,
+      {
+        "Content-Type": mimeType,
+      },
+    );
+
+    let updated: Awaited<ReturnType<typeof this.prisma.user.update>>;
+    try {
+      updated = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          avatarStorageKey: storageKey,
+          avatarMimeType: mimeType,
+          avatarUpdatedAt: new Date(),
+        },
+      });
+    } catch (caught) {
+      await this.minio
+        .removeObject(this.bucket, storageKey)
+        .catch(() => undefined);
+      throw caught;
+    }
+
+    if (user.avatarStorageKey && user.avatarStorageKey !== storageKey) {
+      await this.minio
+        .removeObject(this.bucket, user.avatarStorageKey)
+        .catch(() => undefined);
+    }
+
+    return this.toSummary(updated);
+  }
+
+  async getAvatar(userId: string | null, targetUserId: string) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        avatarStorageKey: true,
+        avatarMimeType: true,
+        status: true,
+      },
+    });
+
+    if (!user || user.status !== "active" || !user.avatarStorageKey) {
+      throw new NotFoundException("Avatar not found");
+    }
+
+    const stream = await this.minio.getObject(
+      this.bucket,
+      user.avatarStorageKey,
+    );
+
+    return {
+      mimeType: user.avatarMimeType ?? "image/webp",
+      stream: stream as Readable,
+    };
+  }
+
   async changePassword(userId: string | null, input: ChangePasswordDto) {
     const user = await this.requireActiveUser(userId);
     const passwordMatches = await argon2.verify(
@@ -130,10 +256,18 @@ export class AuthService {
     return user;
   }
 
+  private async ensureBucket() {
+    const exists = await this.minio.bucketExists(this.bucket);
+    if (!exists) {
+      await this.minio.makeBucket(this.bucket);
+    }
+  }
+
   private toSummary(user: {
     id: string;
     username: string;
     displayName: string;
+    avatarUpdatedAt?: Date | null;
     systemRole: UserSummary["systemRole"];
     status: UserSummary["status"];
   }): UserSummary {
@@ -141,8 +275,57 @@ export class AuthService {
       id: user.id,
       username: user.username,
       displayName: user.displayName,
+      avatarUrl: user.avatarUpdatedAt
+        ? `/auth/avatar/${user.id}?v=${user.avatarUpdatedAt.getTime()}`
+        : null,
       systemRole: user.systemRole,
       status: user.status,
     };
   }
+}
+
+function normalizeAvatarMimeType(file: UploadedAvatarFile) {
+  const mimeType = detectAvatarMimeType(file.buffer);
+
+  if (!mimeType || !AVATAR_IMAGE_MIMES.has(mimeType)) {
+    throw new BadRequestException("头像仅支持 PNG、JPEG 或 WebP 图片");
+  }
+
+  return mimeType;
+}
+
+function avatarExtension(mimeType: string) {
+  if (mimeType === "image/png") return "png";
+  if (mimeType === "image/jpeg") return "jpg";
+  return "webp";
+}
+
+function detectAvatarMimeType(buffer: Buffer) {
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+    return "image/jpeg";
+  }
+
+  if (
+    buffer.length >= 12 &&
+    buffer.toString("ascii", 0, 4) === "RIFF" &&
+    buffer.toString("ascii", 8, 12) === "WEBP"
+  ) {
+    return "image/webp";
+  }
+
+  return null;
 }

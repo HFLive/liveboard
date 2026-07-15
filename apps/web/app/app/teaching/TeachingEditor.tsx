@@ -95,8 +95,8 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
                   sourceBlockId: item.sourceBlockId,
                   label: item.block
                     ? getBlockText(item.block) || getBlockLabel(item.block.type)
-                    : "内容段落",
-                  source: item.sourceFileTitle ?? "内容",
+                    : "文档段落",
+                  source: item.sourceFileTitle ?? "文档",
                 });
               }
               if (item.type === "exercise" && item.exerciseSetId) {
@@ -141,7 +141,7 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
         type: "content_block" as const,
         sourceBlockId: block.id,
         label: getBlockText(block) || getBlockLabel(block.type),
-        source: selectedFile?.title ?? "内容",
+        source: selectedFile?.title ?? "文档",
       }));
     setItems((current) => [...current, ...next]);
     setSelectedBlockIds(new Set());
@@ -182,7 +182,7 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
       return;
     }
     if (!items.length) {
-      setError("请至少添加一个内容段落或练习");
+      setError("请至少添加一个文档段落或练习");
       return;
     }
     setLoading(true);
@@ -213,7 +213,7 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
   return (
     <div className="workspace teaching-editor-workspace">
       <Link className="back-link" href={APP_ROUTES.teaching}>
-        <ArrowLeft aria-hidden="true" /> 返回授课
+        <ArrowLeft aria-hidden="true" /> 返回课件
       </Link>
       <header className="page-head compact">
         <div>
@@ -225,7 +225,7 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
       <section className="teaching-editor-grid">
         <div className="teaching-source-panel">
           <label className="form-field teaching-form-field">
-            <span>内容文件</span>
+            <span>文档</span>
             <div className="teaching-control teaching-select-control">
               <FileText aria-hidden="true" className="teaching-control-icon" />
               <select
@@ -233,7 +233,7 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
                 value={selectedFileId}
                 onChange={(event) => setSelectedFileId(event.target.value)}
               >
-                {files.length ? null : <option value="">暂无内容文件</option>}
+                {files.length ? null : <option value="">暂无文档</option>}
                 {files.map((file) => (
                   <option key={file.id} value={file.id}>
                     {file.title}

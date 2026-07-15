@@ -10,6 +10,7 @@ import type {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  ArrowLeft,
   Upload,
   GripVertical,
   Image,
@@ -64,7 +65,7 @@ import {
   fileTypeLabel,
   permissionLabel,
 } from "@/lib/labels";
-import { APP_ROUTES } from "@/lib/routes";
+import { APP_ROUTES, contentDetail } from "@/lib/routes";
 
 const blockShortcuts: Array<{ command: string; type: ContentBlockType }> = [
   { command: "/h1", type: "heading_1" },
@@ -315,7 +316,7 @@ export function DocumentPreview({
 }) {
   return (
     <article className="editor-preview-document">
-      <h1 className="editor-preview-title">{title || "未命名内容"}</h1>
+      <h1 className="editor-preview-title">{title || "未命名文档"}</h1>
       {blocks.length > 0 ? (
         blocks.map((block) => (
           <div className="editor-preview-block" key={block.id}>
@@ -1099,6 +1100,10 @@ export function FileEditor({ fileId }: { fileId: string }) {
 
   return (
     <div className="workspace">
+      <Link className="page-back-link" href={contentDetail(fileId)}>
+        <ArrowLeft aria-hidden="true" />
+        返回文档
+      </Link>
       <section className="page-head compact">
         <div>
           <input
@@ -1144,7 +1149,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
             type="button"
           >
             <Paperclip aria-hidden="true" className="button-icon" />
-            素材
+            文件
           </button>
           <button
             className="button secondary"
@@ -1393,7 +1398,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
           >
             <div className="modal-head">
               <div>
-                <h2>插入素材</h2>
+                <h2>插入文件</h2>
                 <p className="muted">上传新附件，或从网盘选择已有文件。</p>
               </div>
               <button
@@ -1425,7 +1430,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
               <div className="tool-modal-section">
                 <div className="panel-title-row">
                   <h3>网盘文件</h3>
-                  <span className="badge">{libraryAssets.length} 个素材</span>
+                  <span className="badge">{libraryAssets.length} 个文件</span>
                 </div>
                 <input
                   className="input"
@@ -1456,7 +1461,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
                   ) : null}
                   {libraryAssets.length > 0 &&
                   filteredLibraryAssets.length === 0 ? (
-                    <p className="muted">没有匹配的素材。</p>
+                    <p className="muted">没有匹配的文件。</p>
                   ) : null}
                 </div>
               </div>
@@ -1629,7 +1634,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
                     }
                   >
                     <option value="viewer">可查看</option>
-                    <option value="lecturer">可授课</option>
+                    <option value="lecturer">可制作课件</option>
                     <option value="editor">可编辑</option>
                     <option value="owner">可管理</option>
                     <option value="no_access">禁止访问</option>
@@ -1674,7 +1679,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
                         }
                       >
                         <option value="viewer">可查看</option>
-                        <option value="lecturer">可授课</option>
+                        <option value="lecturer">可制作课件</option>
                         <option value="editor">可编辑</option>
                         <option value="owner">可管理</option>
                         <option value="no_access">禁止访问</option>

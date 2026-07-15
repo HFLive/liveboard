@@ -10,7 +10,6 @@ import {
   Folder,
   MoreHorizontal,
   MoveRight,
-  Presentation,
   Pencil,
   Plus,
   RotateCcw,
@@ -47,7 +46,7 @@ import {
   formatDateTime,
   permissionLabel,
 } from "@/lib/labels";
-import { contentDetail, contentPresentation } from "@/lib/routes";
+import { contentDetail } from "@/lib/routes";
 import { MarkdownImportButton } from "./MarkdownImportButton";
 
 type FlatFolderNode = FolderNode & { depth: number };
@@ -732,11 +731,9 @@ export function ContentClient() {
     <div className="workspace">
       <header className="page-head">
         <div>
-          <p className="page-eyebrow">内容工作区</p>
-          <h1>内容</h1>
-          <p className="muted">
-            按文件夹组织教学内容，并管理文件权限与授课入口。
-          </p>
+          <p className="page-eyebrow">文档工作区</p>
+          <h1>文档</h1>
+          <p className="muted">按文件夹组织教学文档，并管理文件权限。</p>
         </div>
       </header>
 
@@ -955,7 +952,7 @@ export function ContentClient() {
             <div>
               <h2>
                 <FileText aria-hidden="true" className="heading-icon" />
-                内容
+                文档
               </h2>
               <div className="breadcrumb" aria-label="当前位置">
                 {activeFolderPath.map((folder, index) => (
@@ -1032,10 +1029,6 @@ export function ContentClient() {
                               <Link href={contentDetail(file.id)}>
                                 <FileText aria-hidden="true" />
                                 打开
-                              </Link>
-                              <Link href={contentPresentation(file.id)}>
-                                <Presentation aria-hidden="true" />
-                                授课模式
                               </Link>
                               <button
                                 onClick={() => beginRenameFile(file)}
@@ -1189,7 +1182,7 @@ export function ContentClient() {
                     ? "文件权限"
                     : "文件夹权限"}
                 </h2>
-                <p className="muted">{permissionTarget?.name ?? "当前内容"}</p>
+                <p className="muted">{permissionTarget?.name ?? "当前文档"}</p>
               </div>
               <button
                 className="icon-button subtle"
@@ -1208,14 +1201,14 @@ export function ContentClient() {
                   {groupGrants.length > 0
                     ? "包含例外权限"
                     : permissionTarget?.isRoot
-                      ? "沿用内容默认权限"
+                      ? "沿用文档默认权限"
                       : "沿用上级权限"}
                 </strong>
                 <span>
                   {groupGrants.length > 0
                     ? `当前${permissionTarget?.type === "file" ? "文件" : "文件夹"}为 ${groupGrants.length} 个权限组单独设置；其他权限继续从上级继承。`
                     : permissionTarget?.isRoot
-                      ? "当前顶层文件夹没有单独设置，权限会随管理中心的内容默认权限自动变化。"
+                      ? "当前顶层文件夹没有单独设置，权限会随管理中心的文档默认权限自动变化。"
                       : `当前${permissionTarget?.type === "file" ? "文件" : "文件夹"}没有单独设置，权限会随上级文件夹自动变化。`}
                 </span>
               </div>
@@ -1255,7 +1248,7 @@ export function ContentClient() {
                     }
                   >
                     <option value="viewer">可查看</option>
-                    <option value="lecturer">可授课</option>
+                    <option value="lecturer">可制作课件</option>
                     <option value="editor">可编辑</option>
                     <option value="owner">可管理</option>
                     <option value="no_access">禁止访问</option>
@@ -1302,7 +1295,7 @@ export function ContentClient() {
                         }
                       >
                         <option value="viewer">可查看</option>
-                        <option value="lecturer">可授课</option>
+                        <option value="lecturer">可制作课件</option>
                         <option value="editor">可编辑</option>
                         <option value="owner">可管理</option>
                         <option value="no_access">禁止访问</option>
@@ -1329,7 +1322,7 @@ export function ContentClient() {
                     <strong>没有例外权限</strong>
                     <span>
                       {permissionTarget?.isRoot
-                        ? "全部权限都沿用管理中心的内容默认权限。"
+                        ? "全部权限都沿用管理中心的文档默认权限。"
                         : "全部权限都沿用上级；通常只需在文件夹层统一管理。"}
                     </span>
                   </div>
@@ -1340,7 +1333,7 @@ export function ContentClient() {
                   <div className="panel-title-row">
                     <h2>
                       {permissionTarget?.isRoot
-                        ? "从内容默认权限继承"
+                        ? "从文档默认权限继承"
                         : "从上级继承"}
                     </h2>
                     <span className="badge">
@@ -1455,7 +1448,7 @@ export function ContentClient() {
                 <input
                   autoFocus
                   className="input"
-                  placeholder="例如：第 1 周授课"
+                  placeholder="例如：第 1 周课件"
                   value={fileTitle}
                   onChange={(event) => setFileTitle(event.target.value)}
                 />

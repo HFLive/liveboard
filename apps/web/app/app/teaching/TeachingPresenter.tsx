@@ -128,13 +128,13 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
         </div>
         <div className="button-row">
           <Link
-            aria-label="返回授课"
+            aria-label="返回课件"
             className="button secondary"
             href={APP_ROUTES.teaching}
-            title="返回授课"
+            title="返回课件"
           >
             <ArrowLeft aria-hidden="true" className="button-icon" />
-            <span>返回授课</span>
+            <span>返回课件</span>
           </Link>
           {deck?.canEdit ? (
             <Link
@@ -222,7 +222,7 @@ function SlideContent({ item }: { item: TeachingDeckItem }) {
   return item.block ? (
     <RenderBlockContent block={item.block} />
   ) : (
-    <p>原内容段落不可用。</p>
+    <p>原文档段落不可用。</p>
   );
 }
 

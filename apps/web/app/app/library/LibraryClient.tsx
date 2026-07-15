@@ -168,7 +168,7 @@ export function LibraryClient() {
       <header className="page-head">
         <div>
           <p className="page-eyebrow">资源管理</p>
-          <h1>素材库</h1>
+          <h1>文件</h1>
           <p className="muted">集中上传、检索和复用图片与附件资源。</p>
         </div>
       </header>
@@ -232,7 +232,7 @@ export function LibraryClient() {
               </select>
               <div
                 className="segmented-control library-view-toggle"
-                aria-label="素材展示方式"
+                aria-label="文件展示方式"
               >
                 <button
                   aria-label="网格视图"
@@ -359,20 +359,20 @@ export function LibraryClient() {
         </div>
 
         <button
-          aria-label="关闭素材详情"
+          aria-label="关闭文件详情"
           className={`asset-detail-backdrop ${showMobileDetail ? "open" : ""}`}
           onClick={() => setShowMobileDetail(false)}
           type="button"
         />
 
         <aside
-          aria-label="素材详情"
+          aria-label="文件详情"
           className={`asset-detail-panel sticky-panel ${
             showMobileDetail ? "mobile-open" : ""
           }`}
         >
           <button
-            aria-label="关闭素材详情"
+            aria-label="关闭文件详情"
             className="asset-detail-close"
             onClick={() => setShowMobileDetail(false)}
             title="关闭"

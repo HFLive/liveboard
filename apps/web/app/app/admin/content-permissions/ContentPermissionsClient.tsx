@@ -24,7 +24,7 @@ const permissionOptions: Array<{
   label: string;
 }> = [
   { value: "viewer", label: "可查看" },
-  { value: "lecturer", label: "可授课" },
+  { value: "lecturer", label: "可制作课件" },
   { value: "editor", label: "可编辑" },
   { value: "owner", label: "可管理" },
 ];
@@ -61,7 +61,7 @@ export function ContentPermissionsClient() {
   useEffect(() => {
     load().catch((caught) => {
       setError(
-        caught instanceof Error ? caught.message : "加载内容默认权限失败",
+        caught instanceof Error ? caught.message : "加载文档默认权限失败",
       );
     });
   }, []);
@@ -96,8 +96,8 @@ export function ContentPermissionsClient() {
       setGrants(grantResult.grants);
       setMessage(
         level
-          ? `「${group.name}」的内容默认权限已更新`
-          : `「${group.name}」不再获得默认内容权限`,
+          ? `「${group.name}」的文档默认权限已更新`
+          : `「${group.name}」不再获得默认文档权限`,
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存默认权限失败");
@@ -110,7 +110,7 @@ export function ContentPermissionsClient() {
     <div className="workspace content-permissions-workspace">
       <header className="page-head">
         <div>
-          <h1>内容权限</h1>
+          <h1>文档权限</h1>
           <p className="muted">设置所有顶层文件夹默认继承的权限。</p>
         </div>
       </header>
@@ -123,12 +123,12 @@ export function ContentPermissionsClient() {
       <section className="content-permission-overview">
         <ShieldCheck aria-hidden="true" />
         <div>
-          <h2>{workspace?.name ?? "内容默认权限"}</h2>
+          <h2>{workspace?.name ?? "文档默认权限"}</h2>
           <p>
             这里设置 workspace
             的基础权限。顶层文件夹、子文件夹和文件会逐级继承；某一级单独设置的例外权限优先生效。
           </p>
-          <p>系统管理员始终可以管理全部内容，不受下方设置影响。</p>
+          <p>系统管理员始终可以管理全部文档，不受下方设置影响。</p>
         </div>
       </section>
 

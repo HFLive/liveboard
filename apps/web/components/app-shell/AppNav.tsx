@@ -13,16 +13,16 @@ import {
   Users,
 } from "lucide-react";
 import type { UserSummary } from "@liveboard/shared";
-import { getMe } from "@/lib/api";
+import { apiResourceUrl, getMe } from "@/lib/api";
 import { roleLabel } from "@/lib/labels";
 import { APP_ROUTES } from "@/lib/routes";
 import { LogoutButton } from "./LogoutButton";
 
 const navItems = [
   { href: APP_ROUTES.ai, label: "AI", Icon: Bot },
-  { href: APP_ROUTES.content, label: "内容", Icon: Files },
-  { href: APP_ROUTES.teaching, label: "授课", Icon: Presentation },
-  { href: APP_ROUTES.library, label: "素材库", Icon: Database },
+  { href: APP_ROUTES.content, label: "文档", Icon: Files },
+  { href: APP_ROUTES.teaching, label: "课件", Icon: Presentation },
+  { href: APP_ROUTES.library, label: "文件", Icon: Database },
   { href: APP_ROUTES.exercises, label: "练习", Icon: ClipboardList },
   { href: APP_ROUTES.forum, label: "论坛", Icon: MessageSquare },
   { href: APP_ROUTES.admin, label: "管理", Icon: Users },
@@ -133,7 +133,11 @@ export function AppNav() {
           title="个人设置"
         >
           <span className="rail-avatar" aria-hidden="true">
-            {userInitial}
+            {user?.avatarUrl ? (
+              <img alt="" src={apiResourceUrl(user.avatarUrl)} />
+            ) : (
+              userInitial
+            )}
           </span>
           <span className="rail-user-copy">
             <span>{displayName}</span>

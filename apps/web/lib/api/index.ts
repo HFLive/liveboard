@@ -25,6 +25,10 @@ import {
 
 export { ApiError } from "./client";
 
+export function apiResourceUrl(path: string) {
+  return path.startsWith("http") ? path : `${API_URL}${path}`;
+}
+
 export function login(username: string, password: string) {
   return request<{ user: UserSummary }>("/auth/login", {
     method: "POST",
@@ -47,6 +51,30 @@ export function updateProfile(input: { displayName: string }) {
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+export async function uploadAvatar(file: File) {
+  const formData = new FormData();
+  formData.set("file", file);
+
+  const response = await fetch(`${API_URL}/auth/me/avatar`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    redirectToLoginOnUnauthorized(response.status, "/auth/me/avatar");
+    const body = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    const message = Array.isArray(body?.message)
+      ? body.message.join("；")
+      : body?.message;
+    throw new ApiError(message ?? "头像上传失败", response.status);
+  }
+
+  return (await response.json()) as { user: UserSummary };
 }
 
 export function changePassword(input: {

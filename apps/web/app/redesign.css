@@ -232,6 +232,13 @@ button:active:not(:disabled),
   border-color: rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.09);
   font-size: 12px;
+  overflow: hidden;
+}
+
+.rail-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .rail-user-copy span {
@@ -2077,13 +2084,201 @@ button:disabled {
 }
 
 .profile-layout {
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+  gap: 14px;
+}
+
+.profile-layout .workbench-side {
+  align-content: start;
+  gap: 10px;
 }
 
 .profile-form {
   gap: 20px;
   padding: 22px;
+}
+
+.profile-avatar-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.profile-avatar-preview {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.profile-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-avatar-row > div:last-child {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  justify-items: start;
+}
+
+.profile-avatar-row .muted {
+  margin: 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.avatar-crop-modal {
+  width: min(460px, calc(100vw - 28px));
+}
+
+.avatar-crop-body {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+}
+
+.avatar-crop-stage {
+  position: relative;
+  width: min(280px, calc(100vw - 74px));
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--panel-soft);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.avatar-crop-stage.dragging {
+  cursor: grabbing;
+}
+
+.avatar-crop-stage::after {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 999px rgba(0, 0, 0, 0.02);
+  content: "";
+  pointer-events: none;
+}
+
+.avatar-crop-stage img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.avatar-zoom-label {
+  width: min(320px, 100%);
+}
+
+.avatar-zoom-label input {
+  width: 100%;
+}
+
+.profile-layout .password-disclosure {
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.profile-layout .password-disclosure[open] {
+  border-color: var(--line);
+  background: var(--surface-raised);
+}
+
+.profile-layout .password-disclosure summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 8px;
+}
+
+.profile-layout .password-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.profile-layout .password-disclosure summary::after {
+  margin-left: auto;
+  color: var(--muted);
+  content: "+";
+  font-size: 17px;
+  font-weight: 760;
+}
+
+.profile-layout .password-disclosure[open] summary::after {
+  content: "-";
+}
+
+.profile-layout .password-disclosure summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.profile-layout .password-disclosure summary small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.profile-layout .password-disclosure .heading-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.profile-layout .password-disclosure .disclosure-body {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 12px;
+}
+
+.profile-layout .password-disclosure .button {
+  width: 100%;
+}
+
+.profile-layout .workbench-side > .action-panel.quiet {
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.profile-layout .workbench-side > .action-panel.quiet h2 {
+  font-size: 15px;
+}
+
+.profile-layout .workbench-side > .action-panel.quiet p {
+  margin: 0;
+  font-size: 13px;
 }
 
 .profile-readonly-grid {

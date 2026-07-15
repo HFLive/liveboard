@@ -69,7 +69,7 @@ function sourceLabel(items: TeachingDeckItem[]) {
         .map((item) =>
           item.type === "exercise"
             ? "课堂练习"
-            : item.sourceFileTitle || "内容",
+            : item.sourceFileTitle || "文档",
         )
         .filter(Boolean),
     ),
