@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowLeft, Check, Send } from "lucide-react";
+import { ArrowLeft, Send } from "lucide-react";
 import type { ForumCategorySummary } from "@liveboard/shared";
 import { createForumThread, listForumOverview } from "@/lib/api";
 import { APP_ROUTES, forumThread } from "@/lib/routes";
@@ -104,24 +104,21 @@ export function NewForumThreadClient() {
         >
           <fieldset className="forum-category-picker">
             <legend>选择版块</legend>
-            <div>
+            <select
+              className="select"
+              disabled={loading || categories.length === 0}
+              onChange={(event) => setCategoryId(event.target.value)}
+              value={categoryId}
+            >
               {categories.map((category) => (
-                <button
-                  className={category.id === categoryId ? "active" : ""}
-                  key={category.id}
-                  onClick={() => setCategoryId(category.id)}
-                  type="button"
-                >
-                  <span>
-                    <strong>{category.name}</strong>
-                    <small>{category.description ?? "暂无说明"}</small>
-                  </span>
-                  {category.id === categoryId ? (
-                    <Check aria-hidden="true" />
-                  ) : null}
-                </button>
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
               ))}
-            </div>
+            </select>
+            {selectedCategory ? (
+              <p>{selectedCategory.description ?? "暂无说明"}</p>
+            ) : null}
             {!loading && categories.length === 0 ? (
               <p className="notice-box">暂无可用版块，请联系管理员创建。</p>
             ) : null}
@@ -136,7 +133,6 @@ export function NewForumThreadClient() {
               autoFocus
               className="input"
               maxLength={120}
-              placeholder="一句话说清楚问题或观点"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
@@ -150,7 +146,6 @@ export function NewForumThreadClient() {
             <textarea
               className="textarea"
               maxLength={8000}
-              placeholder="说明背景、你的想法或已经尝试过的方法……"
               value={body}
               onChange={(event) => setBody(event.target.value)}
             />
@@ -166,21 +161,6 @@ export function NewForumThreadClient() {
             </button>
           </div>
         </form>
-        <aside className="forum-compose-guide surface">
-          <span>发布到</span>
-          <strong>{selectedCategory?.name ?? "尚未选择版块"}</strong>
-          <p>
-            {selectedCategory?.description ?? "请选择与帖子内容最相关的版块。"}
-          </p>
-          <div>
-            <h2>更容易获得回复</h2>
-            <ul>
-              <li>标题直接说明问题或观点</li>
-              <li>正文补充必要背景</li>
-              <li>说明你已经尝试过什么</li>
-            </ul>
-          </div>
-        </aside>
       </section>
     </div>
   );

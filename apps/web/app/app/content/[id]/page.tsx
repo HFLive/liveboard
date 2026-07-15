@@ -1,4 +1,5 @@
-import { FileEditor } from "./FileEditor";
+import "./content-viewer.css";
+import { FileViewer } from "./FileViewer";
 
 export default async function FileDetailPage({
   params,
@@ -7,5 +8,5 @@ export default async function FileDetailPage({
 }) {
   const { id } = await params;
 
-  return <FileEditor fileId={id} />;
+  return <FileViewer fileId={id} />;
 }

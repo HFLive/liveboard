@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Patch, Post, Req, Res } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Req,
+  Res,
+  UploadedFile,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import { Public } from "../../common/public.decorator";
@@ -8,6 +20,7 @@ import {
   shouldUseSecureSessionCookie,
 } from "../../common/session-cookie";
 import { AuthService } from "./auth.service";
+import { MAX_AVATAR_SIZE_BYTES, type UploadedAvatarFile } from "./auth.service";
 import { ChangePasswordDto, LoginDto, UpdateProfileDto } from "./auth.dto";
 
 @Controller("auth")
@@ -63,6 +76,37 @@ export class AuthController {
     @Body() body: UpdateProfileDto,
   ) {
     return { user: await this.authService.updateProfile(userId, body) };
+  }
+
+  @Post("me/avatar")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: { fileSize: MAX_AVATAR_SIZE_BYTES, files: 1 },
+    }),
+  )
+  async updateAvatar(
+    @CurrentUserId() userId: string | null,
+    @UploadedFile() file?: UploadedAvatarFile,
+  ) {
+    return { user: await this.authService.updateAvatar(userId, file) };
+  }
+
+  @Get("avatar/:id")
+  async getAvatar(
+    @CurrentUserId() userId: string | null,
+    @Param("id") targetUserId: string,
+    @Res() res: Response,
+  ) {
+    const { mimeType, stream } = await this.authService.getAvatar(
+      userId,
+      targetUserId,
+    );
+
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cross-Origin-Resource-Policy", "same-site");
+    stream.pipe(res);
   }
 
   @Patch("password")

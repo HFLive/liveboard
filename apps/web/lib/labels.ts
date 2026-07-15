@@ -42,7 +42,7 @@ export function permissionLabel(level: PermissionLevel | null | undefined) {
   const labels: Record<PermissionLevel, string> = {
     owner: "可管理",
     editor: "可编辑",
-    lecturer: "可授课",
+    lecturer: "可制作课件",
     viewer: "可查看",
     no_access: "禁止访问",
   };

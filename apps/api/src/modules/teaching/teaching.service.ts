@@ -159,21 +159,21 @@ export class TeachingService {
       items.map(async (item, sortOrder) => {
         if (item.type === "content_block") {
           if (!item.sourceBlockId) {
-            throw new BadRequestException("内容段落无效");
+            throw new BadRequestException("文档段落无效");
           }
           const block = await this.prisma.contentBlock.findUnique({
             where: { id: item.sourceBlockId },
             include: { file: true },
           });
           if (!block) {
-            throw new NotFoundException("选中的内容段落不存在");
+            throw new NotFoundException("选中的文档段落不存在");
           }
           const level = await this.permissions.getEffectiveLevelForFile(
             userId,
             block.fileId,
           );
           if (!canView(level)) {
-            throw new ForbiddenException("无权使用选中的内容段落");
+            throw new ForbiddenException("无权使用选中的文档段落");
           }
           const snapshot = {
             id: block.id,
@@ -259,6 +259,7 @@ export class TeachingService {
     id: string;
     username: string;
     displayName: string;
+    avatarUpdatedAt?: Date | null;
     systemRole: "super_admin" | "admin" | "member";
     status: "active" | "disabled";
   }) {
@@ -266,6 +267,9 @@ export class TeachingService {
       id: user.id,
       username: user.username,
       displayName: user.displayName,
+      avatarUrl: user.avatarUpdatedAt
+        ? `/auth/avatar/${user.id}?v=${user.avatarUpdatedAt.getTime()}`
+        : null,
       systemRole: user.systemRole,
       status: user.status,
     };

@@ -29,6 +29,7 @@ type ForumUserRecord = {
   id: string;
   username: string;
   displayName: string;
+  avatarUpdatedAt?: Date | null;
   systemRole: UserSummary["systemRole"];
   status: UserSummary["status"];
 };
@@ -813,6 +814,9 @@ export class ForumService {
       id: user.id,
       username: user.username,
       displayName: user.displayName,
+      avatarUrl: user.avatarUpdatedAt
+        ? `/auth/avatar/${user.id}?v=${user.avatarUpdatedAt.getTime()}`
+        : null,
       systemRole: user.systemRole,
       status: user.status,
     };

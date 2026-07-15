@@ -47,7 +47,7 @@ export function TeachingClient() {
       <header className="page-head compact">
         <div>
           <p className="page-eyebrow">教学活动</p>
-          <h1>授课</h1>
+          <h1>课件</h1>
         </div>
       </header>
 
@@ -116,7 +116,7 @@ export function TeachingClient() {
               <span>
                 {decks.length
                   ? "换一个关键词搜索。"
-                  : "从内容中选择段落，拼成第一份课件。"}
+                  : "从文档中选择段落，拼成第一份课件。"}
               </span>
               {!decks.length ? (
                 <Link

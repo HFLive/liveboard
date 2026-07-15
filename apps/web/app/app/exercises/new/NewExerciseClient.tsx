@@ -653,7 +653,7 @@ export function NewExerciseClient() {
                 <Check aria-hidden="true" />
                 <span>
                   <strong>这道题将人工批阅</strong>
-                  <small>成员可输入长文本，提交后由授课者给分。</small>
+                  <small>成员可输入长文本，提交后由教师给分。</small>
                 </span>
               </div>
             )}

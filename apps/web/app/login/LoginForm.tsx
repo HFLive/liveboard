@@ -22,8 +22,8 @@ export function LoginForm() {
 
   const demoAccounts = [
     { label: "最高管理员", username: "admin", password: "liveboard-admin" },
-    { label: "内容维护", username: "author", password: "liveboard-author" },
-    { label: "授课者", username: "lecturer", password: "liveboard-lecturer" },
+    { label: "文档维护", username: "author", password: "liveboard-author" },
+    { label: "课件制作", username: "lecturer", password: "liveboard-lecturer" },
     { label: "学习者", username: "learner", password: "liveboard-learner" },
   ];
 

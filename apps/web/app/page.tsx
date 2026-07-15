@@ -60,7 +60,7 @@ export default function HomePage() {
                   <span>成员权限</span>
                 </aside>
                 <div className="scene-content">
-                  <div className="scene-path">内容 / 第一讲教案</div>
+                  <div className="scene-path">文档 / 第一讲教案</div>
                   <div className="scene-document-head">
                     <h2>第一讲：直播基础</h2>
                     <span>已发布</span>
@@ -92,12 +92,12 @@ export default function HomePage() {
           <article>
             <BookOpen aria-hidden="true" />
             <h3>整理资料</h3>
-            <p>用文件夹和块编辑器编写、查找和引用教学内容。</p>
+            <p>用文件夹和块编辑器编写、查找和引用教学文档。</p>
           </article>
           <article>
             <Presentation aria-hidden="true" />
-            <h3>授课模式</h3>
-            <p>把已有内容组合成课程，并直接用于课堂展示。</p>
+            <h3>课件展示</h3>
+            <p>把已有文档组合成课件，并直接用于课堂展示。</p>
           </article>
           <article>
             <ClipboardCheck aria-hidden="true" />

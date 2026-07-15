@@ -34,8 +34,8 @@ export function contentDetail(fileId: string): Route {
   return `/app/content/${routeSegment(fileId)}` as Route;
 }
 
-export function contentPresentation(fileId: string): Route {
-  return `/app/content/${routeSegment(fileId)}/present` as Route;
+export function contentEdit(fileId: string): Route {
+  return `/app/content/${routeSegment(fileId)}/edit` as Route;
 }
 
 export function exerciseDetail(exerciseSetId: string): Route {

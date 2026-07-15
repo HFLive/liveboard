@@ -65,7 +65,7 @@ export default function AdminPage() {
         >
           <SlidersHorizontal aria-hidden="true" />
           <span>
-            <strong>内容默认权限</strong>
+            <strong>文档默认权限</strong>
             <small>设置顶层文件夹继承的基础权限</small>
           </span>
         </Link>

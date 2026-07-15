@@ -136,7 +136,7 @@ async function main() {
   const lecturerGroup = await upsertPermissionGroup({
     workspaceId: workspace.id,
     name: "讲师",
-    description: "可授课和查看发布资料",
+    description: "可制作课件和查看已发布文档",
     createdById: admin.id,
   });
   const learnerGroup = await upsertPermissionGroup({
