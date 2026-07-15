@@ -36,22 +36,6 @@ export function ExercisesClient() {
     });
   }, [exerciseSets, filter, query]);
 
-  const notStartedCount = exerciseSets.filter(
-    (exercise) => exercise.latestSubmissionStatus === "not_started",
-  ).length;
-  const submittedCount = exerciseSets.filter((exercise) =>
-    ["submitted", "auto_graded", "needs_manual_review"].includes(
-      exercise.latestSubmissionStatus,
-    ),
-  ).length;
-  const gradedCount = exerciseSets.filter(
-    (exercise) => exercise.latestSubmissionStatus === "graded",
-  ).length;
-  const reviewCount = exerciseSets.reduce(
-    (sum, exercise) => sum + exercise.pendingReviewCount,
-    0,
-  );
-
   useEffect(() => {
     listExerciseSets()
       .then((result) => setExerciseSets(result.exerciseSets))
@@ -71,29 +55,6 @@ export function ExercisesClient() {
       </header>
 
       {error ? <p className="error-text">{error}</p> : null}
-
-      <section className="metric-strip" aria-label="练习概览">
-        <article className="metric">
-          <span>全部练习</span>
-          <strong>{exerciseSets.length}</strong>
-        </article>
-        <article className="metric">
-          <span>未开始</span>
-          <strong>{notStartedCount}</strong>
-        </article>
-        <article className="metric">
-          <span>待处理</span>
-          <strong>{submittedCount}</strong>
-        </article>
-        <article className="metric">
-          <span>已批阅</span>
-          <strong>{gradedCount}</strong>
-        </article>
-        <article className="metric">
-          <span>待人工批阅</span>
-          <strong>{reviewCount}</strong>
-        </article>
-      </section>
 
       <section className="workbench-main">
         <div className="panel-head">
@@ -225,7 +186,7 @@ export function ExercisesClient() {
                 </tr>
               ))}
               {filteredExerciseSets.length === 0 ? (
-                <tr>
+                <tr className="exercise-empty-row">
                   <td className="empty-cell" colSpan={6}>
                     <div className="empty-panel">
                       <strong>

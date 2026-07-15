@@ -77,6 +77,7 @@ export interface FolderNode {
   parentId: string | null;
   permission: PermissionLevel;
   fileCount: number;
+  updatedAt: string;
   children: FolderNode[];
 }
 

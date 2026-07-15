@@ -389,47 +389,29 @@
   padding-top: 3px;
 }
 
-.ai-workspace .chat-source-detail {
-  width: auto;
-  overflow: hidden;
+.ai-workspace .chat-source-link {
+  display: inline-flex;
+  align-items: center;
   border: 1px solid #dedbd5;
   border-radius: 999px;
   background: #faf9f7;
-}
-
-.ai-workspace .chat-source-detail[open] {
-  flex-basis: 100%;
-  border-radius: 12px;
-}
-
-.ai-workspace .chat-source-detail summary {
-  display: flex;
-  align-items: center;
-  gap: 5px;
   padding: 6px 10px;
-}
-
-.ai-workspace .chat-source-detail summary::before {
-  display: none;
-  content: none;
-}
-
-.ai-workspace .chat-source-detail summary a {
   color: var(--text-soft);
   font-size: 12px;
   font-weight: 620;
 }
 
-.ai-workspace .chat-source-toggle-icon {
-  width: 13px;
-  height: 13px;
-  flex: 0 0 auto;
-  color: var(--muted);
-  transition: transform 140ms ease;
+.ai-workspace .chat-source-link:hover {
+  border-color: var(--line-strong);
+  background: #f5f3ef;
+  color: var(--text);
 }
 
-.ai-workspace .chat-source-detail[open] .chat-source-toggle-icon {
-  transform: rotate(180deg);
+.ai-workspace .chat-source-link.unavailable {
+  border-style: dashed;
+  background: #f6f4f0;
+  color: var(--muted);
+  cursor: default;
 }
 
 .ai-workspace .ai-welcome {

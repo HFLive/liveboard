@@ -331,6 +331,7 @@ export interface AiSourceSummary {
   title: string;
   type: string;
   updatedAt: string;
+  unavailable?: boolean;
   blocks?: Array<{
     id: string;
     type: string;
@@ -700,9 +701,10 @@ export function updateFolder(input: {
   );
 }
 
-export function deleteFolder(folderId: string) {
+export function deleteFolder(folderId: string, confirmationName: string) {
   return request<{ ok: boolean }>(`/folders/${folderId}`, {
     method: "DELETE",
+    body: JSON.stringify({ recursive: true, confirmationName }),
   });
 }
 

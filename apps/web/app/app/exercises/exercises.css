@@ -1,0 +1,3 @@
+.table .exercise-empty-row > .empty-cell {
+  background: var(--bg);
+}

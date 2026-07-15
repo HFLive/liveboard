@@ -54,13 +54,6 @@ export function TeachingClient() {
       {error ? <p className="error-text">{error}</p> : null}
 
       <section className="workbench-main teaching-list-panel">
-        <div className="panel-head">
-          <h2>课件</h2>
-          <Link className="button" href={APP_ROUTES.teachingNew}>
-            <Plus aria-hidden="true" className="button-icon" />
-            创建课件
-          </Link>
-        </div>
         <div className="list-toolbar">
           <label className="search-field">
             <Search aria-hidden="true" />
@@ -71,6 +64,10 @@ export function TeachingClient() {
               value={query}
             />
           </label>
+          <Link className="button" href={APP_ROUTES.teachingNew}>
+            <Plus aria-hidden="true" className="button-icon" />
+            创建课件
+          </Link>
         </div>
         <div className="teaching-deck-list">
           {filtered.map((deck) => (

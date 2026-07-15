@@ -195,7 +195,7 @@ model Folder {
   updatedAt   DateTime @updatedAt
 
   workspace Workspace   @relation(fields: [workspaceId], references: [id])
-  parent    Folder?     @relation("FolderTree", fields: [parentId], references: [id])
+  parent    Folder?     @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
   children  Folder[]    @relation("FolderTree")
   createdBy User        @relation("FolderCreatedBy", fields: [createdById], references: [id])
   files     File[]
@@ -220,7 +220,7 @@ model File {
   updatedAt   DateTime   @updatedAt
 
   workspace         Workspace          @relation(fields: [workspaceId], references: [id])
-  folder            Folder             @relation(fields: [folderId], references: [id])
+  folder            Folder             @relation(fields: [folderId], references: [id], onDelete: Cascade)
   createdBy         User               @relation("FileCreatedBy", fields: [createdById], references: [id])
   updatedBy         User               @relation("FileUpdatedBy", fields: [updatedById], references: [id])
   blocks            ContentBlock[]
@@ -298,8 +298,8 @@ model ContentBlock {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  file              File               @relation(fields: [fileId], references: [id])
-  parent            ContentBlock?      @relation("BlockTree", fields: [parentBlockId], references: [id])
+  file              File               @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  parent            ContentBlock?      @relation("BlockTree", fields: [parentBlockId], references: [id], onDelete: Cascade)
   child             ContentBlock[]     @relation("BlockTree")
   teachingDeckItems TeachingDeckItem[] @relation("TeachingDeckItemSourceBlock")
 
@@ -316,7 +316,7 @@ model ExerciseSet {
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
-  file              File               @relation(fields: [fileId], references: [id])
+  file              File               @relation(fields: [fileId], references: [id], onDelete: Cascade)
   questions         Question[]
   submissions       Submission[]
   teachingDeckItems TeachingDeckItem[]
@@ -373,7 +373,7 @@ model Question {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
-  exerciseSet ExerciseSet        @relation(fields: [exerciseSetId], references: [id])
+  exerciseSet ExerciseSet        @relation(fields: [exerciseSetId], references: [id], onDelete: Cascade)
   answers     SubmissionAnswer[]
 }
 
@@ -391,7 +391,7 @@ model Submission {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  exerciseSet ExerciseSet        @relation(fields: [exerciseSetId], references: [id])
+  exerciseSet ExerciseSet        @relation(fields: [exerciseSetId], references: [id], onDelete: Cascade)
   user        User               @relation(fields: [userId], references: [id])
   answers     SubmissionAnswer[]
 
@@ -409,8 +409,8 @@ model SubmissionAnswer {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  submission Submission @relation(fields: [submissionId], references: [id])
-  question   Question   @relation(fields: [questionId], references: [id])
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
 }
 
 model FileAsset {

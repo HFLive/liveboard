@@ -38,6 +38,7 @@ interface AiSourceSummary {
   title: string;
   type: string;
   updatedAt: string;
+  unavailable?: boolean;
   blocks: Array<{
     id: string;
     type: string;
@@ -291,17 +292,53 @@ export class AiService {
       throw new ForbiddenException("No permission to view AI conversation");
     }
 
+    const parsedMessages = conversation.messages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      sources: parseSources(message.sourcesJson),
+      createdAt: message.createdAt.toISOString(),
+    }));
+    const sourceIds = [
+      ...new Set(
+        parsedMessages.flatMap((message) =>
+          message.sources.map((source) => source.id),
+        ),
+      ),
+    ];
+    const files = await this.prisma.file.findMany({
+      where: { id: { in: sourceIds } },
+      select: { id: true, status: true },
+    });
+    const permissions = await this.permissions.getEffectiveLevelsForFiles(
+      userId,
+      files.map((file) => file.id),
+    );
+    const availableSourceIds = new Set(
+      files
+        .filter((file) => {
+          const permission = permissions.get(file.id) ?? null;
+          return (
+            file.status !== "archived" &&
+            canView(permission) &&
+            !(file.status === "draft" && permission === "viewer")
+          );
+        })
+        .map((file) => file.id),
+    );
+
     return {
       id: conversation.id,
       title: conversation.title,
       createdAt: conversation.createdAt.toISOString(),
       updatedAt: conversation.updatedAt.toISOString(),
-      messages: conversation.messages.map((message) => ({
-        id: message.id,
-        role: message.role,
-        content: message.content,
-        sources: parseSources(message.sourcesJson),
-        createdAt: message.createdAt.toISOString(),
+      messages: parsedMessages.map((message) => ({
+        ...message,
+        sources: message.sources.map((source) =>
+          availableSourceIds.has(source.id)
+            ? source
+            : { ...source, unavailable: true },
+        ),
       })),
     };
   }

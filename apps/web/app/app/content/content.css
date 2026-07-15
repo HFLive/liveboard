@@ -1,0 +1,80 @@
+.folder-delete-modal {
+  width: min(520px, 100%);
+}
+
+.folder-delete-warning {
+  display: grid;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--danger) 24%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  padding: 14px 16px;
+  color: var(--danger);
+}
+
+.folder-delete-warning span {
+  line-height: 1.55;
+}
+
+.folder-delete-modal .modal-body > .muted {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.table .content-empty-row > .empty-cell {
+  background: var(--bg);
+}
+
+.content-sort-control {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.content-sort-control .select {
+  min-height: 38px;
+  width: 112px;
+  padding-left: 10px;
+  font-size: 13px;
+}
+
+.content-folder-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+}
+
+.content-folder-link:hover {
+  color: var(--accent-dark);
+}
+
+.content-folder-link svg {
+  width: 17px;
+  height: 17px;
+  color: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .files-layout .workbench-main > .panel-head .toolbar-row {
+    width: 100%;
+  }
+
+  .content-sort-control,
+  .content-sort-control .select {
+    width: 100%;
+  }
+
+  .folder-delete-modal .modal-foot .button-row,
+  .folder-delete-modal .modal-foot .button {
+    width: 100%;
+  }
+}

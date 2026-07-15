@@ -38,6 +38,11 @@ export interface UpdateFolderInput {
   parentId?: string | null;
 }
 
+export interface DeleteFolderInput {
+  recursive: boolean;
+  confirmationName: string;
+}
+
 export interface UpdateFileInput {
   title?: string;
   folderId?: string;
@@ -108,6 +113,7 @@ export class FilesService {
         parentId: folder.parentId,
         permission: permission!,
         fileCount: folder._count.files,
+        updatedAt: folder.updatedAt.toISOString(),
         children: [],
       });
     }
@@ -300,7 +306,11 @@ export class FilesService {
     });
   }
 
-  async deleteFolder(userId: string | null, folderId: string) {
+  async deleteFolder(
+    userId: string | null,
+    folderId: string,
+    input: DeleteFolderInput,
+  ) {
     if (!userId) {
       throw new UnauthorizedException("Missing session");
     }
@@ -316,34 +326,62 @@ export class FilesService {
 
     const folder = await this.prisma.folder.findUnique({
       where: { id: folderId },
-      include: {
-        children: { select: { id: true }, take: 1 },
-        files: { select: { id: true }, take: 1 },
-      },
+      select: { id: true, name: true, workspaceId: true },
     });
 
     if (!folder) {
       throw new NotFoundException("Folder not found");
     }
 
-    if (folder.children.length > 0 || folder.files.length > 0) {
-      throw new BadRequestException("Only empty folders can be deleted");
+    if (!input.recursive || input.confirmationName !== folder.name) {
+      throw new BadRequestException("请确认递归删除并输入正确的文件夹名称");
     }
 
     await this.prisma.$transaction(async (tx) => {
       const current = await tx.folder.findUnique({
         where: { id: folderId },
-        include: {
-          children: { select: { id: true }, take: 1 },
-          files: { select: { id: true }, take: 1 },
-        },
+        select: { id: true, name: true, workspaceId: true },
       });
       if (!current) throw new NotFoundException("Folder not found");
-      if (current.children.length > 0 || current.files.length > 0) {
-        throw new BadRequestException("Only empty folders can be deleted");
+      if (current.name !== input.confirmationName) {
+        throw new BadRequestException("文件夹名称已变化，请重新确认");
       }
+
+      const workspaceFolders = await tx.folder.findMany({
+        where: { workspaceId: current.workspaceId },
+        select: { id: true, parentId: true },
+      });
+      const childIdsByParent = new Map<string, string[]>();
+      for (const item of workspaceFolders) {
+        if (!item.parentId) continue;
+        const childIds = childIdsByParent.get(item.parentId) ?? [];
+        childIds.push(item.id);
+        childIdsByParent.set(item.parentId, childIds);
+      }
+
+      const folderIds = new Set([folderId]);
+      const stack = [...(childIdsByParent.get(folderId) ?? [])];
+      while (stack.length > 0) {
+        const id = stack.pop();
+        if (!id || folderIds.has(id)) continue;
+        folderIds.add(id);
+        stack.push(...(childIdsByParent.get(id) ?? []));
+      }
+
+      const files = await tx.file.findMany({
+        where: { folderId: { in: [...folderIds] } },
+        select: { id: true },
+      });
       await tx.permissionGrant.deleteMany({
-        where: { targetType: "folder", targetId: folderId },
+        where: {
+          OR: [
+            { targetType: "folder", targetId: { in: [...folderIds] } },
+            {
+              targetType: "file",
+              targetId: { in: files.map((file) => file.id) },
+            },
+          ],
+        },
       });
       await tx.folder.delete({ where: { id: folderId } });
     });
@@ -907,14 +945,11 @@ export class FilesService {
       throw new ForbiddenException("No permission to delete file");
     }
 
-    await this.prisma.file.update({
-      where: { id: fileId },
-      data: {
-        status: "archived",
-        archivedAt: new Date(),
-        updatedById: userId,
-        version: { increment: 1 },
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.permissionGrant.deleteMany({
+        where: { targetType: "file", targetId: fileId },
+      });
+      await tx.file.delete({ where: { id: fileId } });
     });
 
     return { ok: true };

@@ -15,7 +15,14 @@ describe("FilesService", () => {
       create: jest.fn(),
       createMany: jest.fn(),
     },
-    file: { create: jest.fn(), update: jest.fn() },
+    file: {
+      create: jest.fn(),
+      update: jest.fn(),
+      findMany: jest.fn(),
+      delete: jest.fn(),
+    },
+    folder: { findUnique: jest.fn(), findMany: jest.fn(), delete: jest.fn() },
+    permissionGrant: { deleteMany: jest.fn() },
   };
   const prisma = {
     file: { findUnique: jest.fn() },
@@ -184,6 +191,82 @@ describe("FilesService", () => {
       }),
     ).rejects.toThrow("Markdown 文件不能超过 2 MB");
     expect(permissions.getEffectiveLevelForFolder).not.toHaveBeenCalled();
+  });
+
+  it("requires the exact folder name before recursive deletion", async () => {
+    permissions.getEffectiveLevelForFolder.mockResolvedValue("editor");
+    prisma.folder.findUnique.mockResolvedValue({
+      id: "folder-1",
+      name: "课程资料",
+      workspaceId: "workspace-1",
+    });
+
+    await expect(
+      service.deleteFolder("editor-1", "folder-1", {
+        recursive: true,
+        confirmationName: "课程",
+      }),
+    ).rejects.toThrow("请确认递归删除并输入正确的文件夹名称");
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("deletes descendant permissions before cascading a folder subtree", async () => {
+    permissions.getEffectiveLevelForFolder.mockResolvedValue("editor");
+    prisma.folder.findUnique.mockResolvedValue({
+      id: "folder-1",
+      name: "课程资料",
+      workspaceId: "workspace-1",
+    });
+    tx.folder.findUnique.mockResolvedValue({
+      id: "folder-1",
+      name: "课程资料",
+      workspaceId: "workspace-1",
+    });
+    tx.folder.findMany.mockResolvedValue([
+      { id: "folder-1", parentId: null },
+      { id: "folder-2", parentId: "folder-1" },
+      { id: "folder-3", parentId: "folder-2" },
+      { id: "other-folder", parentId: null },
+    ]);
+    tx.file.findMany.mockResolvedValue([{ id: "file-1" }, { id: "file-2" }]);
+
+    await service.deleteFolder("editor-1", "folder-1", {
+      recursive: true,
+      confirmationName: "课程资料",
+    });
+
+    expect(tx.permissionGrant.deleteMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          {
+            targetType: "folder",
+            targetId: {
+              in: expect.arrayContaining(["folder-1", "folder-2", "folder-3"]),
+            },
+          },
+          { targetType: "file", targetId: { in: ["file-1", "file-2"] } },
+        ],
+      },
+    });
+    expect(tx.folder.delete).toHaveBeenCalledWith({
+      where: { id: "folder-1" },
+    });
+  });
+
+  it("permanently deletes a file and its direct permission grants", async () => {
+    permissions.getEffectiveLevelForFile.mockResolvedValue("editor");
+
+    await service.deleteFile("editor-1", "file-1");
+
+    expect(tx.permissionGrant.deleteMany).toHaveBeenCalledWith({
+      where: { targetType: "file", targetId: "file-1" },
+    });
+    expect(tx.file.delete).toHaveBeenCalledWith({
+      where: { id: "file-1" },
+    });
+    expect(tx.file.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "file-1" } }),
+    );
   });
 
   it("rejects invalid UTF-8 and too many blocks before creating a file", async () => {

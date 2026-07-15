@@ -9,6 +9,7 @@ import type {
 } from "@liveboard/shared";
 import { listForumOverview } from "@/lib/api";
 import { APP_ROUTES, forumThread } from "@/lib/routes";
+import { ForumUserAvatar } from "./ForumUserAvatar";
 
 type CategoryFilter = "all" | string;
 type StatusFilter = "all" | "open" | "locked" | "archived";
@@ -66,10 +67,6 @@ export function ForumClient() {
     () => new Map(categories.map((category) => [category.id, category])),
     [categories],
   );
-  const activeCategory =
-    activeCategoryId === "all"
-      ? null
-      : (categoryById.get(activeCategoryId) ?? null);
 
   const filteredThreads = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -159,12 +156,6 @@ export function ForumClient() {
 
         <section className="forum-feed">
           <div className="forum-feed-head forum-feed-toolbar">
-            <div className="forum-feed-title">
-              <h2>{activeCategory?.name ?? "全部帖子"}</h2>
-              <span>
-                {loading ? "正在加载" : `${filteredThreads.length} 个结果`}
-              </span>
-            </div>
             <label className="search-field forum-search">
               <Search aria-hidden="true" />
               <input
@@ -234,9 +225,10 @@ export function ForumClient() {
                   href={forumThread(thread.id)}
                   key={thread.id}
                 >
-                  <span className="forum-topic-avatar" aria-hidden="true">
-                    {thread.author.displayName.trim().charAt(0).toUpperCase()}
-                  </span>
+                  <ForumUserAvatar
+                    className="forum-topic-avatar"
+                    user={thread.author}
+                  />
                   <span className="forum-topic-content">
                     <span className="forum-topic-meta">
                       <b>{category?.name ?? "未分类"}</b>

@@ -32,6 +32,7 @@ import {
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/labels";
 import { APP_ROUTES } from "@/lib/routes";
+import { ForumUserAvatar } from "../ForumUserAvatar";
 
 interface ForumThreadClientProps {
   threadId: string;
@@ -338,9 +339,10 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       >
         {nestedReplies.map((replyPost) => (
           <article className="forum-reply-row" key={replyPost.id}>
-            <div className="forum-comment-avatar small" aria-hidden="true">
-              {replyPost.author.displayName.slice(0, 1)}
-            </div>
+            <ForumUserAvatar
+              className="forum-comment-avatar small"
+              user={replyPost.author}
+            />
             <div className="forum-comment-content">
               <div className="forum-post-toolbar">
                 <span className="forum-comment-meta">
@@ -632,6 +634,10 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
             {postStructure.mainPost ? (
               <article className="forum-post-row forum-main-post">
                 <aside className="forum-post-author">
+                  <ForumUserAvatar
+                    className="forum-comment-avatar forum-main-author-avatar"
+                    user={postStructure.mainPost.author}
+                  />
                   <strong>{postStructure.mainPost.author.displayName}</strong>
                   <span>@{postStructure.mainPost.author.username}</span>
                   <em>楼主</em>
@@ -730,9 +736,10 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 return (
                   <article className="forum-comment-row" key={post.id}>
                     <div className="forum-comment-main">
-                      <div className="forum-comment-avatar" aria-hidden="true">
-                        {post.author.displayName.slice(0, 1)}
-                      </div>
+                      <ForumUserAvatar
+                        className="forum-comment-avatar"
+                        user={post.author}
+                      />
                       <div className="forum-comment-content">
                         <div className="forum-post-toolbar">
                           <span className="forum-comment-meta">
