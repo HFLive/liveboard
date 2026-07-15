@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import {
   Download,
   File,
@@ -22,10 +22,18 @@ import {
 } from "@/lib/api";
 import { assetTypeLabel, formatDateTime } from "@/lib/labels";
 import { contentDetail } from "@/lib/routes";
+import { SortIconSelect } from "@/components/SortIconSelect";
 
 type AssetKindFilter = "all" | "image" | "file";
 type AssetSort = "newest" | "oldest" | "name" | "references";
 type AssetView = "grid" | "list";
+
+const SORT_OPTIONS = [
+  { value: "newest", label: "最新上传" },
+  { value: "oldest", label: "最早上传" },
+  { value: "name", label: "按名称" },
+  { value: "references", label: "按引用数" },
+] as const;
 
 export function LibraryClient() {
   const [assets, setAssets] = useState<FileAssetSummary[]>([]);
@@ -79,17 +87,16 @@ export function LibraryClient() {
         return sort === "oldest" ? leftTime - rightTime : rightTime - leftTime;
       });
   }, [assets, kindFilter, query, sort]);
-  const selectedAsset =
-    filteredAssets.find((asset) => asset.id === selectedAssetId) ??
-    filteredAssets[0] ??
-    null;
+  const selectedAsset = selectedAssetId
+    ? (filteredAssets.find((asset) => asset.id === selectedAssetId) ?? null)
+    : null;
   async function load() {
     const result = await listLibraryAssets();
     setAssets(result.assets);
     setSelectedAssetId((current) =>
       current && result.assets.some((asset) => asset.id === current)
         ? current
-        : (result.assets[0]?.id ?? null),
+        : null,
     );
   }
 
@@ -112,9 +119,39 @@ export function LibraryClient() {
     };
   }, [showMobileDetail]);
 
+  useEffect(() => {
+    if (
+      selectedAssetId &&
+      !filteredAssets.some((asset) => asset.id === selectedAssetId)
+    ) {
+      setSelectedAssetId(null);
+      setShowMobileDetail(false);
+    }
+  }, [filteredAssets, selectedAssetId]);
+
   function selectAsset(assetId: string) {
     setSelectedAssetId(assetId);
     setShowMobileDetail(true);
+  }
+
+  function clearSelection() {
+    setSelectedAssetId(null);
+    setShowMobileDetail(false);
+  }
+
+  function clearSelectionFromBackground(event: MouseEvent<HTMLDivElement>) {
+    const target = event.target;
+
+    if (
+      !(target instanceof HTMLElement) ||
+      target.closest(
+        ".asset-card, .asset-list-row, button, a, input, select, label",
+      )
+    ) {
+      return;
+    }
+
+    clearSelection();
   }
 
   async function onUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -190,7 +227,7 @@ export function LibraryClient() {
       ) : null}
 
       <section className="library-layout">
-        <div className="workbench-main">
+        <div className="workbench-main" onClick={clearSelectionFromBackground}>
           <div className="list-toolbar">
             <label className="search-field">
               <Search aria-hidden="true" />
@@ -220,16 +257,11 @@ export function LibraryClient() {
                 <option value="image">图片</option>
                 <option value="file">附件</option>
               </select>
-              <select
-                className="select compact-select"
+              <SortIconSelect
+                onChange={setSort}
+                options={SORT_OPTIONS}
                 value={sort}
-                onChange={(event) => setSort(event.target.value as AssetSort)}
-              >
-                <option value="newest">最新上传</option>
-                <option value="oldest">最早上传</option>
-                <option value="name">按名称</option>
-                <option value="references">按引用数</option>
-              </select>
+              />
               <div
                 className="segmented-control library-view-toggle"
                 aria-label="文件展示方式"
@@ -361,7 +393,7 @@ export function LibraryClient() {
         <button
           aria-label="关闭文件详情"
           className={`asset-detail-backdrop ${showMobileDetail ? "open" : ""}`}
-          onClick={() => setShowMobileDetail(false)}
+          onClick={clearSelection}
           type="button"
         />
 
@@ -374,7 +406,7 @@ export function LibraryClient() {
           <button
             aria-label="关闭文件详情"
             className="asset-detail-close"
-            onClick={() => setShowMobileDetail(false)}
+            onClick={clearSelection}
             title="关闭"
             type="button"
           >

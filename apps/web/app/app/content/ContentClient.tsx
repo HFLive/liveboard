@@ -47,6 +47,7 @@ import {
   permissionLabel,
 } from "@/lib/labels";
 import { contentDetail } from "@/lib/routes";
+import { SortIconSelect } from "@/components/SortIconSelect";
 import { MarkdownImportButton } from "./MarkdownImportButton";
 
 type FlatFolderNode = FolderNode & { depth: number };
@@ -71,6 +72,12 @@ type DeleteFolderTarget = {
   fileCount: number;
 };
 type ContentSortMode = "name" | "updated" | "type";
+
+const SORT_OPTIONS = [
+  { value: "updated", label: "最近更新" },
+  { value: "name", label: "名称" },
+  { value: "type", label: "类型" },
+] as const;
 
 function flattenFolders(folders: FolderNode[], depth = 0): FlatFolderNode[] {
   return folders.flatMap((folder) => [
@@ -1042,20 +1049,11 @@ export function ContentClient() {
               </div>
             </div>
             <div className="toolbar-row">
-              <label className="content-sort-control">
-                <span>排序</span>
-                <select
-                  className="select"
-                  onChange={(event) =>
-                    setContentSortMode(event.target.value as ContentSortMode)
-                  }
-                  value={contentSortMode}
-                >
-                  <option value="updated">最近更新</option>
-                  <option value="name">名称</option>
-                  <option value="type">类型</option>
-                </select>
-              </label>
+              <SortIconSelect
+                onChange={setContentSortMode}
+                options={SORT_OPTIONS}
+                value={contentSortMode}
+              />
               <MarkdownImportButton
                 disabled={!activeFolderId}
                 onImport={onImportMarkdown}

@@ -25,22 +25,6 @@
   background: var(--bg);
 }
 
-.content-sort-control {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.content-sort-control .select {
-  min-height: 38px;
-  width: 112px;
-  padding-left: 10px;
-  font-size: 13px;
-}
-
 .content-folder-link {
   display: inline-flex;
   align-items: center;
@@ -65,11 +49,6 @@
 
 @media (max-width: 640px) {
   .files-layout .workbench-main > .panel-head .toolbar-row {
-    width: 100%;
-  }
-
-  .content-sort-control,
-  .content-sort-control .select {
     width: 100%;
   }
 

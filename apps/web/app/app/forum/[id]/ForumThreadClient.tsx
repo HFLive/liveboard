@@ -289,7 +289,6 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     }
   }
 
-  const replyCount = thread ? Math.max(0, thread.postCount - 1) : 0;
   const statusText =
     thread?.status === "locked"
       ? "已锁定"
@@ -417,10 +416,10 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
               ) : (
                 <div className="forum-post-body">
                   <p>
-                    {depth > 1 && replyPost.replyTo ? (
+                    {replyPost.replyTo &&
+                    (depth > 3 || replyPost.replyToId !== parentId) ? (
                       <span className="forum-reply-target">
-                        回复 {replyPost.replyTo.author.displayName}（@
-                        {replyPost.replyTo.author.username}）：
+                        回复 {replyPost.replyTo.author.displayName}：
                       </span>
                     ) : null}
                     {replyPost.body}
@@ -497,17 +496,6 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
         <ArrowLeft aria-hidden="true" />
         返回论坛
       </Link>
-      <section className="page-head">
-        <div>
-          <p className="page-eyebrow">{thread?.category.name ?? "论坛"}</p>
-          <h1>{thread?.title ?? "帖子详情"}</h1>
-          <p className="muted">
-            {thread
-              ? `${thread.author.displayName} · 创建于 ${formatDateTime(thread.createdAt)} · 最近活跃 ${formatDateTime(thread.lastActivityAt)}`
-              : "正在加载帖子内容与回复。"}
-          </p>
-        </div>
-      </section>
 
       {error ? <p className="error-text">{error}</p> : null}
 
@@ -525,10 +513,6 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 ) : null}
                 {statusText}
               </em>
-              <div className="forum-thread-summary">
-                <strong>{replyCount}</strong>
-                <span>回复</span>
-              </div>
             </div>
             {editingThread ? (
               <form className="forum-thread-edit-form" onSubmit={saveThread}>
@@ -684,6 +668,9 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                       ) : null}
                     </span>
                   </div>
+                  {!editingThread ? (
+                    <h1 className="forum-main-post-title">{thread.title}</h1>
+                  ) : null}
                   {editingPostId === postStructure.mainPost.id ? (
                     <div className="forum-post-edit-form">
                       <textarea

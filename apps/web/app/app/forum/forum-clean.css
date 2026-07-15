@@ -169,15 +169,6 @@
   font-size: 12px;
 }
 
-.forum-home .forum-sort-control .select {
-  min-height: 30px;
-  width: 108px;
-  border: 0;
-  background: transparent;
-  padding: 0 22px 0 4px;
-  font-size: 12px;
-}
-
 .forum-home .forum-create-action {
   min-height: 30px;
   white-space: nowrap;
@@ -372,6 +363,15 @@
   padding: 0;
 }
 
+.workspace.forum-workspace .forum-thread-detail .forum-status-badge {
+  font-size: 17px;
+}
+
+.workspace.forum-workspace .forum-thread-detail .forum-status-badge svg {
+  width: 16px;
+  height: 16px;
+}
+
 .forum-thread-detail .forum-thread-actions {
   justify-content: flex-end;
 }
@@ -409,6 +409,14 @@
 
 .forum-thread-detail .forum-main-post {
   display: block;
+}
+
+.forum-thread-detail .forum-main-post-title {
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding: 3px 0 0;
+  font-size: 20px;
+  line-height: 1.35;
 }
 
 .forum-thread-detail .forum-post-author {
@@ -452,19 +460,52 @@
 .forum-thread-detail .forum-comment-section {
   border: 0;
   background: transparent;
+  padding: 0 16px;
 }
 
 .forum-thread-detail .forum-comment-head {
   min-height: 40px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
   background: transparent;
-  padding: 0 16px;
+  padding: 0;
 }
 
 .forum-thread-detail .forum-comment-row {
   border-bottom: 1px solid var(--line);
   background: transparent;
-  padding: 14px 16px;
+  padding: 14px 0;
+}
+
+.forum-thread-detail .forum-comment-main,
+.forum-thread-detail .forum-reply-row {
+  align-items: start;
+}
+
+.forum-thread-detail .forum-comment-content > .forum-post-toolbar {
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.forum-thread-detail
+  .forum-comment-main
+  > .forum-comment-content
+  > .forum-post-toolbar {
+  margin-top: 6px;
+}
+
+.forum-thread-detail
+  .forum-reply-row
+  > .forum-comment-content
+  > .forum-post-toolbar {
+  margin-top: 3px;
+}
+
+.forum-thread-detail .forum-comment-meta {
+  align-items: baseline;
+}
+
+.forum-thread-detail .forum-comment-content > .forum-post-body {
+  min-width: 0;
 }
 
 .forum-thread-detail .forum-comment-avatar,
@@ -485,15 +526,17 @@
 }
 
 .forum-thread-detail .forum-reply-form {
-  margin-top: 10px;
+  margin-top: 0;
   border: 0;
+  border-top: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
-  padding: 14px 0 0;
+  padding: 14px 16px 16px;
 }
 
 .forum-thread-detail .forum-reply-form .textarea {
   min-height: 104px;
+  border-color: var(--line);
   background: #fff;
 }
 
@@ -657,10 +700,9 @@
   }
 
   .forum-thread-detail .forum-post-content,
-  .forum-thread-detail .forum-post-author,
-  .forum-thread-detail .forum-comment-row {
-    padding-right: 2px;
-    padding-left: 2px;
+  .forum-thread-detail .forum-post-author {
+    padding-right: 14px;
+    padding-left: 14px;
   }
 
   .forum-compose-layout {
