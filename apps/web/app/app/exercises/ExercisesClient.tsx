@@ -50,7 +50,7 @@ export function ExercisesClient() {
         <div>
           <p className="page-eyebrow">教学活动</p>
           <h1>练习</h1>
-          <p className="muted">创建练习、跟踪提交进度并处理待批阅内容。</p>
+          <p className="muted">创建练习、跟踪提交进度并处理待批改内容。</p>
         </div>
       </header>
 
@@ -105,7 +105,7 @@ export function ExercisesClient() {
               onClick={() => setFilter("graded")}
               type="button"
             >
-              已批阅
+              已批改
             </button>
           </div>
         </div>
@@ -153,7 +153,7 @@ export function ExercisesClient() {
                     {exercise.canManage ? (
                       <div className="submission-count-cell">
                         <span>{exercise.submissionCount} 份提交</span>
-                        <small>{exercise.pendingReviewCount} 份待批阅</small>
+                        <small>{exercise.pendingReviewCount} 份待批改</small>
                       </div>
                     ) : exercise.latestSubmissionStatus === "not_started" ? (
                       "尚未提交"
@@ -178,7 +178,7 @@ export function ExercisesClient() {
                             aria-hidden="true"
                             className="button-icon"
                           />
-                          批阅
+                          批改
                         </Link>
                       ) : null}
                     </div>

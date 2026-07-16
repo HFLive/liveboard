@@ -57,3 +57,7 @@ export function exerciseSubmissions(exerciseSetId: string): Route {
 export function forumThread(threadId: string): Route {
   return `/app/forum/${routeSegment(threadId)}` as Route;
 }
+
+export function userProfile(userId: string): Route {
+  return `/app/users/${routeSegment(userId)}` as Route;
+}

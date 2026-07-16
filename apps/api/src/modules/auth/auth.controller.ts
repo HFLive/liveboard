@@ -20,7 +20,11 @@ import {
   shouldUseSecureSessionCookie,
 } from "../../common/session-cookie";
 import { AuthService } from "./auth.service";
-import { MAX_AVATAR_SIZE_BYTES, type UploadedAvatarFile } from "./auth.service";
+import {
+  MAX_AVATAR_SIZE_BYTES,
+  MAX_BANNER_SIZE_BYTES,
+  type UploadedProfileImageFile,
+} from "./auth.service";
 import { ChangePasswordDto, LoginDto, UpdateProfileDto } from "./auth.dto";
 
 @Controller("auth")
@@ -86,9 +90,32 @@ export class AuthController {
   )
   async updateAvatar(
     @CurrentUserId() userId: string | null,
-    @UploadedFile() file?: UploadedAvatarFile,
+    @UploadedFile() file?: UploadedProfileImageFile,
   ) {
     return { user: await this.authService.updateAvatar(userId, file) };
+  }
+
+  @Post("me/banner")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: { fileSize: MAX_BANNER_SIZE_BYTES, files: 1 },
+    }),
+  )
+  async updateBanner(
+    @CurrentUserId() userId: string | null,
+    @UploadedFile() file?: UploadedProfileImageFile,
+  ) {
+    return { user: await this.authService.updateBanner(userId, file) };
+  }
+
+  @Get("profile/:id")
+  async getProfile(
+    @CurrentUserId() userId: string | null,
+    @Param("id") targetUserId: string,
+  ) {
+    return {
+      user: await this.authService.getUserProfile(userId, targetUserId),
+    };
   }
 
   @Get("avatar/:id")
@@ -98,6 +125,24 @@ export class AuthController {
     @Res() res: Response,
   ) {
     const { mimeType, stream } = await this.authService.getAvatar(
+      userId,
+      targetUserId,
+    );
+
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cross-Origin-Resource-Policy", "same-site");
+    stream.pipe(res);
+  }
+
+  @Get("banner/:id")
+  async getBanner(
+    @CurrentUserId() userId: string | null,
+    @Param("id") targetUserId: string,
+    @Res() res: Response,
+  ) {
+    const { mimeType, stream } = await this.authService.getBanner(
       userId,
       targetUserId,
     );

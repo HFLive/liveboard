@@ -24,7 +24,7 @@ describe("display labels", () => {
     expect(fileStatusLabel("archived")).toBe("已删除");
     expect(questionTypeLabel("short_answer")).toBe("简答");
     expect(submissionStatusLabel(undefined)).toBe("未开始");
-    expect(submissionStatusLabel("needs_manual_review")).toBe("待人工批阅");
+    expect(submissionStatusLabel("needs_manual_review")).toBe("待人工批改");
     expect(userStatusLabel("disabled")).toBe("已停用");
   });
 

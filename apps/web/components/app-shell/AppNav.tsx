@@ -10,12 +10,13 @@ import {
   Files,
   MessageSquare,
   Presentation,
+  Settings,
   Users,
 } from "lucide-react";
 import type { UserSummary } from "@liveboard/shared";
 import { apiResourceUrl, getMe } from "@/lib/api";
 import { roleLabel } from "@/lib/labels";
-import { APP_ROUTES } from "@/lib/routes";
+import { APP_ROUTES, userProfile } from "@/lib/routes";
 import { LogoutButton } from "./LogoutButton";
 
 const navItems = [
@@ -122,15 +123,17 @@ export function AppNav() {
       <div className="rail-footer">
         <Link
           aria-current={
-            isActive(pathname, APP_ROUTES.profile) ? "page" : undefined
+            user && isActive(pathname, userProfile(user.id))
+              ? "page"
+              : undefined
           }
           className={
-            isActive(pathname, APP_ROUTES.profile)
+            user && isActive(pathname, userProfile(user.id))
               ? "rail-user active"
               : "rail-user"
           }
-          href={APP_ROUTES.profile}
-          title="个人设置"
+          href={user ? userProfile(user.id) : APP_ROUTES.profile}
+          title="个人主页"
         >
           <span className="rail-avatar" aria-hidden="true">
             {user?.avatarUrl ? (
@@ -149,6 +152,16 @@ export function AppNav() {
                 : "加载中…"}
             </small>
           </span>
+        </Link>
+        <Link
+          aria-current={
+            isActive(pathname, APP_ROUTES.profile) ? "page" : undefined
+          }
+          className="nav-button"
+          href={APP_ROUTES.profile}
+          title="个人设置"
+        >
+          <Settings aria-hidden="true" />
         </Link>
         <LogoutButton />
       </div>

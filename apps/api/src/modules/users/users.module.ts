@@ -4,6 +4,7 @@ import {
   PermissionGroupLookupController,
   PermissionGroupsController,
   UsersController,
+  VisibilityUsersController,
 } from "./users.controller";
 import { UsersService } from "./users.service";
 
@@ -13,6 +14,7 @@ import { UsersService } from "./users.service";
     UsersController,
     PermissionGroupsController,
     PermissionGroupLookupController,
+    VisibilityUsersController,
   ],
   providers: [UsersService],
 })

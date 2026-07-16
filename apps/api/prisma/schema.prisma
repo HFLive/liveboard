@@ -47,11 +47,6 @@ enum FileStatus {
   archived
 }
 
-enum ReferenceMode {
-  snapshot
-  linked
-}
-
 enum QuestionType {
   single_choice
   multiple_choice
@@ -73,7 +68,6 @@ enum SubmissionStatus {
 enum ForumThreadStatus {
   open
   locked
-  archived
 }
 
 model User {
@@ -84,6 +78,10 @@ model User {
   avatarStorageKey  String?
   avatarMimeType    String?
   avatarUpdatedAt   DateTime?
+  bio               String?
+  bannerStorageKey  String?
+  bannerMimeType    String?
+  bannerUpdatedAt   DateTime?
   sessionVersion    Int        @default(0)
   systemRole        SystemRole
   status            UserStatus @default(active)
@@ -102,6 +100,8 @@ model User {
   forumThreads               ForumThread[]           @relation("ForumThreadAuthor")
   forumPosts                 ForumPost[]             @relation("ForumPostAuthor")
   teachingDecks              TeachingDeck[]          @relation("TeachingDeckCreatedBy")
+  visibleTeachingDecks       TeachingDeckViewer[]
+  visibleExerciseSets        ExerciseSetViewer[]
 }
 
 model Workspace {
@@ -291,19 +291,16 @@ model PermissionGroupMember {
 }
 
 model ContentBlock {
-  id            String         @id @default(cuid())
+  id            String   @id @default(cuid())
   fileId        String
   parentBlockId String?
   type          String
-  sortOrder     Int            @default(0)
+  sortOrder     Int      @default(0)
   dataJson      Json
-  sourceFileId  String?
-  sourceBlockId String?
-  referenceMode ReferenceMode?
   createdById   String
   updatedById   String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   file              File               @relation(fields: [fileId], references: [id], onDelete: Cascade)
   parent            ContentBlock?      @relation("BlockTree", fields: [parentBlockId], references: [id], onDelete: Cascade)
@@ -323,10 +320,11 @@ model ExerciseSet {
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
-  file              File               @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  file              File                @relation(fields: [fileId], references: [id], onDelete: Cascade)
   questions         Question[]
   submissions       Submission[]
   teachingDeckItems TeachingDeckItem[]
+  viewers           ExerciseSetViewer[]
 }
 
 model TeachingDeck {
@@ -337,9 +335,10 @@ model TeachingDeck {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  workspace Workspace          @relation(fields: [workspaceId], references: [id])
-  createdBy User               @relation("TeachingDeckCreatedBy", fields: [createdById], references: [id])
+  workspace Workspace            @relation(fields: [workspaceId], references: [id])
+  createdBy User                 @relation("TeachingDeckCreatedBy", fields: [createdById], references: [id])
   items     TeachingDeckItem[]
+  viewers   TeachingDeckViewer[]
 
   @@index([workspaceId, updatedAt])
   @@index([createdById])
@@ -353,6 +352,7 @@ model TeachingDeckItem {
   sourceFileId  String?
   sourceBlockId String?
   exerciseSetId String?
+  assetId       String?
   snapshotJson  Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -361,11 +361,37 @@ model TeachingDeckItem {
   sourceFile  File?         @relation("TeachingDeckItemSourceFile", fields: [sourceFileId], references: [id], onDelete: SetNull)
   sourceBlock ContentBlock? @relation("TeachingDeckItemSourceBlock", fields: [sourceBlockId], references: [id], onDelete: SetNull)
   exerciseSet ExerciseSet?  @relation(fields: [exerciseSetId], references: [id], onDelete: SetNull)
+  asset       FileAsset?    @relation(fields: [assetId], references: [id], onDelete: Restrict)
 
   @@index([deckId, sortOrder])
   @@index([sourceFileId])
   @@index([sourceBlockId])
   @@index([exerciseSetId])
+  @@index([assetId])
+}
+
+model TeachingDeckViewer {
+  deckId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  deck TeachingDeck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([deckId, userId])
+  @@index([userId])
+}
+
+model ExerciseSetViewer {
+  exerciseSetId String
+  userId        String
+  createdAt     DateTime @default(now())
+
+  exerciseSet ExerciseSet @relation(fields: [exerciseSetId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([exerciseSetId, userId])
+  @@index([userId])
 }
 
 model Question {
@@ -436,10 +462,11 @@ model FileAsset {
   uploadedBy  String
   createdAt   DateTime @default(now())
 
-  workspace Workspace  @relation(fields: [workspaceId], references: [id])
-  folder    Folder?    @relation(fields: [folderId], references: [id])
-  file      File?      @relation(fields: [fileId], references: [id])
-  forumPost ForumPost? @relation("ForumPostImages", fields: [forumPostId], references: [id], onDelete: Cascade)
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id])
+  folder            Folder?            @relation(fields: [folderId], references: [id])
+  file              File?              @relation(fields: [fileId], references: [id])
+  forumPost         ForumPost?         @relation("ForumPostImages", fields: [forumPostId], references: [id], onDelete: Cascade)
+  teachingDeckItems TeachingDeckItem[]
 
   @@index([forumPostId, sortOrder])
 }

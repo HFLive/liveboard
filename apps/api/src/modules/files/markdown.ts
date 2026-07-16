@@ -370,13 +370,6 @@ function exportBlock(block: ExportableBlock) {
       ? `[${escapeMarkdownLabel(filename)}](${url})`
       : `附件：${escapeMarkdownText(filename)}`;
   }
-  if (block.type === "reference") {
-    const source = stringField(data, "sourceFileTitle");
-    return [
-      `> ${source ? `引用自：${escapeMarkdownText(source)}` : "引用内容"}`,
-      ...text.split("\n").map((line) => `> ${escapeMarkdownText(line)}`),
-    ].join("\n");
-  }
   if (block.type === "question") return `### 题目\n\n${inline}`;
 
   return `> 未识别内容块（${escapeMarkdownText(block.type)}）\n> ${inline}`;

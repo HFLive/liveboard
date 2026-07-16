@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MoreHorizontal, Play, Plus, Search, Trash2 } from "lucide-react";
 import type { TeachingDeckSummary } from "@liveboard/shared";
 import { deleteTeachingDeck, listTeachingDecks } from "@/lib/api";
+import { UserProfileLink } from "@/components/UserProfileLink";
 import { formatDateTime } from "@/lib/labels";
 import { APP_ROUTES, teachingEdit, teachingPresent } from "@/lib/routes";
 
@@ -75,8 +76,12 @@ export function TeachingClient() {
               <div className="teaching-deck-main">
                 <Link href={teachingPresent(deck.id)}>{deck.title}</Link>
                 <span>
-                  {deck.itemCount} 个内容块 · {deck.createdBy.displayName} ·
-                  更新于 {formatDateTime(deck.updatedAt)}
+                  {deck.itemCount} 个内容块 ·{" "}
+                  <UserProfileLink
+                    className="user-profile-link"
+                    user={deck.createdBy}
+                  />{" "}
+                  · 更新于 {formatDateTime(deck.updatedAt)}
                 </span>
               </div>
               <div className="teaching-deck-actions">

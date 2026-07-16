@@ -89,4 +89,45 @@ describe("AuthService", () => {
       }),
     );
   });
+
+  it("updates the display name and public biography", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      username: "teacher",
+      displayName: "Teacher",
+      bio: null,
+      bannerUpdatedAt: null,
+      avatarUpdatedAt: null,
+      systemRole: "member",
+      status: "active",
+    });
+    prisma.user.update.mockResolvedValue({
+      id: "user-1",
+      username: "teacher",
+      displayName: "张老师",
+      bio: "负责线路基础课程",
+      bannerUpdatedAt: null,
+      avatarUpdatedAt: null,
+      systemRole: "member",
+      status: "active",
+    });
+
+    await expect(
+      service.updateProfile("user-1", {
+        displayName: " 张老师 ",
+        bio: " 负责线路基础课程 ",
+      }),
+    ).resolves.toMatchObject({
+      displayName: "张老师",
+      bio: "负责线路基础课程",
+      bannerUrl: null,
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: {
+        displayName: "张老师",
+        bio: "负责线路基础课程",
+      },
+    });
+  });
 });

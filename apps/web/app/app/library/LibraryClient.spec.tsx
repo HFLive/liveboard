@@ -1,9 +1,27 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LibraryClient } from "./LibraryClient";
-import { listLibraryAssets } from "@/lib/api";
+import {
+  AssetInUseError,
+  deleteLibraryAsset,
+  listLibraryAssets,
+} from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
+  AssetInUseError: class AssetInUseError extends Error {
+    constructor(
+      message: string,
+      readonly references: unknown[],
+    ) {
+      super(message);
+    }
+  },
   deleteLibraryAsset: vi.fn(),
   listLibraryAssets: vi.fn(),
   uploadAsset: vi.fn(),
@@ -62,5 +80,53 @@ describe("LibraryClient selection", () => {
 
     await waitFor(() => expect(card).not.toHaveClass("active"));
     expect(screen.getByText("未选择文件")).toBeInTheDocument();
+  });
+
+  it("replaces the delete confirmation with a reference details dialog", async () => {
+    vi.mocked(deleteLibraryAsset).mockRejectedValue(
+      new AssetInUseError("文件已被引用，不能删除", [
+        {
+          targetType: "file",
+          fileId: "file-1",
+          fileTitle: "课程概述",
+          blockId: "block-1",
+          blockType: "image",
+        },
+        {
+          targetType: "teaching_deck",
+          deckId: "deck-1",
+          deckTitle: "课堂讲解",
+          itemId: "item-1",
+        },
+      ]),
+    );
+    const { container } = render(<LibraryClient />);
+
+    await screen.findByRole("button", { name: /example.png/ });
+    const cardDeleteButton = container.querySelector(
+      ".asset-card .inline-icon-button",
+    );
+    expect(cardDeleteButton).not.toBeNull();
+    fireEvent.click(cardDeleteButton as HTMLElement);
+
+    const confirmation = screen
+      .getByRole("heading", { name: "删除文件" })
+      .closest(".modal-panel");
+    expect(confirmation).not.toBeNull();
+    fireEvent.click(
+      within(confirmation as HTMLElement).getByRole("button", {
+        name: "删除",
+      }),
+    );
+
+    const blockedDialog = await screen.findByRole("dialog", {
+      name: "文件无法删除",
+    });
+    expect(
+      screen.queryByRole("heading", { name: "删除文件" }),
+    ).not.toBeInTheDocument();
+    expect(within(blockedDialog).getByText("课程概述")).toBeInTheDocument();
+    expect(within(blockedDialog).getByText("课堂讲解")).toBeInTheDocument();
+    expect(container.querySelector(".reference-warning")).toBeNull();
   });
 });

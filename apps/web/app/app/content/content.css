@@ -37,6 +37,7 @@
   font: inherit;
   font-weight: 700;
   line-height: 1.25;
+  min-height: 28px;
   margin: 0;
   padding: 0;
   text-align: left;
@@ -55,8 +56,12 @@
   color: var(--accent);
 }
 
-.content-items-table > tbody > tr:not(.content-empty-row) > td {
-  height: 46px;
+.workspace:not(.ai-workspace)
+  .content-items-table
+  > tbody
+  > tr:not(.content-empty-row)
+  > td {
+  height: 28px;
   padding-top: 0;
   padding-bottom: 0;
   vertical-align: middle;
@@ -210,7 +215,16 @@
 }
 
 @media (max-width: 640px) {
-  .content-items-table > tbody > tr:not(.content-empty-row) > td {
+  .content-folder-link,
+  .content-file-link {
+    min-height: 28px;
+  }
+
+  .workspace:not(.ai-workspace)
+    .content-items-table
+    > tbody
+    > tr:not(.content-empty-row)
+    > td {
     height: auto;
     padding-top: 9px;
     padding-bottom: 9px;

@@ -18,7 +18,7 @@
 .ai-workspace .ai-sidebar {
   position: relative;
   z-index: 2;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-width: 0;
   overflow: hidden;
   border: 0;
@@ -28,50 +28,10 @@
   box-shadow: none;
 }
 
-.ai-workspace .ai-brand-panel {
-  min-height: 62px;
-  border: 0;
-  background: transparent;
-  padding: 15px 16px 9px;
-}
-
-.ai-workspace .ai-service-status {
-  gap: 8px;
-  min-height: 36px;
-}
-
-.ai-workspace .ai-service-status svg {
-  width: 20px;
-  height: 20px;
-}
-
-.ai-workspace .ai-service-status::after {
-  color: var(--text);
-  content: "AI";
-  font-size: 17px;
-  font-weight: 720;
-  letter-spacing: -0.02em;
-}
-
-.ai-workspace .ai-title-status {
-  width: 8px;
-  height: 8px;
-}
-
-.ai-workspace .ai-title-status.ok {
-  background: #2f855a;
-  box-shadow: 0 0 0 2px rgba(47, 133, 90, 0.12);
-}
-
-.ai-workspace .ai-title-status.unavailable {
-  background: #c2413a;
-  box-shadow: 0 0 0 2px rgba(194, 65, 58, 0.12);
-}
-
 .ai-workspace .ai-sidebar-primary {
   display: grid;
   gap: 6px;
-  padding: 8px 10px 14px;
+  padding: 12px 10px 14px;
 }
 
 .ai-workspace .ai-sidebar-new {
@@ -121,6 +81,7 @@
   border-radius: 10px;
   background: transparent;
   padding-left: 36px;
+  font-size: 70%;
 }
 
 .ai-workspace .ai-history-search input:hover {

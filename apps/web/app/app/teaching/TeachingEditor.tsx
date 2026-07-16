@@ -13,18 +13,23 @@ import {
   Plus,
   Save,
   Trash2,
+  Users,
+  X,
 } from "lucide-react";
-import type { FileSummary } from "@liveboard/shared";
+import type { FileSummary, UserSummary } from "@liveboard/shared";
 import {
   ContentBlock,
   createTeachingDeck,
   ExerciseSetSummary,
   getTeachingDeck,
+  getMe,
   listBlocks,
   listExerciseSets,
   listFiles,
+  listVisibilityUsers,
   updateTeachingDeck,
 } from "@/lib/api";
+import { UserVisibilityPicker } from "@/components/UserVisibilityPicker";
 import { APP_ROUTES, teachingEdit, teachingPresent } from "@/lib/routes";
 import {
   getBlockLabel,
@@ -59,6 +64,17 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
   );
   const [selectedExerciseId, setSelectedExerciseId] = useState("");
   const [items, setItems] = useState<DraftItem[]>([]);
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [creatorUserId, setCreatorUserId] = useState("");
+  const [selectedVisibleUserIds, setSelectedVisibleUserIds] = useState<
+    Set<string>
+  >(new Set());
+  const [visibilityQuery, setVisibilityQuery] = useState("");
+  const [showVisibilityModal, setShowVisibilityModal] = useState(false);
+  const [visibilityDraftUserIds, setVisibilityDraftUserIds] = useState<
+    Set<string>
+  >(new Set());
+  const [canManageVisibility, setCanManageVisibility] = useState(!deckId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,48 +87,66 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
     Promise.all([
       listFiles(),
       listExerciseSets(),
+      getMe(),
+      listVisibilityUsers(),
       deckId ? getTeachingDeck(deckId) : Promise.resolve(null),
     ])
-      .then(([fileResult, exerciseResult, deckResult]) => {
-        const contentFiles = fileResult.files.filter(
-          (file) => file.type !== "exercise_set" && file.type !== "asset",
-        );
-        setFiles(contentFiles);
-        setExercises(exerciseResult.exerciseSets);
-        setSelectedFileId(contentFiles[0]?.id ?? "");
-        setSelectedExerciseId(exerciseResult.exerciseSets[0]?.id ?? "");
-        if (deckResult) {
-          if (!deckResult.deck.canEdit) {
-            throw new Error("只有创建者或管理员可以编辑课件");
-          }
-          setTitle(deckResult.deck.title);
-          setItems(
-            deckResult.deck.items.reduce<DraftItem[]>((result, item) => {
-              if (item.type === "content_block" && item.sourceBlockId) {
-                result.push({
-                  key: item.id,
-                  type: "content_block" as const,
-                  sourceBlockId: item.sourceBlockId,
-                  label: item.block
-                    ? getBlockText(item.block) || getBlockLabel(item.block.type)
-                    : "文档段落",
-                  source: item.sourceFileTitle ?? "文档",
-                });
-              }
-              if (item.type === "exercise" && item.exerciseSetId) {
-                result.push({
-                  key: item.id,
-                  type: "exercise" as const,
-                  exerciseSetId: item.exerciseSetId,
-                  label: item.exerciseTitle ?? "练习",
-                  source: "嵌套练习",
-                });
-              }
-              return result;
-            }, []),
+      .then(
+        ([fileResult, exerciseResult, meResult, usersResult, deckResult]) => {
+          const contentFiles = fileResult.files.filter(
+            (file) => file.type !== "exercise_set" && file.type !== "asset",
           );
-        }
-      })
+          setFiles(contentFiles);
+          setExercises(exerciseResult.exerciseSets);
+          setUsers(usersResult.users);
+          setSelectedFileId(contentFiles[0]?.id ?? "");
+          setSelectedExerciseId(exerciseResult.exerciseSets[0]?.id ?? "");
+          if (deckResult) {
+            if (!deckResult.deck.canEdit) {
+              throw new Error("只有创建者或管理员可以编辑课件");
+            }
+            setTitle(deckResult.deck.title);
+            setCreatorUserId(deckResult.deck.createdBy.id);
+            setCanManageVisibility(deckResult.deck.canManageVisibility);
+            setSelectedVisibleUserIds(
+              new Set(
+                deckResult.deck.visibleUserIds ?? [
+                  deckResult.deck.createdBy.id,
+                ],
+              ),
+            );
+            setItems(
+              deckResult.deck.items.reduce<DraftItem[]>((result, item) => {
+                if (item.type === "content_block" && item.sourceBlockId) {
+                  result.push({
+                    key: item.id,
+                    type: "content_block" as const,
+                    sourceBlockId: item.sourceBlockId,
+                    label: item.block
+                      ? getBlockText(item.block) ||
+                        getBlockLabel(item.block.type)
+                      : "文档段落",
+                    source: item.sourceFileTitle ?? "文档",
+                  });
+                }
+                if (item.type === "exercise" && item.exerciseSetId) {
+                  result.push({
+                    key: item.id,
+                    type: "exercise" as const,
+                    exerciseSetId: item.exerciseSetId,
+                    label: item.exerciseTitle ?? "练习",
+                    source: "嵌套练习",
+                  });
+                }
+                return result;
+              }, []),
+            );
+          } else {
+            setCreatorUserId(meResult.user.id);
+            setSelectedVisibleUserIds(new Set([meResult.user.id]));
+          }
+        },
+      )
       .catch((caught) =>
         setError(caught instanceof Error ? caught.message : "加载编辑器失败"),
       );
@@ -176,6 +210,17 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
     });
   }
 
+  function openVisibilityModal() {
+    setVisibilityDraftUserIds(new Set(selectedVisibleUserIds));
+    setVisibilityQuery("");
+    setShowVisibilityModal(true);
+  }
+
+  function confirmVisibility() {
+    setSelectedVisibleUserIds(new Set(visibilityDraftUserIds));
+    setShowVisibilityModal(false);
+  }
+
   async function save() {
     if (!title.trim()) {
       setError("请输入课件名称");
@@ -194,6 +239,9 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
           ? { type: item.type, sourceBlockId: item.sourceBlockId }
           : { type: item.type, exerciseSetId: item.exerciseSetId },
       ),
+      ...(canManageVisibility
+        ? { visibleUserIds: [...selectedVisibleUserIds] }
+        : {}),
     };
     try {
       const result = deckId
@@ -212,8 +260,9 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
 
   return (
     <div className="workspace teaching-editor-workspace">
-      <Link className="back-link" href={APP_ROUTES.teaching}>
-        <ArrowLeft aria-hidden="true" /> 返回课件
+      <Link className="page-back-link" href={APP_ROUTES.teaching}>
+        <ArrowLeft aria-hidden="true" />
+        <span>返回课件</span>
       </Link>
       <header className="page-head compact">
         <div>
@@ -338,6 +387,16 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
               />
             </div>
           </label>
+          {canManageVisibility && creatorUserId ? (
+            <button
+              className="button secondary teaching-visibility-button"
+              onClick={openVisibilityModal}
+              type="button"
+            >
+              <Users aria-hidden="true" className="button-icon" />
+              可见范围（{selectedVisibleUserIds.size} 人）
+            </button>
+          ) : null}
           <div className="panel-head">
             <h2>课件内容</h2>
             <span className="muted">按顺序排列，展示时自动分页</span>
@@ -411,6 +470,56 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
           </div>
         </div>
       </section>
+      {showVisibilityModal && creatorUserId ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            aria-labelledby="teaching-visibility-title"
+            aria-modal="true"
+            className="modal-panel teaching-visibility-modal"
+            role="dialog"
+          >
+            <div className="modal-head">
+              <h2 id="teaching-visibility-title">设置可见范围</h2>
+              <button
+                className="icon-button subtle"
+                onClick={() => setShowVisibilityModal(false)}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <UserVisibilityPicker
+                creatorUserId={creatorUserId}
+                onChange={setVisibilityDraftUserIds}
+                onQueryChange={setVisibilityQuery}
+                query={visibilityQuery}
+                selectedUserIds={visibilityDraftUserIds}
+                users={users}
+              />
+            </div>
+            <div className="modal-foot">
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  onClick={() => setShowVisibilityModal(false)}
+                  type="button"
+                >
+                  取消
+                </button>
+                <button
+                  className="button"
+                  onClick={confirmVisibility}
+                  type="button"
+                >
+                  确定
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

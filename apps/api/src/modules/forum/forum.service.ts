@@ -84,6 +84,7 @@ type ForumPostRecord = {
 type ForumPermissionContext = {
   userId: string;
   isAdmin: boolean;
+  canEditThread: boolean;
   threadAuthorId: string;
   threadStatus: ForumThreadSummary["status"];
   canRevealAnonymous: boolean;
@@ -108,7 +109,6 @@ export class ForumService {
 
   async listOverview(userId: string | null) {
     const user = await this.requireActiveUser(userId);
-    const isAdmin = isSystemAdmin(user.systemRole);
     const workspace = await this.getDefaultWorkspace();
     await this.ensureDefaultCategories(workspace.id);
 
@@ -119,9 +119,7 @@ export class ForumService {
         include: {
           _count: {
             select: {
-              threads: isAdmin
-                ? true
-                : { where: { status: { not: "archived" } } },
+              threads: true,
             },
           },
         },
@@ -129,7 +127,6 @@ export class ForumService {
       this.prisma.forumThread.findMany({
         where: {
           workspaceId: workspace.id,
-          ...(isAdmin ? {} : { status: { not: "archived" } }),
         },
         orderBy: [{ lastActivityAt: "desc" }],
         take: 40,
@@ -175,7 +172,7 @@ export class ForumService {
           include: {
             _count: {
               select: {
-                threads: { where: { status: { not: "archived" } } },
+                threads: true,
               },
             },
           },
@@ -192,10 +189,7 @@ export class ForumService {
       },
     });
 
-    if (
-      !thread ||
-      (thread.status === "archived" && !isSystemAdmin(user.systemRole))
-    ) {
+    if (!thread) {
       throw new NotFoundException("Forum thread not found");
     }
 
@@ -246,7 +240,7 @@ export class ForumService {
           include: {
             _count: {
               select: {
-                threads: { where: { status: { not: "archived" } } },
+                threads: true,
               },
             },
           },
@@ -278,7 +272,7 @@ export class ForumService {
       where: { id: threadId },
     });
 
-    if (!thread || thread.status === "archived") {
+    if (!thread) {
       throw new NotFoundException("Forum thread not found");
     }
 
@@ -336,6 +330,7 @@ export class ForumService {
     return this.toPostSummary(post, {
       userId: user.id,
       isAdmin: isSystemAdmin(user.systemRole),
+      canEditThread: isSuperAdmin(user.systemRole),
       threadAuthorId: thread.authorId,
       threadStatus: thread.status,
       canRevealAnonymous: isSuperAdmin(user.systemRole),
@@ -353,23 +348,12 @@ export class ForumService {
       where: { id: threadId },
     });
 
-    if (
-      !existing ||
-      (existing.status === "archived" && !isSystemAdmin(user.systemRole))
-    ) {
+    if (!existing) {
       throw new NotFoundException("Forum thread not found");
     }
 
     const isAdmin = isSystemAdmin(user.systemRole);
-    const isAuthor = existing.authorId === user.id;
-
-    if (!isAdmin && !isAuthor) {
-      throw new ForbiddenException("No permission to edit thread");
-    }
-
-    if (["locked", "archived"].includes(existing.status) && !isAdmin) {
-      throw new ForbiddenException("该帖子已锁定，不能编辑");
-    }
+    const canEditThread = isSuperAdmin(user.systemRole);
 
     const data: {
       title?: string;
@@ -378,10 +362,16 @@ export class ForumService {
     } = {};
 
     if (typeof input.title === "string") {
+      if (!canEditThread) {
+        throw new ForbiddenException("Only super admins can edit threads");
+      }
       data.title = this.normalizeTitle(input.title);
     }
 
     if (typeof input.categoryId === "string") {
+      if (!canEditThread) {
+        throw new ForbiddenException("Only super admins can edit threads");
+      }
       const category = await this.prisma.forumCategory.findFirst({
         where: {
           id: input.categoryId,
@@ -413,7 +403,7 @@ export class ForumService {
           include: {
             _count: {
               select: {
-                threads: { where: { status: { not: "archived" } } },
+                threads: true,
               },
             },
           },
@@ -433,24 +423,27 @@ export class ForumService {
     return this.toThreadDetail(thread, user);
   }
 
-  async archiveThread(userId: string | null, threadId: string) {
+  async deleteThread(userId: string | null, threadId: string) {
     const user = await this.requireActiveUser(userId);
     const thread = await this.prisma.forumThread.findUnique({
       where: { id: threadId },
+      include: {
+        posts: { select: { id: true } },
+      },
     });
 
-    if (!thread || thread.status === "archived") {
+    if (!thread) {
       throw new NotFoundException("Forum thread not found");
     }
 
     if (thread.authorId !== user.id && !isSystemAdmin(user.systemRole)) {
-      throw new ForbiddenException("No permission to archive thread");
+      throw new ForbiddenException("No permission to delete thread");
     }
 
-    await this.prisma.forumThread.update({
-      where: { id: threadId },
-      data: { status: "archived" },
-    });
+    await this.assets.removeForumPostImages(
+      thread.posts.map((post) => post.id),
+    );
+    await this.prisma.forumThread.delete({ where: { id: threadId } });
 
     return { ok: true };
   }
@@ -469,16 +462,12 @@ export class ForumService {
 
     const isAdmin = isSystemAdmin(user.systemRole);
 
-    if (!post || (post.thread.status === "archived" && !isAdmin)) {
+    if (!post) {
       throw new NotFoundException("Forum post not found");
     }
 
-    if (!isAdmin && post.authorId !== user.id) {
-      throw new ForbiddenException("No permission to edit post");
-    }
-
-    if (post.thread.status === "locked" && !isAdmin) {
-      throw new ForbiddenException("该帖子已锁定，不能编辑回复");
+    if (!isSuperAdmin(user.systemRole)) {
+      throw new ForbiddenException("Only super admins can edit threads");
     }
 
     const mainPost = await this.prisma.forumPost.findFirst({
@@ -504,6 +493,7 @@ export class ForumService {
     return this.toPostSummary(updated, {
       userId: user.id,
       isAdmin,
+      canEditThread: isSuperAdmin(user.systemRole),
       threadAuthorId: post.thread.authorId,
       threadStatus: post.thread.status,
       canRevealAnonymous: isSuperAdmin(user.systemRole),
@@ -529,7 +519,7 @@ export class ForumService {
 
     const isAdmin = isSystemAdmin(user.systemRole);
 
-    if (!post || (post.thread.status === "archived" && !isAdmin)) {
+    if (!post) {
       throw new NotFoundException("Forum post not found");
     }
 
@@ -545,11 +535,11 @@ export class ForumService {
     }
 
     if (isFirstPost) {
-      await this.prisma.forumThread.update({
-        where: { id: post.threadId },
-        data: { status: "archived" },
-      });
-      return { ok: true, archivedThread: true };
+      await this.assets.removeForumPostImages(
+        post.thread.posts.map((candidate) => candidate.id),
+      );
+      await this.prisma.forumThread.delete({ where: { id: post.threadId } });
+      return { ok: true, deletedThread: true };
     }
 
     const deletingPostIds = post.thread.posts
@@ -583,7 +573,7 @@ export class ForumService {
       return deletedCount;
     });
 
-    return { ok: true, archivedThread: false, deletedCount };
+    return { ok: true, deletedThread: false, deletedCount };
   }
 
   async listCategoriesForAdmin(
@@ -837,13 +827,12 @@ export class ForumService {
     user: ForumUserRecord,
   ): ForumThreadDetail {
     const isAdmin = isSystemAdmin(user.systemRole);
-    const canEdit =
-      isAdmin || (thread.author.id === user.id && thread.status === "open");
-    const canArchive =
-      thread.status !== "archived" && (isAdmin || thread.author.id === user.id);
+    const canEdit = isSuperAdmin(user.systemRole);
+    const canDelete = isAdmin || thread.author.id === user.id;
     const permissions = {
       userId: user.id,
       isAdmin,
+      canEditThread: canEdit,
       threadAuthorId: thread.author.id,
       threadStatus: thread.status,
       canRevealAnonymous: isSuperAdmin(user.systemRole),
@@ -854,7 +843,7 @@ export class ForumService {
       ...this.toThreadSummary(thread, permissions.canRevealAnonymous),
       category: this.toCategorySummary(thread.category),
       canEdit,
-      canArchive,
+      canDelete,
       canModerate: isAdmin,
       canReply: thread.status === "open",
       posts: thread.posts.map((post) => this.toPostSummary(post, permissions)),
@@ -869,7 +858,8 @@ export class ForumService {
       permissions?.isAdmin ||
       (permissions?.threadStatus === "open" &&
         post.author.id === permissions?.userId);
-    const canEdit = canMutate && post.id === permissions?.mainPostId;
+    const canEdit =
+      permissions?.canEditThread && post.id === permissions.mainPostId;
 
     return {
       id: post.id,

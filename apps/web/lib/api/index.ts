@@ -16,6 +16,7 @@ import type {
   SystemRole,
   TeachingDeckSummary,
   TeachingDeckItemType,
+  UserProfile,
   UserSummary,
 } from "@liveboard/shared";
 import {
@@ -45,11 +46,15 @@ export function logout() {
 }
 
 export function getMe() {
-  return request<{ user: UserSummary }>("/auth/me");
+  return request<{ user: UserProfile }>("/auth/me");
 }
 
-export function updateProfile(input: { displayName: string }) {
-  return request<{ user: UserSummary }>("/auth/me", {
+export function getUserProfile(userId: string) {
+  return request<{ user: UserProfile }>(`/auth/profile/${userId}`);
+}
+
+export function updateProfile(input: { displayName: string; bio?: string }) {
+  return request<{ user: UserProfile }>("/auth/me", {
     method: "PATCH",
     body: JSON.stringify(input),
   });
@@ -76,7 +81,31 @@ export async function uploadAvatar(file: File) {
     throw new ApiError(message ?? "头像上传失败", response.status);
   }
 
-  return (await response.json()) as { user: UserSummary };
+  return (await response.json()) as { user: UserProfile };
+}
+
+export async function uploadProfileBanner(file: File) {
+  const formData = new FormData();
+  formData.set("file", file);
+
+  const response = await fetch(`${API_URL}/auth/me/banner`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    redirectToLoginOnUnauthorized(response.status, "/auth/me/banner");
+    const body = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    const message = Array.isArray(body?.message)
+      ? body.message.join("；")
+      : body?.message;
+    throw new ApiError(message ?? "Banner 上传失败", response.status);
+  }
+
+  return (await response.json()) as { user: UserProfile };
 }
 
 export function changePassword(input: {
@@ -91,6 +120,10 @@ export function changePassword(input: {
 
 export function listUsers() {
   return request<{ users: UserSummary[] }>("/admin/users");
+}
+
+export function listVisibilityUsers() {
+  return request<{ users: UserSummary[] }>("/users/visibility-options");
 }
 
 export function listPermissionGroups() {
@@ -523,7 +556,7 @@ export function updateForumPost(postId: string, input: { body: string }) {
 export function deleteForumPost(postId: string) {
   return request<{
     ok: boolean;
-    archivedThread?: boolean;
+    deletedThread?: boolean;
     deletedCount?: number;
   }>(`/forum/posts/${postId}`, {
     method: "DELETE",
@@ -771,9 +804,6 @@ export interface ContentBlock {
   type: ContentBlockType;
   sortOrder: number;
   dataJson: { text?: string; language?: string } | unknown;
-  sourceFileId?: string | null;
-  sourceBlockId?: string | null;
-  referenceMode?: "snapshot" | "linked" | null;
 }
 
 export function getFile(id: string) {
@@ -798,19 +828,6 @@ export function createBlock(input: {
   });
 }
 
-export function referenceBlocks(input: {
-  fileId: string;
-  sourceBlockIds: string[];
-}) {
-  return request<{ blocks: ContentBlock[] }>(
-    `/files/${input.fileId}/reference-blocks`,
-    {
-      method: "POST",
-      body: JSON.stringify({ sourceBlockIds: input.sourceBlockIds }),
-    },
-  );
-}
-
 export interface FileAssetSummary {
   id: string;
   folderId: string | null;
@@ -823,12 +840,20 @@ export interface FileAssetSummary {
   createdAt?: string;
 }
 
-export interface AssetReferenceSummary {
-  fileId: string;
-  fileTitle: string;
-  blockId: string;
-  blockType: string;
-}
+export type AssetReferenceSummary =
+  | {
+      targetType: "file";
+      fileId: string;
+      fileTitle: string;
+      blockId: string;
+      blockType: string;
+    }
+  | {
+      targetType: "teaching_deck";
+      deckId: string;
+      deckTitle: string;
+      itemId: string;
+    };
 
 export class AssetInUseError extends ApiError {
   constructor(
@@ -1055,6 +1080,8 @@ export interface TeachingDeckDetail {
   title: string;
   createdBy: UserSummary;
   canEdit: boolean;
+  canManageVisibility: boolean;
+  visibleUserIds?: string[];
   createdAt: string;
   updatedAt: string;
   items: TeachingDeckItem[];
@@ -1071,6 +1098,7 @@ export function getTeachingDeck(id: string) {
 export function createTeachingDeck(input: {
   title: string;
   items: TeachingDeckItemInput[];
+  visibleUserIds?: string[];
 }) {
   return request<{ deck: TeachingDeckDetail }>("/teaching-decks", {
     method: "POST",
@@ -1080,7 +1108,11 @@ export function createTeachingDeck(input: {
 
 export function updateTeachingDeck(
   id: string,
-  input: { title?: string; items?: TeachingDeckItemInput[] },
+  input: {
+    title?: string;
+    items?: TeachingDeckItemInput[];
+    visibleUserIds?: string[];
+  },
 ) {
   return request<{ deck: TeachingDeckDetail }>(`/teaching-decks/${id}`, {
     method: "PATCH",
@@ -1129,6 +1161,7 @@ export function createExerciseSet(input: {
   allowMultipleSubmissions: boolean;
   showAnswerAfterSubmit: boolean;
   questions: CreateExerciseQuestionInput[];
+  visibleUserIds?: string[];
 }) {
   return request<{ exerciseSet: { id: string; fileId: string } }>(
     "/exercise-sets",
@@ -1158,16 +1191,28 @@ export interface ExerciseQuestion {
 export interface ExerciseSetDetail {
   id: string;
   fileId: string;
-  file: { title: string };
+  file: { title: string; createdById: string };
   openAt: string | null;
   dueAt: string | null;
   allowMultipleSubmissions: boolean;
   showAnswerAfterSubmit: boolean;
   questions: ExerciseQuestion[];
+  canManageVisibility: boolean;
+  visibleUserIds?: string[];
 }
 
 export function getExerciseSet(id: string) {
   return request<{ exerciseSet: ExerciseSetDetail }>(`/exercise-sets/${id}`);
+}
+
+export function updateExerciseVisibility(id: string, visibleUserIds: string[]) {
+  return request<{ exerciseSet: ExerciseSetDetail }>(
+    `/exercise-sets/${id}/visibility`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ visibleUserIds }),
+    },
+  );
 }
 
 export function submitExerciseSet(

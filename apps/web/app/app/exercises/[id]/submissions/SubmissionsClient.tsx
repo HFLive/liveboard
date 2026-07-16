@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Search } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Search } from "lucide-react";
 import { gradeSubmission, listSubmissions, SubmissionSummary } from "@/lib/api";
+import { UserProfileLink } from "@/components/UserProfileLink";
 import {
   formatDateTime,
   questionTypeLabel,
@@ -23,7 +24,7 @@ export function SubmissionsClient({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"pending" | "all" | "graded">("pending");
+  const [filter, setFilter] = useState<"pending" | "graded">("pending");
   const [saving, setSaving] = useState(false);
 
   const filteredSubmissions = useMemo(() => {
@@ -34,7 +35,6 @@ export function SubmissionsClient({
           submission.user.username.toLowerCase().includes(normalizedQuery)
         : true;
       const matchesFilter =
-        filter === "all" ||
         (filter === "graded" && submission.status === "graded") ||
         (filter === "pending" && submission.status !== "graded");
       return matchesQuery && matchesFilter;
@@ -92,10 +92,10 @@ export function SubmissionsClient({
           feedback: feedback[answer.id],
         })),
       });
-      setMessage("批阅已保存");
+      setMessage("批改已保存");
       await load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "批阅失败");
+      setError(caught instanceof Error ? caught.message : "批改失败");
     } finally {
       setSaving(false);
     }
@@ -103,23 +103,19 @@ export function SubmissionsClient({
 
   return (
     <div className="workspace">
+      <Link className="page-back-link" href={exerciseDetail(exerciseSetId)}>
+        <ArrowLeft aria-hidden="true" />
+        返回练习
+      </Link>
       <section className="page-head">
         <div>
           <p className="page-eyebrow">练习管理</p>
-          <h1>提交批阅</h1>
+          <h1>提交批改</h1>
           <p className="muted">
             {submissions.length > 0
               ? `共 ${submissions.length} 份提交，选择成员后逐题评分并填写反馈。`
               : "查看成员提交，并在收到作答后完成评分与反馈。"}
           </p>
-        </div>
-        <div className="button-row">
-          <Link
-            className="button secondary"
-            href={exerciseDetail(exerciseSetId)}
-          >
-            返回练习
-          </Link>
         </div>
       </section>
 
@@ -131,7 +127,7 @@ export function SubmissionsClient({
           <div className="panel-head compact">
             <div>
               <h2>提交队列</h2>
-              <span className="muted">{pendingCount} 份待批阅</span>
+              <span className="muted">{pendingCount} 份待批改</span>
             </div>
           </div>
           <div className="review-queue-tools">
@@ -149,36 +145,41 @@ export function SubmissionsClient({
                 onClick={() => setFilter("pending")}
                 type="button"
               >
-                待批阅
-              </button>
-              <button
-                className={filter === "all" ? "active" : ""}
-                onClick={() => setFilter("all")}
-                type="button"
-              >
-                全部
+                待批改
               </button>
               <button
                 className={filter === "graded" ? "active" : ""}
                 onClick={() => setFilter("graded")}
                 type="button"
               >
-                已完成
+                已批改
               </button>
             </div>
           </div>
           <div className="submission-list">
             {filteredSubmissions.map((submission) => (
-              <button
+              <div
                 className={`submission-row ${
                   selectedSubmission?.id === submission.id ? "active" : ""
                 }`}
                 key={submission.id}
                 onClick={() => setSelectedId(submission.id)}
-                type="button"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelectedId(submission.id);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
               >
                 <span>
-                  <strong>{submission.user.displayName}</strong>
+                  <strong>
+                    <UserProfileLink
+                      className="user-profile-link"
+                      user={submission.user}
+                    />
+                  </strong>
                   <small>{formatDateTime(submission.submittedAt)}</small>
                 </span>
                 <em>{submissionStatusLabel(submission.status)}</em>
@@ -187,7 +188,7 @@ export function SubmissionsClient({
                     ? `-/${submission.maxScore}`
                     : `${submission.score}/${submission.maxScore}`}
                 </b>
-              </button>
+              </div>
             ))}
             {filteredSubmissions.length === 0 ? (
               <div className="empty-panel">
@@ -212,17 +213,22 @@ export function SubmissionsClient({
             >
               <div className="review-detail-head">
                 <div>
-                  <h2>{selectedSubmission.user.displayName}</h2>
+                  <h2>
+                    <UserProfileLink
+                      className="user-profile-link"
+                      user={selectedSubmission.user}
+                    />
+                  </h2>
                   <p className="muted">
                     {submissionStatusLabel(selectedSubmission.status)} /{" "}
                     {selectedSubmission.score === null
-                      ? `待批阅/${selectedSubmission.maxScore}`
+                      ? `待批改/${selectedSubmission.maxScore}`
                       : `${selectedSubmission.score}/${selectedSubmission.maxScore}`}
                   </p>
                 </div>
                 <button className="button" disabled={saving} type="submit">
                   <CheckCircle2 aria-hidden="true" className="button-icon" />
-                  {saving ? "保存中" : "保存批阅"}
+                  {saving ? "保存中" : "保存批改"}
                 </button>
               </div>
 
@@ -306,7 +312,7 @@ export function SubmissionsClient({
           ) : (
             <div className="empty-panel">
               <strong>请选择提交</strong>
-              <span>左侧队列中选择一份提交后即可批阅。</span>
+              <span>左侧队列中选择一份提交后即可批改。</span>
             </div>
           )}
         </main>

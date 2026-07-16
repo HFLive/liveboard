@@ -1,4 +1,4 @@
-import { IsString, MaxLength, MinLength } from "class-validator";
+import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 
 export class LoginDto {
   @IsString()
@@ -13,10 +13,16 @@ export class LoginDto {
 }
 
 export class UpdateProfileDto {
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(80)
-  displayName!: string;
+  displayName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  bio?: string;
 }
 
 export class ChangePasswordDto {

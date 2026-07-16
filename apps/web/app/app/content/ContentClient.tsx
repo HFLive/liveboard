@@ -92,6 +92,14 @@ const SORT_OPTIONS = [
   { value: "type", label: "类型" },
 ] as const;
 
+function canCreateFolder(level: PermissionLevel | null) {
+  return level === "owner" || level === "editor";
+}
+
+function canCreateFile(level: PermissionLevel | null) {
+  return canCreateFolder(level) || level === "lecturer";
+}
+
 function flattenFolders(folders: FolderNode[], depth = 0): FlatFolderNode[] {
   return folders.flatMap((folder) => [
     { ...folder, depth },
@@ -221,6 +229,8 @@ export function ContentClient() {
   const activeFolder = flatFolders.find(
     (folder) => folder.id === activeFolderId,
   );
+  const canCreateFolderHere = canCreateFolder(activeFolder?.permission ?? null);
+  const canCreateFileHere = canCreateFile(activeFolder?.permission ?? null);
   const pinnedItems = useMemo(
     () => collectPinnedContent(activeFolder),
     [activeFolder],
@@ -1319,13 +1329,15 @@ export function ContentClient() {
                 className="context-menu floating-context-menu"
                 style={{ left: openFolderMenu.x, top: openFolderMenu.y }}
               >
-                <button
-                  onClick={() => beginCreateFolder(folder.id)}
-                  type="button"
-                >
-                  <Plus aria-hidden="true" />
-                  新建文件夹
-                </button>
+                {canCreateFolder(folder.permission) ? (
+                  <button
+                    onClick={() => beginCreateFolder(folder.id)}
+                    type="button"
+                  >
+                    <Plus aria-hidden="true" />
+                    新建文件夹
+                  </button>
+                ) : null}
                 <button onClick={() => beginRenameFolder(folder)} type="button">
                   <Pencil aria-hidden="true" />
                   重命名
@@ -1508,22 +1520,6 @@ export function ContentClient() {
                 位置
               </h2>
             </div>
-            <button
-              className="icon-button"
-              onClick={() =>
-                showCreateFolder
-                  ? setShowCreateFolder(false)
-                  : beginCreateFolder(activeFolderId)
-              }
-              title="新建文件夹"
-              type="button"
-            >
-              {showCreateFolder ? (
-                <X aria-hidden="true" />
-              ) : (
-                <Plus aria-hidden="true" />
-              )}
-            </button>
           </div>
           <div className="file-tree">
             {visibleTreeRows.map(renderContentTreeRow)}
@@ -1571,54 +1567,58 @@ export function ContentClient() {
                 options={SORT_OPTIONS}
                 value={contentSortMode}
               />
-              <MarkdownImportButton
-                disabled={!activeFolderId}
-                onImport={onImportMarkdown}
-              />
-              <div className="new-content-menu" data-menu-root="true">
-                <button
-                  aria-expanded={showCreateMenu}
-                  aria-haspopup="menu"
-                  className="button secondary"
-                  onClick={() => {
-                    setOpenFolderMenu(null);
-                    setOpenContentRowMenu(null);
-                    setShowCreateMenu((current) => !current);
-                  }}
-                  type="button"
-                >
-                  <Plus aria-hidden="true" className="button-icon" />
-                  新建
-                  <ChevronDown aria-hidden="true" className="button-icon" />
-                </button>
-                {showCreateMenu ? (
-                  <div
-                    className="context-menu right new-content-options"
-                    role="menu"
+              {canCreateFileHere ? (
+                <MarkdownImportButton onImport={onImportMarkdown} />
+              ) : null}
+              {canCreateFolderHere || canCreateFileHere ? (
+                <div className="new-content-menu" data-menu-root="true">
+                  <button
+                    aria-expanded={showCreateMenu}
+                    aria-haspopup="menu"
+                    className="button secondary"
+                    onClick={() => {
+                      setOpenFolderMenu(null);
+                      setOpenContentRowMenu(null);
+                      setShowCreateMenu((current) => !current);
+                    }}
+                    type="button"
                   >
-                    <button
-                      onClick={() => beginCreateFolder(activeFolderId)}
-                      role="menuitem"
-                      type="button"
+                    <Plus aria-hidden="true" className="button-icon" />
+                    新建
+                    <ChevronDown aria-hidden="true" className="button-icon" />
+                  </button>
+                  {showCreateMenu ? (
+                    <div
+                      className="context-menu right new-content-options"
+                      role="menu"
                     >
-                      <Folder aria-hidden="true" />
-                      新建文件夹
-                    </button>
-                    <button
-                      disabled={!activeFolderId}
-                      onClick={() => {
-                        setShowCreateMenu(false);
-                        setShowCreateFile(true);
-                      }}
-                      role="menuitem"
-                      type="button"
-                    >
-                      <FileText aria-hidden="true" />
-                      创建文档
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+                      {canCreateFolderHere ? (
+                        <button
+                          onClick={() => beginCreateFolder(activeFolderId)}
+                          role="menuitem"
+                          type="button"
+                        >
+                          <Folder aria-hidden="true" />
+                          新建文件夹
+                        </button>
+                      ) : null}
+                      {canCreateFileHere ? (
+                        <button
+                          onClick={() => {
+                            setShowCreateMenu(false);
+                            setShowCreateFile(true);
+                          }}
+                          role="menuitem"
+                          type="button"
+                        >
+                          <FileText aria-hidden="true" />
+                          创建文档
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="table-wrap">

@@ -151,8 +151,8 @@ export function submissionStatusLabel(status: string | null | undefined) {
     in_progress: "进行中",
     submitted: "已提交",
     auto_graded: "已自动批改",
-    needs_manual_review: "待人工批阅",
-    graded: "已批阅",
+    needs_manual_review: "待人工批改",
+    graded: "已批改",
     late: "已逾期",
   };
 

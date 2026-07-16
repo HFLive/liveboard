@@ -6,7 +6,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { gradeQuestion, canLecture, canView } from "@liveboard/shared";
+import { gradeQuestion, canLecture, isSuperAdmin } from "@liveboard/shared";
 import type { QuestionType } from "@liveboard/shared";
 import { Prisma } from "@prisma/client";
 import { PermissionsService } from "../permissions/permissions.service";
@@ -25,17 +25,23 @@ export class ExercisesService {
   ) {}
 
   async listExerciseSets(userId: string | null) {
-    if (!userId) {
-      throw new UnauthorizedException("Missing session");
-    }
+    const user = await this.requireUser(userId);
 
     const [exerciseSets, pendingCounts] = await Promise.all([
       this.prisma.exerciseSet.findMany({
+        where: isSuperAdmin(user.systemRole)
+          ? undefined
+          : {
+              OR: [
+                { file: { createdById: user.id } },
+                { viewers: { some: { userId: user.id } } },
+              ],
+            },
         include: {
           file: true,
           _count: { select: { questions: true, submissions: true } },
           submissions: {
-            where: { userId },
+            where: { userId: user.id },
             select: {
               status: true,
               score: true,
@@ -57,7 +63,7 @@ export class ExercisesService {
       pendingCounts.map((item) => [item.exerciseSetId, item._count._all]),
     );
     const permissions = await this.permissions.getEffectiveLevelsForFiles(
-      userId,
+      user.id,
       exerciseSets.map((exerciseSet) => exerciseSet.fileId),
     );
 
@@ -66,10 +72,6 @@ export class ExercisesService {
     for (const exerciseSet of exerciseSets) {
       const level = permissions.get(exerciseSet.fileId) ?? null;
 
-      if (!canView(level)) {
-        continue;
-      }
-
       const latestSubmission = exerciseSet.submissions[0];
 
       visible.push({
@@ -77,7 +79,8 @@ export class ExercisesService {
         fileId: exerciseSet.fileId,
         title: exerciseSet.file.title,
         questionCount: exerciseSet._count.questions,
-        canManage: canLecture(level),
+        canManage:
+          exerciseSet.file.createdById === user.id || canLecture(level),
         submissionCount: exerciseSet._count.submissions,
         pendingReviewCount: pendingByExerciseSet.get(exerciseSet.id) ?? 0,
         openAt: exerciseSet.openAt?.toISOString() ?? null,
@@ -93,9 +96,7 @@ export class ExercisesService {
   }
 
   async createExerciseSet(userId: string | null, input: CreateExerciseSetDto) {
-    if (!userId) {
-      throw new UnauthorizedException("Missing session");
-    }
+    const user = await this.requireUser(userId);
 
     const title = input.title.trim();
     if (!title) {
@@ -128,7 +129,7 @@ export class ExercisesService {
 
     for (const folder of folders) {
       const level = await this.permissions.getEffectiveLevelForFolder(
-        userId,
+        user.id,
         folder.id,
       );
       if (canLecture(level)) {
@@ -141,6 +142,11 @@ export class ExercisesService {
       throw new ForbiddenException("没有可用于创建测验的空间");
     }
 
+    const visibleUserIds = await this.normalizeVisibleUserIds(
+      user.id,
+      input.visibleUserIds,
+    );
+
     return this.prisma.$transaction(async (transaction) => {
       const file = await transaction.file.create({
         data: {
@@ -148,8 +154,8 @@ export class ExercisesService {
           folderId: targetFolder.id,
           type: "exercise_set",
           title,
-          createdById: userId,
-          updatedById: userId,
+          createdById: user.id,
+          updatedById: user.id,
         },
       });
 
@@ -160,6 +166,11 @@ export class ExercisesService {
           dueAt,
           allowMultipleSubmissions: input.allowMultipleSubmissions ?? false,
           showAnswerAfterSubmit: input.showAnswerAfterSubmit ?? false,
+          viewers: {
+            create: visibleUserIds.map((viewerUserId) => ({
+              userId: viewerUserId,
+            })),
+          },
           questions: {
             create: input.questions.map((question, index) => ({
               type: question.type,
@@ -177,19 +188,18 @@ export class ExercisesService {
   }
 
   async getExerciseSet(userId: string | null, exerciseSetId: string) {
-    if (!userId) {
-      throw new UnauthorizedException("Missing session");
-    }
+    const user = await this.requireUser(userId);
 
     const exerciseSet = await this.prisma.exerciseSet.findUnique({
       where: { id: exerciseSetId },
       include: {
         file: true,
+        viewers: { select: { userId: true } },
         questions: {
           orderBy: { sortOrder: "asc" },
         },
         submissions: {
-          where: { userId },
+          where: { userId: user.id },
           select: { id: true },
           take: 1,
         },
@@ -201,32 +211,81 @@ export class ExercisesService {
     }
 
     const level = await this.permissions.getEffectiveLevelForFile(
-      userId,
+      user.id,
       exerciseSet.fileId,
     );
 
-    if (!(
-      canView(level) || (await this.hasTeachingDeckAccess(exerciseSetId))
-    )) {
+    if (
+      !this.canAccessExerciseSet(user, exerciseSet) &&
+      !(await this.hasTeachingDeckAccess(user, exerciseSetId))
+    ) {
       throw new ForbiddenException("No permission to view exercise set");
     }
 
     const canSeeAnswers =
       canLecture(level) ||
       (exerciseSet.showAnswerAfterSubmit && exerciseSet.submissions.length > 0);
-    const { submissions: _submissions, ...exerciseSetWithoutSubmissions } =
-      exerciseSet;
+    const canManageVisibility = exerciseSet.file.createdById === user.id;
+    const {
+      submissions: _submissions,
+      viewers,
+      ...exerciseSetWithoutSubmissions
+    } = exerciseSet;
+    const detail = {
+      ...exerciseSetWithoutSubmissions,
+      canManageVisibility,
+      visibleUserIds: canManageVisibility
+        ? viewers.map((viewer) => viewer.userId)
+        : undefined,
+    };
 
     if (!canSeeAnswers) {
       return {
-        ...exerciseSetWithoutSubmissions,
+        ...detail,
         questions: exerciseSet.questions.map(
           ({ answerJson: _answerJson, ...question }) => question,
         ),
       };
     }
 
-    return exerciseSetWithoutSubmissions;
+    return detail;
+  }
+
+  async updateVisibility(
+    userId: string | null,
+    exerciseSetId: string,
+    visibleUserIds: string[],
+  ) {
+    const user = await this.requireUser(userId);
+    const exerciseSet = await this.prisma.exerciseSet.findUnique({
+      where: { id: exerciseSetId },
+      include: { file: { select: { createdById: true } } },
+    });
+
+    if (!exerciseSet) {
+      throw new NotFoundException("Exercise set not found");
+    }
+    if (exerciseSet.file.createdById !== user.id) {
+      throw new ForbiddenException("只有创建者可以修改可见范围");
+    }
+
+    const normalized = await this.normalizeVisibleUserIds(
+      exerciseSet.file.createdById,
+      visibleUserIds,
+    );
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.exerciseSetViewer.deleteMany({
+        where: { exerciseSetId },
+      });
+      await transaction.exerciseSetViewer.createMany({
+        data: normalized.map((viewerUserId) => ({
+          exerciseSetId,
+          userId: viewerUserId,
+        })),
+      });
+    });
+
+    return this.getExerciseSet(user.id, exerciseSetId);
   }
 
   async submitExercise(
@@ -234,17 +293,16 @@ export class ExercisesService {
     exerciseSetId: string,
     input: SubmitExerciseDto,
   ) {
-    if (!userId) {
-      throw new UnauthorizedException("Missing session");
-    }
+    const user = await this.requireUser(userId);
 
     const exerciseSet = await this.prisma.exerciseSet.findUnique({
       where: { id: exerciseSetId },
       include: {
         file: true,
+        viewers: { select: { userId: true } },
         questions: true,
         submissions: {
-          where: { userId },
+          where: { userId: user.id },
           select: { id: true },
         },
       },
@@ -254,14 +312,10 @@ export class ExercisesService {
       throw new NotFoundException("Exercise set not found");
     }
 
-    const level = await this.permissions.getEffectiveLevelForFile(
-      userId,
-      exerciseSet.fileId,
-    );
-
-    if (!(
-      canView(level) || (await this.hasTeachingDeckAccess(exerciseSetId))
-    )) {
+    if (
+      !this.canAccessExerciseSet(user, exerciseSet) &&
+      !(await this.hasTeachingDeckAccess(user, exerciseSetId))
+    ) {
       throw new ForbiddenException("No permission to submit exercise");
     }
 
@@ -335,7 +389,7 @@ export class ExercisesService {
           async (tx) => {
             if (!exerciseSet.allowMultipleSubmissions) {
               const existing = await tx.submission.count({
-                where: { exerciseSetId, userId },
+                where: { exerciseSetId, userId: user.id },
               });
               if (existing > 0) {
                 throw new ForbiddenException(
@@ -346,7 +400,7 @@ export class ExercisesService {
             return tx.submission.create({
               data: {
                 exerciseSetId,
-                userId,
+                userId: user.id,
                 status: needsManualReview
                   ? "needs_manual_review"
                   : "auto_graded",
@@ -427,32 +481,29 @@ export class ExercisesService {
   }
 
   async listMySubmissions(userId: string | null, exerciseSetId: string) {
-    if (!userId) {
-      throw new UnauthorizedException("Missing session");
-    }
+    const user = await this.requireUser(userId);
 
     const exerciseSet = await this.prisma.exerciseSet.findUnique({
       where: { id: exerciseSetId },
-      include: { file: true },
+      include: {
+        file: true,
+        viewers: { select: { userId: true } },
+      },
     });
 
     if (!exerciseSet) {
       throw new NotFoundException("Exercise set not found");
     }
 
-    const level = await this.permissions.getEffectiveLevelForFile(
-      userId,
-      exerciseSet.fileId,
-    );
-
-    if (!(
-      canView(level) || (await this.hasTeachingDeckAccess(exerciseSetId))
-    )) {
+    if (
+      !this.canAccessExerciseSet(user, exerciseSet) &&
+      !(await this.hasTeachingDeckAccess(user, exerciseSetId))
+    ) {
       throw new ForbiddenException("No permission to view submissions");
     }
 
     const submissions = await this.prisma.submission.findMany({
-      where: { exerciseSetId, userId },
+      where: { exerciseSetId, userId: user.id },
       include: {
         user: true,
         answers: {
@@ -535,13 +586,13 @@ export class ExercisesService {
       new Set(input.answers.map((answer) => answer.answerId)).size !==
         input.answers.length
     ) {
-      throw new BadRequestException("请完整批阅每一道题");
+      throw new BadRequestException("请完整批改每一道题");
     }
 
     for (const answer of input.answers) {
       const storedAnswer = answerById.get(answer.answerId);
       if (!storedAnswer) {
-        throw new BadRequestException("批阅中包含不属于该提交的答案");
+        throw new BadRequestException("批改中包含不属于该提交的答案");
       }
 
       if (answer.score > storedAnswer.question.score) {
@@ -582,12 +633,67 @@ export class ExercisesService {
     });
   }
 
-  private async hasTeachingDeckAccess(exerciseSetId: string) {
+  private async hasTeachingDeckAccess(
+    user: Awaited<ReturnType<ExercisesService["requireUser"]>>,
+    exerciseSetId: string,
+  ) {
     return (
       (await this.prisma.teachingDeckItem.count({
-        where: { exerciseSetId },
+        where: {
+          exerciseSetId,
+          ...(isSuperAdmin(user.systemRole)
+            ? {}
+            : {
+                deck: {
+                  OR: [
+                    { createdById: user.id },
+                    { viewers: { some: { userId: user.id } } },
+                  ],
+                },
+              }),
+        },
       })) > 0
     );
+  }
+
+  private canAccessExerciseSet(
+    user: Awaited<ReturnType<ExercisesService["requireUser"]>>,
+    exerciseSet: {
+      file: { createdById: string };
+      viewers: Array<{ userId: string }>;
+    },
+  ) {
+    return (
+      isSuperAdmin(user.systemRole) ||
+      exerciseSet.file.createdById === user.id ||
+      exerciseSet.viewers.some((viewer) => viewer.userId === user.id)
+    );
+  }
+
+  private async normalizeVisibleUserIds(
+    creatorUserId: string,
+    visibleUserIds: string[] | undefined,
+  ) {
+    const normalized = [...new Set([creatorUserId, ...(visibleUserIds ?? [])])];
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: normalized }, status: "active" },
+      select: { id: true },
+    });
+    if (users.length !== normalized.length) {
+      throw new BadRequestException("可见范围中包含无效用户");
+    }
+    return normalized;
+  }
+
+  private async requireUser(userId: string | null) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.status !== "active") {
+      throw new UnauthorizedException("User not found");
+    }
+    return user;
   }
 
   private validateQuestion(

@@ -1,5 +1,6 @@
 import {
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -69,6 +70,19 @@ export class CreateExerciseSetDto {
   @ValidateNested({ each: true })
   @Type(() => CreateQuestionDto)
   questions!: CreateQuestionDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  visibleUserIds?: string[];
+}
+
+export class UpdateExerciseVisibilityDto {
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  visibleUserIds!: string[];
 }
 
 export class SubmitAnswerDto {

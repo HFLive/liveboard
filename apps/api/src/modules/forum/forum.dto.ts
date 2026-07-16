@@ -55,7 +55,7 @@ export class UpdateForumThreadDto {
   categoryId?: string;
 
   @IsOptional()
-  @IsIn(["open", "locked", "archived"])
+  @IsIn(["open", "locked"])
   status?: ForumThreadStatus;
 }
 

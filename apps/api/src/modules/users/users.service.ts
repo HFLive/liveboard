@@ -76,6 +76,29 @@ export class UsersService {
     return users.map((user) => this.toSummary(user));
   }
 
+  async listVisibilityUsers(
+    actorUserId: string | null,
+  ): Promise<UserSummary[]> {
+    if (!actorUserId) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { status: true },
+    });
+    if (!actor || actor.status !== "active") {
+      throw new UnauthorizedException("User not found");
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: { status: "active" },
+      orderBy: [{ displayName: "asc" }, { username: "asc" }],
+    });
+
+    return users.map((user) => this.toSummary(user));
+  }
+
   async listUserStorage(
     actorUserId: string | null,
   ): Promise<UserStorageSummary[]> {

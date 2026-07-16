@@ -1,4 +1,5 @@
 import { FileEditor } from "../FileEditor";
+import "./content-editor.css";
 
 export default async function FileEditPage({
   params,

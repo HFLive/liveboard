@@ -98,8 +98,8 @@ export default function HomePage() {
           </article>
           <article>
             <ClipboardCheck aria-hidden="true" />
-            <h3>练习与批阅</h3>
-            <p>发布练习，自动批改客观题，集中处理人工批阅。</p>
+            <h3>练习与批改</h3>
+            <p>发布练习，自动批改客观题，集中处理人工批改。</p>
           </article>
           <article>
             <ShieldCheck aria-hidden="true" />

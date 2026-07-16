@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  Archive,
   ArrowLeft,
   Lock,
   MessageSquareReply,
@@ -33,6 +32,7 @@ import {
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/labels";
 import { APP_ROUTES } from "@/lib/routes";
+import { UserProfileLink } from "@/components/UserProfileLink";
 import { ForumUserAvatar } from "../ForumUserAvatar";
 import { ForumImagePicker } from "../ForumImagePicker";
 import { ForumPostImages } from "../ForumPostImages";
@@ -211,16 +211,26 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       <span className="forum-comment-meta">
         <span className="forum-comment-author-line">
           <strong>
-            {post.isAnonymous ? "匿名用户" : post.author.displayName}
+            {post.isAnonymous ? (
+              "匿名用户"
+            ) : (
+              <UserProfileLink
+                className="user-profile-link"
+                user={post.author}
+              />
+            )}
           </strong>
           {post.isAnonymous && post.author.id !== "anonymous" ? (
             <small className="forum-comment-real-identity">
-              真实身份：{post.author.displayName}（@{post.author.username}）
+              真实身份：
+              <UserProfileLink
+                className="user-profile-link"
+                user={post.author}
+              />
             </small>
           ) : null}
         </span>
         <small className="forum-comment-time">
-          {post.isAnonymous ? "" : `@${post.author.username} · `}
           {formatDateTime(post.createdAt)}
           {post.updatedAt !== post.createdAt ? " · 已编辑" : ""}
         </small>
@@ -280,14 +290,10 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     }
   }
 
-  async function restoreThread() {
-    await setThreadStatus("open");
-  }
-
-  async function archiveThread() {
+  async function deleteThread() {
     if (
       !thread ||
-      !window.confirm("归档后普通成员将看不到这个帖子，确定继续吗？")
+      !window.confirm("帖子及其全部回复将被永久删除，确定继续吗？")
     ) {
       return;
     }
@@ -299,7 +305,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       await deleteForumThread(thread.id);
       router.push(APP_ROUTES.forum);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "归档帖子失败");
+      setError(caught instanceof Error ? caught.message : "删除帖子失败");
       setActionLoading(false);
     }
   }
@@ -337,7 +343,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
 
   async function removePost(postId: string, isFirstPost: boolean) {
     const message = isFirstPost
-      ? "删除第一楼会归档整个帖子，确定继续吗？"
+      ? "删除第一楼会永久删除整个帖子及其全部回复，确定继续吗？"
       : "确定删除这条回复吗？";
 
     if (!window.confirm(message)) {
@@ -350,7 +356,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     try {
       const result = await deleteForumPost(postId);
 
-      if (result.archivedThread) {
+      if (result.deletedThread) {
         router.push(APP_ROUTES.forum);
         return;
       }
@@ -393,12 +399,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     }
   }
 
-  const statusText =
-    thread?.status === "locked"
-      ? "已锁定"
-      : thread?.status === "archived"
-        ? "已归档"
-        : "开放";
+  const statusText = thread?.status === "locked" ? "已锁定" : "开放";
   const postStructure = useMemo(() => {
     const posts = thread?.posts ?? [];
     const mainPost = posts[0] ?? null;
@@ -471,9 +472,14 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                   (depth > 3 || replyPost.replyToId !== parentId) ? (
                     <span className="forum-reply-target">
                       回复{" "}
-                      {replyPost.replyTo.isAnonymous
-                        ? "匿名用户"
-                        : replyPost.replyTo.author.displayName}
+                      {replyPost.replyTo.isAnonymous ? (
+                        "匿名用户"
+                      ) : (
+                        <UserProfileLink
+                          className="user-profile-link"
+                          user={replyPost.replyTo.author}
+                        />
+                      )}
                       ：
                     </span>
                   ) : null}
@@ -567,9 +573,6 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 {thread.status === "locked" ? (
                   <Lock aria-hidden="true" />
                 ) : null}
-                {thread.status === "archived" ? (
-                  <Archive aria-hidden="true" />
-                ) : null}
                 {statusText}
               </em>
             </div>
@@ -627,17 +630,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 </button>
               ) : null}
               {thread.canModerate ? (
-                thread.status === "archived" ? (
-                  <button
-                    className="button secondary"
-                    disabled={actionLoading}
-                    onClick={restoreThread}
-                    type="button"
-                  >
-                    <Unlock aria-hidden="true" className="button-icon" />
-                    恢复
-                  </button>
-                ) : thread.status === "locked" ? (
+                thread.status === "locked" ? (
                   <button
                     className="button secondary"
                     disabled={actionLoading}
@@ -659,15 +652,15 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                   </button>
                 )
               ) : null}
-              {thread.canArchive ? (
+              {thread.canDelete ? (
                 <button
                   className="button danger"
                   disabled={actionLoading}
-                  onClick={archiveThread}
+                  onClick={deleteThread}
                   type="button"
                 >
-                  <Archive aria-hidden="true" className="button-icon" />
-                  归档
+                  <Trash2 aria-hidden="true" className="button-icon" />
+                  删除帖子
                 </button>
               ) : null}
             </div>
@@ -683,17 +676,30 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                     user={postStructure.mainPost.author}
                   />
                   <strong>
-                    {postStructure.mainPost.isAnonymous
-                      ? "匿名用户"
-                      : postStructure.mainPost.author.displayName}
+                    {postStructure.mainPost.isAnonymous ? (
+                      "匿名用户"
+                    ) : (
+                      <UserProfileLink
+                        className="user-profile-link"
+                        user={postStructure.mainPost.author}
+                      />
+                    )}
                   </strong>
-                  <span>
-                    {postStructure.mainPost.isAnonymous
-                      ? postStructure.mainPost.author.id !== "anonymous"
-                        ? `真实身份：${postStructure.mainPost.author.displayName}（@${postStructure.mainPost.author.username}）`
-                        : "匿名"
-                      : `@${postStructure.mainPost.author.username}`}
-                  </span>
+                  {postStructure.mainPost.isAnonymous ? (
+                    <span>
+                      {postStructure.mainPost.author.id !== "anonymous" ? (
+                        <>
+                          真实身份：
+                          <UserProfileLink
+                            className="user-profile-link"
+                            user={postStructure.mainPost.author}
+                          />
+                        </>
+                      ) : (
+                        "匿名"
+                      )}
+                    </span>
+                  ) : null}
                 </aside>
                 <div className="forum-post-content">
                   <div className="forum-post-toolbar">
@@ -926,21 +932,15 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
             </form>
           ) : (
             <div className="forum-inline-notice">
-              {thread.status === "archived" ? (
-                <Archive aria-hidden="true" />
-              ) : (
-                <Lock aria-hidden="true" />
-              )}
-              {thread.status === "archived"
-                ? "帖子已归档，仅管理员可查看和恢复。"
-                : "帖子已锁定，暂不能继续回复。"}
+              <Lock aria-hidden="true" />
+              帖子已锁定，暂不能继续回复。
             </div>
           )}
         </section>
       ) : !loading ? (
         <section className="empty-panel surface">
           <strong>没有找到这个帖子</strong>
-          <span>可能已被归档，或链接已经失效。</span>
+          <span>帖子可能已被删除，或链接已经失效。</span>
           <Link className="button secondary" href={APP_ROUTES.forum}>
             返回论坛
           </Link>
