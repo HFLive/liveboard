@@ -8,6 +8,7 @@ describe("FilesService", () => {
     getEffectiveLevelForFile: jest.fn(),
     getEffectiveLevelForFolder: jest.fn(),
     getEffectiveLevelsForFiles: jest.fn(),
+    getEffectiveLevelsForFolders: jest.fn(),
   };
   const tx = {
     contentBlock: {
@@ -18,15 +19,29 @@ describe("FilesService", () => {
     file: {
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       findMany: jest.fn(),
       delete: jest.fn(),
     },
-    folder: { findUnique: jest.fn(), findMany: jest.fn(), delete: jest.fn() },
+    folder: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+      delete: jest.fn(),
+    },
     permissionGrant: { deleteMany: jest.fn() },
   };
   const prisma = {
-    file: { findUnique: jest.fn() },
-    folder: { findUnique: jest.fn() },
+    file: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn() },
+    folder: {
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+    },
+    user: { findUnique: jest.fn() },
+    workspace: { findFirst: jest.fn() },
     fileAsset: { findUnique: jest.fn() },
     contentBlock: {
       findFirst: jest.fn(),
@@ -60,9 +75,99 @@ describe("FilesService", () => {
       title: "课程",
       type: "doc",
       status: "draft",
+      pinnedOrder: null,
       updatedAt: new Date("2026-07-14T00:00:00.000Z"),
     });
     prisma.$transaction.mockImplementation((callback) => callback(tx));
+  });
+
+  it("returns visible files inside the folder tree", async () => {
+    prisma.user.findUnique.mockResolvedValue({ systemRole: "admin" });
+    prisma.folder.findMany.mockResolvedValue([
+      {
+        id: "folder-1",
+        name: "课程资料",
+        parentId: null,
+        pinnedOrder: 1,
+        updatedAt: new Date("2026-07-16T00:00:00.000Z"),
+        _count: { files: 1 },
+      },
+    ]);
+    prisma.file.findMany.mockResolvedValue([
+      {
+        id: "file-1",
+        folderId: "folder-1",
+        title: "课程导读",
+        type: "doc",
+        status: "published",
+        pinnedOrder: 0,
+        updatedAt: new Date("2026-07-16T01:00:00.000Z"),
+      },
+    ]);
+    permissions.getEffectiveLevelsForFolders.mockResolvedValue(
+      new Map([["folder-1", "editor"]]),
+    );
+    permissions.getEffectiveLevelsForFiles.mockResolvedValue(
+      new Map([["file-1", "editor"]]),
+    );
+
+    const result = await service.getFolderTree("admin-1");
+
+    expect(result.canManagePins).toBe(true);
+    expect(result.folders[0]).toMatchObject({
+      id: "folder-1",
+      pinnedOrder: 1,
+      files: [{ id: "file-1", title: "课程导读", pinnedOrder: 0 }],
+    });
+  });
+
+  it("lets an administrator atomically reorder mixed content pins", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "admin-1",
+      systemRole: "admin",
+      status: "active",
+    });
+    prisma.workspace.findFirst.mockResolvedValue({ id: "workspace-1" });
+    prisma.folder.findFirst.mockResolvedValue({ id: "container-1" });
+    prisma.folder.count.mockResolvedValue(1);
+    prisma.file.count.mockResolvedValue(1);
+    prisma.folder.findMany.mockResolvedValue([]);
+    prisma.file.findMany.mockResolvedValue([]);
+    permissions.getEffectiveLevelsForFolders.mockResolvedValue(new Map());
+    permissions.getEffectiveLevelsForFiles.mockResolvedValue(new Map());
+
+    await service.updateContentPins("admin-1", {
+      folderId: "container-1",
+      items: [
+        { targetType: "file", targetId: "file-1" },
+        { targetType: "folder", targetId: "folder-1" },
+      ],
+    });
+
+    expect(tx.file.updateMany).toHaveBeenCalledWith({
+      where: {
+        workspaceId: "workspace-1",
+        folderId: "container-1",
+        pinnedOrder: { not: null },
+      },
+      data: { pinnedOrder: null },
+    });
+    expect(tx.folder.updateMany).toHaveBeenCalledWith({
+      where: {
+        workspaceId: "workspace-1",
+        parentId: "container-1",
+        pinnedOrder: { not: null },
+      },
+      data: { pinnedOrder: null },
+    });
+    expect(tx.file.update).toHaveBeenCalledWith({
+      where: { id: "file-1" },
+      data: { pinnedOrder: 0 },
+    });
+    expect(tx.folder.update).toHaveBeenCalledWith({
+      where: { id: "folder-1" },
+      data: { pinnedOrder: 1 },
+    });
   });
 
   it("rejects re-sharing an asset without edit permission on its source", async () => {

@@ -6,8 +6,17 @@ import {
   Param,
   Patch,
   Post,
+  UploadedFiles,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FilesInterceptor } from "@nestjs/platform-express";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
+import {
+  AssetsService,
+  MAX_FORUM_IMAGES,
+  MAX_FORUM_IMAGE_SIZE_BYTES,
+  type UploadedAssetFile,
+} from "../files/assets.service";
 import {
   CreateForumCategoryDto,
   CreateForumPostDto,
@@ -20,7 +29,10 @@ import { ForumService } from "./forum.service";
 
 @Controller("forum")
 export class ForumController {
-  constructor(private readonly forumService: ForumService) {}
+  constructor(
+    private readonly forumService: ForumService,
+    private readonly assetsService: AssetsService,
+  ) {}
 
   @Get("overview")
   async overview(@CurrentUserId() userId: string | null) {
@@ -121,6 +133,25 @@ export class ForumController {
   ) {
     return {
       post: await this.forumService.updatePost(userId, id, body),
+    };
+  }
+
+  @Post("posts/:id/images")
+  @UseInterceptors(
+    FilesInterceptor("images", MAX_FORUM_IMAGES, {
+      limits: {
+        files: MAX_FORUM_IMAGES,
+        fileSize: MAX_FORUM_IMAGE_SIZE_BYTES,
+      },
+    }),
+  )
+  async uploadPostImages(
+    @CurrentUserId() userId: string | null,
+    @Param("id") id: string,
+    @UploadedFiles() files: UploadedAssetFile[] = [],
+  ) {
+    return {
+      images: await this.assetsService.uploadForumPostImages(userId, id, files),
     };
   }
 

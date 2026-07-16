@@ -59,13 +59,14 @@ export function LoginForm() {
           required
         />
       </label>
-      <label className="label">
-        密码
+      <div className="label">
+        <label htmlFor="login-password">密码</label>
         <span className="password-field">
           <input
             aria-describedby={error ? "login-error" : undefined}
             aria-invalid={Boolean(error)}
             className="input"
+            id="login-password"
             name="password"
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
@@ -87,7 +88,7 @@ export function LoginForm() {
             )}
           </button>
         </span>
-      </label>
+      </div>
       {error ? (
         <p
           aria-live="polite"

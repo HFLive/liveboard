@@ -21,9 +21,6 @@ export default function HomePage() {
             <a className="marketing-nav-link" href="#workflow">
               功能
             </a>
-            <Link className="marketing-login-link" href="/login">
-              登录
-            </Link>
           </div>
         </nav>
 
@@ -38,7 +35,7 @@ export default function HomePage() {
                 登录
                 <ArrowRight aria-hidden="true" className="button-icon right" />
               </Link>
-              <a className="home-secondary-button" href="#workflow">
+              <a className="marketing-text-link" href="#workflow">
                 查看功能
               </a>
             </div>
@@ -110,16 +107,6 @@ export default function HomePage() {
             <p>按成员和权限组控制资料的查看、编辑与管理范围。</p>
           </article>
         </div>
-      </section>
-
-      <section className="marketing-cta">
-        <div>
-          <h2>登录 LiveBoard</h2>
-        </div>
-        <Link className="home-primary-button" href="/login">
-          登录
-          <ArrowRight aria-hidden="true" className="button-icon right" />
-        </Link>
       </section>
     </main>
   );

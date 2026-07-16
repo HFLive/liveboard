@@ -12,6 +12,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { Type } from "class-transformer";
 import type { Response } from "express";
 import {
   IsArray,
@@ -20,6 +21,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  ValidateNested,
 } from "class-validator";
 import type { FileType } from "@liveboard/shared";
 import type { ContentBlockType } from "@liveboard/shared";
@@ -150,6 +152,24 @@ class ReorderBlocksDto {
   blockIds!: string[];
 }
 
+class ContentPinTargetDto {
+  @IsIn(["folder", "file"])
+  targetType!: "folder" | "file";
+
+  @IsString()
+  targetId!: string;
+}
+
+class UpdateContentPinsDto {
+  @IsString()
+  folderId!: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ContentPinTargetDto)
+  items!: ContentPinTargetDto[];
+}
+
 class UploadAssetDto {
   @IsOptional()
   @IsString()
@@ -187,7 +207,15 @@ export class FilesController {
 
   @Get("folders/tree")
   async folderTree(@CurrentUserId() userId: string | null) {
-    return { folders: await this.filesService.getFolderTree(userId) };
+    return this.filesService.getFolderTree(userId);
+  }
+
+  @Patch("content-pins")
+  async updateContentPins(
+    @CurrentUserId() userId: string | null,
+    @Body() body: UpdateContentPinsDto,
+  ) {
+    return this.filesService.updateContentPins(userId, body);
   }
 
   @Post("folders")

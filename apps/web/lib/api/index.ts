@@ -1,8 +1,10 @@
 import type {
   ContentBlockType,
+  ContentPinTarget,
   FileSummary,
   FolderNode,
   ForumCategorySummary,
+  ForumImageSummary,
   ForumPostSummary,
   ForumThreadDetail,
   ForumThreadSummary,
@@ -444,6 +446,7 @@ export function createForumThread(input: {
   categoryId: string;
   title: string;
   body: string;
+  isAnonymous?: boolean;
 }) {
   return request<{ thread: ForumThreadDetail }>("/forum/threads", {
     method: "POST",
@@ -473,7 +476,7 @@ export function deleteForumThread(threadId: string) {
 
 export function createForumPost(
   threadId: string,
-  input: { body: string; parentId?: string },
+  input: { body: string; parentId?: string; isAnonymous?: boolean },
 ) {
   return request<{ post: ForumPostSummary }>(
     `/forum/threads/${threadId}/posts`,
@@ -482,6 +485,32 @@ export function createForumPost(
       body: JSON.stringify(input),
     },
   );
+}
+
+export async function uploadForumPostImages(postId: string, images: File[]) {
+  const formData = new FormData();
+  for (const image of images) {
+    formData.append("images", image);
+  }
+
+  const response = await fetch(`${API_URL}/forum/posts/${postId}/images`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    redirectToLoginOnUnauthorized(
+      response.status,
+      `/forum/posts/${postId}/images`,
+    );
+    const body = (await response.json().catch(() => null)) as {
+      message?: string;
+    } | null;
+    throw new ApiError(body?.message ?? "图片上传失败", response.status);
+  }
+
+  return (await response.json()) as { images: ForumImageSummary[] };
 }
 
 export function updateForumPost(postId: string, input: { body: string }) {
@@ -674,7 +703,19 @@ export function deletePermissionGrant(grantId: string) {
 }
 
 export function getFolderTree() {
-  return request<{ folders: FolderNode[] }>("/folders/tree");
+  return request<{ folders: FolderNode[]; canManagePins: boolean }>(
+    "/folders/tree",
+  );
+}
+
+export function updateContentPins(folderId: string, items: ContentPinTarget[]) {
+  return request<{ folders: FolderNode[]; canManagePins: boolean }>(
+    "/content-pins",
+    {
+      method: "PATCH",
+      body: JSON.stringify({ folderId, items }),
+    },
+  );
 }
 
 export function createFolder(input: { name: string; parentId?: string }) {

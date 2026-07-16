@@ -25,29 +25,201 @@
   background: var(--bg);
 }
 
-.content-folder-link {
+.content-folder-link,
+.content-file-link {
   display: inline-flex;
   align-items: center;
   gap: 9px;
+  min-width: 0;
   border: 0;
   background: transparent;
   color: var(--text);
   font: inherit;
   font-weight: 700;
+  line-height: 1.25;
+  margin: 0;
+  padding: 0;
   text-align: left;
 }
 
-.content-folder-link:hover {
+.content-folder-link:hover,
+.content-file-link:hover {
   color: var(--accent-dark);
 }
 
-.content-folder-link svg {
+.content-folder-link svg,
+.content-file-link svg {
+  flex: 0 0 17px;
   width: 17px;
   height: 17px;
   color: var(--accent);
 }
 
+.content-items-table > tbody > tr:not(.content-empty-row) > td {
+  height: 46px;
+  padding-top: 0;
+  padding-bottom: 0;
+  vertical-align: middle;
+}
+
+.content-items-table td[data-label="操作"] {
+  width: 46px;
+  text-align: right;
+}
+
+.content-items-table .row-menu-wrap {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.content-row-menu-button {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+
+.content-row-menu-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.context-menu.content-row-context-menu {
+  width: 180px;
+  min-width: 180px;
+  box-sizing: border-box;
+}
+
+.new-content-menu {
+  position: relative;
+}
+
+.new-content-menu > .button {
+  gap: 6px;
+}
+
+.new-content-options {
+  top: calc(100% + 6px);
+  min-width: 154px;
+}
+
+.content-draft-tag {
+  flex: 0 0 auto;
+  border-radius: 5px;
+  background: #ebe8e1;
+  color: var(--muted);
+  padding: 2px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.file-tree .tree-folder-item,
+.file-tree .tree-file-item {
+  padding-right: 4px;
+  padding-left: calc(4px + min(var(--tree-depth, 0), 7) * 13px);
+}
+
+.file-tree .tree-folder-item {
+  grid-template-columns: 22px minmax(0, 1fr) 28px;
+  gap: 2px;
+}
+
+.file-tree .tree-file-item {
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 2px;
+  color: var(--text-soft);
+}
+
+.file-tree .tree-main-button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 24px;
+}
+
+.tree-toggle-button,
+.content-pinned-actions > button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  transform: none;
+}
+
+.tree-toggle-button:hover,
+.content-pinned-actions > button:hover:not(:disabled) {
+  background: #e9e7e2;
+  color: var(--text);
+}
+
+.tree-toggle-button:active:not(:disabled),
+.content-pinned-actions > button:active:not(:disabled) {
+  transform: none;
+}
+
+.tree-toggle-button svg,
+.content-pinned-actions > button > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tree-toggle-spacer {
+  width: 22px;
+  height: 22px;
+}
+
+.tree-file-item .item-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.content-pinned-row > td {
+  background: color-mix(in srgb, var(--panel-soft) 72%, transparent);
+}
+
+.content-folder-link .content-pin-marker,
+.content-file-link .content-pin-marker {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  color: var(--accent);
+}
+
+.content-pinned-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.content-pinned-actions > button:disabled {
+  opacity: 0.3;
+}
+
+.content-pinned-actions > .content-row-menu-button {
+  width: 28px;
+  height: 28px;
+}
+
 @media (max-width: 640px) {
+  .content-items-table > tbody > tr:not(.content-empty-row) > td {
+    height: auto;
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  .content-items-table td[data-label="操作"] {
+    width: auto;
+  }
+
   .files-layout .workbench-main > .panel-head .toolbar-row {
     width: 100%;
   }

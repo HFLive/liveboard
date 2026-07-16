@@ -13,8 +13,9 @@ import type {
   ForumThreadSummary,
   UserSummary,
 } from "@liveboard/shared";
-import { isSystemAdmin } from "@liveboard/shared";
+import { isSuperAdmin, isSystemAdmin } from "@liveboard/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { AssetsService } from "../files/assets.service";
 import type {
   CreateForumCategoryDto,
   CreateForumPostDto,
@@ -48,6 +49,7 @@ type ForumThreadRecord = {
   title: string;
   excerpt?: string;
   status: ForumThreadSummary["status"];
+  isAnonymous: boolean;
   author: ForumUserRecord;
   createdAt: Date;
   updatedAt: Date;
@@ -62,9 +64,17 @@ type ForumPostRecord = {
   parentId: string | null;
   replyToId: string | null;
   body: string;
+  isAnonymous: boolean;
+  images: Array<{
+    id: string;
+    width: number | null;
+    height: number | null;
+    sortOrder: number | null;
+  }>;
   author: ForumUserRecord;
   replyTo?: {
     id: string;
+    isAnonymous: boolean;
     author: ForumUserRecord;
   } | null;
   createdAt: Date;
@@ -76,11 +86,25 @@ type ForumPermissionContext = {
   isAdmin: boolean;
   threadAuthorId: string;
   threadStatus: ForumThreadSummary["status"];
+  canRevealAnonymous: boolean;
+  mainPostId: string | null;
+};
+
+const ANONYMOUS_FORUM_USER: UserSummary = {
+  id: "anonymous",
+  username: "anonymous",
+  displayName: "匿名用户",
+  avatarUrl: null,
+  systemRole: "member",
+  status: "active",
 };
 
 @Injectable()
 export class ForumService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly assets: AssetsService,
+  ) {}
 
   async listOverview(userId: string | null) {
     const user = await this.requireActiveUser(userId);
@@ -126,10 +150,13 @@ export class ForumService {
         this.toCategorySummary(category),
       ),
       threads: threads.map(({ posts, ...thread }) =>
-        this.toThreadSummary({
-          ...thread,
-          excerpt: posts[0]?.body ?? "",
-        }),
+        this.toThreadSummary(
+          {
+            ...thread,
+            excerpt: posts[0]?.body ?? "",
+          },
+          isSuperAdmin(user.systemRole),
+        ),
       ),
     };
   }
@@ -155,7 +182,11 @@ export class ForumService {
         },
         posts: {
           orderBy: [{ createdAt: "asc" }],
-          include: { author: true, replyTo: { include: { author: true } } },
+          include: {
+            author: true,
+            replyTo: { include: { author: true } },
+            images: { orderBy: { sortOrder: "asc" } },
+          },
         },
         _count: { select: { posts: true } },
       },
@@ -199,11 +230,13 @@ export class ForumService {
         categoryId: category.id,
         authorId: user.id,
         title,
+        isAnonymous: input.isAnonymous ?? false,
         lastActivityAt: now,
         posts: {
           create: {
             authorId: user.id,
             body,
+            isAnonymous: input.isAnonymous ?? false,
           },
         },
       },
@@ -220,7 +253,11 @@ export class ForumService {
         },
         posts: {
           orderBy: [{ createdAt: "asc" }],
-          include: { author: true, replyTo: { include: { author: true } } },
+          include: {
+            author: true,
+            replyTo: { include: { author: true } },
+            images: { orderBy: { sortOrder: "asc" } },
+          },
         },
         _count: { select: { posts: true } },
       },
@@ -276,8 +313,13 @@ export class ForumService {
           replyToId: parentPost?.id ?? null,
           authorId: user.id,
           body,
+          isAnonymous: input.isAnonymous ?? false,
         },
-        include: { author: true, replyTo: { include: { author: true } } },
+        include: {
+          author: true,
+          replyTo: { include: { author: true } },
+          images: { orderBy: { sortOrder: "asc" } },
+        },
       });
 
       await tx.forumThread.update({
@@ -296,6 +338,8 @@ export class ForumService {
       isAdmin: isSystemAdmin(user.systemRole),
       threadAuthorId: thread.authorId,
       threadStatus: thread.status,
+      canRevealAnonymous: isSuperAdmin(user.systemRole),
+      mainPostId: null,
     });
   }
 
@@ -376,7 +420,11 @@ export class ForumService {
         },
         posts: {
           orderBy: [{ createdAt: "asc" }],
-          include: { author: true, replyTo: { include: { author: true } } },
+          include: {
+            author: true,
+            replyTo: { include: { author: true } },
+            images: { orderBy: { sortOrder: "asc" } },
+          },
         },
         _count: { select: { posts: true } },
       },
@@ -433,10 +481,24 @@ export class ForumService {
       throw new ForbiddenException("该帖子已锁定，不能编辑回复");
     }
 
+    const mainPost = await this.prisma.forumPost.findFirst({
+      where: { threadId: post.threadId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+    });
+
+    if (!mainPost || mainPost.id !== post.id) {
+      throw new ForbiddenException("评论不支持编辑");
+    }
+
     const updated = await this.prisma.forumPost.update({
       where: { id: postId },
       data: { body },
-      include: { author: true, replyTo: { include: { author: true } } },
+      include: {
+        author: true,
+        replyTo: { include: { author: true } },
+        images: { orderBy: { sortOrder: "asc" } },
+      },
     });
 
     return this.toPostSummary(updated, {
@@ -444,6 +506,8 @@ export class ForumService {
       isAdmin,
       threadAuthorId: post.thread.authorId,
       threadStatus: post.thread.status,
+      canRevealAnonymous: isSuperAdmin(user.systemRole),
+      mainPostId: mainPost.id,
     });
   }
 
@@ -456,7 +520,7 @@ export class ForumService {
           include: {
             posts: {
               orderBy: [{ createdAt: "asc" }],
-              select: { id: true },
+              select: { id: true, parentId: true },
             },
           },
         },
@@ -487,6 +551,13 @@ export class ForumService {
       });
       return { ok: true, archivedThread: true };
     }
+
+    const deletingPostIds = post.thread.posts
+      .filter((candidate) =>
+        candidate.id === post.id ? true : candidate.parentId === post.id,
+      )
+      .map((candidate) => candidate.id);
+    await this.assets.removeForumPostImages(deletingPostIds);
 
     const deletedCount = await this.prisma.$transaction(async (tx) => {
       const deletedCount =
@@ -728,14 +799,22 @@ export class ForumService {
     };
   }
 
-  private toThreadSummary(thread: ForumThreadRecord): ForumThreadSummary {
+  private toThreadSummary(
+    thread: ForumThreadRecord,
+    canRevealAnonymous = false,
+  ): ForumThreadSummary {
     return {
       id: thread.id,
       categoryId: thread.categoryId,
       title: thread.title,
       excerpt: this.toExcerpt(thread.excerpt ?? thread.posts?.[0]?.body ?? ""),
       status: thread.status,
-      author: this.toUserSummary(thread.author),
+      isAnonymous: thread.isAnonymous,
+      author: this.toVisibleAuthor(
+        thread.author,
+        thread.isAnonymous,
+        canRevealAnonymous,
+      ),
       postCount: thread._count?.posts ?? thread.posts?.length ?? 0,
       createdAt: thread.createdAt.toISOString(),
       updatedAt: thread.updatedAt.toISOString(),
@@ -767,10 +846,12 @@ export class ForumService {
       isAdmin,
       threadAuthorId: thread.author.id,
       threadStatus: thread.status,
+      canRevealAnonymous: isSuperAdmin(user.systemRole),
+      mainPostId: thread.posts[0]?.id ?? null,
     };
 
     return {
-      ...this.toThreadSummary(thread),
+      ...this.toThreadSummary(thread, permissions.canRevealAnonymous),
       category: this.toCategorySummary(thread.category),
       canEdit,
       canArchive,
@@ -788,6 +869,7 @@ export class ForumService {
       permissions?.isAdmin ||
       (permissions?.threadStatus === "open" &&
         post.author.id === permissions?.userId);
+    const canEdit = canMutate && post.id === permissions?.mainPostId;
 
     return {
       id: post.id,
@@ -797,14 +879,31 @@ export class ForumService {
       replyTo: post.replyTo
         ? {
             id: post.replyTo.id,
-            author: this.toUserSummary(post.replyTo.author),
+            isAnonymous: post.replyTo.isAnonymous,
+            author: this.toVisibleAuthor(
+              post.replyTo.author,
+              post.replyTo.isAnonymous,
+              permissions?.canRevealAnonymous ?? false,
+            ),
           }
         : null,
-      author: this.toUserSummary(post.author),
+      isAnonymous: post.isAnonymous,
+      author: this.toVisibleAuthor(
+        post.author,
+        post.isAnonymous,
+        permissions?.canRevealAnonymous ?? false,
+      ),
       body: post.body,
+      images: post.images.map((image) => ({
+        id: image.id,
+        url: `/assets/${image.id}`,
+        width: image.width ?? 1,
+        height: image.height ?? 1,
+        sortOrder: image.sortOrder ?? 0,
+      })),
       createdAt: post.createdAt.toISOString(),
       updatedAt: post.updatedAt.toISOString(),
-      canEdit: canMutate ?? false,
+      canEdit: canEdit ?? false,
       canDelete: canMutate ?? false,
     };
   }
@@ -820,5 +919,15 @@ export class ForumService {
       systemRole: user.systemRole,
       status: user.status,
     };
+  }
+
+  private toVisibleAuthor(
+    user: ForumUserRecord,
+    isAnonymous: boolean,
+    canRevealAnonymous: boolean,
+  ): UserSummary {
+    return isAnonymous && !canRevealAnonymous
+      ? ANONYMOUS_FORUM_USER
+      : this.toUserSummary(user);
   }
 }

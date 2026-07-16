@@ -226,13 +226,25 @@ export function ForumClient() {
                 >
                   <ForumUserAvatar
                     className="forum-topic-avatar"
+                    isAnonymous={thread.isAnonymous}
                     user={thread.author}
                   />
                   <span className="forum-topic-content">
                     <span className="forum-topic-meta">
                       <b>{category?.name ?? "未分类"}</b>
                       <span>·</span>
-                      <span>{thread.author.displayName}</span>
+                      <span>
+                        {thread.isAnonymous
+                          ? "匿名用户"
+                          : thread.author.displayName}
+                      </span>
+                      {thread.isAnonymous &&
+                      thread.author.id !== "anonymous" ? (
+                        <span className="forum-anonymous-reveal">
+                          真实身份：{thread.author.displayName}（@
+                          {thread.author.username}）
+                        </span>
+                      ) : null}
                       <span>·</span>
                       <span>{formatRelativeTime(thread.lastActivityAt)}</span>
                       {thread.status !== "open" ? (

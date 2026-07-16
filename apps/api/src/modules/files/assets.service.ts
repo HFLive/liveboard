@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { canEdit } from "@liveboard/shared";
+import { canEdit, isSystemAdmin } from "@liveboard/shared";
 import { Client } from "minio";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
@@ -28,6 +28,9 @@ export interface UploadAssetInput {
 }
 
 export const MAX_ASSET_SIZE_BYTES = 50 * 1024 * 1024;
+export const MAX_FORUM_IMAGES = 9;
+export const MAX_FORUM_REPLY_IMAGES = 3;
+export const MAX_FORUM_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const SAFE_INLINE_IMAGE_MIMES = new Set([
   "image/gif",
   "image/jpeg",
@@ -158,13 +161,162 @@ export class AssetsService {
     };
   }
 
+  async uploadForumPostImages(
+    userId: string | null,
+    postId: string,
+    files: UploadedAssetFile[],
+  ) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    if (files.length === 0) {
+      throw new BadRequestException("请选择图片");
+    }
+
+    const [user, post, existingCount] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId } }),
+      this.prisma.forumPost.findUnique({
+        where: { id: postId },
+        include: { thread: true },
+      }),
+      this.prisma.fileAsset.count({ where: { forumPostId: postId } }),
+    ]);
+
+    if (!user || user.status !== "active") {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    if (!post || post.thread.status === "archived") {
+      throw new NotFoundException("Forum post not found");
+    }
+
+    if (post.authorId !== user.id && !isSystemAdmin(user.systemRole)) {
+      throw new ForbiddenException("No permission to attach images");
+    }
+
+    const mainPost = await this.prisma.forumPost.findFirst({
+      where: { threadId: post.threadId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+    });
+    const maxImages =
+      mainPost?.id === post.id ? MAX_FORUM_IMAGES : MAX_FORUM_REPLY_IMAGES;
+
+    if (existingCount + files.length > maxImages) {
+      throw new BadRequestException(`最多附带 ${maxImages} 张图片`);
+    }
+
+    await this.ensureBucket();
+    const uploaded: Array<{
+      id: string;
+      storageKey: string;
+      width: number;
+      height: number;
+      sortOrder: number;
+    }> = [];
+
+    try {
+      for (const [index, file] of files.entries()) {
+        if (file.size > MAX_FORUM_IMAGE_SIZE_BYTES) {
+          throw new BadRequestException("压缩后的单张图片不能超过 10MB");
+        }
+
+        const mimeType = normalizeAssetMimeType(file);
+        if (mimeType !== "image/webp") {
+          throw new BadRequestException("论坛图片必须压缩为 WebP 格式");
+        }
+
+        const dimensions = readWebpDimensions(file.buffer);
+        if (!dimensions) {
+          throw new BadRequestException("无法读取图片尺寸");
+        }
+
+        if (Math.max(dimensions.width, dimensions.height) > 1600) {
+          throw new BadRequestException("图片最长边不能超过 1600px");
+        }
+
+        const storageKey = `${post.thread.workspaceId}/forum/${post.id}/${randomUUID()}.webp`;
+        const asset = await this.reserveAssetWithinQuota(userId, file.size, {
+          workspaceId: post.thread.workspaceId,
+          folderId: null,
+          fileId: null,
+          forumPostId: post.id,
+          storageKey,
+          filename: `forum-image-${existingCount + index + 1}.webp`,
+          mimeType,
+          sizeBytes: file.size,
+          width: dimensions.width,
+          height: dimensions.height,
+          sortOrder: existingCount + index,
+          uploadedBy: userId,
+        });
+
+        try {
+          await this.minio.putObject(
+            this.bucket,
+            storageKey,
+            file.buffer,
+            file.size,
+            { "Content-Type": mimeType },
+          );
+        } catch (caught) {
+          await this.prisma.fileAsset
+            .delete({ where: { id: asset.id } })
+            .catch(() => undefined);
+          throw caught;
+        }
+
+        uploaded.push({
+          id: asset.id,
+          storageKey,
+          width: dimensions.width,
+          height: dimensions.height,
+          sortOrder: existingCount + index,
+        });
+      }
+    } catch (caught) {
+      await Promise.all(
+        uploaded.map((asset) =>
+          this.minio
+            .removeObject(this.bucket, asset.storageKey)
+            .catch(() => undefined),
+        ),
+      );
+      if (uploaded.length > 0) {
+        await this.prisma.fileAsset.deleteMany({
+          where: { id: { in: uploaded.map((asset) => asset.id) } },
+        });
+      }
+      throw caught;
+    }
+
+    return uploaded.map(({ storageKey: _storageKey, ...asset }) => ({
+      ...asset,
+      url: `/assets/${asset.id}`,
+    }));
+  }
+
+  async removeForumPostImages(postIds: string[]) {
+    if (postIds.length === 0) return;
+    const assets = await this.prisma.fileAsset.findMany({
+      where: { forumPostId: { in: postIds } },
+      select: { storageKey: true },
+    });
+    await Promise.all(
+      assets.map((asset) =>
+        this.minio.removeObject(this.bucket, asset.storageKey),
+      ),
+    );
+  }
+
   async listLibraryAssets(userId: string | null) {
     if (!userId) {
       throw new UnauthorizedException("Missing session");
     }
 
     const assets = await this.prisma.fileAsset.findMany({
-      where: { uploadedBy: userId },
+      where: { uploadedBy: userId, forumPostId: null },
       orderBy: { createdAt: "desc" },
     });
 
@@ -202,6 +354,10 @@ export class AssetsService {
 
     if (asset.uploadedBy !== userId) {
       throw new ForbiddenException("No permission to delete asset");
+    }
+
+    if (asset.forumPostId) {
+      throw new ForbiddenException("Forum images cannot be deleted here");
     }
 
     const references = await this.getAssetReferences([asset.id]);
@@ -300,10 +456,29 @@ export class AssetsService {
       id: string;
       folderId: string | null;
       fileId: string | null;
+      forumPostId: string | null;
       uploadedBy: string;
     },
   ) {
     if (asset.uploadedBy === userId) {
+      return;
+    }
+
+    if (asset.forumPostId) {
+      const [post, user] = await Promise.all([
+        this.prisma.forumPost.findUnique({
+          where: { id: asset.forumPostId },
+          include: { thread: true },
+        }),
+        this.prisma.user.findUnique({ where: { id: userId } }),
+      ]);
+      if (
+        !post ||
+        !user ||
+        (post.thread.status === "archived" && !isSystemAdmin(user.systemRole))
+      ) {
+        throw new ForbiddenException("No permission to view asset");
+      }
       return;
     }
 
@@ -509,6 +684,59 @@ function detectSafeRasterMime(buffer: Buffer) {
   ) {
     return "image/webp";
   }
+  return null;
+}
+
+export function readWebpDimensions(buffer: Buffer) {
+  if (
+    buffer.length < 30 ||
+    buffer.subarray(0, 4).toString("ascii") !== "RIFF" ||
+    buffer.subarray(8, 12).toString("ascii") !== "WEBP"
+  ) {
+    return null;
+  }
+
+  let offset = 12;
+  while (offset + 8 <= buffer.length) {
+    const chunkType = buffer.subarray(offset, offset + 4).toString("ascii");
+    const chunkSize = buffer.readUInt32LE(offset + 4);
+    const dataOffset = offset + 8;
+
+    if (chunkType === "VP8X" && dataOffset + 10 <= buffer.length) {
+      return {
+        width: 1 + buffer.readUIntLE(dataOffset + 4, 3),
+        height: 1 + buffer.readUIntLE(dataOffset + 7, 3),
+      };
+    }
+
+    if (
+      chunkType === "VP8L" &&
+      dataOffset + 5 <= buffer.length &&
+      buffer[dataOffset] === 0x2f
+    ) {
+      const bits = buffer.readUInt32LE(dataOffset + 1);
+      return {
+        width: (bits & 0x3fff) + 1,
+        height: ((bits >> 14) & 0x3fff) + 1,
+      };
+    }
+
+    if (
+      chunkType === "VP8 " &&
+      dataOffset + 10 <= buffer.length &&
+      buffer[dataOffset + 3] === 0x9d &&
+      buffer[dataOffset + 4] === 0x01 &&
+      buffer[dataOffset + 5] === 0x2a
+    ) {
+      return {
+        width: buffer.readUInt16LE(dataOffset + 6) & 0x3fff,
+        height: buffer.readUInt16LE(dataOffset + 8) & 0x3fff,
+      };
+    }
+
+    offset = dataOffset + chunkSize + (chunkSize % 2);
+  }
+
   return null;
 }
 

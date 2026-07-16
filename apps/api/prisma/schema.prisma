@@ -147,6 +147,7 @@ model ForumThread {
   categoryId     String
   authorId       String
   title          String
+  isAnonymous    Boolean           @default(false)
   status         ForumThreadStatus @default(open)
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
@@ -162,14 +163,15 @@ model ForumThread {
 }
 
 model ForumPost {
-  id        String   @id @default(cuid())
-  threadId  String
-  parentId  String?
-  replyToId String?
-  authorId  String
-  body      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  threadId    String
+  parentId    String?
+  replyToId   String?
+  authorId    String
+  body        String
+  isAnonymous Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   thread          ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   parent          ForumPost?  @relation("ForumPostReplies", fields: [parentId], references: [id], onDelete: Cascade)
@@ -177,6 +179,7 @@ model ForumPost {
   replyTo         ForumPost?  @relation("ForumPostReplyTargets", fields: [replyToId], references: [id], onDelete: SetNull)
   targetedReplies ForumPost[] @relation("ForumPostReplyTargets")
   author          User        @relation("ForumPostAuthor", fields: [authorId], references: [id])
+  images          FileAsset[] @relation("ForumPostImages")
 
   @@index([threadId, createdAt])
   @@index([parentId, createdAt])
@@ -190,6 +193,7 @@ model Folder {
   parentId    String?
   name        String
   sortOrder   Int      @default(0)
+  pinnedOrder Int?
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -202,6 +206,7 @@ model Folder {
   assets    FileAsset[]
 
   @@index([workspaceId, parentId, sortOrder])
+  @@index([workspaceId, pinnedOrder])
 }
 
 model File {
@@ -212,6 +217,7 @@ model File {
   title       String
   status      FileStatus @default(draft)
   version     Int        @default(1)
+  pinnedOrder Int?
   createdById String
   updatedById String
   publishedAt DateTime?
@@ -229,6 +235,7 @@ model File {
   teachingDeckItems TeachingDeckItem[] @relation("TeachingDeckItemSourceFile")
 
   @@index([folderId, status, updatedAt])
+  @@index([workspaceId, pinnedOrder])
 }
 
 model PermissionGrant {
@@ -418,16 +425,23 @@ model FileAsset {
   workspaceId String
   folderId    String?
   fileId      String?
+  forumPostId String?
   storageKey  String   @unique
   filename    String
   mimeType    String
   sizeBytes   Int
+  width       Int?
+  height      Int?
+  sortOrder   Int?
   uploadedBy  String
   createdAt   DateTime @default(now())
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id])
-  folder    Folder?   @relation(fields: [folderId], references: [id])
-  file      File?     @relation(fields: [fileId], references: [id])
+  workspace Workspace  @relation(fields: [workspaceId], references: [id])
+  folder    Folder?    @relation(fields: [folderId], references: [id])
+  file      File?      @relation(fields: [fileId], references: [id])
+  forumPost ForumPost? @relation("ForumPostImages", fields: [forumPostId], references: [id], onDelete: Cascade)
+
+  @@index([forumPostId, sortOrder])
 }
 
 model AiSettings {

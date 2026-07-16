@@ -1,6 +1,23 @@
 /* Public home owns its responsive layout here so later global redesign rules
    cannot restore desktop grid constraints on narrow screens. */
 
+.marketing-page .marketing-text-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  color: var(--text-soft);
+  padding: 0 4px;
+  font-size: 14px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.marketing-page .marketing-text-link:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
 @media (max-width: 960px) {
   .marketing-page {
     overflow-x: clip;
@@ -39,8 +56,7 @@
 @media (max-width: 760px) {
   .marketing-page .marketing-nav,
   .marketing-page .marketing-hero-inner,
-  .marketing-page .marketing-section,
-  .marketing-page .marketing-cta {
+  .marketing-page .marketing-section {
     width: calc(100% - 32px);
   }
 
@@ -66,11 +82,6 @@
     display: none;
   }
 
-  .marketing-page .marketing-login-link {
-    min-height: 36px;
-    padding: 0 13px;
-  }
-
   .marketing-page .marketing-hero-inner {
     gap: 32px;
     padding: 34px 0 48px;
@@ -90,14 +101,15 @@
   }
 
   .marketing-page .marketing-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
     gap: 10px;
     margin-top: 24px;
   }
 
-  .marketing-page .marketing-actions > * {
-    width: 100%;
+  .marketing-page .marketing-actions .home-primary-button {
+    flex: 0 0 auto;
   }
 
   .marketing-page .scene-window-main {
@@ -218,23 +230,9 @@
   .marketing-page .marketing-feature-grid h3 {
     margin-top: 4px;
   }
-
-  .marketing-page .marketing-cta {
-    align-items: stretch;
-    flex-direction: column;
-    padding: 38px 0 48px;
-  }
-
-  .marketing-page .marketing-cta .home-primary-button {
-    width: 100%;
-  }
 }
 
 @media (max-width: 380px) {
-  .marketing-page .marketing-actions {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .marketing-page .scene-app {
     grid-template-columns: 82px minmax(0, 1fr);
   }

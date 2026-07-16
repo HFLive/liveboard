@@ -48,4 +48,16 @@ describe("LoginForm", () => {
     expect(replace).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
   });
+
+  it("toggles password visibility from the full toggle button", () => {
+    render(<LoginForm />);
+
+    const passwordInput = screen.getByLabelText("密码");
+    const toggle = screen.getByRole("button", { name: "显示密码" });
+
+    expect(passwordInput).toHaveAttribute("type", "password");
+    fireEvent.click(toggle);
+    expect(passwordInput).toHaveAttribute("type", "text");
+    expect(toggle).toHaveAccessibleName("隐藏密码");
+  });
 });

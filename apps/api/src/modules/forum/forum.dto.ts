@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -22,6 +23,10 @@ export class CreateForumThreadDto {
   @MinLength(1)
   @MaxLength(8000)
   body!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isAnonymous?: boolean;
 }
 
 export class CreateForumPostDto {
@@ -33,6 +38,10 @@ export class CreateForumPostDto {
   @IsOptional()
   @IsString()
   parentId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isAnonymous?: boolean;
 }
 
 export class UpdateForumThreadDto {
