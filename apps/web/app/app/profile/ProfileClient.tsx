@@ -9,26 +9,36 @@ import {
   useRef,
   useState,
 } from "react";
-import { Camera, KeyRound, Upload, UserRound, X } from "lucide-react";
-import type { UserSummary } from "@liveboard/shared";
+import {
+  Camera,
+  ImagePlus,
+  KeyRound,
+  Upload,
+  UserRound,
+  X,
+} from "lucide-react";
+import type { UserProfile } from "@liveboard/shared";
 import {
   apiResourceUrl,
   changePassword,
   getMe,
   updateProfile,
   uploadAvatar,
+  uploadProfileBanner,
 } from "@/lib/api";
 import { roleLabel, userStatusLabel } from "@/lib/labels";
 
 const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
+const MAX_BANNER_UPLOAD_BYTES = 5 * 1024 * 1024;
 const AVATAR_CANVAS_SIZE = 512;
 const AVATAR_CROP_VIEW_SIZE = 280;
 
 type CropOffset = { x: number; y: number };
 
 export function ProfileClient() {
-  const [user, setUser] = useState<UserSummary | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [displayName, setDisplayName] = useState("");
+  const [bio, setBio] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -46,7 +56,9 @@ export function ProfileClient() {
     offset: CropOffset;
   } | null>(null);
   const [savingAvatar, setSavingAvatar] = useState(false);
+  const [savingBanner, setSavingBanner] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const bannerInputRef = useRef<HTMLInputElement | null>(null);
   const avatarImageRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
@@ -54,6 +66,7 @@ export function ProfileClient() {
       .then((result) => {
         setUser(result.user);
         setDisplayName(result.user.displayName);
+        setBio(result.user.bio ?? "");
       })
       .catch((caught) => {
         setError(caught instanceof Error ? caught.message : "加载个人信息失败");
@@ -81,15 +94,50 @@ export function ProfileClient() {
     setSavingProfile(true);
 
     try {
-      const result = await updateProfile({ displayName: displayName.trim() });
+      const result = await updateProfile({
+        displayName: displayName.trim(),
+        bio,
+      });
       setUser(result.user);
       setDisplayName(result.user.displayName);
+      setBio(result.user.bio ?? "");
       window.dispatchEvent(new Event("liveboard:profile-updated"));
       setProfileMessage("个人信息已保存");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存个人信息失败");
     } finally {
       setSavingProfile(false);
+    }
+  }
+
+  async function onSelectBanner(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    setError(null);
+    setProfileMessage(null);
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Banner 仅支持 PNG、JPEG 或 WebP 图片");
+      return;
+    }
+
+    if (file.size > MAX_BANNER_UPLOAD_BYTES) {
+      setError("Banner 图片不能超过 5MB");
+      return;
+    }
+
+    setSavingBanner(true);
+    try {
+      const result = await uploadProfileBanner(file);
+      setUser(result.user);
+      setProfileMessage("Banner 已更新");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Banner 上传失败");
+    } finally {
+      setSavingBanner(false);
     }
   }
 
@@ -243,6 +291,39 @@ export function ProfileClient() {
           </div>
 
           <form className="profile-form" onSubmit={onSaveProfile}>
+            <div className="profile-banner-editor">
+              <div className="profile-banner-preview" aria-hidden="true">
+                {user?.bannerUrl ? (
+                  <img alt="" src={apiResourceUrl(user.bannerUrl)} />
+                ) : (
+                  <ImagePlus />
+                )}
+              </div>
+              <div className="profile-banner-actions">
+                <div>
+                  <strong>个人主页 Banner</strong>
+                  <p className="muted">
+                    支持 PNG、JPEG、WebP，图片不超过 5MB。
+                  </p>
+                </div>
+                <input
+                  accept="image/png,image/jpeg,image/webp"
+                  className="sr-only"
+                  onChange={onSelectBanner}
+                  ref={bannerInputRef}
+                  type="file"
+                />
+                <button
+                  className="button secondary"
+                  disabled={savingBanner}
+                  onClick={() => bannerInputRef.current?.click()}
+                  type="button"
+                >
+                  <ImagePlus aria-hidden="true" className="button-icon" />
+                  {savingBanner ? "上传中" : "更换 Banner"}
+                </button>
+              </div>
+            </div>
             <div className="profile-avatar-row">
               <div className="profile-avatar-preview" aria-hidden="true">
                 {user?.avatarUrl ? (
@@ -278,6 +359,18 @@ export function ProfileClient() {
                 onChange={(event) => setDisplayName(event.target.value)}
                 value={displayName}
               />
+            </label>
+            <label className="label">
+              个人简介
+              <textarea
+                className="textarea profile-bio-input"
+                maxLength={500}
+                onChange={(event) => setBio(event.target.value)}
+                placeholder="介绍一下自己"
+                rows={5}
+                value={bio}
+              />
+              <small className="muted">{bio.length}/500</small>
             </label>
             <div className="profile-readonly-grid">
               <div>
@@ -356,11 +449,6 @@ export function ProfileClient() {
               </button>
             </form>
           </details>
-
-          <section className="action-panel quiet">
-            <h2>账号说明</h2>
-            <p className="muted">登录账号和系统权限由管理员创建和维护。</p>
-          </section>
         </aside>
       </section>
 

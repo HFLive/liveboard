@@ -156,6 +156,18 @@ export class UsersController {
   }
 }
 
+@Controller("users")
+export class VisibilityUsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Get("visibility-options")
+  async list(@CurrentUserId() actorUserId: string | null) {
+    return {
+      users: await this.usersService.listVisibilityUsers(actorUserId),
+    };
+  }
+}
+
 @Controller("admin/permission-groups")
 export class PermissionGroupsController {
   constructor(private readonly usersService: UsersService) {}

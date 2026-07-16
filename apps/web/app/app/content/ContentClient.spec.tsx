@@ -262,6 +262,34 @@ describe("ContentClient folder deletion", () => {
     expect(screen.getByText("文档类型")).toBeInTheDocument();
   });
 
+  it("hides creation and Markdown import actions without write permission", async () => {
+    const viewerTree: FolderNode[] = [
+      {
+        ...folderTree[0]!,
+        permission: "viewer",
+        children: folderTree[0]!.children.map((folder) => ({
+          ...folder,
+          permission: "viewer",
+        })),
+      },
+    ];
+    vi.mocked(getFolderTree).mockReset().mockResolvedValue({
+      folders: viewerTree,
+      canManagePins: false,
+    });
+
+    render(<ContentClient />);
+
+    await screen.findByTitle("课程资料");
+    expect(
+      screen.queryByRole("button", { name: "导入 Markdown" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "新建" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTitle("新建文件夹")).not.toBeInTheDocument();
+  });
+
   it("requires two confirmations before recursively deleting a folder", async () => {
     render(<ContentClient />);
 

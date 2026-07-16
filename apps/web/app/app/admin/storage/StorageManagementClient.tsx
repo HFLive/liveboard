@@ -8,6 +8,7 @@ import {
   type UserStorageSummary,
 } from "@/lib/api";
 import { roleLabel } from "@/lib/labels";
+import { UserProfileLink } from "@/components/UserProfileLink";
 import { AdminSubnav } from "@/components/admin/AdminSubnav";
 
 export function StorageManagementClient() {
@@ -150,12 +151,13 @@ export function StorageManagementClient() {
                 return (
                   <tr key={item.user.id}>
                     <td data-label="成员">
-                      <span
-                        className="grant-member"
-                        title={`${item.user.displayName} (${item.user.username})`}
-                      >
-                        <strong>{item.user.displayName}</strong>
-                        <small>{item.user.username}</small>
+                      <span className="grant-member">
+                        <strong>
+                          <UserProfileLink
+                            className="user-profile-link"
+                            user={item.user}
+                          />
+                        </strong>
                       </span>
                     </td>
                     <td data-label="系统权限">

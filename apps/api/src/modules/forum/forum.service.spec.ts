@@ -11,7 +11,11 @@ describe("ForumService", () => {
       count: jest.fn(),
       findMany: jest.fn(),
     },
-    forumThread: { findMany: jest.fn(), findUnique: jest.fn() },
+    forumThread: {
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      delete: jest.fn(),
+    },
     forumPost: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
@@ -186,22 +190,79 @@ describe("ForumService", () => {
     expect(result.posts[0]?.isAnonymous).toBe(true);
   });
 
-  it("rejects editing comments while keeping the main post editable", async () => {
+  it("rejects editing comments even for super admins", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "super-1",
+      username: "root",
+      displayName: "最高管理员",
+      systemRole: "super_admin",
+      status: "active",
+    });
     prisma.forumPost.findUnique.mockResolvedValue({
       id: "comment-1",
       threadId: "thread-1",
-      authorId: "user-1",
+      authorId: "author-1",
       thread: {
         id: "thread-1",
-        authorId: "user-1",
+        authorId: "author-1",
         status: "open",
       },
     });
     prisma.forumPost.findFirst.mockResolvedValue({ id: "main-post-1" });
 
     await expect(
-      service.updatePost("user-1", "comment-1", { body: "修改评论" }),
+      service.updatePost("super-1", "comment-1", { body: "修改评论" }),
     ).rejects.toThrow("评论不支持编辑");
     expect(prisma.forumPost.update).not.toHaveBeenCalled();
+  });
+
+  it("does not allow regular admins to edit thread titles or bodies", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "admin-1",
+      username: "admin",
+      displayName: "管理员",
+      systemRole: "admin",
+      status: "active",
+    });
+    prisma.forumThread.findUnique.mockResolvedValue({
+      id: "thread-1",
+      authorId: "admin-1",
+      workspaceId: "workspace-1",
+      status: "open",
+    });
+
+    await expect(
+      service.updateThread("admin-1", "thread-1", { title: "修改标题" }),
+    ).rejects.toThrow("Only super admins can edit threads");
+
+    prisma.forumPost.findUnique.mockResolvedValue({
+      id: "post-1",
+      threadId: "thread-1",
+      authorId: "admin-1",
+      thread: { id: "thread-1", authorId: "admin-1", status: "open" },
+    });
+    await expect(
+      service.updatePost("admin-1", "post-1", { body: "修改正文" }),
+    ).rejects.toThrow("Only super admins can edit threads");
+  });
+
+  it("permanently deletes a thread and its forum images", async () => {
+    prisma.forumThread.findUnique.mockResolvedValue({
+      id: "thread-1",
+      authorId: "user-1",
+      posts: [{ id: "post-1" }, { id: "post-2" }],
+    });
+    prisma.forumThread.delete.mockResolvedValue({ id: "thread-1" });
+
+    await expect(service.deleteThread("user-1", "thread-1")).resolves.toEqual({
+      ok: true,
+    });
+    expect(assets.removeForumPostImages).toHaveBeenCalledWith([
+      "post-1",
+      "post-2",
+    ]);
+    expect(prisma.forumThread.delete).toHaveBeenCalledWith({
+      where: { id: "thread-1" },
+    });
   });
 });

@@ -2798,49 +2798,6 @@ p.muted {
   white-space: nowrap;
 }
 
-.reference-picker {
-  display: grid;
-  gap: 8px;
-  max-height: 260px;
-  overflow: auto;
-  border: 1px solid var(--line);
-  background: var(--panel-soft);
-  padding: 8px;
-}
-
-.reference-option {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 9px;
-  align-items: start;
-  border: 1px solid var(--line);
-  background: #fff;
-  padding: 9px;
-}
-
-.reference-option input {
-  margin-top: 4px;
-}
-
-.reference-option span {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.reference-option b {
-  font-size: 13px;
-}
-
-.reference-option small {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .library-picker {
   display: grid;
   gap: 8px;
@@ -4351,8 +4308,7 @@ p.muted {
   font-weight: 750;
 }
 
-.modal-library-picker,
-.modal-reference-picker {
+.modal-library-picker {
   max-height: 360px;
 }
 
@@ -4591,7 +4547,6 @@ p.muted {
 .render-list,
 .render-quote,
 .render-todo,
-.render-reference,
 .render-question,
 .render-placeholder {
   font-size: 18px;
@@ -4605,26 +4560,11 @@ p.muted {
 }
 
 .render-quote,
-.render-reference,
 .render-question,
 .render-placeholder {
   border-left: 4px solid var(--line-strong);
   background: var(--panel-soft);
   padding: 12px 14px;
-}
-
-.render-reference {
-  display: grid;
-  gap: 6px;
-}
-
-.render-reference small {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.render-reference span {
-  display: block;
 }
 
 .render-code {
@@ -5323,12 +5263,6 @@ p.muted {
   min-width: min(620px, 72%);
 }
 
-.forum-status-filter button {
-  min-height: 32px;
-  padding: 0 10px;
-  font-size: 13px;
-}
-
 .forum-search {
   min-width: min(300px, 100%);
 }
@@ -5491,11 +5425,6 @@ p.muted {
 .forum-status-badge.locked {
   background: #fff8e8;
   color: #6b4a08;
-}
-
-.forum-status-badge.archived {
-  background: #f1eeee;
-  color: var(--danger);
 }
 
 .forum-status-badge svg {
@@ -6017,17 +5946,6 @@ p.muted {
   .forum-feed-tools {
     justify-content: flex-start;
     min-width: 0;
-  }
-
-  .forum-status-filter {
-    flex-wrap: nowrap;
-    max-width: 100%;
-    overflow-x: auto;
-    scrollbar-width: thin;
-  }
-
-  .forum-status-filter button {
-    flex: 0 0 auto;
   }
 
   .forum-search {

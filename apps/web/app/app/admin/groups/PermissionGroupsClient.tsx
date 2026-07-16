@@ -22,6 +22,7 @@ import {
   updatePermissionGroup,
 } from "@/lib/api";
 import { userStatusLabel } from "@/lib/labels";
+import { UserProfileLink } from "@/components/UserProfileLink";
 import { AdminSubnav } from "@/components/admin/AdminSubnav";
 
 export function PermissionGroupsClient() {
@@ -347,7 +348,6 @@ export function PermissionGroupsClient() {
                               </span>
                               <span>
                                 <strong>{user.displayName}</strong>
-                                <small>{user.username}</small>
                               </span>
                               <Plus aria-hidden="true" />
                             </button>
@@ -376,8 +376,12 @@ export function PermissionGroupsClient() {
                           {member.user.displayName.charAt(0).toUpperCase()}
                         </span>
                         <span>
-                          <strong>{member.user.displayName}</strong>
-                          <small>{member.user.username}</small>
+                          <strong>
+                            <UserProfileLink
+                              className="user-profile-link"
+                              user={member.user}
+                            />
+                          </strong>
                         </span>
                         <span className="permission-member-status">
                           <Check aria-hidden="true" />

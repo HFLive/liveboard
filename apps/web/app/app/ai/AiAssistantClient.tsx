@@ -50,10 +50,10 @@ const welcomeMessage: ChatMessage = {
 };
 
 const promptSuggestions = [
-  "总结最近更新的资料",
-  "梳理本周课程重点",
-  "根据资料生成练习题",
-  "找出可复用的教学模板",
+  "总结最近更新文档的核心内容",
+  "把课程资料整理成一份授课提纲",
+  "根据资料生成 5 道复习题并附答案",
+  "找出资料中需要补充或进一步核对的内容",
 ];
 
 export function AiAssistantClient() {
@@ -410,36 +410,6 @@ export function AiAssistantClient() {
           id="ai-history-drawer"
           aria-label="AI 历史记录"
         >
-          <div className="ai-brand-panel">
-            <div
-              aria-label={
-                aiStatus
-                  ? aiStatus.available
-                    ? "AI 服务可用"
-                    : "AI 服务暂不可用"
-                  : "AI 服务连接中"
-              }
-              className="ai-service-status"
-              title={
-                aiStatus
-                  ? aiStatus.available
-                    ? "服务可用"
-                    : "暂不可用"
-                  : "连接中"
-              }
-            >
-              <span
-                className={
-                  aiStatus
-                    ? aiStatus.available
-                      ? "ai-title-status ok"
-                      : "ai-title-status unavailable"
-                    : "ai-title-status"
-                }
-              />
-            </div>
-          </div>
-
           <div className="ai-sidebar-primary">
             <button
               className={

@@ -71,10 +71,6 @@ export interface UpdateBlockInput {
   dataJson: unknown;
 }
 
-export interface ReferenceBlocksInput {
-  sourceBlockIds: string[];
-}
-
 export interface ReorderBlocksInput {
   blockIds: string[];
 }
@@ -820,88 +816,6 @@ export class FilesService {
         data: { version: { increment: 1 }, updatedById: userId },
       });
       return block;
-    });
-  }
-
-  async referenceBlocks(
-    userId: string | null,
-    fileId: string,
-    input: ReferenceBlocksInput,
-  ) {
-    if (!userId) {
-      throw new UnauthorizedException("Missing session");
-    }
-
-    if (input.sourceBlockIds.length === 0) {
-      throw new BadRequestException("Please select at least one block");
-    }
-
-    const targetPermission = await this.permissions.getEffectiveLevelForFile(
-      userId,
-      fileId,
-    );
-
-    if (!canEdit(targetPermission) && targetPermission !== "lecturer") {
-      throw new ForbiddenException("No permission to edit file");
-    }
-
-    const sourceBlocks = await this.prisma.contentBlock.findMany({
-      where: { id: { in: input.sourceBlockIds } },
-      include: { file: true },
-    });
-    const byId = new Map(sourceBlocks.map((block) => [block.id, block]));
-    const orderedBlocks = input.sourceBlockIds
-      .map((blockId) => byId.get(blockId))
-      .filter((block): block is NonNullable<typeof block> => Boolean(block));
-
-    if (orderedBlocks.length !== input.sourceBlockIds.length) {
-      throw new NotFoundException("Source block not found");
-    }
-
-    const sourcePermissions = await this.permissions.getEffectiveLevelsForFiles(
-      userId,
-      orderedBlocks.map((block) => block.fileId),
-    );
-    for (const block of orderedBlocks) {
-      if (!canView(sourcePermissions.get(block.fileId) ?? null)) {
-        throw new ForbiddenException("No permission to reference source block");
-      }
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-      const maxBlock = await tx.contentBlock.findFirst({
-        where: { fileId },
-        orderBy: { sortOrder: "desc" },
-        select: { sortOrder: true },
-      });
-      const startOrder = maxBlock?.sortOrder ?? 0;
-      const created = [];
-      for (const [index, block] of orderedBlocks.entries()) {
-        created.push(
-          await tx.contentBlock.create({
-            data: {
-              fileId,
-              type: "reference",
-              sortOrder: startOrder + (index + 1) * 10,
-              dataJson: {
-                text: getBlockText(block.dataJson),
-                sourceFileTitle: block.file.title,
-                sourceBlockType: block.type,
-              },
-              sourceFileId: block.fileId,
-              sourceBlockId: block.id,
-              referenceMode: "snapshot",
-              createdById: userId,
-              updatedById: userId,
-            },
-          }),
-        );
-      }
-      await tx.file.update({
-        where: { id: fileId },
-        data: { version: { increment: 1 }, updatedById: userId },
-      });
-      return created;
     });
   }
 

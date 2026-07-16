@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Archive, Lock, MessageSquare, Plus, Search } from "lucide-react";
+import { Lock, MessageSquare, Plus, Search } from "lucide-react";
 import type {
   ForumCategorySummary,
   ForumThreadSummary,
@@ -10,10 +10,10 @@ import type {
 import { listForumOverview } from "@/lib/api";
 import { APP_ROUTES, forumThread } from "@/lib/routes";
 import { SortIconSelect } from "@/components/SortIconSelect";
+import { UserProfileLink } from "@/components/UserProfileLink";
 import { ForumUserAvatar } from "./ForumUserAvatar";
 
 type CategoryFilter = "all" | string;
-type StatusFilter = "all" | "open" | "locked" | "archived";
 type SortMode = "activity" | "newest" | "replies";
 
 const SORT_OPTIONS = [
@@ -43,7 +43,6 @@ export function ForumClient() {
   const [threads, setThreads] = useState<ForumThreadSummary[]>([]);
   const [activeCategoryId, setActiveCategoryId] =
     useState<CategoryFilter>("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("activity");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -81,15 +80,13 @@ export function ForumClient() {
       .filter((thread) => {
         const matchesCategory =
           activeCategoryId === "all" || thread.categoryId === activeCategoryId;
-        const matchesStatus =
-          statusFilter === "all" || thread.status === statusFilter;
         const matchesQuery = normalizedQuery
           ? thread.title.toLowerCase().includes(normalizedQuery) ||
             thread.excerpt.toLowerCase().includes(normalizedQuery) ||
             thread.author.displayName.toLowerCase().includes(normalizedQuery) ||
             thread.author.username.toLowerCase().includes(normalizedQuery)
           : true;
-        return matchesCategory && matchesStatus && matchesQuery;
+        return matchesCategory && matchesQuery;
       })
       .sort((left, right) => {
         if (sortMode === "replies") {
@@ -103,16 +100,12 @@ export function ForumClient() {
         ).getTime();
         return rightTime - leftTime;
       });
-  }, [activeCategoryId, query, sortMode, statusFilter, threads]);
+  }, [activeCategoryId, query, sortMode, threads]);
 
-  const hasFilters =
-    activeCategoryId !== "all" ||
-    statusFilter !== "all" ||
-    Boolean(query.trim());
+  const hasFilters = activeCategoryId !== "all" || Boolean(query.trim());
 
   function resetFilters() {
     setActiveCategoryId("all");
-    setStatusFilter("all");
     setQuery("");
   }
 
@@ -172,28 +165,6 @@ export function ForumClient() {
                 value={query}
               />
             </label>
-            <div
-              className="segmented-control forum-status-filter"
-              aria-label="帖子状态"
-            >
-              {(
-                [
-                  ["all", "全部"],
-                  ["open", "开放"],
-                  ["locked", "锁定"],
-                  ["archived", "归档"],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  className={statusFilter === value ? "active" : ""}
-                  key={value}
-                  onClick={() => setStatusFilter(value)}
-                  type="button"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
             <SortIconSelect
               className="forum-sort-control"
               onChange={setSortMode}
@@ -219,11 +190,7 @@ export function ForumClient() {
               const category = categoryById.get(thread.categoryId);
               const replyCount = Math.max(0, thread.postCount - 1);
               return (
-                <Link
-                  className="forum-topic"
-                  href={forumThread(thread.id)}
-                  key={thread.id}
-                >
+                <article className="forum-topic" key={thread.id}>
                   <ForumUserAvatar
                     className="forum-topic-avatar"
                     isAnonymous={thread.isAnonymous}
@@ -233,33 +200,35 @@ export function ForumClient() {
                     <span className="forum-topic-meta">
                       <b>{category?.name ?? "未分类"}</b>
                       <span>·</span>
-                      <span>
-                        {thread.isAnonymous
-                          ? "匿名用户"
-                          : thread.author.displayName}
-                      </span>
+                      {thread.isAnonymous ? (
+                        <span>匿名用户</span>
+                      ) : (
+                        <UserProfileLink
+                          className="user-profile-link"
+                          user={thread.author}
+                        />
+                      )}
                       {thread.isAnonymous &&
                       thread.author.id !== "anonymous" ? (
                         <span className="forum-anonymous-reveal">
-                          真实身份：{thread.author.displayName}（@
-                          {thread.author.username}）
+                          真实身份：
+                          <UserProfileLink
+                            className="user-profile-link"
+                            user={thread.author}
+                          />
                         </span>
                       ) : null}
                       <span>·</span>
                       <span>{formatRelativeTime(thread.lastActivityAt)}</span>
-                      {thread.status !== "open" ? (
+                      {thread.status === "locked" ? (
                         <span className={`forum-list-status ${thread.status}`}>
-                          {thread.status === "locked" ? (
-                            <Lock aria-hidden="true" />
-                          ) : (
-                            <Archive aria-hidden="true" />
-                          )}
-                          {thread.status === "locked" ? "已锁定" : "已归档"}
+                          <Lock aria-hidden="true" />
+                          已锁定
                         </span>
                       ) : null}
                     </span>
                     <strong className="forum-topic-title">
-                      {thread.title}
+                      <Link href={forumThread(thread.id)}>{thread.title}</Link>
                     </strong>
                     {thread.excerpt ? <p>{thread.excerpt}</p> : null}
                     <span className="forum-topic-footer">
@@ -267,7 +236,7 @@ export function ForumClient() {
                       {replyCount} 条回复
                     </span>
                   </span>
-                </Link>
+                </article>
               );
             })}
 

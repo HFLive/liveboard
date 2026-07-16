@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { roleLabel, userStatusLabel } from "@/lib/labels";
 import { AdminSubnav } from "@/components/admin/AdminSubnav";
+import { UserProfileLink } from "@/components/UserProfileLink";
 
 type UserEditDraft = {
   displayName: string;
@@ -356,7 +357,12 @@ export function UserManagementClient() {
               <tbody>
                 {users.map((user) => (
                   <tr key={user.id}>
-                    <td data-label="显示名">{user.displayName}</td>
+                    <td data-label="显示名">
+                      <UserProfileLink
+                        className="user-profile-link"
+                        user={user}
+                      />
+                    </td>
                     <td data-label="登录账号">
                       <span className="account-code">{user.username}</span>
                     </td>

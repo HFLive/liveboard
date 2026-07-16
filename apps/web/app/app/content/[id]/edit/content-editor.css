@@ -1,0 +1,81 @@
+.editor-action-bar .publish-state-badge {
+  min-height: 31px;
+  border: 0;
+  border-radius: 10px;
+  background: #eeebe5;
+  color: var(--text-soft);
+  padding: 0 11px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.editor-action-bar .publish-state-badge.muted {
+  background: #eeebe5;
+  color: var(--muted);
+}
+
+.media-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 104px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  color: var(--text-soft);
+  cursor: pointer;
+  padding: 14px;
+  text-align: left;
+}
+
+.media-picker-trigger:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.media-picker-trigger > svg {
+  width: 22px;
+  height: 22px;
+}
+
+.media-picker-trigger > span {
+  display: grid;
+  gap: 2px;
+}
+
+.media-picker-trigger small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.media-block-fields {
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 210px) auto;
+}
+
+.media-block-fields.attachment-fields {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.media-replace-button {
+  align-self: end;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .editor-action-bar .button-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .media-block-fields,
+  .media-block-fields.attachment-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .media-replace-button {
+    justify-self: start;
+  }
+}

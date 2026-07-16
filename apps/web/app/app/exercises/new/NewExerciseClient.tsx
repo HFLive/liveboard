@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,12 +13,19 @@ import {
   Pencil,
   Plus,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
-import type { QuestionType } from "@liveboard/shared";
-import { createExerciseSet, CreateExerciseQuestionInput } from "@/lib/api";
+import type { QuestionType, UserSummary } from "@liveboard/shared";
+import {
+  createExerciseSet,
+  CreateExerciseQuestionInput,
+  getMe,
+  listVisibilityUsers,
+} from "@/lib/api";
+import { UserVisibilityPicker } from "@/components/UserVisibilityPicker";
 import { questionTypeLabel } from "@/lib/labels";
-import { APP_ROUTES, exerciseDetail } from "@/lib/routes";
+import { APP_ROUTES } from "@/lib/routes";
 
 const questionTypes: Array<{ value: QuestionType; label: string }> = [
   { value: "single_choice", label: questionTypeLabel("single_choice") },
@@ -44,7 +51,7 @@ function formatBuilderAnswer(value: unknown) {
     return value ? "正确" : "错误";
   }
 
-  return typeof value === "string" && value ? value : "人工批阅";
+  return typeof value === "string" && value ? value : "人工批改";
 }
 
 function getQuestionOptions(question: CreateExerciseQuestionInput) {
@@ -68,12 +75,34 @@ export function NewExerciseClient() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [creatorUserId, setCreatorUserId] = useState("");
+  const [selectedVisibleUserIds, setSelectedVisibleUserIds] = useState<
+    Set<string>
+  >(new Set());
+  const [visibilityQuery, setVisibilityQuery] = useState("");
+  const [showVisibilityModal, setShowVisibilityModal] = useState(false);
+  const [visibilityDraftUserIds, setVisibilityDraftUserIds] = useState<
+    Set<string>
+  >(new Set());
 
   const needsOptions = type === "single_choice" || type === "multiple_choice";
   const totalScore = useMemo(
     () => questions.reduce((sum, question) => sum + question.score, 0),
     [questions],
   );
+
+  useEffect(() => {
+    Promise.all([getMe(), listVisibilityUsers()])
+      .then(([meResult, usersResult]) => {
+        setUsers(usersResult.users);
+        setCreatorUserId(meResult.user.id);
+        setSelectedVisibleUserIds(new Set([meResult.user.id]));
+      })
+      .catch((caught) =>
+        setError(caught instanceof Error ? caught.message : "加载用户失败"),
+      );
+  }, []);
 
   function resetQuestionEditor() {
     setEditingIndex(null);
@@ -83,6 +112,17 @@ export function NewExerciseClient() {
     setAnswer(undefined);
     setScore(5);
     setError(null);
+  }
+
+  function openVisibilityModal() {
+    setVisibilityDraftUserIds(new Set(selectedVisibleUserIds));
+    setVisibilityQuery("");
+    setShowVisibilityModal(true);
+  }
+
+  function applyVisibilityDraft() {
+    setSelectedVisibleUserIds(new Set(visibilityDraftUserIds));
+    setShowVisibilityModal(false);
   }
 
   function changeQuestionType(nextType: QuestionType) {
@@ -328,15 +368,16 @@ export function NewExerciseClient() {
 
     setLoading(true);
     try {
-      const result = await createExerciseSet({
+      await createExerciseSet({
         title: title.trim(),
         ...(openAt ? { openAt: toIsoString(openAt) } : {}),
         ...(dueAt ? { dueAt: toIsoString(dueAt) } : {}),
         allowMultipleSubmissions,
         showAnswerAfterSubmit,
         questions,
+        visibleUserIds: [...selectedVisibleUserIds],
       });
-      router.push(exerciseDetail(result.exerciseSet.id));
+      router.push(APP_ROUTES.exercises);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "创建练习失败");
     } finally {
@@ -386,22 +427,24 @@ export function NewExerciseClient() {
 
           <div className="quiz-settings-grid">
             <label className="label">
-              开始时间
+              开始时间（可选）
               <input
                 className="input"
                 onChange={(event) => setOpenAt(event.target.value)}
                 type="datetime-local"
                 value={openAt}
               />
+              <small className="muted">不填写则创建后立即开始。</small>
             </label>
             <label className="label">
-              截止时间
+              截止时间（可选）
               <input
                 className="input"
                 onChange={(event) => setDueAt(event.target.value)}
                 type="datetime-local"
                 value={dueAt}
               />
+              <small className="muted">不填写则不设截止时间。</small>
             </label>
           </div>
 
@@ -433,6 +476,16 @@ export function NewExerciseClient() {
               />
             </label>
           </div>
+          {creatorUserId ? (
+            <button
+              className="button secondary quiz-visibility-button"
+              onClick={openVisibilityModal}
+              type="button"
+            >
+              <Users aria-hidden="true" className="button-icon" />
+              可见范围（{selectedVisibleUserIds.size} 人）
+            </button>
+          ) : null}
         </section>
 
         <section className="quiz-question-section">
@@ -468,7 +521,7 @@ export function NewExerciseClient() {
                     <p>
                       {questionTypeLabel(question.type)} · {question.score} 分
                       {question.type === "short_answer"
-                        ? " · 人工批阅"
+                        ? " · 人工批改"
                         : ` · 答案：${formatBuilderAnswer(question.answerJson)}`}
                     </p>
                   </div>
@@ -652,7 +705,7 @@ export function NewExerciseClient() {
               <div className="quiz-manual-review-note">
                 <Check aria-hidden="true" />
                 <span>
-                  <strong>这道题将人工批阅</strong>
+                  <strong>这道题将人工批改</strong>
                   <small>成员可输入长文本，提交后由教师给分。</small>
                 </span>
               </div>
@@ -702,6 +755,56 @@ export function NewExerciseClient() {
           </button>
         </footer>
       </form>
+      {showVisibilityModal && creatorUserId ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            aria-labelledby="exercise-visibility-title"
+            aria-modal="true"
+            className="modal-panel quiz-visibility-modal"
+            role="dialog"
+          >
+            <div className="modal-head">
+              <h2 id="exercise-visibility-title">设置可见范围</h2>
+              <button
+                className="icon-button subtle"
+                onClick={() => setShowVisibilityModal(false)}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <UserVisibilityPicker
+                creatorUserId={creatorUserId}
+                onChange={setVisibilityDraftUserIds}
+                onQueryChange={setVisibilityQuery}
+                query={visibilityQuery}
+                selectedUserIds={visibilityDraftUserIds}
+                users={users}
+              />
+            </div>
+            <div className="modal-foot">
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  onClick={() => setShowVisibilityModal(false)}
+                  type="button"
+                >
+                  取消
+                </button>
+                <button
+                  className="button"
+                  onClick={applyVisibilityDraft}
+                  type="button"
+                >
+                  保存可见范围
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

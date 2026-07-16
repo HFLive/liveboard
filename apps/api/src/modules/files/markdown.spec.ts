@@ -155,10 +155,6 @@ $$
         type: "attachment",
         dataJson: { filename: "讲义.pdf", url: "/assets/asset-1" },
       },
-      {
-        type: "reference",
-        dataJson: { text: "正文", sourceFileTitle: "来源" },
-      },
       { type: "question", dataJson: { text: "为什么？" } },
     ]);
 
@@ -169,7 +165,6 @@ $$
     expect(output).toContain("图片：图");
     expect(output).not.toContain("javascript:");
     expect(output).toContain("[讲义.pdf](/assets/asset-1)");
-    expect(output).toContain("> 引用自：来源");
     expect(output).toContain("### 题目\n\n为什么？");
   });
 

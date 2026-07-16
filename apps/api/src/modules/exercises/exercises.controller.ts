@@ -4,6 +4,7 @@ import {
   CreateExerciseSetDto,
   GradeSubmissionDto,
   SubmitExerciseDto,
+  UpdateExerciseVisibilityDto,
 } from "./exercises.dto";
 import { ExercisesService } from "./exercises.service";
 
@@ -32,6 +33,21 @@ export class ExercisesController {
   async get(@CurrentUserId() userId: string | null, @Param("id") id: string) {
     return {
       exerciseSet: await this.exercisesService.getExerciseSet(userId, id),
+    };
+  }
+
+  @Patch("exercise-sets/:id/visibility")
+  async updateVisibility(
+    @CurrentUserId() userId: string | null,
+    @Param("id") id: string,
+    @Body() body: UpdateExerciseVisibilityDto,
+  ) {
+    return {
+      exerciseSet: await this.exercisesService.updateVisibility(
+        userId,
+        id,
+        body.visibleUserIds,
+      ),
     };
   }
 

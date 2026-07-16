@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ConflictException } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 import type { PermissionsService } from "../permissions/permissions.service";
 import type { PrismaService } from "../prisma/prisma.service";
@@ -75,18 +75,22 @@ describe("AssetsService consistency", () => {
     workspace: { findFirst: jest.fn() },
     forumPost: { findUnique: jest.fn(), findFirst: jest.fn() },
     fileAsset: {
+      findUnique: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
       delete: jest.fn(),
       deleteMany: jest.fn(),
     },
     contentBlock: { findMany: jest.fn() },
+    teachingDeckItem: { findMany: jest.fn(), findFirst: jest.fn() },
     $transaction: jest.fn(),
   };
   const minio = {
     bucketExists: jest.fn(),
     makeBucket: jest.fn(),
     putObject: jest.fn(),
+    getObject: jest.fn(),
+    removeObject: jest.fn(),
   };
   let service: AssetsService;
 
@@ -99,6 +103,7 @@ describe("AssetsService consistency", () => {
     );
     Object.assign(service as unknown as { minio: unknown }, { minio });
     prisma.workspace.findFirst.mockResolvedValue({ id: "workspace-1" });
+    prisma.teachingDeckItem.findMany.mockResolvedValue([]);
     prisma.fileAsset.delete.mockResolvedValue({ id: "asset-1" });
     minio.bucketExists.mockResolvedValue(true);
   });
@@ -118,6 +123,62 @@ describe("AssetsService consistency", () => {
         }),
       }),
     );
+  });
+
+  it("allows an asset through a teaching deck visible to the user", async () => {
+    prisma.fileAsset.findUnique.mockResolvedValue({
+      id: "asset-1",
+      uploadedBy: "teacher-1",
+      folderId: null,
+      fileId: null,
+      forumPostId: null,
+      storageKey: "asset-key",
+    });
+    prisma.contentBlock.findMany.mockResolvedValue([]);
+    prisma.user.findUnique.mockResolvedValue({
+      status: "active",
+      systemRole: "member",
+    });
+    prisma.teachingDeckItem.findFirst.mockResolvedValue({ id: "item-1" });
+    minio.getObject.mockResolvedValue({ pipe: jest.fn() });
+
+    await expect(
+      service.getAssetForDownload("learner-1", "asset-1"),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        asset: expect.objectContaining({ id: "asset-1" }),
+      }),
+    );
+    expect(prisma.teachingDeckItem.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          assetId: "asset-1",
+          deck: expect.objectContaining({ OR: expect.any(Array) }),
+        }),
+      }),
+    );
+  });
+
+  it("blocks deletion and returns the referencing teaching deck", async () => {
+    prisma.fileAsset.findUnique.mockResolvedValue({
+      id: "asset-1",
+      uploadedBy: "user-1",
+      forumPostId: null,
+      storageKey: "asset-key",
+    });
+    prisma.contentBlock.findMany.mockResolvedValue([]);
+    prisma.teachingDeckItem.findMany.mockResolvedValue([
+      {
+        id: "item-1",
+        assetId: "asset-1",
+        deck: { id: "deck-1", title: "课堂讲解" },
+      },
+    ]);
+
+    await expect(
+      service.deleteLibraryAsset("user-1", "asset-1"),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(minio.removeObject).not.toHaveBeenCalled();
   });
 
   it("removes the reserved database row when object upload fails", async () => {

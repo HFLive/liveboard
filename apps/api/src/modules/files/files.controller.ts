@@ -100,7 +100,6 @@ class CreateBlockDto {
     "image",
     "attachment",
     "divider",
-    "reference",
     "question",
     "table",
     "math",
@@ -129,7 +128,6 @@ class UpdateBlockDto {
     "image",
     "attachment",
     "divider",
-    "reference",
     "question",
     "table",
     "math",
@@ -138,12 +136,6 @@ class UpdateBlockDto {
 
   @IsObject()
   dataJson!: Record<string, unknown>;
-}
-
-class ReferenceBlocksDto {
-  @IsArray()
-  @IsString({ each: true })
-  sourceBlockIds!: string[];
 }
 
 class ReorderBlocksDto {
@@ -359,17 +351,6 @@ export class FilesController {
     @Body() body: CreateBlockDto,
   ) {
     return { block: await this.filesService.createBlock(userId, fileId, body) };
-  }
-
-  @Post("files/:id/reference-blocks")
-  async referenceBlocks(
-    @CurrentUserId() userId: string | null,
-    @Param("id") fileId: string,
-    @Body() body: ReferenceBlocksDto,
-  ) {
-    return {
-      blocks: await this.filesService.referenceBlocks(userId, fileId, body),
-    };
   }
 
   @Patch("files/:id/blocks/reorder")

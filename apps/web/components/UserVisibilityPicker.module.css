@@ -1,0 +1,140 @@
+.picker {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface-soft);
+}
+
+.header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.header strong {
+  font-size: 0.82rem;
+}
+
+.header span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.header button {
+  border: 0;
+  background: transparent;
+  color: var(--accent-dark);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.header button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 10px;
+}
+
+.search svg {
+  position: absolute;
+  left: 10px;
+  width: 15px;
+  pointer-events: none;
+  color: var(--muted);
+}
+
+.search input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 10px 7px 32px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  outline: 0;
+}
+
+.search input:focus {
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.users {
+  display: flex;
+  flex-direction: column;
+  max-height: 210px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+}
+
+.user {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.user + .user {
+  border-top: 1px solid var(--line);
+}
+
+.user:hover {
+  background: var(--surface-soft);
+}
+
+.user > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.user strong,
+.user small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user strong {
+  font-size: 0.8rem;
+}
+
+.user small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.user em {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-style: normal;
+}
+
+.empty {
+  margin: 0;
+  padding: 18px 12px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-align: center;
+}

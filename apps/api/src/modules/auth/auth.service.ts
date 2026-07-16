@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { UserSummary } from "@liveboard/shared";
+import type { UserProfile, UserSummary } from "@liveboard/shared";
 import argon2 from "argon2";
 import { Client } from "minio";
 import { randomUUID } from "node:crypto";
@@ -16,7 +16,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { ChangePasswordDto, UpdateProfileDto } from "./auth.dto";
 import { LoginRateLimitService } from "./login-rate-limit.service";
 
-export interface UploadedAvatarFile {
+export interface UploadedProfileImageFile {
   originalname: string;
   mimetype: string;
   size: number;
@@ -24,7 +24,8 @@ export interface UploadedAvatarFile {
 }
 
 export const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024;
-const AVATAR_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
+export const MAX_BANNER_SIZE_BYTES = 5 * 1024 * 1024;
+const PROFILE_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 @Injectable()
 export class AuthService {
@@ -99,7 +100,7 @@ export class AuthService {
     return { user: this.toSummary(user), sessionVersion: user.sessionVersion };
   }
 
-  async getCurrentUser(userId: string | null): Promise<UserSummary> {
+  async getCurrentUser(userId: string | null): Promise<UserProfile> {
     if (!userId) {
       throw new UnauthorizedException("Missing session");
     }
@@ -112,32 +113,56 @@ export class AuthService {
       throw new NotFoundException("User not found");
     }
 
-    return this.toSummary(user);
+    return this.toProfile(user);
+  }
+
+  async getUserProfile(
+    userId: string | null,
+    targetUserId: string,
+  ): Promise<UserProfile> {
+    await this.requireActiveUser(userId);
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+    });
+
+    if (!target || target.status !== "active") {
+      throw new NotFoundException("User not found");
+    }
+
+    return this.toProfile(target);
   }
 
   async updateProfile(
     userId: string | null,
     input: UpdateProfileDto,
-  ): Promise<UserSummary> {
+  ): Promise<UserProfile> {
     const user = await this.requireActiveUser(userId);
-    const displayName = input.displayName.trim();
+    const data: { displayName?: string; bio?: string | null } = {};
 
-    if (!displayName) {
-      throw new BadRequestException("显示名不能为空");
+    if (typeof input.displayName === "string") {
+      const displayName = input.displayName.trim();
+      if (!displayName) {
+        throw new BadRequestException("显示名不能为空");
+      }
+      data.displayName = displayName;
+    }
+
+    if (typeof input.bio === "string") {
+      data.bio = input.bio.trim() || null;
     }
 
     const updated = await this.prisma.user.update({
       where: { id: user.id },
-      data: { displayName },
+      data,
     });
 
-    return this.toSummary(updated);
+    return this.toProfile(updated);
   }
 
   async updateAvatar(
     userId: string | null,
-    file: UploadedAvatarFile | undefined,
-  ): Promise<UserSummary> {
+    file: UploadedProfileImageFile | undefined,
+  ): Promise<UserProfile> {
     const user = await this.requireActiveUser(userId);
 
     if (!file) {
@@ -148,8 +173,8 @@ export class AuthService {
       throw new BadRequestException("头像图片不能超过 2MB");
     }
 
-    const mimeType = normalizeAvatarMimeType(file);
-    const storageKey = `avatars/${user.id}/${randomUUID()}.${avatarExtension(mimeType)}`;
+    const mimeType = normalizeProfileImageMimeType(file, "头像");
+    const storageKey = `avatars/${user.id}/${randomUUID()}.${profileImageExtension(mimeType)}`;
 
     await this.ensureBucket();
     await this.minio.putObject(
@@ -185,7 +210,59 @@ export class AuthService {
         .catch(() => undefined);
     }
 
-    return this.toSummary(updated);
+    return this.toProfile(updated);
+  }
+
+  async updateBanner(
+    userId: string | null,
+    file: UploadedProfileImageFile | undefined,
+  ): Promise<UserProfile> {
+    const user = await this.requireActiveUser(userId);
+
+    if (!file) {
+      throw new BadRequestException("请选择 Banner 图片");
+    }
+
+    if (file.size > MAX_BANNER_SIZE_BYTES) {
+      throw new BadRequestException("Banner 图片不能超过 5MB");
+    }
+
+    const mimeType = normalizeProfileImageMimeType(file, "Banner");
+    const storageKey = `banners/${user.id}/${randomUUID()}.${profileImageExtension(mimeType)}`;
+
+    await this.ensureBucket();
+    await this.minio.putObject(
+      this.bucket,
+      storageKey,
+      file.buffer,
+      file.size,
+      { "Content-Type": mimeType },
+    );
+
+    let updated: Awaited<ReturnType<typeof this.prisma.user.update>>;
+    try {
+      updated = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          bannerStorageKey: storageKey,
+          bannerMimeType: mimeType,
+          bannerUpdatedAt: new Date(),
+        },
+      });
+    } catch (caught) {
+      await this.minio
+        .removeObject(this.bucket, storageKey)
+        .catch(() => undefined);
+      throw caught;
+    }
+
+    if (user.bannerStorageKey && user.bannerStorageKey !== storageKey) {
+      await this.minio
+        .removeObject(this.bucket, user.bannerStorageKey)
+        .catch(() => undefined);
+    }
+
+    return this.toProfile(updated);
   }
 
   async getAvatar(userId: string | null, targetUserId: string) {
@@ -213,6 +290,35 @@ export class AuthService {
 
     return {
       mimeType: user.avatarMimeType ?? "image/webp",
+      stream: stream as Readable,
+    };
+  }
+
+  async getBanner(userId: string | null, targetUserId: string) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        bannerStorageKey: true,
+        bannerMimeType: true,
+        status: true,
+      },
+    });
+
+    if (!user || user.status !== "active" || !user.bannerStorageKey) {
+      throw new NotFoundException("Banner not found");
+    }
+
+    const stream = await this.minio.getObject(
+      this.bucket,
+      user.bannerStorageKey,
+    );
+
+    return {
+      mimeType: user.bannerMimeType ?? "image/webp",
       stream: stream as Readable,
     };
   }
@@ -282,19 +388,41 @@ export class AuthService {
       status: user.status,
     };
   }
+
+  private toProfile(user: {
+    id: string;
+    username: string;
+    displayName: string;
+    avatarUpdatedAt?: Date | null;
+    bio?: string | null;
+    bannerUpdatedAt?: Date | null;
+    systemRole: UserSummary["systemRole"];
+    status: UserSummary["status"];
+  }): UserProfile {
+    return {
+      ...this.toSummary(user),
+      bio: user.bio ?? null,
+      bannerUrl: user.bannerUpdatedAt
+        ? `/auth/banner/${user.id}?v=${user.bannerUpdatedAt.getTime()}`
+        : null,
+    };
+  }
 }
 
-function normalizeAvatarMimeType(file: UploadedAvatarFile) {
+function normalizeProfileImageMimeType(
+  file: UploadedProfileImageFile,
+  label: string,
+) {
   const mimeType = detectAvatarMimeType(file.buffer);
 
-  if (!mimeType || !AVATAR_IMAGE_MIMES.has(mimeType)) {
-    throw new BadRequestException("头像仅支持 PNG、JPEG 或 WebP 图片");
+  if (!mimeType || !PROFILE_IMAGE_MIMES.has(mimeType)) {
+    throw new BadRequestException(`${label}仅支持 PNG、JPEG 或 WebP 图片`);
   }
 
   return mimeType;
 }
 
-function avatarExtension(mimeType: string) {
+function profileImageExtension(mimeType: string) {
   if (mimeType === "image/png") return "png";
   if (mimeType === "image/jpeg") return "jpg";
   return "webp";

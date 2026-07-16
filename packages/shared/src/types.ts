@@ -26,7 +26,6 @@ export type ContentBlockType =
   | "image"
   | "attachment"
   | "divider"
-  | "reference"
   | "question"
   | "table"
   | "math";
@@ -47,7 +46,7 @@ export type SubmissionStatus =
   | "graded"
   | "late";
 
-export type ForumThreadStatus = "open" | "locked" | "archived";
+export type ForumThreadStatus = "open" | "locked";
 
 export interface UserSummary {
   id: string;
@@ -56,6 +55,11 @@ export interface UserSummary {
   avatarUrl: string | null;
   systemRole: SystemRole;
   status: "active" | "disabled";
+}
+
+export interface UserProfile extends UserSummary {
+  bio: string | null;
+  bannerUrl: string | null;
 }
 
 export interface PermissionGroupMemberSummary {
@@ -165,7 +169,7 @@ export interface ForumImageSummary {
 export interface ForumThreadDetail extends ForumThreadSummary {
   category: ForumCategorySummary;
   canEdit: boolean;
-  canArchive: boolean;
+  canDelete: boolean;
   canModerate: boolean;
   canReply: boolean;
   posts: ForumPostSummary[];

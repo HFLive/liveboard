@@ -9,6 +9,10 @@ describe("ExercisesService", () => {
     getEffectiveLevelsForFiles: jest.fn(),
   };
   const prisma = {
+    user: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+    },
     folder: {
       findMany: jest.fn(),
     },
@@ -17,6 +21,7 @@ describe("ExercisesService", () => {
       findMany: jest.fn(),
       findUnique: jest.fn(),
     },
+    teachingDeckItem: { count: jest.fn() },
     submission: {
       findUnique: jest.fn(),
       groupBy: jest.fn(),
@@ -27,6 +32,17 @@ describe("ExercisesService", () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    prisma.user.findUnique.mockImplementation(({ where }) =>
+      Promise.resolve({
+        id: where.id,
+        status: "active",
+        systemRole: "member",
+      }),
+    );
+    prisma.user.findMany.mockImplementation(({ where }) =>
+      Promise.resolve(where.id.in.map((id: string) => ({ id }))),
+    );
+    prisma.teachingDeckItem.count.mockResolvedValue(0);
     service = new ExercisesService(
       prisma as unknown as PrismaService,
       permissions as unknown as PermissionsService,
@@ -39,7 +55,7 @@ describe("ExercisesService", () => {
       {
         id: "exercise-1",
         fileId: "file-1",
-        file: { title: "章节练习" },
+        file: { title: "章节练习", createdById: "teacher-1" },
         _count: { questions: 3, submissions: 12 },
         submissions: [{ status: "graded", score: 8, maxScore: 10 }],
         openAt: null,
@@ -76,7 +92,8 @@ describe("ExercisesService", () => {
     prisma.exerciseSet.findUnique.mockResolvedValue({
       id: "exercise-1",
       fileId: "file-1",
-      file: { title: "练习" },
+      file: { title: "练习", createdById: "teacher-1" },
+      viewers: [{ userId: "learner-1" }],
       showAnswerAfterSubmit: true,
       submissions: [],
       questions: [
@@ -157,7 +174,8 @@ describe("ExercisesService", () => {
     prisma.exerciseSet.findUnique.mockResolvedValue({
       id: "exercise-1",
       fileId: "file-1",
-      file: { title: "练习" },
+      file: { title: "练习", createdById: "teacher-1" },
+      viewers: [{ userId: "learner-1" }],
       showAnswerAfterSubmit: true,
       submissions: [{ id: "submission-1" }],
       questions: [
@@ -179,7 +197,8 @@ describe("ExercisesService", () => {
     prisma.exerciseSet.findUnique.mockResolvedValue({
       id: "exercise-1",
       fileId: "file-1",
-      file: { title: "练习" },
+      file: { title: "练习", createdById: "teacher-1" },
+      viewers: [{ userId: "learner-1" }],
       openAt: null,
       dueAt: null,
       allowMultipleSubmissions: false,
@@ -229,7 +248,7 @@ describe("ExercisesService", () => {
       service.gradeSubmission("lecturer-1", "submission-1", {
         answers: [{ answerId: "answer-2", score: 3 }],
       }),
-    ).rejects.toThrow("批阅中包含不属于该提交的答案");
+    ).rejects.toThrow("批改中包含不属于该提交的答案");
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 

@@ -21,3 +21,68 @@
 .workspace.library-workspace .asset-list-row.active:hover {
   background: #e5e2dc;
 }
+
+.workspace.library-workspace .asset-reference-modal {
+  width: min(520px, 100%);
+}
+
+.asset-reference-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.asset-reference-summary strong {
+  color: #9f2f2f;
+  font-size: 13px;
+}
+
+.asset-reference-summary p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.asset-reference-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(320px, 45vh);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.asset-reference-list a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 11px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.asset-reference-list a + a {
+  border-top: 1px solid var(--line);
+}
+
+.asset-reference-list a:hover {
+  background: var(--surface-soft);
+}
+
+.asset-reference-list span {
+  border-radius: 7px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  padding: 3px 6px;
+  font-size: 10px;
+}
+
+.asset-reference-list strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

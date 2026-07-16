@@ -21,10 +21,9 @@ export const blockTypeOptions: Array<{
   { value: "table", label: "表格" },
   { value: "math", label: "数学公式" },
   { value: "divider", label: "分割线" },
-  { value: "reference", label: "引用块" },
   { value: "question", label: "题目块" },
-  { value: "image", label: "图片占位" },
-  { value: "attachment", label: "附件占位" },
+  { value: "image", label: "插图" },
+  { value: "attachment", label: "附件" },
 ];
 
 export function getBlockText(block: ContentBlock): string {
@@ -158,7 +157,10 @@ export function RenderBlockContent({ block }: { block: ContentBlock }) {
 
   if (block.type === "numbered_list") {
     return (
-      <ol className="render-list">
+      <ol
+        className="render-list"
+        start={getBlockDataNumber(block, "start") ?? undefined}
+      >
         {lines(text).map((item) => (
           <li key={item}>{richText(item)}</li>
         ))}
@@ -273,17 +275,6 @@ export function RenderBlockContent({ block }: { block: ContentBlock }) {
       </a>
     ) : (
       <div className="render-placeholder">附件：{text || "等待上传"}</div>
-    );
-  }
-
-  if (block.type === "reference") {
-    const sourceTitle = getBlockDataString(block, "sourceFileTitle");
-
-    return (
-      <div className="render-reference">
-        <small>{sourceTitle ? `引用自：${sourceTitle}` : "引用块"}</small>
-        <span>{text || "待选择来源内容"}</span>
-      </div>
     );
   }
 

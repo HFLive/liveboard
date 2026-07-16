@@ -21,7 +21,7 @@ import {
   uploadAsset,
 } from "@/lib/api";
 import { assetTypeLabel, formatDateTime } from "@/lib/labels";
-import { contentDetail } from "@/lib/routes";
+import { contentDetail, teachingPresent } from "@/lib/routes";
 import { SortIconSelect } from "@/components/SortIconSelect";
 
 type AssetKindFilter = "all" | "image" | "file";
@@ -47,7 +47,11 @@ export function LibraryClient() {
   const [deleteTarget, setDeleteTarget] = useState<FileAssetSummary | null>(
     null,
   );
-  const [references, setReferences] = useState<AssetReferenceSummary[]>([]);
+  const [blockedDelete, setBlockedDelete] = useState<{
+    filename: string;
+    message: string;
+    references: AssetReferenceSummary[];
+  } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -165,7 +169,7 @@ export function LibraryClient() {
     setUploading(true);
     setError(null);
     setMessage(null);
-    setReferences([]);
+    setBlockedDelete(null);
 
     try {
       await uploadAsset({ file });
@@ -182,7 +186,7 @@ export function LibraryClient() {
   async function onDelete(asset: FileAssetSummary) {
     setError(null);
     setMessage(null);
-    setReferences([]);
+    setBlockedDelete(null);
 
     try {
       await deleteLibraryAsset(asset.id);
@@ -191,8 +195,12 @@ export function LibraryClient() {
       await load();
     } catch (caught) {
       if (caught instanceof AssetInUseError) {
-        setError(caught.message);
-        setReferences(caught.references);
+        setDeleteTarget(null);
+        setBlockedDelete({
+          filename: asset.filename,
+          message: caught.message,
+          references: caught.references,
+        });
         return;
       }
 
@@ -212,19 +220,6 @@ export function LibraryClient() {
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
-      {references.length > 0 ? (
-        <section className="reference-warning">
-          <strong>引用位置</strong>
-          {references.map((reference) => (
-            <a
-              href={contentDetail(reference.fileId)}
-              key={`${reference.fileId}-${reference.blockId}`}
-            >
-              {reference.fileTitle}
-            </a>
-          ))}
-        </section>
-      ) : null}
 
       <section className="library-layout">
         <div className="workbench-main" onClick={clearSelectionFromBackground}>
@@ -502,11 +497,6 @@ export function LibraryClient() {
                   {uploading ? "上传中" : "选择文件"}
                 </span>
               </label>
-              <div className="notice-box">
-                <span>
-                  上传后的图片和附件会自动进入个人网盘，编辑文件时可以直接引用。
-                </span>
-              </div>
             </div>
           </div>
         </div>
@@ -529,7 +519,7 @@ export function LibraryClient() {
             <div className="modal-body">
               <p className="muted">
                 确定删除“{deleteTarget.filename}
-                ”吗？如果它正在被文件引用，系统会拒绝删除并显示引用位置。
+                ”吗？如果它正在被文档或课件引用，系统会拒绝删除并显示引用位置。
               </p>
             </div>
             <div className="modal-foot">
@@ -549,6 +539,72 @@ export function LibraryClient() {
                   删除
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {blockedDelete ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            aria-labelledby="asset-delete-blocked-title"
+            aria-modal="true"
+            className="modal-panel asset-reference-modal"
+            role="dialog"
+          >
+            <div className="modal-head">
+              <h2 id="asset-delete-blocked-title">文件无法删除</h2>
+              <button
+                className="icon-button subtle"
+                onClick={() => setBlockedDelete(null)}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="asset-reference-summary">
+                <strong>{blockedDelete.message}</strong>
+                <p>
+                  “{blockedDelete.filename}
+                  ”正在被以下内容使用。请先从对应文档或课件中移除，再删除这个文件。
+                </p>
+              </div>
+              <div className="asset-reference-list">
+                {blockedDelete.references.map((reference) => {
+                  if (reference.targetType === "teaching_deck") {
+                    return (
+                      <a
+                        href={teachingPresent(reference.deckId)}
+                        key={`deck-${reference.deckId}-${reference.itemId}`}
+                      >
+                        <span>课件</span>
+                        <strong>{reference.deckTitle}</strong>
+                      </a>
+                    );
+                  }
+
+                  return (
+                    <a
+                      href={contentDetail(reference.fileId)}
+                      key={`file-${reference.fileId}-${reference.blockId}`}
+                    >
+                      <span>文档</span>
+                      <strong>{reference.fileTitle}</strong>
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="modal-foot">
+              <button
+                className="button secondary"
+                onClick={() => setBlockedDelete(null)}
+                type="button"
+              >
+                关闭
+              </button>
             </div>
           </div>
         </div>

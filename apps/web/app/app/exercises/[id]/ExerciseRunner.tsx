@@ -2,11 +2,11 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { ArrowLeft, X } from "lucide-react";
 import {
   ExerciseQuestion,
   ExerciseSetDetail,
   getExerciseSet,
-  listExerciseSets,
   listMySubmissions,
   SubmissionSummary,
   submitExerciseSet,
@@ -16,7 +16,7 @@ import {
   questionTypeLabel,
   submissionStatusLabel,
 } from "@/lib/labels";
-import { exerciseSubmissions } from "@/lib/routes";
+import { APP_ROUTES } from "@/lib/routes";
 
 type AnswerState = Record<string, string | string[] | boolean>;
 
@@ -93,13 +93,12 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
     null,
   );
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
-  const [canManage, setCanManage] = useState(false);
   const [answers, setAnswers] = useState<AnswerState>({});
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
   const now = Date.now();
   const hasNotStarted =
     !!exerciseSet?.openAt && new Date(exerciseSet.openAt).getTime() > now;
@@ -126,16 +125,10 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
     Promise.all([
       getExerciseSet(exerciseSetId),
       listMySubmissions(exerciseSetId),
-      listExerciseSets(),
     ])
-      .then(([exerciseResult, submissionResult, exerciseListResult]) => {
+      .then(([exerciseResult, submissionResult]) => {
         setExerciseSet(exerciseResult.exerciseSet);
         setSubmissions(submissionResult.submissions);
-        setCanManage(
-          exerciseListResult.exerciseSets.find(
-            (item) => item.id === exerciseSetId,
-          )?.canManage ?? false,
-        );
         try {
           const storedDraft = window.localStorage.getItem(draftKey);
           if (storedDraft) {
@@ -165,7 +158,6 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
   }, [answers, draftKey, draftReady]);
 
   function setAnswer(questionId: string, value: string | string[] | boolean) {
-    setConfirming(false);
     setAnswers((current) => ({
       ...current,
       [questionId]: value,
@@ -182,16 +174,18 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
     setAnswer(questionId, next);
   }
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!exerciseSet) {
+    if (!exerciseSet || !canSubmit || loading) {
       return;
     }
 
-    if (!confirming) {
-      setConfirming(true);
-      setMessage(null);
+    setShowSubmitConfirmation(true);
+  }
+
+  async function confirmSubmit() {
+    if (!exerciseSet || !canSubmit || loading) {
       return;
     }
 
@@ -216,7 +210,7 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
       setSubmissions(submissionResult.submissions);
       setExerciseSet(refreshedExercise.exerciseSet);
       setAnswers({});
-      setConfirming(false);
+      setShowSubmitConfirmation(false);
       window.localStorage.removeItem(draftKey);
       setMessage(
         submission.score === null
@@ -232,6 +226,10 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
 
   return (
     <div className="workspace">
+      <Link className="page-back-link" href={APP_ROUTES.exercises}>
+        <ArrowLeft aria-hidden="true" />
+        返回练习列表
+      </Link>
       <section className="page-head">
         <div>
           <p className="page-eyebrow">练习详情</p>
@@ -242,16 +240,6 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
               : "正在加载练习内容与提交状态。"}
           </p>
         </div>
-        {canManage ? (
-          <div className="button-row">
-            <Link
-              className="button secondary"
-              href={exerciseSubmissions(exerciseSetId)}
-            >
-              批阅提交
-            </Link>
-          </div>
-        ) : null}
       </section>
 
       {error ? <p className="error-text">{error}</p> : null}
@@ -273,7 +261,7 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
               disabled={loading || !canSubmit}
               type="submit"
             >
-              {loading ? "提交中" : confirming ? "确认提交" : "检查提交"}
+              {loading ? "提交中" : "提交"}
             </button>
           </div>
           <div className="editor">
@@ -308,8 +296,18 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
             <h2>提交</h2>
             <div className="status-list">
               <span>{exerciseSet?.questions.length ?? 0} 道题</span>
-              <span>开始：{formatDateTime(exerciseSet?.openAt)}</span>
-              <span>截止：{formatDateTime(exerciseSet?.dueAt)}</span>
+              <span>
+                开始：
+                {exerciseSet?.openAt
+                  ? formatDateTime(exerciseSet.openAt)
+                  : "立即开始"}
+              </span>
+              <span>
+                截止：
+                {exerciseSet?.dueAt
+                  ? formatDateTime(exerciseSet.dueAt)
+                  : "不设截止时间"}
+              </span>
               <span>
                 提交：
                 {exerciseSet?.allowMultipleSubmissions ? "允许多次" : "仅一次"}
@@ -344,29 +342,12 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
             {alreadySubmitted ? (
               <p className="notice-box">这个练习仅允许提交一次。</p>
             ) : null}
-            {confirming ? (
-              <div className="submit-confirmation" role="status">
-                <strong>提交后将记录本次作答</strong>
-                <span>
-                  {unansweredCount > 0
-                    ? `仍有 ${unansweredCount} 道题未作答，可以留空提交。`
-                    : "所有题目均已作答，请确认提交。"}
-                </span>
-                <button
-                  className="button secondary"
-                  onClick={() => setConfirming(false)}
-                  type="button"
-                >
-                  返回检查
-                </button>
-              </div>
-            ) : null}
             <button
               className="button"
               disabled={loading || !canSubmit}
               type="submit"
             >
-              {loading ? "提交中" : confirming ? "确认提交" : "检查提交"}
+              {loading ? "提交中" : "提交"}
             </button>
           </section>
 
@@ -414,7 +395,7 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
                         <small>
                           得分：
                           {answer.score === null
-                            ? "待批阅"
+                            ? "待批改"
                             : `${answer.score}/${answer.question?.score ?? "-"}`}
                         </small>
                         {answer.feedback ? <em>{answer.feedback}</em> : null}
@@ -427,6 +408,57 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
           </section>
         </aside>
       </form>
+      {showSubmitConfirmation && exerciseSet ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            aria-labelledby="exercise-submit-title"
+            aria-modal="true"
+            className="modal-panel exercise-submit-modal"
+            role="dialog"
+          >
+            <div className="modal-head">
+              <h2 id="exercise-submit-title">确认提交练习</h2>
+              <button
+                className="icon-button subtle"
+                disabled={loading}
+                onClick={() => setShowSubmitConfirmation(false)}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>确定提交本次作答吗？提交后会正式记录这次结果。</p>
+              {unansweredCount > 0 ? (
+                <p className="muted">
+                  仍有 {unansweredCount} 道题未作答，确认后将留空提交。
+                </p>
+              ) : null}
+            </div>
+            <div className="modal-foot">
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  disabled={loading}
+                  onClick={() => setShowSubmitConfirmation(false)}
+                  type="button"
+                >
+                  取消
+                </button>
+                <button
+                  className="button"
+                  disabled={loading}
+                  onClick={() => void confirmSubmit()}
+                  type="button"
+                >
+                  {loading ? "提交中" : "确认提交"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ChevronLeft,
@@ -27,6 +27,7 @@ type AnswerValue = string | string[] | boolean;
 
 export function TeachingPresenter({ deckId }: { deckId: string }) {
   const stageRef = useRef<HTMLElement | null>(null);
+  const slideRef = useRef<HTMLElement | null>(null);
   const [deck, setDeck] = useState<TeachingDeckDetail | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -115,12 +116,61 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
     slides[Math.min(activeIndex, Math.max(slides.length - 1, 0))];
   const full = isFullscreen || focusMode;
 
+  useLayoutEffect(() => {
+    const slide = slideRef.current;
+    if (!slide || !activeSlide) return;
+    const fitGroupId = activeSlide.fitGroupId;
+    let frame = 0;
+
+    function fitSlide() {
+      if (!slide) return;
+      const groupedScale = fitGroupId
+        ? Math.max(
+            0.48,
+            Math.min(0.62, window.innerWidth / 700, window.innerHeight / 700),
+          )
+        : null;
+      let scale = groupedScale ?? 1;
+      slide.style.setProperty("--slide-fit", String(scale));
+      if (groupedScale !== null) {
+        slide.dataset.fitScale = scale.toFixed(3);
+        return;
+      }
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const fits =
+          slide.scrollHeight <= slide.clientHeight + 1 &&
+          slide.scrollWidth <= slide.clientWidth + 1;
+        if (fits || scale <= 0.62) break;
+        scale = Math.max(0.62, scale - 0.055);
+        slide.style.setProperty("--slide-fit", String(scale));
+      }
+      slide.dataset.fitScale = scale.toFixed(3);
+    }
+
+    function scheduleFit() {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fitSlide);
+    }
+
+    scheduleFit();
+    window.addEventListener("resize", scheduleFit);
+    const images = Array.from(slide.querySelectorAll("img"));
+    images.forEach((image) => image.addEventListener("load", scheduleFit));
+    void document.fonts?.ready.then(scheduleFit);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", scheduleFit);
+      images.forEach((image) => image.removeEventListener("load", scheduleFit));
+    };
+  }, [activeSlide, full]);
+
   return (
     <div className={`teaching-presenter ${focusMode ? "focus-mode" : ""}`}>
       <header className="teaching-presenter-topbar">
         <div>
           <h1>{deck?.title ?? "课件"}</h1>
-          <span>
+          <span className="teaching-page-count">
             {slides.length
               ? `${activeIndex + 1} / ${slides.length}`
               : "正在加载"}
@@ -166,19 +216,24 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
       {error ? <p className="error-text">{error}</p> : null}
       <section className="teaching-presenter-stage" ref={stageRef}>
         <div className="teaching-slide-source">{activeSlide?.sourceLabel}</div>
-        <article
-          className={`teaching-slide ${activeSlide ? `${activeSlide.kind}-slide` : ""}`}
-        >
-          {activeSlide ? (
-            activeSlide.items.map((item) => (
-              <div className="teaching-slide-block" key={item.id}>
-                <SlideContent item={item} />
-              </div>
-            ))
-          ) : (
-            <p className="muted">课件暂无内容。</p>
-          )}
-        </article>
+        <div className="teaching-slide-viewport">
+          <article
+            className={`teaching-slide ${activeSlide ? `${activeSlide.kind}-slide` : ""}`}
+            ref={slideRef}
+          >
+            <div className="teaching-slide-content">
+              {activeSlide ? (
+                activeSlide.items.map((item) => (
+                  <div className="teaching-slide-block" key={item.id}>
+                    <SlideContent item={item} />
+                  </div>
+                ))
+              ) : (
+                <p className="muted">课件暂无内容。</p>
+              )}
+            </div>
+          </article>
+        </div>
         <div className="teaching-presenter-controls">
           <button
             aria-label="上一页"
@@ -256,7 +311,7 @@ function EmbeddedExercise({ exerciseSetId }: { exerciseSetId: string }) {
       );
       setMessage(
         result.submission.score === null
-          ? "练习已提交，等待批阅。"
+          ? "练习已提交，等待批改。"
           : `练习已提交，得分 ${result.submission.score}/${result.submission.maxScore}。`,
       );
     } catch (caught) {

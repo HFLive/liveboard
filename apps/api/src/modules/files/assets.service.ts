@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { canEdit, isSystemAdmin } from "@liveboard/shared";
+import { canEdit, isSuperAdmin, isSystemAdmin } from "@liveboard/shared";
 import { Client } from "minio";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
@@ -187,7 +187,7 @@ export class AssetsService {
       throw new UnauthorizedException("Missing session");
     }
 
-    if (!post || post.thread.status === "archived") {
+    if (!post) {
       throw new NotFoundException("Forum post not found");
     }
 
@@ -366,10 +366,8 @@ export class AssetsService {
       throw new ConflictException({
         message: "文件已被引用，不能删除",
         references: references.map((reference) => ({
-          fileId: reference.fileId,
-          fileTitle: reference.fileTitle,
-          blockId: reference.blockId,
-          blockType: reference.blockType,
+          ...reference,
+          assetId: undefined,
         })),
       });
     }
@@ -465,33 +463,54 @@ export class AssetsService {
     }
 
     if (asset.forumPostId) {
-      const [post, user] = await Promise.all([
-        this.prisma.forumPost.findUnique({
-          where: { id: asset.forumPostId },
-          include: { thread: true },
-        }),
-        this.prisma.user.findUnique({ where: { id: userId } }),
-      ]);
-      if (
-        !post ||
-        !user ||
-        (post.thread.status === "archived" && !isSystemAdmin(user.systemRole))
-      ) {
+      const post = await this.prisma.forumPost.findUnique({
+        where: { id: asset.forumPostId },
+      });
+      if (!post) {
         throw new ForbiddenException("No permission to view asset");
       }
       return;
     }
 
     const references = await this.getAssetReferences([asset.id]);
+    const contentReferences = references.filter(
+      (reference) => reference.targetType === "file",
+    );
 
     const referenceLevels = await Promise.all(
-      references.map((reference) =>
+      contentReferences.map((reference) =>
         this.permissions.getEffectiveLevelForFile(userId, reference.fileId),
       ),
     );
 
     if (referenceLevels.some((level) => level && level !== "no_access")) {
       return;
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { systemRole: true, status: true },
+    });
+    if (user?.status === "active") {
+      const teachingReference = await this.prisma.teachingDeckItem.findFirst({
+        where: {
+          assetId: asset.id,
+          ...(isSuperAdmin(user.systemRole)
+            ? {}
+            : {
+                deck: {
+                  OR: [
+                    { createdById: userId },
+                    { viewers: { some: { userId } } },
+                  ],
+                },
+              }),
+        },
+        select: { id: true },
+      });
+      if (teachingReference) {
+        return;
+      }
     }
 
     if (asset.fileId) {
@@ -527,30 +546,46 @@ export class AssetsService {
     }
 
     const assetIdSet = new Set(assetIds);
-    const blocks = await this.prisma.contentBlock.findMany({
-      where: {
-        type: { in: ["image", "attachment"] },
-        file: { status: { not: "archived" } },
-        OR: assetIds.map((assetId) => ({
-          dataJson: { path: ["assetId"], equals: assetId },
-        })),
-      },
-      include: {
-        file: {
-          select: {
-            id: true,
-            title: true,
+    const [blocks, teachingItems] = await Promise.all([
+      this.prisma.contentBlock.findMany({
+        where: {
+          type: { in: ["image", "attachment"] },
+          file: { status: { not: "archived" } },
+          OR: assetIds.map((assetId) => ({
+            dataJson: { path: ["assetId"], equals: assetId },
+          })),
+        },
+        include: {
+          file: {
+            select: {
+              id: true,
+              title: true,
+            },
           },
         },
-      },
-    });
-    const references: Array<{
-      assetId: string;
-      blockId: string;
-      blockType: string;
-      fileId: string;
-      fileTitle: string;
-    }> = [];
+      }),
+      this.prisma.teachingDeckItem.findMany({
+        where: { assetId: { in: assetIds } },
+        include: { deck: { select: { id: true, title: true } } },
+      }),
+    ]);
+    const references: Array<
+      | {
+          assetId: string;
+          targetType: "file";
+          blockId: string;
+          blockType: string;
+          fileId: string;
+          fileTitle: string;
+        }
+      | {
+          assetId: string;
+          targetType: "teaching_deck";
+          itemId: string;
+          deckId: string;
+          deckTitle: string;
+        }
+    > = [];
 
     for (const block of blocks) {
       const data = asRecord(block.dataJson);
@@ -559,10 +594,23 @@ export class AssetsService {
       if (assetId && assetIdSet.has(assetId)) {
         references.push({
           assetId,
+          targetType: "file",
           blockId: block.id,
           blockType: block.type,
           fileId: block.file.id,
           fileTitle: block.file.title,
+        });
+      }
+    }
+
+    for (const item of teachingItems) {
+      if (item.assetId && assetIdSet.has(item.assetId)) {
+        references.push({
+          assetId: item.assetId,
+          targetType: "teaching_deck",
+          itemId: item.id,
+          deckId: item.deck.id,
+          deckTitle: item.deck.title,
         });
       }
     }

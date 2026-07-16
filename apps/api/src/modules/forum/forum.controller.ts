@@ -107,11 +107,11 @@ export class ForumController {
   }
 
   @Delete("threads/:id")
-  async archiveThread(
+  async deleteThread(
     @CurrentUserId() userId: string | null,
     @Param("id") id: string,
   ) {
-    return this.forumService.archiveThread(userId, id);
+    return this.forumService.deleteThread(userId, id);
   }
 
   @Post("threads/:id/posts")

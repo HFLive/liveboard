@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsIn,
   IsOptional,
@@ -34,6 +35,12 @@ export class CreateTeachingDeckDto {
   @ValidateNested({ each: true })
   @Type(() => TeachingDeckItemDto)
   items!: TeachingDeckItemDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  visibleUserIds?: string[];
 }
 
 export class UpdateTeachingDeckDto {
@@ -48,4 +55,10 @@ export class UpdateTeachingDeckDto {
   @ValidateNested({ each: true })
   @Type(() => TeachingDeckItemDto)
   items?: TeachingDeckItemDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  visibleUserIds?: string[];
 }

@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ContentBlockType,
-  FileSummary,
   PermissionLevel,
   PermissionGroupSummary,
 } from "@liveboard/shared";
@@ -14,9 +13,7 @@ import {
   Upload,
   GripVertical,
   Image,
-  Link2,
   MoreHorizontal,
-  Paperclip,
   Plus,
   RotateCcw,
   Send,
@@ -37,12 +34,10 @@ import {
   listLibraryAssets,
   listPermissionGrants,
   listBlocks,
-  listFiles,
   FileAssetSummary,
   InheritedPermissionGrantSummary,
   PermissionGrantSummary,
   publishFile,
-  referenceBlocks,
   reorderBlocks,
   updateFile,
   updateBlock,
@@ -103,7 +98,7 @@ function getBlockRows(type: ContentBlockType) {
     return 1;
   }
 
-  if (["quote", "reference", "question"].includes(type)) {
+  if (["quote", "question"].includes(type)) {
     return 3;
   }
 
@@ -334,14 +329,11 @@ export function FileEditor({ fileId }: { fileId: string }) {
   const router = useRouter();
   const [file, setFile] = useState<FileDetail | null>(null);
   const [blocks, setBlocks] = useState<ContentBlock[]>([]);
-  const [sourceFiles, setSourceFiles] = useState<FileSummary[]>([]);
-  const [selectedSourceFileId, setSelectedSourceFileId] = useState("");
-  const [sourceBlocks, setSourceBlocks] = useState<ContentBlock[]>([]);
   const [libraryAssets, setLibraryAssets] = useState<FileAssetSummary[]>([]);
   const [assetQuery, setAssetQuery] = useState("");
-  const [selectedSourceBlockIds, setSelectedSourceBlockIds] = useState<
-    string[]
-  >([]);
+  const [assetTargetBlockId, setAssetTargetBlockId] = useState<string | null>(
+    null,
+  );
   const [newType, setNewType] = useState<ContentBlockType>("paragraph");
   const [newText, setNewText] = useState("");
   const [titleInput, setTitleInput] = useState("");
@@ -360,7 +352,6 @@ export function FileEditor({ fileId }: { fileId: string }) {
   const [grantLevel, setGrantLevel] = useState<PermissionLevel>("viewer");
   const [showPermissions, setShowPermissions] = useState(false);
   const [showAssetModal, setShowAssetModal] = useState(false);
-  const [showReferenceModal, setShowReferenceModal] = useState(false);
   const [draggingBlockId, setDraggingBlockId] = useState<string | null>(null);
   const [dragOverBlockId, setDragOverBlockId] = useState<string | null>(null);
   const [uploadingAsset, setUploadingAsset] = useState(false);
@@ -408,32 +399,17 @@ export function FileEditor({ fileId }: { fileId: string }) {
   );
 
   async function load() {
-    const [
-      fileResult,
-      blockResult,
-      fileListResult,
-      grantResult,
-      libraryResult,
-    ] = await Promise.all([
-      getFile(fileId),
-      listBlocks(fileId),
-      listFiles(),
-      listPermissionGrants("file", fileId),
-      listLibraryAssets(),
-    ]);
-    const nextSourceFiles = fileListResult.files.filter(
-      (item) => item.id !== fileId,
-    );
+    const [fileResult, blockResult, grantResult, libraryResult] =
+      await Promise.all([
+        getFile(fileId),
+        listBlocks(fileId),
+        listPermissionGrants("file", fileId),
+        listLibraryAssets(),
+      ]);
 
     setFile(fileResult.file);
     setBlocks(blockResult.blocks);
-    setSourceFiles(nextSourceFiles);
     setLibraryAssets(libraryResult.assets);
-    setSelectedSourceFileId((current) =>
-      nextSourceFiles.some((item) => item.id === current)
-        ? current
-        : nextSourceFiles[0]?.id || "",
-    );
     setGrants(grantResult.grants);
     setInheritedGrants(grantResult.inheritedGrants);
     setTitleInput(fileResult.file.title);
@@ -489,35 +465,6 @@ export function FileEditor({ fileId }: { fileId: string }) {
     setGrantGroupId(availableGrantGroups[0]?.id ?? "");
   }, [availableGrantGroups, grantGroupId]);
 
-  useEffect(() => {
-    if (!selectedSourceFileId) {
-      setSourceBlocks([]);
-      setSelectedSourceBlockIds([]);
-      return;
-    }
-
-    let active = true;
-
-    listBlocks(selectedSourceFileId)
-      .then((result) => {
-        if (active) {
-          setSourceBlocks(result.blocks);
-          setSelectedSourceBlockIds([]);
-        }
-      })
-      .catch((caught) => {
-        if (active) {
-          setError(
-            caught instanceof Error ? caught.message : "加载来源内容失败",
-          );
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [selectedSourceFileId]);
-
   async function onAddBlock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -557,6 +504,46 @@ export function FileEditor({ fileId }: { fileId: string }) {
     setNewText(value);
   }
 
+  function openAssetPicker(blockId: string) {
+    setAssetTargetBlockId(blockId);
+    setAssetQuery("");
+    setShowAssetModal(true);
+  }
+
+  function closeAssetPicker() {
+    setShowAssetModal(false);
+    setAssetTargetBlockId(null);
+  }
+
+  function buildAssetBlockData(asset: FileAssetSummary) {
+    const isImage = asset.mimeType.startsWith("image/");
+
+    return {
+      text: asset.filename,
+      url: asset.url,
+      assetId: asset.id,
+      filename: asset.filename,
+      mimeType: asset.mimeType,
+      sizeBytes: asset.sizeBytes,
+      widthPercent: isImage ? 100 : undefined,
+    };
+  }
+
+  async function insertAssetIntoTarget(asset: FileAssetSummary) {
+    if (!assetTargetBlockId) {
+      throw new Error("请选择要插入文件的插图段落");
+    }
+
+    const type: ContentBlockType = asset.mimeType.startsWith("image/")
+      ? "image"
+      : "attachment";
+    await updateBlock({
+      blockId: assetTargetBlockId,
+      type,
+      dataJson: buildAssetBlockData(asset),
+    });
+  }
+
   async function onUploadAsset(file: File | undefined) {
     if (!file) {
       return;
@@ -569,24 +556,11 @@ export function FileEditor({ fileId }: { fileId: string }) {
     try {
       const result = await uploadAsset({ file, fileId });
       const asset = result.asset;
-      const type: ContentBlockType = asset.mimeType.startsWith("image/")
-        ? "image"
-        : "attachment";
-
-      await createBlock({
-        fileId,
-        type,
-        dataJson: {
-          text: asset.filename,
-          url: asset.url,
-          assetId: asset.id,
-          filename: asset.filename,
-          mimeType: asset.mimeType,
-          sizeBytes: asset.sizeBytes,
-          widthPercent: type === "image" ? 100 : undefined,
-        },
-      });
-      setMessage(type === "image" ? "图片已上传" : "附件已上传");
+      await insertAssetIntoTarget(asset);
+      setMessage(
+        asset.mimeType.startsWith("image/") ? "图片已插入" : "附件已插入",
+      );
+      closeAssetPicker();
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "上传失败");
@@ -620,21 +594,9 @@ export function FileEditor({ fileId }: { fileId: string }) {
     setMessage(null);
 
     try {
-      await createBlock({
-        fileId,
-        type: asset.mimeType.startsWith("image/") ? "image" : "attachment",
-        dataJson: {
-          text: asset.filename,
-          url: asset.url,
-          assetId: asset.id,
-          filename: asset.filename,
-          mimeType: asset.mimeType,
-          sizeBytes: asset.sizeBytes,
-          widthPercent: asset.mimeType.startsWith("image/") ? 100 : undefined,
-        },
-      });
+      await insertAssetIntoTarget(asset);
       setMessage("网盘文件已插入");
-      setShowAssetModal(false);
+      closeAssetPicker();
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "插入网盘文件失败");
@@ -865,38 +827,6 @@ export function FileEditor({ fileId }: { fileId: string }) {
     }
   }
 
-  function toggleSourceBlock(blockId: string) {
-    setSelectedSourceBlockIds((current) =>
-      current.includes(blockId)
-        ? current.filter((item) => item !== blockId)
-        : [...current, blockId],
-    );
-  }
-
-  async function onReferenceBlocks(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    setMessage(null);
-
-    if (selectedSourceBlockIds.length === 0) {
-      setError("请选择要引用的内容块");
-      return;
-    }
-
-    try {
-      await referenceBlocks({
-        fileId,
-        sourceBlockIds: selectedSourceBlockIds,
-      });
-      setSelectedSourceBlockIds([]);
-      setMessage("引用内容已插入");
-      setShowReferenceModal(false);
-      await load();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "插入引用失败");
-    }
-  }
-
   async function onDeleteGrant(grantId: string) {
     setError(null);
     setMessage(null);
@@ -962,9 +892,17 @@ export function FileEditor({ fileId }: { fileId: string }) {
               />
             </figure>
           ) : (
-            <div className="render-placeholder">
-              图片：{getBlockText(block) || "等待上传"}
-            </div>
+            <button
+              className="media-picker-trigger"
+              onClick={() => openAssetPicker(block.id)}
+              type="button"
+            >
+              <Image aria-hidden="true" />
+              <span>
+                <strong>选择图片或附件</strong>
+                <small>从电脑上传，或从网盘选择</small>
+              </span>
+            </button>
           )}
           <div className="media-block-fields">
             <label className="compact-field">
@@ -997,6 +935,15 @@ export function FileEditor({ fileId }: { fileId: string }) {
                 value={widthPercent}
               />
             </label>
+            {url ? (
+              <button
+                className="button secondary media-replace-button"
+                onClick={() => openAssetPicker(block.id)}
+                type="button"
+              >
+                更换图片或附件
+              </button>
+            ) : null}
           </div>
         </div>
       );
@@ -1024,25 +971,44 @@ export function FileEditor({ fileId }: { fileId: string }) {
               </span>
             </a>
           ) : (
-            <div className="render-placeholder">
-              附件：{filename || "等待上传"}
-            </div>
+            <button
+              className="media-picker-trigger"
+              onClick={() => openAssetPicker(block.id)}
+              type="button"
+            >
+              <Image aria-hidden="true" />
+              <span>
+                <strong>选择图片或附件</strong>
+                <small>从电脑上传，或从网盘选择</small>
+              </span>
+            </button>
           )}
-          <label className="compact-field">
-            <span>标题</span>
-            <input
-              className="input compact-input"
-              onBlur={() => void onSaveBlock(block)}
-              onChange={(event) =>
-                patchBlockData(block, {
-                  filename: event.target.value,
-                  text: event.target.value,
-                })
-              }
-              placeholder="附件标题"
-              value={filename}
-            />
-          </label>
+          <div className="media-block-fields attachment-fields">
+            <label className="compact-field">
+              <span>标题</span>
+              <input
+                className="input compact-input"
+                onBlur={() => void onSaveBlock(block)}
+                onChange={(event) =>
+                  patchBlockData(block, {
+                    filename: event.target.value,
+                    text: event.target.value,
+                  })
+                }
+                placeholder="附件标题"
+                value={filename}
+              />
+            </label>
+            {url ? (
+              <button
+                className="button secondary media-replace-button"
+                onClick={() => openAssetPicker(block.id)}
+                type="button"
+              >
+                更换图片或附件
+              </button>
+            ) : null}
+          </div>
         </div>
       );
     }
@@ -1143,22 +1109,6 @@ export function FileEditor({ fileId }: { fileId: string }) {
 
       <section className="editor-action-bar" aria-label="文件操作">
         <div className="button-row">
-          <button
-            className="button secondary"
-            onClick={() => setShowAssetModal(true)}
-            type="button"
-          >
-            <Paperclip aria-hidden="true" className="button-icon" />
-            文件
-          </button>
-          <button
-            className="button secondary"
-            onClick={() => setShowReferenceModal(true)}
-            type="button"
-          >
-            <Link2 aria-hidden="true" className="button-icon" />
-            引用
-          </button>
           {isPublished ? (
             <span className="publish-state-badge">已发布</span>
           ) : isArchived ? (
@@ -1316,13 +1266,15 @@ export function FileEditor({ fileId }: { fileId: string }) {
                       setNewType(event.target.value as ContentBlockType)
                     }
                   >
-                    {blockTypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
+                    {blockTypeOptions
+                      .filter((option) => option.value !== "attachment")
+                      .map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
                   </select>
-                  {["divider", "table"].includes(newType) ? null : (
+                  {["divider", "table", "image"].includes(newType) ? null : (
                     <textarea
                       className="doc-new-block-input"
                       onChange={(event) => onNewTextChange(event.target.value)}
@@ -1398,12 +1350,12 @@ export function FileEditor({ fileId }: { fileId: string }) {
           >
             <div className="modal-head">
               <div>
-                <h2>插入文件</h2>
-                <p className="muted">上传新附件，或从网盘选择已有文件。</p>
+                <h2>插入插图</h2>
+                <p className="muted">上传图片或附件，或从网盘选择已有文件。</p>
               </div>
               <button
                 className="icon-button subtle"
-                onClick={() => setShowAssetModal(false)}
+                onClick={closeAssetPicker}
                 title="关闭"
                 type="button"
               >
@@ -1467,100 +1419,6 @@ export function FileEditor({ fileId }: { fileId: string }) {
               </div>
             </div>
           </section>
-        </div>
-      ) : null}
-
-      {showReferenceModal ? (
-        <div className="modal-backdrop" role="presentation">
-          <form
-            className="modal-panel editor-tool-modal"
-            onSubmit={onReferenceBlocks}
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className="modal-head">
-              <div>
-                <h2>引用内容</h2>
-                <p className="muted">从其他资料中选择内容块插入当前文件。</p>
-              </div>
-              <button
-                className="icon-button subtle"
-                onClick={() => setShowReferenceModal(false)}
-                title="关闭"
-                type="button"
-              >
-                <X aria-hidden="true" />
-              </button>
-            </div>
-            <div className="modal-body editor-tool-body">
-              <label className="form-field">
-                <span>来源文件</span>
-                <select
-                  className="select"
-                  disabled={sourceFiles.length === 0}
-                  value={selectedSourceFileId}
-                  onChange={(event) =>
-                    setSelectedSourceFileId(event.target.value)
-                  }
-                >
-                  {sourceFiles.map((sourceFile) => (
-                    <option key={sourceFile.id} value={sourceFile.id}>
-                      {sourceFile.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="reference-picker modal-reference-picker">
-                {sourceBlocks.map((sourceBlock) => {
-                  const sourceText = getBlockText(sourceBlock);
-                  const sourceTitle = getBlockDataString(
-                    sourceBlock,
-                    "sourceFileTitle",
-                  );
-
-                  return (
-                    <label className="reference-option" key={sourceBlock.id}>
-                      <input
-                        checked={selectedSourceBlockIds.includes(
-                          sourceBlock.id,
-                        )}
-                        onChange={() => toggleSourceBlock(sourceBlock.id)}
-                        type="checkbox"
-                      />
-                      <span>
-                        <b>{getBlockLabel(sourceBlock.type)}</b>
-                        <small>
-                          {sourceText ||
-                            sourceTitle ||
-                            "这个内容块没有文字预览"}
-                        </small>
-                      </span>
-                    </label>
-                  );
-                })}
-                {sourceFiles.length === 0 ? (
-                  <p className="muted">暂无其他可引用文件。</p>
-                ) : null}
-                {sourceFiles.length > 0 && sourceBlocks.length === 0 ? (
-                  <p className="muted">这个来源文件还没有内容块。</p>
-                ) : null}
-              </div>
-            </div>
-            <div className="modal-foot">
-              <div className="button-row">
-                <button
-                  className="button secondary"
-                  onClick={() => setShowReferenceModal(false)}
-                  type="button"
-                >
-                  取消
-                </button>
-                <button className="button" type="submit">
-                  插入引用
-                </button>
-              </div>
-            </div>
-          </form>
         </div>
       ) : null}
 

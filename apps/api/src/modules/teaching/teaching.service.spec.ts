@@ -12,7 +12,14 @@ describe("TeachingService", () => {
 
   function createService() {
     const prisma = {
-      user: { findUnique: jest.fn().mockResolvedValue(activeUser) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue(activeUser),
+        findMany: jest
+          .fn()
+          .mockImplementation(({ where }) =>
+            Promise.resolve(where.id.in.map((id: string) => ({ id }))),
+          ),
+      },
       teachingDeck: {
         findUnique: jest.fn(),
         findMany: jest.fn(),
@@ -34,13 +41,14 @@ describe("TeachingService", () => {
     };
   }
 
-  it("allows every active user to read a teaching deck without source permissions", async () => {
+  it("allows a selected user to read a teaching deck without source permissions", async () => {
     const { service, prisma, permissions } = createService();
     prisma.teachingDeck.findUnique.mockResolvedValue({
       id: "deck-1",
       title: "公开课件",
       createdById: "teacher-1",
       createdBy: { ...activeUser, id: "teacher-1" },
+      viewers: [{ userId: activeUser.id }],
       createdAt: new Date("2026-07-13T00:00:00Z"),
       updatedAt: new Date("2026-07-13T00:00:00Z"),
       items: [],
@@ -51,6 +59,24 @@ describe("TeachingService", () => {
     expect(result.title).toBe("公开课件");
     expect(result.canEdit).toBe(false);
     expect(permissions.getEffectiveLevelForFile).not.toHaveBeenCalled();
+  });
+
+  it("refuses a user outside the teaching deck visibility range", async () => {
+    const { service, prisma } = createService();
+    prisma.teachingDeck.findUnique.mockResolvedValue({
+      id: "deck-1",
+      title: "私有课件",
+      createdById: "teacher-1",
+      createdBy: { ...activeUser, id: "teacher-1" },
+      viewers: [],
+      createdAt: new Date("2026-07-13T00:00:00Z"),
+      updatedAt: new Date("2026-07-13T00:00:00Z"),
+      items: [],
+    });
+
+    await expect(service.get(activeUser.id, "deck-1")).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it("refuses to copy a block the creator cannot view", async () => {
