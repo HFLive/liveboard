@@ -5,8 +5,13 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { ArrowLeft, Send } from "lucide-react";
 import type { ForumCategorySummary } from "@liveboard/shared";
-import { createForumThread, listForumOverview } from "@/lib/api";
+import {
+  createForumThread,
+  listForumOverview,
+  uploadForumPostImages,
+} from "@/lib/api";
 import { APP_ROUTES, forumThread } from "@/lib/routes";
+import { ForumImagePicker } from "../ForumImagePicker";
 
 export function NewForumThreadClient() {
   const router = useRouter();
@@ -14,6 +19,13 @@ export function NewForumThreadClient() {
   const [categoryId, setCategoryId] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [images, setImages] = useState<File[]>([]);
+  const [processingImages, setProcessingImages] = useState(false);
+  const [createdTarget, setCreatedTarget] = useState<{
+    threadId: string;
+    postId: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,13 +70,25 @@ export function NewForumThreadClient() {
     setSubmitting(true);
 
     try {
-      const result = await createForumThread({
-        categoryId,
-        title,
-        body,
-      });
+      let target = createdTarget;
+      if (!target) {
+        const result = await createForumThread({
+          categoryId,
+          title,
+          body,
+          isAnonymous,
+        });
+        const postId = result.thread.posts[0]?.id;
+        if (!postId) throw new Error("帖子创建成功，但未找到正文");
+        target = { threadId: result.thread.id, postId };
+        setCreatedTarget(target);
+      }
 
-      router.push(forumThread(result.thread.id));
+      if (images.length > 0) {
+        await uploadForumPostImages(target.postId, images);
+      }
+
+      router.push(forumThread(target.threadId));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "发帖失败");
       setSubmitting(false);
@@ -74,6 +98,7 @@ export function NewForumThreadClient() {
   const canSubmit =
     !loading &&
     !submitting &&
+    !processingImages &&
     Boolean(categoryId) &&
     Boolean(title.trim()) &&
     Boolean(body.trim());
@@ -151,13 +176,35 @@ export function NewForumThreadClient() {
             />
           </label>
 
+          <ForumImagePicker
+            disabled={submitting || Boolean(createdTarget)}
+            onChange={setImages}
+            onError={setError}
+            onProcessingChange={setProcessingImages}
+            value={images}
+          />
+
           <div className="forum-new-actions">
+            <label className="forum-anonymous-option">
+              <input
+                checked={isAnonymous}
+                onChange={(event) => setIsAnonymous(event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                <strong>匿名</strong>
+              </span>
+            </label>
             <Link className="button secondary" href={APP_ROUTES.forum}>
               取消
             </Link>
-            <button className="button" disabled={!canSubmit} type="submit">
+            <button
+              className="button forum-submit-button"
+              disabled={!canSubmit}
+              type="submit"
+            >
               <Send aria-hidden="true" className="button-icon" />
-              {submitting ? "发布中" : "发布到论坛"}
+              {submitting ? "发布中" : createdTarget ? "重试上传图片" : "发布"}
             </button>
           </div>
         </form>

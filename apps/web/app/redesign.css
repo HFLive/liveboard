@@ -1197,27 +1197,37 @@ button:disabled {
 }
 
 .password-field .input {
-  padding-right: 44px;
+  padding-right: 48px;
 }
 
 .password-toggle {
   position: absolute;
-  top: 50%;
-  right: 7px;
+  z-index: 1;
+  top: 5px;
+  right: 5px;
+  bottom: 5px;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: auto;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--muted);
-  transform: translateY(-50%);
+  padding: 0;
+  transform: none;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
 }
 
 .password-toggle:hover {
   background: var(--panel-soft);
   color: var(--text);
+}
+
+.password-toggle:active:not(:disabled) {
+  transform: none;
 }
 
 .password-toggle svg {

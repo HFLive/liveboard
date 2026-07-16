@@ -6,7 +6,11 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { canEdit, canView, isSystemAdmin } from "@liveboard/shared";
-import type { FileSummary, FolderNode } from "@liveboard/shared";
+import type {
+  ContentPinTarget,
+  FileSummary,
+  FolderNode,
+} from "@liveboard/shared";
 import type { FileStatus, FileType } from "@liveboard/shared";
 import type { ContentBlockType } from "@liveboard/shared";
 import type { Prisma } from "@prisma/client";
@@ -52,6 +56,11 @@ export interface ListFilesInput {
   folderId?: string;
 }
 
+export interface UpdateContentPinsInput {
+  folderId: string;
+  items: ContentPinTarget[];
+}
+
 export interface CreateBlockInput {
   type: ContentBlockType;
   dataJson: unknown;
@@ -84,24 +93,47 @@ export class FilesService {
     private readonly permissions: PermissionsService,
   ) {}
 
-  async getFolderTree(userId: string | null): Promise<FolderNode[]> {
+  async getFolderTree(userId: string | null): Promise<{
+    folders: FolderNode[];
+    canManagePins: boolean;
+  }> {
     if (!userId) {
       throw new UnauthorizedException("Missing session");
     }
 
-    const folders = await this.prisma.folder.findMany({
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      include: { _count: { select: { files: true } } },
-    });
+    const [user, folders, files] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { systemRole: true },
+      }),
+      this.prisma.folder.findMany({
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        include: { _count: { select: { files: true } } },
+      }),
+      this.prisma.file.findMany({
+        where: { status: { not: "archived" } },
+        orderBy: [{ title: "asc" }],
+      }),
+    ]);
+
+    if (!user) {
+      throw new UnauthorizedException("Missing session");
+    }
 
     const nodes = new Map<string, FolderNode>();
-    const permissions = await this.permissions.getEffectiveLevelsForFolders(
-      userId,
-      folders.map((folder) => folder.id),
-    );
+    const [folderPermissions, filePermissions] = await Promise.all([
+      this.permissions.getEffectiveLevelsForFolders(
+        userId,
+        folders.map((folder) => folder.id),
+      ),
+      this.permissions.getEffectiveLevelsForFiles(
+        userId,
+        files.map((file) => file.id),
+      ),
+    ]);
 
     for (const folder of folders) {
-      const permission = permissions.get(folder.id) ?? null;
+      const permission = folderPermissions.get(folder.id) ?? null;
 
       if (!canView(permission)) {
         continue;
@@ -113,9 +145,25 @@ export class FilesService {
         parentId: folder.parentId,
         permission: permission!,
         fileCount: folder._count.files,
+        pinnedOrder: folder.pinnedOrder,
         updatedAt: folder.updatedAt.toISOString(),
+        files: [],
         children: [],
       });
+    }
+
+    for (const file of files) {
+      const permission = filePermissions.get(file.id) ?? null;
+
+      if (!canView(permission)) {
+        continue;
+      }
+
+      if (file.status === "draft" && permission === "viewer") {
+        continue;
+      }
+
+      nodes.get(file.folderId)?.files.push(this.toSummary(file));
     }
 
     const roots: FolderNode[] = [];
@@ -128,7 +176,102 @@ export class FilesService {
       }
     }
 
-    return roots;
+    return {
+      folders: roots,
+      canManagePins: isSystemAdmin(user.systemRole),
+    };
+  }
+
+  async updateContentPins(
+    userId: string | null,
+    input: UpdateContentPinsInput,
+  ) {
+    const user = await this.requireSystemAdmin(userId);
+    const workspace = await this.getDefaultWorkspace();
+
+    const containerFolder = await this.prisma.folder.findFirst({
+      where: { id: input.folderId, workspaceId: workspace.id },
+      select: { id: true },
+    });
+
+    if (!containerFolder) {
+      throw new BadRequestException("置顶目录不存在或不属于当前工作区");
+    }
+
+    if (input.items.length > 500) {
+      throw new BadRequestException("置顶项目不能超过 500 个");
+    }
+
+    const keys = input.items.map(
+      (item) => `${item.targetType}:${item.targetId}`,
+    );
+
+    if (new Set(keys).size !== keys.length) {
+      throw new BadRequestException("置顶项目不能重复");
+    }
+
+    const folderIds = input.items
+      .filter((item) => item.targetType === "folder")
+      .map((item) => item.targetId);
+    const fileIds = input.items
+      .filter((item) => item.targetType === "file")
+      .map((item) => item.targetId);
+    const [folderCount, fileCount] = await Promise.all([
+      this.prisma.folder.count({
+        where: {
+          id: { in: folderIds },
+          workspaceId: workspace.id,
+          parentId: input.folderId,
+        },
+      }),
+      this.prisma.file.count({
+        where: {
+          id: { in: fileIds },
+          workspaceId: workspace.id,
+          folderId: input.folderId,
+          status: { not: "archived" },
+        },
+      }),
+    ]);
+
+    if (folderCount !== folderIds.length || fileCount !== fileIds.length) {
+      throw new BadRequestException("置顶项目不存在或不属于当前目录");
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.folder.updateMany({
+        where: {
+          workspaceId: workspace.id,
+          parentId: input.folderId,
+          pinnedOrder: { not: null },
+        },
+        data: { pinnedOrder: null },
+      });
+      await tx.file.updateMany({
+        where: {
+          workspaceId: workspace.id,
+          folderId: input.folderId,
+          pinnedOrder: { not: null },
+        },
+        data: { pinnedOrder: null },
+      });
+
+      for (const [index, item] of input.items.entries()) {
+        if (item.targetType === "folder") {
+          await tx.folder.update({
+            where: { id: item.targetId },
+            data: { pinnedOrder: index },
+          });
+        } else {
+          await tx.file.update({
+            where: { id: item.targetId },
+            data: { pinnedOrder: index },
+          });
+        }
+      }
+    });
+
+    return this.getFolderTree(user.id);
   }
 
   async listFiles(
@@ -955,6 +1098,23 @@ export class FilesService {
     return { ok: true };
   }
 
+  private async requireSystemAdmin(userId: string | null) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, systemRole: true, status: true },
+    });
+
+    if (!user || !isSystemAdmin(user.systemRole) || user.status !== "active") {
+      throw new ForbiddenException("Only admins can manage content pins");
+    }
+
+    return user;
+  }
+
   private async getDefaultWorkspace() {
     const workspace = await this.prisma.workspace.findFirst({
       orderBy: { createdAt: "asc" },
@@ -1002,6 +1162,7 @@ export class FilesService {
     title: string;
     type: FileType;
     status: FileStatus;
+    pinnedOrder: number | null;
     updatedAt: Date;
   }): FileSummary {
     return {
@@ -1010,6 +1171,7 @@ export class FilesService {
       title: file.title,
       type: file.type,
       status: file.status,
+      pinnedOrder: file.pinnedOrder,
       updatedAt: file.updatedAt.toISOString(),
     };
   }

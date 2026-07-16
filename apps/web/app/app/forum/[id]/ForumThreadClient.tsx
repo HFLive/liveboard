@@ -27,12 +27,15 @@ import {
   deleteForumThread,
   getForumThread,
   listForumOverview,
+  uploadForumPostImages,
   updateForumPost,
   updateForumThread,
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/labels";
 import { APP_ROUTES } from "@/lib/routes";
 import { ForumUserAvatar } from "../ForumUserAvatar";
+import { ForumImagePicker } from "../ForumImagePicker";
+import { ForumPostImages } from "../ForumPostImages";
 
 interface ForumThreadClientProps {
   threadId: string;
@@ -47,6 +50,16 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     null,
   );
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [anonymousReplies, setAnonymousReplies] = useState<
+    Record<string, boolean>
+  >({});
+  const [replyImages, setReplyImages] = useState<Record<string, File[]>>({});
+  const [processingReplyImages, setProcessingReplyImages] = useState<
+    Record<string, boolean>
+  >({});
+  const [pendingReplyPosts, setPendingReplyPosts] = useState<
+    Record<string, ForumPostSummary>
+  >({});
   const [editingThread, setEditingThread] = useState(false);
   const [threadTitleDraft, setThreadTitleDraft] = useState("");
   const [threadCategoryDraft, setThreadCategoryDraft] = useState("");
@@ -91,9 +104,28 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     setError(null);
     setSubmitting(true);
     const body = parentId ? (replyDrafts[parentId] ?? "") : reply;
+    const anonymousKey = parentId ?? "root";
 
     try {
-      const result = await createForumPost(threadId, { body, parentId });
+      let post = pendingReplyPosts[anonymousKey];
+      if (!post) {
+        const result = await createForumPost(threadId, {
+          body,
+          parentId,
+          isAnonymous: anonymousReplies[anonymousKey] ?? false,
+        });
+        post = result.post;
+        setPendingReplyPosts((current) => ({
+          ...current,
+          [anonymousKey]: result.post,
+        }));
+      }
+
+      const images = replyImages[anonymousKey] ?? [];
+      if (images.length > 0 && post.images.length === 0) {
+        const uploaded = await uploadForumPostImages(post.id, images);
+        post = { ...post, images: uploaded.images };
+      }
 
       if (parentId) {
         setReplyDrafts((current) => {
@@ -105,15 +137,25 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       } else {
         setReply("");
       }
+      setAnonymousReplies((current) => ({
+        ...current,
+        [anonymousKey]: false,
+      }));
+      setReplyImages((current) => ({ ...current, [anonymousKey]: [] }));
+      setPendingReplyPosts((current) => {
+        const next = { ...current };
+        delete next[anonymousKey];
+        return next;
+      });
 
       setThread((current) =>
         current
           ? {
               ...current,
-              posts: [...current.posts, result.post],
+              posts: [...current.posts, post],
               postCount: current.postCount + 1,
-              lastActivityAt: result.post.createdAt,
-              updatedAt: result.post.createdAt,
+              lastActivityAt: post.createdAt,
+              updatedAt: post.createdAt,
             }
           : current,
       );
@@ -122,6 +164,68 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function renderAnonymousOption(key: string) {
+    return (
+      <label className="forum-anonymous-option compact">
+        <input
+          checked={anonymousReplies[key] ?? false}
+          onChange={(event) =>
+            setAnonymousReplies((current) => ({
+              ...current,
+              [key]: event.target.checked,
+            }))
+          }
+          type="checkbox"
+        />
+        <span>
+          <strong>匿名</strong>
+        </span>
+      </label>
+    );
+  }
+
+  function renderImagePicker(key: string) {
+    return (
+      <ForumImagePicker
+        disabled={submitting || Boolean(pendingReplyPosts[key])}
+        onChange={(images) =>
+          setReplyImages((current) => ({ ...current, [key]: images }))
+        }
+        onError={setError}
+        onProcessingChange={(processing) =>
+          setProcessingReplyImages((current) => ({
+            ...current,
+            [key]: processing,
+          }))
+        }
+        maxImages={3}
+        value={replyImages[key] ?? []}
+      />
+    );
+  }
+
+  function renderCommentMeta(post: ForumPostSummary) {
+    return (
+      <span className="forum-comment-meta">
+        <span className="forum-comment-author-line">
+          <strong>
+            {post.isAnonymous ? "匿名用户" : post.author.displayName}
+          </strong>
+          {post.isAnonymous && post.author.id !== "anonymous" ? (
+            <small className="forum-comment-real-identity">
+              真实身份：{post.author.displayName}（@{post.author.username}）
+            </small>
+          ) : null}
+        </span>
+        <small className="forum-comment-time">
+          {post.isAnonymous ? "" : `@${post.author.username} · `}
+          {formatDateTime(post.createdAt)}
+          {post.updatedAt !== post.createdAt ? " · 已编辑" : ""}
+        </small>
+      </span>
+    );
   }
 
   function startEditThread() {
@@ -340,34 +444,13 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
           <article className="forum-reply-row" key={replyPost.id}>
             <ForumUserAvatar
               className="forum-comment-avatar small"
+              isAnonymous={replyPost.isAnonymous}
               user={replyPost.author}
             />
             <div className="forum-comment-content">
               <div className="forum-post-toolbar">
-                <span className="forum-comment-meta">
-                  <strong>{replyPost.author.displayName}</strong>
-                  <small>
-                    @{replyPost.author.username} ·{" "}
-                    {formatDateTime(replyPost.createdAt)}
-                    {replyPost.updatedAt !== replyPost.createdAt
-                      ? " · 已编辑"
-                      : ""}
-                  </small>
-                </span>
+                {renderCommentMeta(replyPost)}
                 <span>
-                  {replyPost.canEdit && editingPostId !== replyPost.id ? (
-                    <button
-                      className="icon-button subtle"
-                      disabled={actionLoading}
-                      onClick={() =>
-                        startEditPost(replyPost.id, replyPost.body)
-                      }
-                      title="编辑"
-                      type="button"
-                    >
-                      <Pencil aria-hidden="true" />
-                    </button>
-                  ) : null}
                   {replyPost.canDelete ? (
                     <button
                       className="icon-button subtle"
@@ -382,50 +465,22 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 </span>
               </div>
 
-              {editingPostId === replyPost.id ? (
-                <div className="forum-post-edit-form">
-                  <textarea
-                    className="textarea"
-                    maxLength={8000}
-                    value={postDraft}
-                    onChange={(event) => setPostDraft(event.target.value)}
-                  />
-                  <div className="button-row left">
-                    <button
-                      className="button"
-                      disabled={actionLoading || !postDraft.trim()}
-                      onClick={() => savePost(replyPost.id)}
-                      type="button"
-                    >
-                      <Save aria-hidden="true" className="button-icon" />
-                      保存
-                    </button>
-                    <button
-                      className="button secondary"
-                      onClick={() => {
-                        setEditingPostId(null);
-                        setPostDraft("");
-                      }}
-                      type="button"
-                    >
-                      <X aria-hidden="true" className="button-icon" />
-                      取消
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="forum-post-body">
-                  <p>
-                    {replyPost.replyTo &&
-                    (depth > 3 || replyPost.replyToId !== parentId) ? (
-                      <span className="forum-reply-target">
-                        回复 {replyPost.replyTo.author.displayName}：
-                      </span>
-                    ) : null}
-                    {replyPost.body}
-                  </p>
-                </div>
-              )}
+              <div className="forum-post-body">
+                <p>
+                  {replyPost.replyTo &&
+                  (depth > 3 || replyPost.replyToId !== parentId) ? (
+                    <span className="forum-reply-target">
+                      回复{" "}
+                      {replyPost.replyTo.isAnonymous
+                        ? "匿名用户"
+                        : replyPost.replyTo.author.displayName}
+                      ：
+                    </span>
+                  ) : null}
+                  {replyPost.body}
+                </p>
+              </div>
+              <ForumPostImages compact images={replyPost.images} />
 
               {thread.canReply ? (
                 <button
@@ -451,7 +506,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                     autoFocus
                     className="textarea"
                     maxLength={8000}
-                    placeholder={`回复 ${replyPost.author.displayName}`}
+                    placeholder={`回复 ${replyPost.isAnonymous ? "匿名用户" : replyPost.author.displayName}`}
                     value={replyDrafts[replyPost.id] ?? ""}
                     onChange={(event) =>
                       setReplyDrafts((current) => ({
@@ -460,7 +515,8 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                       }))
                     }
                   />
-                  <div className="button-row">
+                  {renderImagePicker(replyPost.id)}
+                  <div className="button-row forum-reply-actions">
                     <button
                       className="button secondary"
                       onClick={() => setActiveReplyPostId(null)}
@@ -468,15 +524,18 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                     >
                       取消
                     </button>
+                    {renderAnonymousOption(replyPost.id)}
                     <button
                       className="button"
                       disabled={
-                        submitting || !(replyDrafts[replyPost.id] ?? "").trim()
+                        submitting ||
+                        processingReplyImages[replyPost.id] ||
+                        !(replyDrafts[replyPost.id] ?? "").trim()
                       }
                       type="submit"
                     >
                       <Send aria-hidden="true" className="button-icon" />
-                      {submitting ? "发送中" : "发送回复"}
+                      {submitting ? "发送中" : "回复"}
                     </button>
                   </div>
                 </form>
@@ -620,11 +679,21 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 <aside className="forum-post-author">
                   <ForumUserAvatar
                     className="forum-comment-avatar forum-main-author-avatar"
+                    isAnonymous={postStructure.mainPost.isAnonymous}
                     user={postStructure.mainPost.author}
                   />
-                  <strong>{postStructure.mainPost.author.displayName}</strong>
-                  <span>@{postStructure.mainPost.author.username}</span>
-                  <em>楼主</em>
+                  <strong>
+                    {postStructure.mainPost.isAnonymous
+                      ? "匿名用户"
+                      : postStructure.mainPost.author.displayName}
+                  </strong>
+                  <span>
+                    {postStructure.mainPost.isAnonymous
+                      ? postStructure.mainPost.author.id !== "anonymous"
+                        ? `真实身份：${postStructure.mainPost.author.displayName}（@${postStructure.mainPost.author.username}）`
+                        : "匿名"
+                      : `@${postStructure.mainPost.author.username}`}
+                  </span>
                 </aside>
                 <div className="forum-post-content">
                   <div className="forum-post-toolbar">
@@ -707,6 +776,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                       <p>{postStructure.mainPost.body}</p>
                     </div>
                   )}
+                  <ForumPostImages images={postStructure.mainPost.images} />
                 </div>
               </article>
             ) : null}
@@ -725,34 +795,13 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                     <div className="forum-comment-main">
                       <ForumUserAvatar
                         className="forum-comment-avatar"
+                        isAnonymous={post.isAnonymous}
                         user={post.author}
                       />
                       <div className="forum-comment-content">
                         <div className="forum-post-toolbar">
-                          <span className="forum-comment-meta">
-                            <strong>{post.author.displayName}</strong>
-                            <small>
-                              @{post.author.username} ·{" "}
-                              {formatDateTime(post.createdAt)}
-                              {post.updatedAt !== post.createdAt
-                                ? " · 已编辑"
-                                : ""}
-                            </small>
-                          </span>
+                          {renderCommentMeta(post)}
                           <span>
-                            {post.canEdit && editingPostId !== post.id ? (
-                              <button
-                                className="icon-button subtle"
-                                disabled={actionLoading}
-                                onClick={() =>
-                                  startEditPost(post.id, post.body)
-                                }
-                                title="编辑"
-                                type="button"
-                              >
-                                <Pencil aria-hidden="true" />
-                              </button>
-                            ) : null}
                             {post.canDelete ? (
                               <button
                                 className="icon-button subtle"
@@ -767,47 +816,10 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                           </span>
                         </div>
 
-                        {editingPostId === post.id ? (
-                          <div className="forum-post-edit-form">
-                            <textarea
-                              className="textarea"
-                              maxLength={8000}
-                              value={postDraft}
-                              onChange={(event) =>
-                                setPostDraft(event.target.value)
-                              }
-                            />
-                            <div className="button-row left">
-                              <button
-                                className="button"
-                                disabled={actionLoading || !postDraft.trim()}
-                                onClick={() => savePost(post.id)}
-                                type="button"
-                              >
-                                <Save
-                                  aria-hidden="true"
-                                  className="button-icon"
-                                />
-                                保存
-                              </button>
-                              <button
-                                className="button secondary"
-                                onClick={() => {
-                                  setEditingPostId(null);
-                                  setPostDraft("");
-                                }}
-                                type="button"
-                              >
-                                <X aria-hidden="true" className="button-icon" />
-                                取消
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="forum-post-body">
-                            <p>{post.body}</p>
-                          </div>
-                        )}
+                        <div className="forum-post-body">
+                          <p>{post.body}</p>
+                        </div>
+                        <ForumPostImages compact images={post.images} />
 
                         {thread.canReply ? (
                           <button
@@ -833,7 +845,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                               autoFocus
                               className="textarea"
                               maxLength={8000}
-                              placeholder={`回复 ${post.author.displayName}`}
+                              placeholder={`回复 ${post.isAnonymous ? "匿名用户" : post.author.displayName}`}
                               value={draft}
                               onChange={(event) =>
                                 setReplyDrafts((current) => ({
@@ -842,7 +854,8 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                                 }))
                               }
                             />
-                            <div className="button-row">
+                            {renderImagePicker(post.id)}
+                            <div className="button-row forum-reply-actions">
                               <button
                                 className="button secondary"
                                 onClick={() => setActiveReplyPostId(null)}
@@ -850,16 +863,21 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                               >
                                 取消
                               </button>
+                              {renderAnonymousOption(post.id)}
                               <button
                                 className="button"
-                                disabled={submitting || !draft.trim()}
+                                disabled={
+                                  submitting ||
+                                  processingReplyImages[post.id] ||
+                                  !draft.trim()
+                                }
                                 type="submit"
                               >
                                 <Send
                                   aria-hidden="true"
                                   className="button-icon"
                                 />
-                                {submitting ? "发送中" : "发送回复"}
+                                {submitting ? "发送中" : "回复"}
                               </button>
                             </div>
                           </form>
@@ -887,19 +905,22 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 <textarea
                   className="textarea"
                   maxLength={8000}
-                  placeholder="补充你的看法、解法或追问"
                   value={reply}
                   onChange={(event) => setReply(event.target.value)}
                 />
               </label>
-              <div className="button-row">
+              {renderImagePicker("root")}
+              <div className="button-row forum-reply-actions">
+                {renderAnonymousOption("root")}
                 <button
                   className="button"
-                  disabled={submitting || !reply.trim()}
+                  disabled={
+                    submitting || processingReplyImages.root || !reply.trim()
+                  }
                   type="submit"
                 >
                   <Send aria-hidden="true" className="button-icon" />
-                  {submitting ? "发送中" : "发布回复"}
+                  {submitting ? "发送中" : "回复"}
                 </button>
               </div>
             </form>

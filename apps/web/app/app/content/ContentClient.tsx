@@ -4,6 +4,9 @@ import { Fragment, FormEvent, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
   ChevronRight,
   X,
   FileText,
@@ -11,12 +14,15 @@ import {
   MoreHorizontal,
   MoveRight,
   Pencil,
+  Pin,
+  PinOff,
   Plus,
   RotateCcw,
   Trash2,
   Users,
 } from "lucide-react";
 import type {
+  ContentPinTarget,
   FileSummary,
   FileType,
   FolderNode,
@@ -38,23 +44,30 @@ import {
   PermissionGrantSummary,
   updateFile,
   updateFolder,
+  updateContentPins,
   upsertPermissionGrant,
 } from "@/lib/api";
-import {
-  fileStatusLabel,
-  fileTypeLabel,
-  formatDateTime,
-  permissionLabel,
-} from "@/lib/labels";
+import { fileTypeLabel, formatDateTime, permissionLabel } from "@/lib/labels";
 import { contentDetail } from "@/lib/routes";
 import { SortIconSelect } from "@/components/SortIconSelect";
 import { MarkdownImportButton } from "./MarkdownImportButton";
 
 type FlatFolderNode = FolderNode & { depth: number };
+type ContentTreeRow =
+  | { kind: "folder"; folder: FolderNode; depth: number }
+  | { kind: "file"; file: FileSummary; depth: number };
+type PinnedContentItem =
+  | { kind: "folder"; folder: FolderNode; pinnedOrder: number }
+  | { kind: "file"; file: FileSummary; pinnedOrder: number };
+type ContentRowItem =
+  { kind: "folder"; folder: FolderNode } | { kind: "file"; file: FileSummary };
 type FloatingMenuState = {
   id: string;
   x: number;
   y: number;
+};
+type ContentRowMenuState = FloatingMenuState & {
+  targetType: "folder" | "file";
 };
 type TreeDepthStyle = CSSProperties & {
   "--tree-depth": number;
@@ -86,6 +99,67 @@ function flattenFolders(folders: FolderNode[], depth = 0): FlatFolderNode[] {
   ]);
 }
 
+function flattenVisibleContent(
+  folders: FolderNode[],
+  collapsedFolderIds: Set<string>,
+  depth = 0,
+): ContentTreeRow[] {
+  return folders.flatMap((folder) => {
+    const rows: ContentTreeRow[] = [{ kind: "folder", folder, depth }];
+
+    if (collapsedFolderIds.has(folder.id)) {
+      return rows;
+    }
+
+    rows.push(
+      ...flattenVisibleContent(folder.children, collapsedFolderIds, depth + 1),
+      ...[...folder.files]
+        .sort((left, right) => left.title.localeCompare(right.title, "zh-CN"))
+        .map((file): ContentTreeRow => ({
+          kind: "file",
+          file,
+          depth: depth + 1,
+        })),
+    );
+
+    return rows;
+  });
+}
+
+function collectPinnedContent(
+  folder: FolderNode | undefined,
+): PinnedContentItem[] {
+  const items: PinnedContentItem[] = [];
+
+  if (!folder) {
+    return items;
+  }
+
+  for (const childFolder of folder.children) {
+    if (childFolder.pinnedOrder !== null) {
+      items.push({
+        kind: "folder",
+        folder: childFolder,
+        pinnedOrder: childFolder.pinnedOrder,
+      });
+    }
+  }
+
+  for (const file of folder.files) {
+    if (file.pinnedOrder !== null) {
+      items.push({ kind: "file", file, pinnedOrder: file.pinnedOrder });
+    }
+  }
+
+  return items.sort((left, right) => left.pinnedOrder - right.pinnedOrder);
+}
+
+function pinnedTarget(item: PinnedContentItem): ContentPinTarget {
+  return item.kind === "folder"
+    ? { targetType: "folder", targetId: item.folder.id }
+    : { targetType: "file", targetId: item.file.id };
+}
+
 function treeDepthStyle(depth: number): TreeDepthStyle {
   return { "--tree-depth": Math.min(depth, 7) };
 }
@@ -95,12 +169,12 @@ export function ContentClient() {
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [files, setFiles] = useState<FileSummary[]>([]);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [openFolderMenu, setOpenFolderMenu] =
     useState<FloatingMenuState | null>(null);
-  const [openFileMenu, setOpenFileMenu] = useState<FloatingMenuState | null>(
-    null,
-  );
+  const [openContentRowMenu, setOpenContentRowMenu] =
+    useState<ContentRowMenuState | null>(null);
   const [movingFolderId, setMovingFolderId] = useState<string | null>(null);
   const [folderMoveTargetId, setFolderMoveTargetId] = useState("");
   const [movingFileId, setMovingFileId] = useState<string | null>(null);
@@ -133,10 +207,33 @@ export function ContentClient() {
   const [isDeletingFolder, setIsDeletingFolder] = useState(false);
   const [contentSortMode, setContentSortMode] =
     useState<ContentSortMode>("updated");
+  const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [canManagePins, setCanManagePins] = useState(false);
+  const [isUpdatingPins, setIsUpdatingPins] = useState(false);
 
   const flatFolders = useMemo(() => flattenFolders(folders), [folders]);
+  const visibleTreeRows = useMemo(
+    () => flattenVisibleContent(folders, collapsedFolderIds),
+    [collapsedFolderIds, folders],
+  );
   const activeFolder = flatFolders.find(
     (folder) => folder.id === activeFolderId,
+  );
+  const pinnedItems = useMemo(
+    () => collectPinnedContent(activeFolder),
+    [activeFolder],
+  );
+  const pinnedTargetKeys = useMemo(
+    () =>
+      new Set(
+        pinnedItems.map((item) => {
+          const target = pinnedTarget(item);
+          return `${target.targetType}:${target.targetId}`;
+        }),
+      ),
+    [pinnedItems],
   );
   const sortedChildFolders = useMemo(() => {
     const children = [...(activeFolder?.children ?? [])];
@@ -174,6 +271,18 @@ export function ContentClient() {
       return left.title.localeCompare(right.title, "zh-CN");
     });
   }, [contentSortMode, files]);
+  const unpinnedChildFolders = useMemo(
+    () =>
+      sortedChildFolders.filter(
+        (folder) => !pinnedTargetKeys.has(`folder:${folder.id}`),
+      ),
+    [pinnedTargetKeys, sortedChildFolders],
+  );
+  const unpinnedFiles = useMemo(
+    () =>
+      sortedFiles.filter((file) => !pinnedTargetKeys.has(`file:${file.id}`)),
+    [pinnedTargetKeys, sortedFiles],
+  );
   const activeFolderPath = useMemo(() => {
     if (!activeFolderId) {
       return [];
@@ -226,6 +335,7 @@ export function ContentClient() {
         : firstFolder;
 
     setFolders(folderResult.folders);
+    setCanManagePins(folderResult.canManagePins);
     setActiveFolderId(selectedFolderId);
 
     const fileResult = await listFiles(selectedFolderId ?? undefined);
@@ -243,6 +353,12 @@ export function ContentClient() {
       setGrantGroupId("");
       setCanManageGrants(false);
     }
+  }
+
+  async function refreshTree() {
+    const result = await getFolderTree();
+    setFolders(result.folders);
+    setCanManagePins(result.canManagePins);
   }
 
   async function loadAssignableGroups(folderId: string) {
@@ -263,7 +379,7 @@ export function ContentClient() {
 
   async function openPermissions(target: PermissionTarget) {
     setOpenFolderMenu(null);
-    setOpenFileMenu(null);
+    setOpenContentRowMenu(null);
     setError(null);
 
     try {
@@ -296,6 +412,12 @@ export function ContentClient() {
   }, []);
 
   useEffect(() => {
+    function closeFloatingMenus() {
+      setOpenFolderMenu(null);
+      setOpenContentRowMenu(null);
+      setShowCreateMenu(false);
+    }
+
     function closeMenus(event: MouseEvent) {
       const target = event.target;
 
@@ -306,12 +428,17 @@ export function ContentClient() {
         return;
       }
 
-      setOpenFolderMenu(null);
-      setOpenFileMenu(null);
+      closeFloatingMenus();
     }
 
     document.addEventListener("mousedown", closeMenus);
-    return () => document.removeEventListener("mousedown", closeMenus);
+    document.addEventListener("scroll", closeFloatingMenus, true);
+    window.addEventListener("resize", closeFloatingMenus);
+    return () => {
+      document.removeEventListener("mousedown", closeMenus);
+      document.removeEventListener("scroll", closeFloatingMenus, true);
+      window.removeEventListener("resize", closeFloatingMenus);
+    };
   }, []);
 
   useEffect(() => {
@@ -322,8 +449,88 @@ export function ContentClient() {
     setGrantGroupId(availableGrantGroups[0]?.id ?? "");
   }, [availableGrantGroups, grantGroupId]);
 
+  function toggleFolderCollapsed(folderId: string) {
+    setCollapsedFolderIds((current) => {
+      const next = new Set(current);
+
+      if (next.has(folderId)) {
+        next.delete(folderId);
+      } else {
+        next.add(folderId);
+      }
+
+      return next;
+    });
+  }
+
+  async function savePinnedTargets(
+    items: ContentPinTarget[],
+    successMessage: string,
+  ) {
+    if (!activeFolderId) {
+      setError("请先选择要管理置顶内容的文件夹");
+      return;
+    }
+
+    setError(null);
+    setMessage(null);
+    setIsUpdatingPins(true);
+
+    try {
+      const result = await updateContentPins(activeFolderId, items);
+      setFolders(result.folders);
+      const updatedActiveFolder = flattenFolders(result.folders).find(
+        (folder) => folder.id === activeFolderId,
+      );
+      if (updatedActiveFolder) {
+        setFiles(updatedActiveFolder.files);
+      }
+      setCanManagePins(result.canManagePins);
+      setOpenFolderMenu(null);
+      setOpenContentRowMenu(null);
+      setMessage(successMessage);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "更新置顶失败");
+    } finally {
+      setIsUpdatingPins(false);
+    }
+  }
+
+  async function togglePinnedTarget(target: ContentPinTarget, label: string) {
+    const currentTargets = pinnedItems.map(pinnedTarget);
+    const targetIndex = currentTargets.findIndex(
+      (item) =>
+        item.targetType === target.targetType &&
+        item.targetId === target.targetId,
+    );
+    const nextTargets =
+      targetIndex === -1
+        ? [...currentTargets, target]
+        : currentTargets.filter((_, index) => index !== targetIndex);
+
+    await savePinnedTargets(
+      nextTargets,
+      targetIndex === -1 ? `“${label}”已置顶` : `“${label}”已取消置顶`,
+    );
+  }
+
+  async function movePinnedItem(index: number, offset: -1 | 1) {
+    const nextIndex = index + offset;
+
+    if (nextIndex < 0 || nextIndex >= pinnedItems.length) {
+      return;
+    }
+
+    const nextItems = [...pinnedItems];
+    const currentItem = nextItems[index]!;
+    nextItems[index] = nextItems[nextIndex]!;
+    nextItems[nextIndex] = currentItem;
+    await savePinnedTargets(nextItems.map(pinnedTarget), "置顶顺序已更新");
+  }
+
   async function selectFolder(folderId: string) {
     setActiveFolderId(folderId);
+    setShowCreateMenu(false);
     setError(null);
     const [fileResult, grantResult] = await Promise.all([
       listFiles(folderId),
@@ -373,10 +580,11 @@ export function ContentClient() {
       });
       setFileTitle("");
       setShowCreateFile(false);
-      setMessage("文件已创建");
+      setMessage("文档已创建");
       await selectFolder(activeFolderId);
+      await refreshTree();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "创建文件失败");
+      setError(caught instanceof Error ? caught.message : "创建文档失败");
     }
   }
 
@@ -398,6 +606,7 @@ export function ContentClient() {
         `“${result.file.title}”已导入，共 ${result.blockCount} 个内容块${warningText}`,
       );
       await selectFolder(activeFolderId);
+      await refreshTree();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "导入 Markdown 失败");
     }
@@ -413,14 +622,15 @@ export function ContentClient() {
 
     try {
       await deleteFile(file.id);
-      setMessage("文件已删除");
+      setMessage("文档已删除");
 
       if (activeFolderId) {
         const fileResult = await listFiles(activeFolderId);
         setFiles(fileResult.files);
       }
+      await refreshTree();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "删除文件失败");
+      setError(caught instanceof Error ? caught.message : "删除文档失败");
     }
   }
 
@@ -432,14 +642,14 @@ export function ContentClient() {
     setMovingFileId(file.id);
     setMoveTargetFolderId(fallbackFolder);
     setRenamingFileId(null);
-    setOpenFileMenu(null);
+    setOpenContentRowMenu(null);
   }
 
   function beginRenameFile(file: FileSummary) {
     setRenamingFileId(file.id);
     setFileRename(file.title);
     setMovingFileId(null);
-    setOpenFileMenu(null);
+    setOpenContentRowMenu(null);
   }
 
   function getFloatingMenuPosition(
@@ -448,7 +658,7 @@ export function ContentClient() {
   ) {
     const rect = button.getBoundingClientRect();
     const menuWidth = 180;
-    const menuHeight = itemCount * 35 + 2;
+    const menuHeight = itemCount * 36 + 2;
     const x = Math.max(
       8,
       Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8),
@@ -462,7 +672,7 @@ export function ContentClient() {
   }
 
   function toggleFolderMenu(folder: FlatFolderNode, button: HTMLButtonElement) {
-    setOpenFileMenu(null);
+    setOpenContentRowMenu(null);
     setOpenFolderMenu((current) => {
       if (current?.id === folder.id) {
         return null;
@@ -475,16 +685,21 @@ export function ContentClient() {
     });
   }
 
-  function toggleFileMenu(fileId: string, button: HTMLButtonElement) {
+  function toggleContentRowMenu(
+    targetType: "folder" | "file",
+    id: string,
+    button: HTMLButtonElement,
+  ) {
     setOpenFolderMenu(null);
-    setOpenFileMenu((current) => {
-      if (current?.id === fileId) {
+    setOpenContentRowMenu((current) => {
+      if (current?.targetType === targetType && current.id === id) {
         return null;
       }
 
       return {
-        id: fileId,
-        ...getFloatingMenuPosition(button, 6),
+        id,
+        targetType,
+        ...getFloatingMenuPosition(button, canManagePins ? 6 : 5),
       };
     });
   }
@@ -519,6 +734,7 @@ export function ContentClient() {
     setFolderParentId(parentId ?? "");
     setFolderName("");
     setShowCreateFolder(true);
+    setShowCreateMenu(false);
     setOpenFolderMenu(null);
   }
 
@@ -535,7 +751,7 @@ export function ContentClient() {
     return path.join(" / ");
   }
 
-  function beginMoveFolder(folder: FlatFolderNode) {
+  function beginMoveFolder(folder: FolderNode) {
     const blockedIds = getFolderDescendantIds(folder.id);
     const fallbackFolder =
       flatFolders.find(
@@ -546,11 +762,12 @@ export function ContentClient() {
     setMovingFolderId(folder.id);
     setFolderMoveTargetId(folder.parentId ?? fallbackFolder);
     setOpenFolderMenu(null);
+    setOpenContentRowMenu(null);
   }
 
   async function onMoveFolder(
     event: FormEvent<HTMLFormElement>,
-    folder: FlatFolderNode,
+    folder: FolderNode,
   ) {
     event.preventDefault();
     setError(null);
@@ -597,14 +814,15 @@ export function ContentClient() {
       });
       setMovingFileId(null);
       setMoveTargetFolderId("");
-      setMessage("文件已移动");
+      setMessage("文档已移动");
 
       if (activeFolderId) {
         const fileResult = await listFiles(activeFolderId);
         setFiles(fileResult.files);
       }
+      await refreshTree();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "移动文件失败");
+      setError(caught instanceof Error ? caught.message : "移动文档失败");
     }
   }
 
@@ -619,7 +837,7 @@ export function ContentClient() {
     const title = fileRename.trim();
 
     if (!title) {
-      setError("文件名不能为空");
+      setError("文档名称不能为空");
       return;
     }
 
@@ -633,14 +851,15 @@ export function ContentClient() {
       await updateFile({ fileId: file.id, title });
       setRenamingFileId(null);
       setFileRename("");
-      setMessage("文件已重命名");
+      setMessage("文档已重命名");
 
       if (activeFolderId) {
         const fileResult = await listFiles(activeFolderId);
         setFiles(fileResult.files);
       }
+      await refreshTree();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "重命名文件失败");
+      setError(caught instanceof Error ? caught.message : "重命名文档失败");
     }
   }
 
@@ -667,7 +886,7 @@ export function ContentClient() {
     }
   }
 
-  function beginDeleteFolder(folder: FlatFolderNode) {
+  function beginDeleteFolder(folder: FolderNode) {
     const descendants = getFolderDescendantIds(folder.id);
     const subtreeIds = new Set([folder.id, ...descendants]);
     const subtreeFileCount = flatFolders.reduce(
@@ -685,6 +904,7 @@ export function ContentClient() {
     setDeleteFolderStep(1);
     setDeleteFolderConfirmation("");
     setOpenFolderMenu(null);
+    setOpenContentRowMenu(null);
   }
 
   function closeDeleteFolderDialog() {
@@ -721,10 +941,466 @@ export function ContentClient() {
     }
   }
 
-  function beginRenameFolder(folder: FlatFolderNode) {
+  function beginRenameFolder(folder: FolderNode) {
     setEditingFolderId(folder.id);
     setFolderRename(folder.name);
     setOpenFolderMenu(null);
+    setOpenContentRowMenu(null);
+  }
+
+  function renderContentRowContextMenu(item: ContentRowItem) {
+    const isFolder = item.kind === "folder";
+    const id = isFolder ? item.folder.id : item.file.id;
+    const label = isFolder ? item.folder.name : item.file.title;
+    const targetType = isFolder ? "folder" : "file";
+
+    if (
+      openContentRowMenu?.targetType !== targetType ||
+      openContentRowMenu.id !== id
+    ) {
+      return null;
+    }
+
+    const isPinned = pinnedTargetKeys.has(`${targetType}:${id}`);
+
+    return (
+      <div
+        className="context-menu floating-context-menu content-row-context-menu"
+        style={{
+          left: openContentRowMenu.x,
+          top: openContentRowMenu.y,
+        }}
+      >
+        {isFolder ? (
+          <button
+            onClick={() => {
+              setOpenContentRowMenu(null);
+              void selectFolder(item.folder.id);
+            }}
+            type="button"
+          >
+            <Folder aria-hidden="true" />
+            打开
+          </button>
+        ) : (
+          <Link href={contentDetail(item.file.id)}>
+            <FileText aria-hidden="true" />
+            打开
+          </Link>
+        )}
+        {canManagePins ? (
+          <button
+            disabled={isUpdatingPins}
+            onClick={() =>
+              void togglePinnedTarget({ targetType, targetId: id }, label)
+            }
+            type="button"
+          >
+            {isPinned ? (
+              <PinOff aria-hidden="true" />
+            ) : (
+              <Pin aria-hidden="true" />
+            )}
+            {isPinned ? "取消置顶" : "置顶"}
+          </button>
+        ) : null}
+        <button
+          onClick={() =>
+            isFolder
+              ? beginRenameFolder(item.folder)
+              : beginRenameFile(item.file)
+          }
+          type="button"
+        >
+          <Pencil aria-hidden="true" />
+          重命名
+        </button>
+        <button
+          onClick={() =>
+            isFolder ? beginMoveFolder(item.folder) : beginMoveFile(item.file)
+          }
+          type="button"
+        >
+          <MoveRight aria-hidden="true" />
+          移动到…
+        </button>
+        <button
+          onClick={() =>
+            void openPermissions({
+              type: targetType,
+              id,
+              name: label,
+              ...(isFolder ? { isRoot: item.folder.parentId === null } : {}),
+            })
+          }
+          type="button"
+        >
+          <Users aria-hidden="true" />
+          权限设置
+        </button>
+        <button
+          className="danger"
+          onClick={() => {
+            if (isFolder) {
+              beginDeleteFolder(item.folder);
+            } else {
+              setOpenContentRowMenu(null);
+              void onDeleteFile(item.file);
+            }
+          }}
+          type="button"
+        >
+          <Trash2 aria-hidden="true" />
+          {isFolder ? "删除文件夹" : "删除"}
+        </button>
+      </div>
+    );
+  }
+
+  function renderFileInlineRows(file: FileSummary) {
+    return (
+      <>
+        {renamingFileId === file.id ? (
+          <tr className="content-inline-row">
+            <td colSpan={3}>
+              <form
+                className="inline-rename-file"
+                onSubmit={(event) => void onRenameFile(event, file)}
+              >
+                <span>文档名称</span>
+                <input
+                  autoFocus
+                  className="input"
+                  value={fileRename}
+                  onChange={(event) => setFileRename(event.target.value)}
+                />
+                <button className="button secondary" type="submit">
+                  保存
+                </button>
+                <button
+                  className="button secondary"
+                  onClick={() => {
+                    setRenamingFileId(null);
+                    setFileRename("");
+                  }}
+                  type="button"
+                >
+                  取消
+                </button>
+              </form>
+            </td>
+          </tr>
+        ) : null}
+        {movingFileId === file.id ? (
+          <tr className="content-inline-row">
+            <td colSpan={3}>
+              <form
+                className="inline-move-file"
+                onSubmit={(event) => void onMoveFile(event, file)}
+              >
+                <span>移动到</span>
+                <select
+                  className="select"
+                  value={moveTargetFolderId}
+                  onChange={(event) =>
+                    setMoveTargetFolderId(event.target.value)
+                  }
+                >
+                  {flatFolders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {"  ".repeat(folder.depth)}
+                      {folder.name}
+                    </option>
+                  ))}
+                </select>
+                <button className="button secondary" type="submit">
+                  移动
+                </button>
+                <button
+                  className="button secondary"
+                  onClick={() => setMovingFileId(null)}
+                  type="button"
+                >
+                  取消
+                </button>
+              </form>
+            </td>
+          </tr>
+        ) : null}
+      </>
+    );
+  }
+
+  function renderPinnedTableRow(item: PinnedContentItem, index: number) {
+    const isFolder = item.kind === "folder";
+    const id = isFolder ? item.folder.id : item.file.id;
+    const label = isFolder ? item.folder.name : item.file.title;
+    const updatedAt = isFolder ? item.folder.updatedAt : item.file.updatedAt;
+
+    return (
+      <Fragment key={`${item.kind}:${id}`}>
+        <tr className="content-pinned-row">
+          <td data-label="文件名">
+            {isFolder ? (
+              <button
+                className="content-folder-link"
+                onClick={() => void selectFolder(item.folder.id)}
+                title={label}
+                type="button"
+              >
+                <Folder aria-hidden="true" />
+                <span>{label}</span>
+                <Pin aria-hidden="true" className="content-pin-marker" />
+              </button>
+            ) : (
+              <Link
+                aria-label={label}
+                className="content-file-link"
+                href={contentDetail(item.file.id)}
+                title={label}
+              >
+                <FileText aria-hidden="true" />
+                {item.file.status === "draft" ? (
+                  <span aria-hidden="true" className="content-draft-tag">
+                    草稿
+                  </span>
+                ) : null}
+                <span>{label}</span>
+                <Pin aria-hidden="true" className="content-pin-marker" />
+              </Link>
+            )}
+          </td>
+          <td data-label="最近更新">{formatDateTime(updatedAt)}</td>
+          <td data-label="操作">
+            <div className="content-pinned-actions" data-menu-root="true">
+              {canManagePins ? (
+                <>
+                  <button
+                    aria-label={`上移“${label}”`}
+                    disabled={isUpdatingPins || index === 0}
+                    onClick={() => void movePinnedItem(index, -1)}
+                    title="上移"
+                    type="button"
+                  >
+                    <ArrowUp aria-hidden="true" />
+                  </button>
+                  <button
+                    aria-label={`下移“${label}”`}
+                    disabled={
+                      isUpdatingPins || index === pinnedItems.length - 1
+                    }
+                    onClick={() => void movePinnedItem(index, 1)}
+                    title="下移"
+                    type="button"
+                  >
+                    <ArrowDown aria-hidden="true" />
+                  </button>
+                </>
+              ) : null}
+              <button
+                aria-label={`“${label}”${isFolder ? "文件夹" : "文档"}操作`}
+                className="content-row-menu-button"
+                onClick={(event) =>
+                  toggleContentRowMenu(
+                    isFolder ? "folder" : "file",
+                    id,
+                    event.currentTarget,
+                  )
+                }
+                title={isFolder ? "文件夹操作" : "文档操作"}
+                type="button"
+              >
+                <MoreHorizontal aria-hidden="true" />
+              </button>
+              {renderContentRowContextMenu(item)}
+            </div>
+          </td>
+        </tr>
+        {!isFolder ? renderFileInlineRows(item.file) : null}
+      </Fragment>
+    );
+  }
+
+  function renderContentTreeRow(row: ContentTreeRow) {
+    if (row.kind === "file") {
+      return (
+        <div
+          className="tree-item tree-file-item"
+          key={`file:${row.file.id}`}
+          style={treeDepthStyle(row.depth)}
+        >
+          <span aria-hidden="true" className="tree-toggle-spacer" />
+          <Link
+            className="tree-main-button"
+            href={contentDetail(row.file.id)}
+            title={row.file.title}
+          >
+            <span className="tree-label">
+              <FileText aria-hidden="true" className="item-icon" />
+              <span>{row.file.title}</span>
+            </span>
+          </Link>
+        </div>
+      );
+    }
+
+    const folder: FlatFolderNode = { ...row.folder, depth: row.depth };
+    const isCollapsed = collapsedFolderIds.has(folder.id);
+    const hasChildren = folder.children.length > 0 || folder.files.length > 0;
+
+    return (
+      <div className="tree-row-wrap" key={`folder:${folder.id}`}>
+        {editingFolderId === folder.id ? (
+          <form
+            className="tree-inline-form"
+            onSubmit={onRenameFolder}
+            style={treeDepthStyle(folder.depth)}
+          >
+            <input
+              autoFocus
+              className="input compact-input"
+              value={folderRename}
+              onChange={(event) => setFolderRename(event.target.value)}
+            />
+            <button className="button secondary compact-button" type="submit">
+              保存
+            </button>
+            <button
+              className="button secondary compact-button"
+              onClick={() => setEditingFolderId(null)}
+              type="button"
+            >
+              取消
+            </button>
+          </form>
+        ) : (
+          <div
+            className={`tree-item tree-folder-item${folder.id === activeFolderId ? " active" : ""}`}
+            data-menu-root="true"
+            style={treeDepthStyle(folder.depth)}
+          >
+            {hasChildren ? (
+              <button
+                aria-label={`${isCollapsed ? "展开" : "折叠"}“${folder.name}”`}
+                className="tree-toggle-button"
+                onClick={() => toggleFolderCollapsed(folder.id)}
+                title={isCollapsed ? "展开" : "折叠"}
+                type="button"
+              >
+                {isCollapsed ? (
+                  <ChevronRight aria-hidden="true" />
+                ) : (
+                  <ChevronDown aria-hidden="true" />
+                )}
+              </button>
+            ) : (
+              <span aria-hidden="true" className="tree-toggle-spacer" />
+            )}
+            <button
+              className="tree-main-button"
+              onClick={() => void selectFolder(folder.id)}
+              type="button"
+            >
+              <span className="tree-label">
+                <Folder aria-hidden="true" className="item-icon" />
+                <span title={folder.name}>{folder.name}</span>
+              </span>
+            </button>
+            <button
+              className="icon-button subtle"
+              onClick={(event) => toggleFolderMenu(folder, event.currentTarget)}
+              title="文件夹操作"
+              type="button"
+            >
+              <MoreHorizontal aria-hidden="true" />
+            </button>
+            {openFolderMenu?.id === folder.id ? (
+              <div
+                className="context-menu floating-context-menu"
+                style={{ left: openFolderMenu.x, top: openFolderMenu.y }}
+              >
+                <button
+                  onClick={() => beginCreateFolder(folder.id)}
+                  type="button"
+                >
+                  <Plus aria-hidden="true" />
+                  新建文件夹
+                </button>
+                <button onClick={() => beginRenameFolder(folder)} type="button">
+                  <Pencil aria-hidden="true" />
+                  重命名
+                </button>
+                <button onClick={() => beginMoveFolder(folder)} type="button">
+                  <MoveRight aria-hidden="true" />
+                  移动到…
+                </button>
+                <button
+                  onClick={() =>
+                    void openPermissions({
+                      type: "folder",
+                      id: folder.id,
+                      name: folder.name,
+                      isRoot: folder.parentId === null,
+                    })
+                  }
+                  type="button"
+                >
+                  <Users aria-hidden="true" />
+                  权限设置
+                </button>
+                <button
+                  className="danger"
+                  onClick={() => beginDeleteFolder(folder)}
+                  type="button"
+                >
+                  <Trash2 aria-hidden="true" />
+                  删除文件夹
+                </button>
+              </div>
+            ) : null}
+          </div>
+        )}
+        {movingFolderId === folder.id ? (
+          <form
+            className="tree-inline-form folder-move-form"
+            onSubmit={(event) => void onMoveFolder(event, folder)}
+            style={treeDepthStyle(folder.depth)}
+          >
+            <span>移动到</span>
+            <select
+              className="select"
+              value={folderMoveTargetId}
+              onChange={(event) => setFolderMoveTargetId(event.target.value)}
+            >
+              <option value="">顶层</option>
+              {flatFolders
+                .filter((candidate) => {
+                  const blockedIds = getFolderDescendantIds(folder.id);
+                  return (
+                    candidate.id !== folder.id && !blockedIds.has(candidate.id)
+                  );
+                })
+                .map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {"  ".repeat(candidate.depth)}
+                    {candidate.name}
+                  </option>
+                ))}
+            </select>
+            <button className="button secondary compact-button" type="submit">
+              移动
+            </button>
+            <button
+              className="button secondary compact-button"
+              onClick={() => setMovingFolderId(null)}
+              type="button"
+            >
+              取消
+            </button>
+          </form>
+        ) : null}
+      </div>
+    );
   }
 
   async function onGrantPermission(event: FormEvent<HTMLFormElement>) {
@@ -850,166 +1526,7 @@ export function ContentClient() {
             </button>
           </div>
           <div className="file-tree">
-            {flatFolders.map((folder) => (
-              <div className="tree-row-wrap" key={folder.id}>
-                {editingFolderId === folder.id ? (
-                  <form
-                    className="tree-inline-form"
-                    onSubmit={onRenameFolder}
-                    style={treeDepthStyle(folder.depth)}
-                  >
-                    <input
-                      autoFocus
-                      className="input compact-input"
-                      value={folderRename}
-                      onChange={(event) => setFolderRename(event.target.value)}
-                    />
-                    <button
-                      className="button secondary compact-button"
-                      type="submit"
-                    >
-                      保存
-                    </button>
-                    <button
-                      className="button secondary compact-button"
-                      onClick={() => setEditingFolderId(null)}
-                      type="button"
-                    >
-                      取消
-                    </button>
-                  </form>
-                ) : (
-                  <div
-                    className={
-                      folder.id === activeFolderId
-                        ? "tree-item active"
-                        : "tree-item"
-                    }
-                    data-menu-root="true"
-                    style={treeDepthStyle(folder.depth)}
-                  >
-                    <button
-                      className="tree-main-button"
-                      onClick={() => void selectFolder(folder.id)}
-                      type="button"
-                    >
-                      <span className="tree-label">
-                        <Folder aria-hidden="true" className="item-icon" />
-                        <span title={folder.name}>{folder.name}</span>
-                      </span>
-                    </button>
-                    <button
-                      className="icon-button subtle"
-                      onClick={(event) =>
-                        toggleFolderMenu(folder, event.currentTarget)
-                      }
-                      title="文件夹操作"
-                      type="button"
-                    >
-                      <MoreHorizontal aria-hidden="true" />
-                    </button>
-                    {openFolderMenu?.id === folder.id ? (
-                      <div
-                        className="context-menu floating-context-menu"
-                        style={{
-                          left: openFolderMenu.x,
-                          top: openFolderMenu.y,
-                        }}
-                      >
-                        <button
-                          onClick={() => beginCreateFolder(folder.id)}
-                          type="button"
-                        >
-                          <Plus aria-hidden="true" />
-                          新建文件夹
-                        </button>
-                        <button
-                          onClick={() => beginRenameFolder(folder)}
-                          type="button"
-                        >
-                          <Pencil aria-hidden="true" />
-                          重命名
-                        </button>
-                        <button
-                          onClick={() => beginMoveFolder(folder)}
-                          type="button"
-                        >
-                          <MoveRight aria-hidden="true" />
-                          移动到…
-                        </button>
-                        <button
-                          onClick={() =>
-                            void openPermissions({
-                              type: "folder",
-                              id: folder.id,
-                              name: folder.name,
-                              isRoot: folder.parentId === null,
-                            })
-                          }
-                          type="button"
-                        >
-                          <Users aria-hidden="true" />
-                          权限设置
-                        </button>
-                        <button
-                          className="danger"
-                          onClick={() => beginDeleteFolder(folder)}
-                          type="button"
-                        >
-                          <Trash2 aria-hidden="true" />
-                          删除文件夹
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-                {movingFolderId === folder.id ? (
-                  <form
-                    className="tree-inline-form folder-move-form"
-                    onSubmit={(event) => void onMoveFolder(event, folder)}
-                    style={treeDepthStyle(folder.depth)}
-                  >
-                    <span>移动到</span>
-                    <select
-                      className="select"
-                      value={folderMoveTargetId}
-                      onChange={(event) =>
-                        setFolderMoveTargetId(event.target.value)
-                      }
-                    >
-                      <option value="">顶层</option>
-                      {flatFolders
-                        .filter((candidate) => {
-                          const blockedIds = getFolderDescendantIds(folder.id);
-                          return (
-                            candidate.id !== folder.id &&
-                            !blockedIds.has(candidate.id)
-                          );
-                        })
-                        .map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>
-                            {"  ".repeat(candidate.depth)}
-                            {candidate.name}
-                          </option>
-                        ))}
-                    </select>
-                    <button
-                      className="button secondary compact-button"
-                      type="submit"
-                    >
-                      移动
-                    </button>
-                    <button
-                      className="button secondary compact-button"
-                      onClick={() => setMovingFolderId(null)}
-                      type="button"
-                    >
-                      取消
-                    </button>
-                  </form>
-                ) : null}
-              </div>
-            ))}
+            {visibleTreeRows.map(renderContentTreeRow)}
             {flatFolders.length === 0 && !showCreateFolder ? (
               <div className="empty-panel">
                 <strong>还没有文件夹</strong>
@@ -1058,29 +1575,64 @@ export function ContentClient() {
                 disabled={!activeFolderId}
                 onImport={onImportMarkdown}
               />
-              <button
-                className="button secondary"
-                onClick={() => setShowCreateFile((current) => !current)}
-                type="button"
-              >
-                <Plus aria-hidden="true" className="button-icon" />
-                新建文件
-              </button>
+              <div className="new-content-menu" data-menu-root="true">
+                <button
+                  aria-expanded={showCreateMenu}
+                  aria-haspopup="menu"
+                  className="button secondary"
+                  onClick={() => {
+                    setOpenFolderMenu(null);
+                    setOpenContentRowMenu(null);
+                    setShowCreateMenu((current) => !current);
+                  }}
+                  type="button"
+                >
+                  <Plus aria-hidden="true" className="button-icon" />
+                  新建
+                  <ChevronDown aria-hidden="true" className="button-icon" />
+                </button>
+                {showCreateMenu ? (
+                  <div
+                    className="context-menu right new-content-options"
+                    role="menu"
+                  >
+                    <button
+                      onClick={() => beginCreateFolder(activeFolderId)}
+                      role="menuitem"
+                      type="button"
+                    >
+                      <Folder aria-hidden="true" />
+                      新建文件夹
+                    </button>
+                    <button
+                      disabled={!activeFolderId}
+                      onClick={() => {
+                        setShowCreateMenu(false);
+                        setShowCreateFile(true);
+                      }}
+                      role="menuitem"
+                      type="button"
+                    >
+                      <FileText aria-hidden="true" />
+                      创建文档
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
           <div className="table-wrap">
-            <table className="table responsive-table">
+            <table className="table responsive-table content-items-table">
               <thead>
                 <tr>
                   <th>文件名</th>
-                  <th>类型</th>
-                  <th>状态</th>
                   <th>最近更新</th>
                   <th aria-label="操作" />
                 </tr>
               </thead>
               <tbody>
-                {sortedChildFolders.map((folder) => (
+                {pinnedItems.map(renderPinnedTableRow)}
+                {unpinnedChildFolders.map((folder) => (
                   <tr className="content-folder-row" key={folder.id}>
                     <td data-label="文件名">
                       <button
@@ -1092,176 +1644,89 @@ export function ContentClient() {
                         {folder.name}
                       </button>
                     </td>
-                    <td data-label="类型">文件夹</td>
-                    <td data-label="状态">—</td>
                     <td data-label="最近更新">
                       {formatDateTime(folder.updatedAt)}
                     </td>
                     <td data-label="操作">
-                      <button
-                        className="table-action"
-                        onClick={() => void selectFolder(folder.id)}
-                        type="button"
-                      >
-                        打开
-                      </button>
+                      <div className="row-menu-wrap" data-menu-root="true">
+                        <button
+                          aria-label={`“${folder.name}”文件夹操作`}
+                          className="icon-button subtle content-row-menu-button"
+                          onClick={(event) =>
+                            toggleContentRowMenu(
+                              "folder",
+                              folder.id,
+                              event.currentTarget,
+                            )
+                          }
+                          title="文件夹操作"
+                          type="button"
+                        >
+                          <MoreHorizontal aria-hidden="true" />
+                        </button>
+                        {renderContentRowContextMenu({
+                          kind: "folder",
+                          folder,
+                        })}
+                      </div>
                     </td>
                   </tr>
                 ))}
-                {sortedFiles.map((file) => (
+                {unpinnedFiles.map((file) => (
                   <Fragment key={file.id}>
-                    <tr>
+                    <tr className="content-file-row">
                       <td data-label="文件名">
-                        <Link href={contentDetail(file.id)}>{file.title}</Link>
+                        <Link
+                          aria-label={file.title}
+                          className="content-file-link"
+                          href={contentDetail(file.id)}
+                        >
+                          <FileText aria-hidden="true" />
+                          {file.status === "draft" ? (
+                            <span
+                              aria-hidden="true"
+                              className="content-draft-tag"
+                            >
+                              草稿
+                            </span>
+                          ) : null}
+                          {file.title}
+                        </Link>
                       </td>
-                      <td data-label="类型">{fileTypeLabel(file.type)}</td>
-                      <td data-label="状态">{fileStatusLabel(file.status)}</td>
                       <td data-label="最近更新">
                         {formatDateTime(file.updatedAt)}
                       </td>
                       <td data-label="操作">
                         <div className="row-menu-wrap" data-menu-root="true">
                           <button
-                            className="icon-button subtle"
+                            aria-label={`“${file.title}”文档操作`}
+                            className="icon-button subtle content-row-menu-button"
                             onClick={(event) =>
-                              toggleFileMenu(file.id, event.currentTarget)
+                              toggleContentRowMenu(
+                                "file",
+                                file.id,
+                                event.currentTarget,
+                              )
                             }
-                            title="文件操作"
+                            title="文档操作"
                             type="button"
                           >
                             <MoreHorizontal aria-hidden="true" />
                           </button>
-                          {openFileMenu?.id === file.id ? (
-                            <div
-                              className="context-menu floating-context-menu"
-                              style={{
-                                left: openFileMenu.x,
-                                top: openFileMenu.y,
-                              }}
-                            >
-                              <Link href={contentDetail(file.id)}>
-                                <FileText aria-hidden="true" />
-                                打开
-                              </Link>
-                              <button
-                                onClick={() => beginRenameFile(file)}
-                                type="button"
-                              >
-                                <Pencil aria-hidden="true" />
-                                重命名
-                              </button>
-                              <button
-                                onClick={() => beginMoveFile(file)}
-                                type="button"
-                              >
-                                <MoveRight aria-hidden="true" />
-                                移动到…
-                              </button>
-                              <button
-                                onClick={() =>
-                                  void openPermissions({
-                                    type: "file",
-                                    id: file.id,
-                                    name: file.title,
-                                  })
-                                }
-                                type="button"
-                              >
-                                <Users aria-hidden="true" />
-                                权限设置
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setOpenFileMenu(null);
-                                  void onDeleteFile(file);
-                                }}
-                                className="danger"
-                                type="button"
-                              >
-                                <Trash2 aria-hidden="true" />
-                                删除
-                              </button>
-                            </div>
-                          ) : null}
+                          {renderContentRowContextMenu({ kind: "file", file })}
                         </div>
                       </td>
                     </tr>
-                    {renamingFileId === file.id ? (
-                      <tr>
-                        <td colSpan={5}>
-                          <form
-                            className="inline-rename-file"
-                            onSubmit={(event) => void onRenameFile(event, file)}
-                          >
-                            <span>文件名</span>
-                            <input
-                              autoFocus
-                              className="input"
-                              value={fileRename}
-                              onChange={(event) =>
-                                setFileRename(event.target.value)
-                              }
-                            />
-                            <button className="button secondary" type="submit">
-                              保存
-                            </button>
-                            <button
-                              className="button secondary"
-                              onClick={() => {
-                                setRenamingFileId(null);
-                                setFileRename("");
-                              }}
-                              type="button"
-                            >
-                              取消
-                            </button>
-                          </form>
-                        </td>
-                      </tr>
-                    ) : null}
-                    {movingFileId === file.id ? (
-                      <tr>
-                        <td colSpan={5}>
-                          <form
-                            className="inline-move-file"
-                            onSubmit={(event) => void onMoveFile(event, file)}
-                          >
-                            <span>移动到</span>
-                            <select
-                              className="select"
-                              value={moveTargetFolderId}
-                              onChange={(event) =>
-                                setMoveTargetFolderId(event.target.value)
-                              }
-                            >
-                              {flatFolders.map((folder) => (
-                                <option key={folder.id} value={folder.id}>
-                                  {"  ".repeat(folder.depth)}
-                                  {folder.name}
-                                </option>
-                              ))}
-                            </select>
-                            <button className="button secondary" type="submit">
-                              移动
-                            </button>
-                            <button
-                              className="button secondary"
-                              onClick={() => setMovingFileId(null)}
-                              type="button"
-                            >
-                              取消
-                            </button>
-                          </form>
-                        </td>
-                      </tr>
-                    ) : null}
+                    {renderFileInlineRows(file)}
                   </Fragment>
                 ))}
-                {sortedChildFolders.length === 0 && sortedFiles.length === 0 ? (
+                {pinnedItems.length === 0 &&
+                unpinnedChildFolders.length === 0 &&
+                unpinnedFiles.length === 0 ? (
                   <tr className="content-empty-row">
-                    <td className="empty-cell" colSpan={5}>
+                    <td className="empty-cell" colSpan={3}>
                       <div className="empty-panel">
-                        <strong>当前文件夹还没有文件</strong>
+                        <strong>当前文件夹还是空的</strong>
                         <span>可以新建文档、教案、课程或练习集。</span>
                         <button
                           className="button secondary"
@@ -1269,7 +1734,7 @@ export function ContentClient() {
                           type="button"
                         >
                           <Plus aria-hidden="true" className="button-icon" />
-                          新建文件
+                          创建文档
                         </button>
                       </div>
                     </td>
@@ -1292,7 +1757,7 @@ export function ContentClient() {
               <div>
                 <h2>
                   {permissionTarget?.type === "file"
-                    ? "文件权限"
+                    ? "文档权限"
                     : "文件夹权限"}
                 </h2>
                 <p className="muted">{permissionTarget?.name ?? "当前文档"}</p>
@@ -1319,10 +1784,10 @@ export function ContentClient() {
                 </strong>
                 <span>
                   {groupGrants.length > 0
-                    ? `当前${permissionTarget?.type === "file" ? "文件" : "文件夹"}为 ${groupGrants.length} 个权限组单独设置；其他权限继续从上级继承。`
+                    ? `当前${permissionTarget?.type === "file" ? "文档" : "文件夹"}为 ${groupGrants.length} 个权限组单独设置；其他权限继续从上级继承。`
                     : permissionTarget?.isRoot
                       ? "当前顶层文件夹没有单独设置，权限会随管理中心的文档默认权限自动变化。"
-                      : `当前${permissionTarget?.type === "file" ? "文件" : "文件夹"}没有单独设置，权限会随上级文件夹自动变化。`}
+                      : `当前${permissionTarget?.type === "file" ? "文档" : "文件夹"}没有单独设置，权限会随上级文件夹自动变化。`}
                 </span>
               </div>
               <div className="panel-title-row">
@@ -1639,7 +2104,7 @@ export function ContentClient() {
         <div className="modal-backdrop" role="presentation">
           <form className="modal-panel" onSubmit={onCreateFile}>
             <div className="modal-head">
-              <h2>新建文件</h2>
+              <h2>创建文档</h2>
               <button
                 className="icon-button subtle"
                 onClick={() => setShowCreateFile(false)}
@@ -1651,7 +2116,7 @@ export function ContentClient() {
             </div>
             <div className="modal-body">
               <label className="label">
-                文件名
+                文档名称
                 <input
                   autoFocus
                   className="input"
@@ -1661,7 +2126,7 @@ export function ContentClient() {
                 />
               </label>
               <label className="label">
-                文件类型
+                文档类型
                 <select
                   className="select"
                   value={fileType}
@@ -1694,7 +2159,7 @@ export function ContentClient() {
                   取消
                 </button>
                 <button className="button" type="submit">
-                  创建文件
+                  创建文档
                 </button>
               </div>
             </div>

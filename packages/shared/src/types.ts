@@ -77,7 +77,9 @@ export interface FolderNode {
   parentId: string | null;
   permission: PermissionLevel;
   fileCount: number;
+  pinnedOrder: number | null;
   updatedAt: string;
+  files: FileSummary[];
   children: FolderNode[];
 }
 
@@ -87,7 +89,15 @@ export interface FileSummary {
   title: string;
   type: FileType;
   status: FileStatus;
+  pinnedOrder: number | null;
   updatedAt: string;
+}
+
+export type ContentPinTargetType = "folder" | "file";
+
+export interface ContentPinTarget {
+  targetType: ContentPinTargetType;
+  targetId: string;
 }
 
 export type TeachingDeckItemType = "content_block" | "exercise";
@@ -116,6 +126,7 @@ export interface ForumThreadSummary {
   title: string;
   excerpt: string;
   status: ForumThreadStatus;
+  isAnonymous: boolean;
   author: UserSummary;
   postCount: number;
   createdAt: string;
@@ -130,14 +141,25 @@ export interface ForumPostSummary {
   replyToId: string | null;
   replyTo?: {
     id: string;
+    isAnonymous: boolean;
     author: UserSummary;
   } | null;
+  isAnonymous: boolean;
   author: UserSummary;
   body: string;
+  images: ForumImageSummary[];
   createdAt: string;
   updatedAt: string;
   canEdit?: boolean;
   canDelete?: boolean;
+}
+
+export interface ForumImageSummary {
+  id: string;
+  url: string;
+  width: number;
+  height: number;
+  sortOrder: number;
 }
 
 export interface ForumThreadDetail extends ForumThreadSummary {
