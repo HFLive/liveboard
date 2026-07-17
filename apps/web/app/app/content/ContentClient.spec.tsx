@@ -5,6 +5,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FolderNode } from "@liveboard/shared";
 import { ContentClient } from "./ContentClient";
@@ -70,9 +71,25 @@ const folderTree: FolderNode[] = [
   },
 ];
 
+function getTree() {
+  const tree = document.querySelector(".file-tree");
+  expect(tree).not.toBeNull();
+  return tree as HTMLElement;
+}
+
+async function enterFolderFromTree(name: string) {
+  fireEvent.click(await within(getTree()).findByRole("button", { name }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "返回上一级" }),
+    ).toBeInTheDocument(),
+  );
+}
+
 describe("ContentClient folder deletion", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     vi.mocked(getFolderTree)
       .mockResolvedValueOnce({ folders: folderTree, canManagePins: false })
       .mockResolvedValue({ folders: [], canManagePins: false });
@@ -129,10 +146,11 @@ describe("ContentClient folder deletion", () => {
 
     render(<ContentClient />);
 
+    await enterFolderFromTree("课程资料");
     const moveDown = await screen.findByRole("button", {
       name: "下移“第一章”",
     });
-    const leftTree = document.querySelector(".file-tree");
+    const leftTree = getTree();
     expect(leftTree?.querySelector(".content-pinned-panel")).toBeNull();
     expect(document.querySelector(".content-pinned-panel")).toBeNull();
     const table = screen.getByRole("table");
@@ -195,6 +213,7 @@ describe("ContentClient folder deletion", () => {
 
     render(<ContentClient />);
 
+    await enterFolderFromTree("课程资料");
     let table = screen.getByRole("table");
     expect(
       await within(table).findByRole("link", { name: "课程导读" }),
@@ -223,11 +242,14 @@ describe("ContentClient folder deletion", () => {
 
     render(<ContentClient />);
 
+    await enterFolderFromTree("课程资料");
     const table = screen.getByRole("table");
     const documentLink = await within(table).findByRole("link", {
       name: "课程导读",
     });
     expect(documentLink).toHaveClass("content-file-link");
+    expect(documentLink).toHaveAttribute("target", "_blank");
+    expect(documentLink).toHaveAttribute("rel", "noopener noreferrer");
     expect(documentLink.querySelector("svg")).not.toBeNull();
     expect(
       within(documentLink.closest("td") as HTMLElement).getByText("草稿"),
@@ -249,6 +271,7 @@ describe("ContentClient folder deletion", () => {
   it("offers folder and document creation from the new menu", async () => {
     render(<ContentClient />);
 
+    await enterFolderFromTree("课程资料");
     fireEvent.click(await screen.findByRole("button", { name: "新建" }));
 
     expect(
@@ -280,9 +303,7 @@ describe("ContentClient folder deletion", () => {
 
     render(<ContentClient />);
 
-    const tree = document.querySelector(".file-tree");
-    expect(tree).not.toBeNull();
-    await within(tree as HTMLElement).findByTitle("课程资料");
+    await enterFolderFromTree("课程资料");
     expect(
       screen.queryByRole("button", { name: "导入 Markdown" }),
     ).not.toBeInTheDocument();
@@ -297,33 +318,137 @@ describe("ContentClient folder deletion", () => {
 
     const table = screen.getByRole("table");
     expect(
-      await within(table).findByRole("button", { name: "第一章" }),
+      await within(table).findByRole("button", { name: "课程资料" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("排序")).toHaveValue("updated");
     fireEvent.click(
-      within(table).getByRole("button", { name: "“第一章”文件夹操作" }),
+      within(table).getByRole("button", { name: "“课程资料”文件夹操作" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "删除文件夹" }));
 
     expect(screen.getByText("此操作无法撤销")).toBeInTheDocument();
-    expect(screen.getByRole("dialog")).toHaveTextContent("3个文档");
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "1个子文件夹和5个文档",
+    );
     expect(deleteFolder).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "继续删除" }));
     const finalDelete = screen.getByRole("button", { name: "永久删除" });
     expect(finalDelete).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("输入文件夹名称“第一章”以确认"), {
-      target: { value: "第一章" },
+    fireEvent.change(screen.getByLabelText("输入文件夹名称“课程资料”以确认"), {
+      target: { value: "课程资料" },
     });
     expect(finalDelete).toBeEnabled();
     fireEvent.click(finalDelete);
 
     await waitFor(() =>
-      expect(deleteFolder).toHaveBeenCalledWith("folder-2", "第一章"),
+      expect(deleteFolder).toHaveBeenCalledWith("folder-1", "课程资料"),
     );
     expect(
       await screen.findByText("文件夹及其中的内容已删除"),
     ).toBeInTheDocument();
+  });
+
+  it("goes up one level from the back button and to the top from the location heading", async () => {
+    render(<ContentClient />);
+
+    const table = screen.getByRole("table");
+    expect(
+      await within(table).findByRole("button", { name: "课程资料" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "返回上一级" }),
+    ).not.toBeInTheDocument();
+
+    await enterFolderFromTree("课程资料");
+    fireEvent.click(
+      within(screen.getByRole("table")).getByRole("button", { name: "第一章" }),
+    );
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("table")).queryByRole("button", {
+          name: "第一章",
+        }),
+      ).not.toBeInTheDocument(),
+    );
+
+    // 返回上一级回到“课程资料”，而不是直接回到顶层
+    fireEvent.click(screen.getByRole("button", { name: "返回上一级" }));
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("table")).getByRole("button", {
+          name: "第一章",
+        }),
+      ).toBeInTheDocument(),
+    );
+
+    // 顶层文件夹的上一级是顶层“/”
+    fireEvent.click(screen.getByRole("button", { name: "返回上一级" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "返回上一级" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      within(screen.getByRole("table")).getByRole("button", {
+        name: "课程资料",
+      }),
+    ).toBeInTheDocument();
+
+    await enterFolderFromTree("课程资料");
+    fireEvent.click(screen.getByRole("button", { name: "位置" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "返回上一级" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      within(screen.getByRole("table")).getByRole("button", {
+        name: "课程资料",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("restores the last opened folder when the page loads again", async () => {
+    vi.mocked(getFolderTree)
+      .mockReset()
+      .mockResolvedValue({ folders: folderTree, canManagePins: false });
+
+    const firstRender = render(<ContentClient />);
+    await enterFolderFromTree("课程资料");
+    firstRender.unmount();
+
+    render(<ContentClient />);
+
+    // “返回文档”回到列表页时直接落在最近打开的目录，而不是顶层
+    await screen.findByRole("button", { name: "返回上一级" });
+    expect(
+      within(screen.getByRole("table")).getByRole("button", { name: "第一章" }),
+    ).toBeInTheDocument();
+  });
+
+  it("restores the last opened folder under StrictMode double effects", async () => {
+    vi.mocked(getFolderTree)
+      .mockReset()
+      .mockResolvedValue({ folders: folderTree, canManagePins: false });
+    window.localStorage.setItem("liveboard:content-active-folder", "folder-2");
+
+    render(
+      <StrictMode>
+        <ContentClient />
+      </StrictMode>,
+    );
+
+    // 开发模式 StrictMode 会重复执行挂载 effect，恢复逻辑必须保持幂等
+    await screen.findByRole("button", { name: "返回上一级" });
+    const breadcrumb = screen.getByLabelText("当前位置");
+    expect(
+      within(breadcrumb).getByRole("button", { name: "课程资料" }),
+    ).toBeInTheDocument();
+    expect(breadcrumb).toHaveTextContent("第一章");
+    expect(window.localStorage.getItem("liveboard:content-active-folder")).toBe(
+      "folder-2",
+    );
   });
 });
