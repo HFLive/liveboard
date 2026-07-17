@@ -179,8 +179,6 @@ export function ContentClient() {
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
-  const [openFolderMenu, setOpenFolderMenu] =
-    useState<FloatingMenuState | null>(null);
   const [openContentRowMenu, setOpenContentRowMenu] =
     useState<ContentRowMenuState | null>(null);
   const [movingFolderId, setMovingFolderId] = useState<string | null>(null);
@@ -388,7 +386,6 @@ export function ContentClient() {
   }
 
   async function openPermissions(target: PermissionTarget) {
-    setOpenFolderMenu(null);
     setOpenContentRowMenu(null);
     setError(null);
 
@@ -423,7 +420,6 @@ export function ContentClient() {
 
   useEffect(() => {
     function closeFloatingMenus() {
-      setOpenFolderMenu(null);
       setOpenContentRowMenu(null);
       setShowCreateMenu(false);
     }
@@ -496,7 +492,6 @@ export function ContentClient() {
         setFiles(updatedActiveFolder.files);
       }
       setCanManagePins(result.canManagePins);
-      setOpenFolderMenu(null);
       setOpenContentRowMenu(null);
       setMessage(successMessage);
     } catch (caught) {
@@ -681,26 +676,11 @@ export function ContentClient() {
     return { x, y };
   }
 
-  function toggleFolderMenu(folder: FlatFolderNode, button: HTMLButtonElement) {
-    setOpenContentRowMenu(null);
-    setOpenFolderMenu((current) => {
-      if (current?.id === folder.id) {
-        return null;
-      }
-
-      return {
-        id: folder.id,
-        ...getFloatingMenuPosition(button, 5),
-      };
-    });
-  }
-
   function toggleContentRowMenu(
     targetType: "folder" | "file",
     id: string,
     button: HTMLButtonElement,
   ) {
-    setOpenFolderMenu(null);
     setOpenContentRowMenu((current) => {
       if (current?.targetType === targetType && current.id === id) {
         return null;
@@ -745,7 +725,6 @@ export function ContentClient() {
     setFolderName("");
     setShowCreateFolder(true);
     setShowCreateMenu(false);
-    setOpenFolderMenu(null);
   }
 
   function folderPathLabel(folderId: string) {
@@ -771,7 +750,6 @@ export function ContentClient() {
 
     setMovingFolderId(folder.id);
     setFolderMoveTargetId(folder.parentId ?? fallbackFolder);
-    setOpenFolderMenu(null);
     setOpenContentRowMenu(null);
   }
 
@@ -913,7 +891,6 @@ export function ContentClient() {
     });
     setDeleteFolderStep(1);
     setDeleteFolderConfirmation("");
-    setOpenFolderMenu(null);
     setOpenContentRowMenu(null);
   }
 
@@ -933,7 +910,6 @@ export function ContentClient() {
 
     try {
       await deleteFolder(deleteFolderTarget.id, deleteFolderTarget.name);
-      setOpenFolderMenu(null);
       const removedFolderIds = getFolderDescendantIds(deleteFolderTarget.id);
       removedFolderIds.add(deleteFolderTarget.id);
       if (activeFolderId && removedFolderIds.has(activeFolderId)) {
@@ -954,7 +930,6 @@ export function ContentClient() {
   function beginRenameFolder(folder: FolderNode) {
     setEditingFolderId(folder.id);
     setFolderRename(folder.name);
-    setOpenFolderMenu(null);
     setOpenContentRowMenu(null);
   }
 
@@ -1286,7 +1261,6 @@ export function ContentClient() {
         ) : (
           <div
             className={`tree-item tree-folder-item${folder.id === activeFolderId ? " active" : ""}`}
-            data-menu-root="true"
             style={treeDepthStyle(folder.depth)}
           >
             {hasChildren ? (
@@ -1316,60 +1290,6 @@ export function ContentClient() {
                 <span title={folder.name}>{folder.name}</span>
               </span>
             </button>
-            <button
-              className="icon-button subtle"
-              onClick={(event) => toggleFolderMenu(folder, event.currentTarget)}
-              title="文件夹操作"
-              type="button"
-            >
-              <MoreHorizontal aria-hidden="true" />
-            </button>
-            {openFolderMenu?.id === folder.id ? (
-              <div
-                className="context-menu floating-context-menu"
-                style={{ left: openFolderMenu.x, top: openFolderMenu.y }}
-              >
-                {canCreateFolder(folder.permission) ? (
-                  <button
-                    onClick={() => beginCreateFolder(folder.id)}
-                    type="button"
-                  >
-                    <Plus aria-hidden="true" />
-                    新建文件夹
-                  </button>
-                ) : null}
-                <button onClick={() => beginRenameFolder(folder)} type="button">
-                  <Pencil aria-hidden="true" />
-                  重命名
-                </button>
-                <button onClick={() => beginMoveFolder(folder)} type="button">
-                  <MoveRight aria-hidden="true" />
-                  移动到…
-                </button>
-                <button
-                  onClick={() =>
-                    void openPermissions({
-                      type: "folder",
-                      id: folder.id,
-                      name: folder.name,
-                      isRoot: folder.parentId === null,
-                    })
-                  }
-                  type="button"
-                >
-                  <Users aria-hidden="true" />
-                  权限设置
-                </button>
-                <button
-                  className="danger"
-                  onClick={() => beginDeleteFolder(folder)}
-                  type="button"
-                >
-                  <Trash2 aria-hidden="true" />
-                  删除文件夹
-                </button>
-              </div>
-            ) : null}
           </div>
         )}
         {movingFolderId === folder.id ? (
@@ -1542,24 +1462,19 @@ export function ContentClient() {
 
         <div className="workbench-main">
           <div className="panel-head">
-            <div>
-              <h2>
-                <FileText aria-hidden="true" className="heading-icon" />
-                文档
-              </h2>
-              <div className="breadcrumb" aria-label="当前位置">
-                {activeFolderPath.map((folder, index) => (
-                  <span key={folder.id}>
-                    {index > 0 ? <ChevronRight aria-hidden="true" /> : null}
-                    <button
-                      onClick={() => void selectFolder(folder.id)}
-                      type="button"
-                    >
-                      {folder.name}
-                    </button>
-                  </span>
-                ))}
-              </div>
+            <div className="breadcrumb" aria-label="当前位置">
+              {activeFolderPath.map((folder, index) => (
+                <span key={folder.id}>
+                  {index > 0 ? <ChevronRight aria-hidden="true" /> : null}
+                  <button
+                    onClick={() => void selectFolder(folder.id)}
+                    title={folder.name}
+                    type="button"
+                  >
+                    {folder.name}
+                  </button>
+                </span>
+              ))}
             </div>
             <div className="toolbar-row">
               <SortIconSelect
@@ -1577,7 +1492,6 @@ export function ContentClient() {
                     aria-haspopup="menu"
                     className="button secondary"
                     onClick={() => {
-                      setOpenFolderMenu(null);
                       setOpenContentRowMenu(null);
                       setShowCreateMenu((current) => !current);
                     }}

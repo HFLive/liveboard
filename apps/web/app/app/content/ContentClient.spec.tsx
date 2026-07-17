@@ -82,9 +82,9 @@ describe("ContentClient folder deletion", () => {
   it("shows files in the location tree and collapses folder contents", async () => {
     render(<ContentClient />);
 
-    await screen.findByTitle("课程资料");
     const tree = document.querySelector(".file-tree");
     expect(tree).not.toBeNull();
+    await within(tree as HTMLElement).findByTitle("课程资料");
     expect(
       within(tree as HTMLElement).getByRole("link", { name: "课程导读" }),
     ).toBeInTheDocument();
@@ -280,7 +280,9 @@ describe("ContentClient folder deletion", () => {
 
     render(<ContentClient />);
 
-    await screen.findByTitle("课程资料");
+    const tree = document.querySelector(".file-tree");
+    expect(tree).not.toBeNull();
+    await within(tree as HTMLElement).findByTitle("课程资料");
     expect(
       screen.queryByRole("button", { name: "导入 Markdown" }),
     ).not.toBeInTheDocument();
@@ -293,36 +295,32 @@ describe("ContentClient folder deletion", () => {
   it("requires two confirmations before recursively deleting a folder", async () => {
     render(<ContentClient />);
 
-    const folderName = await screen.findByTitle("课程资料");
+    const table = screen.getByRole("table");
     expect(
-      within(screen.getByRole("table")).getByRole("button", {
-        name: "第一章",
-      }),
+      await within(table).findByRole("button", { name: "第一章" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("排序")).toHaveValue("updated");
-    const folderRow = folderName.closest("[data-menu-root='true']");
-    expect(folderRow).not.toBeNull();
-    fireEvent.click(within(folderRow as HTMLElement).getByTitle("文件夹操作"));
+    fireEvent.click(
+      within(table).getByRole("button", { name: "“第一章”文件夹操作" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "删除文件夹" }));
 
     expect(screen.getByText("此操作无法撤销")).toBeInTheDocument();
-    expect(screen.getByRole("dialog")).toHaveTextContent(
-      "1个子文件夹和5个文档",
-    );
+    expect(screen.getByRole("dialog")).toHaveTextContent("3个文档");
     expect(deleteFolder).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "继续删除" }));
     const finalDelete = screen.getByRole("button", { name: "永久删除" });
     expect(finalDelete).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("输入文件夹名称“课程资料”以确认"), {
-      target: { value: "课程资料" },
+    fireEvent.change(screen.getByLabelText("输入文件夹名称“第一章”以确认"), {
+      target: { value: "第一章" },
     });
     expect(finalDelete).toBeEnabled();
     fireEvent.click(finalDelete);
 
     await waitFor(() =>
-      expect(deleteFolder).toHaveBeenCalledWith("folder-1", "课程资料"),
+      expect(deleteFolder).toHaveBeenCalledWith("folder-2", "第一章"),
     );
     expect(
       await screen.findByText("文件夹及其中的内容已删除"),
