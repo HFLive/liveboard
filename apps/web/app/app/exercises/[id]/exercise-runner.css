@@ -1,0 +1,305 @@
+/* 练习作答页：题目区与右侧提交区的路由专属样式。
+   面板外框、标题栏底色沿用 .workspace 全局规则，这里只处理内部结构。 */
+
+.exercise-runner .runner-head-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 题目列表：面板内连续行，行间单层分隔线，不使用嵌套卡片。 */
+.exercise-runner .runner-question-list {
+  display: grid;
+}
+
+.exercise-runner .runner-question {
+  display: grid;
+  gap: 12px;
+  border-bottom: 1px solid #e3e0d9;
+  padding: 16px;
+  scroll-margin-top: 84px;
+}
+
+.exercise-runner .runner-question:last-child {
+  border-bottom: 0;
+}
+
+.exercise-runner .runner-question-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.exercise-runner .runner-question-index {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border-radius: 7px;
+  background: #eeebe5;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.exercise-runner .runner-question.answered .runner-question-index {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.exercise-runner .runner-question-title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.exercise-runner .runner-question-title h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.exercise-runner .runner-question-title p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 选项：透明行 + 1px 外框，hover 用全局统一灰，选中保留强调色。 */
+.exercise-runner .choice-list {
+  display: grid;
+  gap: 6px;
+}
+
+.exercise-runner .choice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
+  border: 1px solid #d8d5ce;
+  border-radius: 10px;
+  background: transparent;
+  padding: 9px 11px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.exercise-runner .choice-row:hover {
+  background: #f0eee8;
+}
+
+.exercise-runner .choice-row.selected,
+.exercise-runner .choice-row.selected:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, #d8d5ce);
+  background: var(--accent-soft);
+}
+
+.exercise-runner .choice-row input {
+  flex: 0 0 auto;
+  accent-color: var(--accent-dark);
+}
+
+.exercise-runner .choice-row:has(input:disabled) {
+  cursor: default;
+}
+
+/* 移动端吸底提交条。 */
+.exercise-runner .mobile-submit-bar {
+  display: none;
+}
+
+/* 右侧提交区。 */
+.exercise-runner .runner-submit-panel,
+.exercise-runner .runner-history-panel {
+  gap: 12px;
+}
+
+.exercise-runner .runner-meta-list {
+  display: grid;
+  margin: 0;
+}
+
+.exercise-runner .runner-meta-list > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid #e3e0d9;
+  padding: 6px 0;
+}
+
+.exercise-runner .runner-meta-list > div:last-child {
+  border-bottom: 0;
+}
+
+.exercise-runner .runner-meta-list dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.exercise-runner .runner-meta-list dd {
+  margin: 0;
+  font-size: 12px;
+  text-align: right;
+}
+
+.exercise-runner .runner-submit-button {
+  width: 100%;
+}
+
+/* 题目导航。 */
+.exercise-runner .question-jump-list {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.exercise-runner .question-jump-list a {
+  display: grid;
+  min-height: 30px;
+  place-items: center;
+  border: 1px solid #d8d5ce;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.exercise-runner .question-jump-list a:hover {
+  background: #f0eee8;
+}
+
+.exercise-runner .question-jump-list a.answered,
+.exercise-runner .question-jump-list a.answered:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, #d8d5ce);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* 我的提交。 */
+.exercise-runner .runner-latest-result {
+  display: grid;
+  gap: 2px;
+  border: 1px solid #d8d5ce;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.exercise-runner .runner-latest-result strong {
+  font-size: 20px;
+}
+
+.exercise-runner .runner-latest-result span,
+.exercise-runner .runner-latest-result p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.exercise-runner .runner-submission-list {
+  display: grid;
+}
+
+.exercise-runner .runner-submission {
+  border-bottom: 1px solid #e3e0d9;
+}
+
+.exercise-runner .runner-submission:last-child {
+  border-bottom: 0;
+}
+
+.exercise-runner .runner-submission summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  padding: 8px 0;
+  font-size: 13px;
+}
+
+.exercise-runner .runner-submission summary b {
+  font-size: 12px;
+}
+
+.exercise-runner .runner-answer-list {
+  display: grid;
+  gap: 12px;
+  padding: 2px 0 12px;
+}
+
+.exercise-runner .runner-answer {
+  display: grid;
+  gap: 3px;
+  border-top: 1px solid #e3e0d9;
+  padding-top: 10px;
+  font-size: 12px;
+}
+
+.exercise-runner .runner-answer:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.exercise-runner .runner-answer strong {
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.exercise-runner .runner-answer p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.exercise-runner .runner-answer p.correct-answer {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.exercise-runner .runner-answer small {
+  color: var(--muted);
+}
+
+.exercise-runner .runner-answer em {
+  color: var(--text);
+  font-style: normal;
+}
+
+@media (max-width: 720px) {
+  .exercise-runner .runner-submit-button {
+    display: none;
+  }
+
+  .exercise-runner .mobile-submit-bar {
+    position: sticky;
+    z-index: 80;
+    bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid #d8d5ce;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+    padding: 8px 10px;
+    backdrop-filter: blur(8px);
+  }
+
+  .exercise-runner .mobile-submit-bar span {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .exercise-runner .mobile-submit-bar .button {
+    width: auto;
+    min-width: 120px;
+  }
+}

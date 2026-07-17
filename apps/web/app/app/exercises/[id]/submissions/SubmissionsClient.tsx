@@ -10,7 +10,7 @@ import {
   questionTypeLabel,
   submissionStatusLabel,
 } from "@/lib/labels";
-import { exerciseDetail } from "@/lib/routes";
+import { APP_ROUTES } from "@/lib/routes";
 
 export function SubmissionsClient({
   exerciseSetId,
@@ -102,10 +102,10 @@ export function SubmissionsClient({
   }
 
   return (
-    <div className="workspace">
-      <Link className="page-back-link" href={exerciseDetail(exerciseSetId)}>
+    <div className="workspace review-page">
+      <Link className="page-back-link" href={APP_ROUTES.exercises}>
         <ArrowLeft aria-hidden="true" />
-        返回练习
+        返回练习列表
       </Link>
       <section className="page-head">
         <div>
@@ -220,7 +220,7 @@ export function SubmissionsClient({
                     />
                   </h2>
                   <p className="muted">
-                    {submissionStatusLabel(selectedSubmission.status)} /{" "}
+                    {submissionStatusLabel(selectedSubmission.status)} ·{" "}
                     {selectedSubmission.score === null
                       ? `待批改/${selectedSubmission.maxScore}`
                       : `${selectedSubmission.score}/${selectedSubmission.maxScore}`}
@@ -232,82 +232,86 @@ export function SubmissionsClient({
                 </button>
               </div>
 
-              <div className="answer-review-list">
-                {selectedSubmission.answers.map((answer, index) => (
-                  <section className="answer-review" key={answer.id}>
-                    <div className="answer-review-head">
-                      <div>
-                        <span>题目 {index + 1}</span>
-                        <h3>{getQuestionText(answer.question?.promptJson)}</h3>
+              <div className="review-form-body">
+                <div className="answer-review-list">
+                  {selectedSubmission.answers.map((answer, index) => (
+                    <section className="answer-review" key={answer.id}>
+                      <div className="answer-review-head">
+                        <div>
+                          <span>题目 {index + 1}</span>
+                          <h3>
+                            {getQuestionText(answer.question?.promptJson)}
+                          </h3>
+                        </div>
+                        <strong>
+                          {answer.question
+                            ? `${questionTypeLabel(answer.question.type)} · ${answer.question.score} 分`
+                            : "题目"}
+                        </strong>
                       </div>
-                      <strong>
-                        {answer.question
-                          ? `${questionTypeLabel(answer.question.type)} / ${answer.question.score} 分`
-                          : "题目"}
-                      </strong>
-                    </div>
-                    <div className="answer-body">
-                      <span>作答</span>
-                      <p>{formatAnswer(answer.answerJson)}</p>
-                      {answer.question?.answerJson !== undefined ? (
-                        <small>
-                          参考答案：{formatAnswer(answer.question.answerJson)}
-                        </small>
-                      ) : null}
-                    </div>
-                    <div className="answer-grade-grid">
-                      <label className="label">
-                        得分
-                        <input
-                          className="input"
-                          max={answer.question?.score}
-                          min={0}
-                          onChange={(event) =>
-                            setScores((current) => ({
-                              ...current,
-                              [answer.id]: Number(event.target.value),
-                            }))
-                          }
-                          type="number"
-                          value={scores[answer.id] ?? answer.score ?? 0}
-                        />
-                      </label>
-                      <label className="label">
-                        反馈
-                        <input
-                          className="input"
-                          onChange={(event) =>
-                            setFeedback((current) => ({
-                              ...current,
-                              [answer.id]: event.target.value,
-                            }))
-                          }
-                          value={feedback[answer.id] ?? answer.feedback ?? ""}
-                        />
-                      </label>
-                    </div>
-                  </section>
-                ))}
-              </div>
+                      <div className="answer-body">
+                        <span>作答</span>
+                        <p>{formatAnswer(answer.answerJson)}</p>
+                        {answer.question?.answerJson !== undefined ? (
+                          <small>
+                            参考答案：{formatAnswer(answer.question.answerJson)}
+                          </small>
+                        ) : null}
+                      </div>
+                      <div className="answer-grade-grid">
+                        <label className="label">
+                          得分
+                          <input
+                            className="input"
+                            max={answer.question?.score}
+                            min={0}
+                            onChange={(event) =>
+                              setScores((current) => ({
+                                ...current,
+                                [answer.id]: Number(event.target.value),
+                              }))
+                            }
+                            type="number"
+                            value={scores[answer.id] ?? answer.score ?? 0}
+                          />
+                        </label>
+                        <label className="label">
+                          反馈
+                          <input
+                            className="input"
+                            onChange={(event) =>
+                              setFeedback((current) => ({
+                                ...current,
+                                [answer.id]: event.target.value,
+                              }))
+                            }
+                            value={feedback[answer.id] ?? answer.feedback ?? ""}
+                          />
+                        </label>
+                      </div>
+                    </section>
+                  ))}
+                </div>
 
-              <label className="label">
-                总体反馈
-                <textarea
-                  className="textarea"
-                  onChange={(event) =>
-                    setFeedback((current) => ({
-                      ...current,
-                      [selectedSubmission.id]: event.target.value,
-                    }))
-                  }
-                  rows={3}
-                  value={
-                    feedback[selectedSubmission.id] ??
-                    selectedSubmission.feedback ??
-                    ""
-                  }
-                />
-              </label>
+                <label className="label">
+                  总体反馈
+                  <textarea
+                    className="textarea"
+                    onChange={(event) =>
+                      setFeedback((current) => ({
+                        ...current,
+                        [selectedSubmission.id]: event.target.value,
+                      }))
+                    }
+                    rows={3}
+                    value={
+                      feedback[selectedSubmission.id] ??
+                      selectedSubmission.feedback ??
+                      ""
+                    }
+                  />
+                </label>
+              </div>
             </form>
           ) : (
             <div className="empty-panel">

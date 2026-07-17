@@ -2560,34 +2560,6 @@ p.muted {
   min-height: 520px;
 }
 
-.exercise-question-card {
-  display: grid;
-  gap: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: #fff;
-  padding: 14px;
-}
-
-.exercise-question-card h2,
-.exercise-question-card h3,
-.exercise-question-card p {
-  margin: 0;
-}
-
-.exercise-question-card h2 {
-  font-size: 17px;
-  line-height: 1.45;
-}
-
-.exercise-question-card p {
-  line-height: 1.6;
-}
-
-.mobile-submit-bar {
-  display: none;
-}
-
 .publish-panel {
   gap: 12px;
 }
@@ -3726,20 +3698,6 @@ p.muted {
   align-items: start;
 }
 
-.review-queue,
-.review-detail {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-xs);
-  overflow: hidden;
-}
-
-.review-queue {
-  position: sticky;
-  top: 86px;
-}
-
 .submission-list {
   display: grid;
 }
@@ -3750,21 +3708,10 @@ p.muted {
   gap: 4px 10px;
   width: 100%;
   border: 0;
-  border-top: 1px solid var(--line);
-  background: #fff;
   color: var(--text);
   padding: 12px;
   text-align: left;
   cursor: pointer;
-}
-
-.submission-row:hover,
-.submission-row.active {
-  background: var(--panel-soft);
-}
-
-.submission-row.active {
-  box-shadow: inset 3px 0 0 var(--focus);
 }
 
 .submission-row span {
@@ -3796,21 +3743,6 @@ p.muted {
   display: grid;
   gap: 16px;
   padding: 16px;
-}
-
-.review-detail-head,
-.answer-review-head,
-.answer-grade-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: start;
-}
-
-.review-detail-head {
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 14px;
 }
 
 .review-detail-head h2,
@@ -4906,101 +4838,6 @@ p.muted {
   color: inherit;
   padding: 3px 7px;
   text-decoration: none;
-}
-
-.submission-result {
-  display: grid;
-  gap: 4px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: #fff;
-  padding: 10px;
-}
-
-.submission-result strong {
-  font-size: 20px;
-}
-
-.submission-result span,
-.submission-result p {
-  color: var(--muted);
-  font-size: 12px;
-  margin: 0;
-}
-
-.submission-history {
-  display: grid;
-  gap: 8px;
-}
-
-.submission-history details {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: #fff;
-  overflow: hidden;
-}
-
-.submission-history summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  cursor: pointer;
-  padding: 9px 10px;
-}
-
-.submission-history summary b {
-  font-size: 12px;
-}
-
-.answer-feedback-list {
-  display: grid;
-  gap: 8px;
-  border-top: 1px solid var(--line);
-  padding: 10px;
-}
-
-.answer-feedback {
-  display: grid;
-  gap: 4px;
-  border-left: 3px solid var(--line-strong);
-  background: var(--panel-soft);
-  padding: 9px;
-}
-
-.answer-feedback span,
-.answer-feedback small {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.answer-feedback p {
-  margin: 0;
-}
-
-.answer-feedback em {
-  color: var(--text);
-  font-size: 12px;
-  font-style: normal;
-}
-
-.choice-list {
-  display: grid;
-  gap: 8px;
-}
-
-.choice-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  border: 1px solid var(--line);
-  background: #fff;
-  padding: 9px 10px;
-}
-
-.choice-row input {
-  flex: 0 0 auto;
 }
 
 .grant-list,
@@ -6259,40 +6096,7 @@ p.muted {
     min-height: auto;
   }
 
-  .exercise-question-card {
-    padding: 12px;
-  }
-
-  .exercise-question-card h2 {
-    font-size: 16px;
-  }
-
-  .mobile-submit-bar {
-    position: sticky;
-    z-index: 80;
-    bottom: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    border: 1px solid var(--line-strong);
-    background: #fff;
-    padding: 10px;
-  }
-
-  .mobile-submit-bar span {
-    color: var(--muted);
-    font-size: 13px;
-    font-weight: 700;
-  }
-
-  .mobile-submit-bar .button {
-    width: auto;
-    min-width: 128px;
-  }
-
-  .exercise-builder .publish-panel .button,
-  .exercise-runner-form .workbench-side > .action-panel:first-child .button {
+  .exercise-builder .publish-panel .button {
     display: none;
   }
 
@@ -6464,9 +6268,5 @@ p.muted {
   .button.secondary,
   .button.danger {
     width: 100%;
-  }
-
-  .mobile-submit-bar .button {
-    width: auto;
   }
 }

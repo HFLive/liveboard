@@ -225,7 +225,7 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
   }
 
   return (
-    <div className="workspace">
+    <div className="workspace exercise-runner">
       <Link className="page-back-link" href={APP_ROUTES.exercises}>
         <ArrowLeft aria-hidden="true" />
         返回练习列表
@@ -251,6 +251,9 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
             <div>
               <h2>题目</h2>
             </div>
+            <span className="runner-head-meta">
+              已答 {answeredCount}/{exerciseSet?.questions.length ?? 0}
+            </span>
           </div>
           <div className="mobile-submit-bar">
             <span>
@@ -264,21 +267,26 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
               {loading ? "提交中" : "提交"}
             </button>
           </div>
-          <div className="editor">
+          <div className="runner-question-list">
             {exerciseSet?.questions.map((question, index) => (
               <article
-                className={`exercise-question-card form ${
-                  isAnswered(question, answers[question.id]) ? "answered" : ""
+                className={`runner-question${
+                  isAnswered(question, answers[question.id]) ? " answered" : ""
                 }`}
                 id={`question-${question.id}`}
                 key={question.id}
               >
-                <h2>
-                  {index + 1}. {getPromptText(question)}
-                </h2>
-                <p className="muted">
-                  {questionTypeLabel(question.type)} / {question.score} 分
-                </p>
+                <div className="runner-question-head">
+                  <span aria-hidden="true" className="runner-question-index">
+                    {index + 1}
+                  </span>
+                  <div className="runner-question-title">
+                    <h3>{getPromptText(question)}</h3>
+                    <p>
+                      {questionTypeLabel(question.type)} · {question.score} 分
+                    </p>
+                  </div>
+                </div>
                 <QuestionInput
                   answer={answers[question.id]}
                   onChange={(value) => setAnswer(question.id, value)}
@@ -292,27 +300,38 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
         </div>
 
         <aside className="workbench-side">
-          <section className="action-panel">
+          <section className="action-panel runner-submit-panel">
             <h2>提交</h2>
-            <div className="status-list">
-              <span>{exerciseSet?.questions.length ?? 0} 道题</span>
-              <span>
-                开始：
-                {exerciseSet?.openAt
-                  ? formatDateTime(exerciseSet.openAt)
-                  : "立即开始"}
-              </span>
-              <span>
-                截止：
-                {exerciseSet?.dueAt
-                  ? formatDateTime(exerciseSet.dueAt)
-                  : "不设截止时间"}
-              </span>
-              <span>
-                提交：
-                {exerciseSet?.allowMultipleSubmissions ? "允许多次" : "仅一次"}
-              </span>
-            </div>
+            <dl className="runner-meta-list">
+              <div>
+                <dt>题数</dt>
+                <dd>{exerciseSet?.questions.length ?? 0} 道</dd>
+              </div>
+              <div>
+                <dt>开始</dt>
+                <dd>
+                  {exerciseSet?.openAt
+                    ? formatDateTime(exerciseSet.openAt)
+                    : "立即开始"}
+                </dd>
+              </div>
+              <div>
+                <dt>截止</dt>
+                <dd>
+                  {exerciseSet?.dueAt
+                    ? formatDateTime(exerciseSet.dueAt)
+                    : "不设截止时间"}
+                </dd>
+              </div>
+              <div>
+                <dt>提交</dt>
+                <dd>
+                  {exerciseSet?.allowMultipleSubmissions
+                    ? "不限次数"
+                    : "仅一次"}
+                </dd>
+              </div>
+            </dl>
             <div
               className="exercise-progress"
               aria-label={`已完成 ${progress}%`}
@@ -320,7 +339,7 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
               <span style={{ width: `${progress}%` }} />
             </div>
             <p className="exercise-progress-label">
-              已答 {answeredCount} 题，剩余 {unansweredCount} 题
+              已答 {answeredCount} 题 · 剩余 {unansweredCount} 题
             </p>
             <nav className="question-jump-list" aria-label="题目导航">
               {exerciseSet?.questions.map((question, index) => (
@@ -343,7 +362,7 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
               <p className="notice-box">这个练习仅允许提交一次。</p>
             ) : null}
             <button
-              className="button"
+              className="button runner-submit-button"
               disabled={loading || !canSubmit}
               type="submit"
             >
@@ -351,10 +370,10 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
             </button>
           </section>
 
-          <section className="action-panel quiet">
+          <section className="action-panel runner-history-panel">
             <h2>我的提交</h2>
             {latestSubmission ? (
-              <div className="submission-result">
+              <div className="runner-latest-result">
                 <strong>
                   {latestSubmission.score === null
                     ? submissionStatusLabel(latestSubmission.status)
@@ -368,43 +387,46 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
             ) : (
               <p className="muted">还没有提交记录。</p>
             )}
-            <div className="submission-history">
-              {submissions.map((submission, index) => (
-                <details key={submission.id} open={index === 0}>
-                  <summary>
-                    <span>第 {submissions.length - index} 次提交</span>
-                    <b>
-                      {submission.score === null
-                        ? submissionStatusLabel(submission.status)
-                        : `${submission.score}/${submission.maxScore}`}
-                    </b>
-                  </summary>
-                  <div className="answer-feedback-list">
-                    {submission.answers.map((answer, answerIndex) => (
-                      <div className="answer-feedback" key={answer.id}>
-                        <span>题目 {answerIndex + 1}</span>
-                        <strong>
-                          {getQuestionText(answer.question?.promptJson)}
-                        </strong>
-                        <p>作答：{formatAnswer(answer.answerJson)}</p>
-                        {answer.question?.answerJson !== undefined ? (
-                          <p className="correct-answer">
-                            参考答案：{formatAnswer(answer.question.answerJson)}
-                          </p>
-                        ) : null}
-                        <small>
-                          得分：
-                          {answer.score === null
-                            ? "待批改"
-                            : `${answer.score}/${answer.question?.score ?? "-"}`}
-                        </small>
-                        {answer.feedback ? <em>{answer.feedback}</em> : null}
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              ))}
-            </div>
+            {submissions.length > 0 ? (
+              <div className="runner-submission-list">
+                {submissions.map((submission, index) => (
+                  <details className="runner-submission" key={submission.id}>
+                    <summary>
+                      <span>第 {submissions.length - index} 次提交</span>
+                      <b>
+                        {submission.score === null
+                          ? submissionStatusLabel(submission.status)
+                          : `${submission.score}/${submission.maxScore}`}
+                      </b>
+                    </summary>
+                    <div className="runner-answer-list">
+                      {submission.answers.map((answer, answerIndex) => (
+                        <div className="runner-answer" key={answer.id}>
+                          <strong>
+                            {answerIndex + 1}.{" "}
+                            {getQuestionText(answer.question?.promptJson)}
+                          </strong>
+                          <p>作答：{formatAnswer(answer.answerJson)}</p>
+                          {answer.question?.answerJson !== undefined ? (
+                            <p className="correct-answer">
+                              参考答案：
+                              {formatAnswer(answer.question.answerJson)}
+                            </p>
+                          ) : null}
+                          <small>
+                            得分：
+                            {answer.score === null
+                              ? "待批改"
+                              : `${answer.score}/${answer.question?.score ?? "-"}`}
+                          </small>
+                          {answer.feedback ? <em>{answer.feedback}</em> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            ) : null}
           </section>
         </aside>
       </form>
@@ -530,7 +552,10 @@ function QuestionInput({
     return (
       <div className="choice-list">
         {options.map((option) => (
-          <label className="choice-row" key={option}>
+          <label
+            className={answer === option ? "choice-row selected" : "choice-row"}
+            key={option}
+          >
             <input
               checked={answer === option}
               disabled={disabled}
@@ -551,7 +576,12 @@ function QuestionInput({
     return (
       <div className="choice-list">
         {options.map((option) => (
-          <label className="choice-row" key={option}>
+          <label
+            className={
+              values.includes(option) ? "choice-row selected" : "choice-row"
+            }
+            key={option}
+          >
             <input
               checked={values.includes(option)}
               disabled={disabled}
@@ -568,7 +598,9 @@ function QuestionInput({
   if (question.type === "true_false") {
     return (
       <div className="choice-list">
-        <label className="choice-row">
+        <label
+          className={answer === true ? "choice-row selected" : "choice-row"}
+        >
           <input
             checked={answer === true}
             disabled={disabled}
@@ -578,7 +610,9 @@ function QuestionInput({
           />
           正确
         </label>
-        <label className="choice-row">
+        <label
+          className={answer === false ? "choice-row selected" : "choice-row"}
+        >
           <input
             checked={answer === false}
             disabled={disabled}

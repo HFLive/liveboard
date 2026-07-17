@@ -1,0 +1,143 @@
+/* 练习批改页：提交队列与批改详情的路由专属样式。
+   面板外框、标题栏底色与全站高密度工作区保持一致。 */
+
+.review-page .review-queue,
+.review-page .review-detail {
+  border: 1px solid #d8d5ce;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.review-page .review-queue {
+  overflow: hidden;
+}
+
+.review-page .review-queue > .panel-head {
+  border-radius: 13px 13px 0 0;
+}
+
+/* 队列高度不随筛选变化，列表内部滚动，避免粘性定位随右侧
+   详情高度变化在吸附与归位之间切换造成面板上下跳动。 */
+.review-page .submission-list {
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+}
+
+/* 提交队列：透明连续行，行间单层分隔线，hover 用全局统一灰。 */
+.review-page .submission-row {
+  border: 0;
+  border-bottom: 1px solid #e3e0d9;
+  background: transparent;
+  padding: 10px 12px;
+}
+
+.review-page .submission-row:last-child {
+  border-bottom: 0;
+}
+
+.review-page .submission-row.active {
+  background: var(--accent-soft);
+  box-shadow: none;
+}
+
+/* 批改详情：头部为与面板一致的浅暖灰标题区。 */
+.review-page .review-form {
+  gap: 0;
+  padding: 0;
+}
+
+.review-page .review-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #d8d5ce;
+  border-radius: 13px 13px 0 0;
+  background: #f4f2ee;
+  padding: 13px 16px;
+}
+
+.review-page .review-detail-head > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.review-page .review-detail-head p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.review-page .review-form-body {
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px;
+}
+
+/* 逐题批改：连续行 + 单层分隔线，不使用嵌套卡片。 */
+.review-page .answer-review-list {
+  display: grid;
+  gap: 0;
+}
+
+.review-page .answer-review {
+  display: grid;
+  gap: 10px;
+  border: 0;
+  border-bottom: 1px solid #e3e0d9;
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 0;
+}
+
+.review-page .answer-review:first-child {
+  padding-top: 0;
+}
+
+.review-page .answer-review:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.review-page .answer-review-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.review-page .answer-review-head strong {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  padding: 0;
+}
+
+.review-page .answer-body {
+  border: 0;
+  border-radius: 8px;
+  background: #f4f2ee;
+  padding: 10px 12px;
+}
+
+.review-page .answer-grade-grid {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .review-page .review-detail-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .review-page .answer-grade-grid {
+    grid-template-columns: 1fr;
+  }
+}
