@@ -1839,44 +1839,8 @@ button:disabled {
   gap: 16px;
 }
 
-.exercise-question-card {
-  border-color: var(--line);
-  border-radius: 12px;
-  padding: 18px;
-}
-
-.exercise-question-card h2 {
-  font-size: 18px;
-}
-
-.choice-row {
-  border-radius: 9px;
-  background: #f8faf8;
-}
-
-.submission-result {
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: var(--accent-soft);
-}
-
-.submission-history details,
-.answer-review {
-  border-color: var(--line);
-  border-radius: 10px;
-}
-
 .review-workspace {
   gap: 16px;
-}
-
-.submission-row {
-  border-top-color: var(--line);
-}
-
-.submission-row.active,
-.submission-row:hover {
-  background: var(--accent-soft);
 }
 
 /* Forum */
@@ -3274,18 +3238,6 @@ button:disabled {
   font-weight: 500;
 }
 
-.exercise-question-card {
-  scroll-margin-top: 84px;
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.exercise-question-card.answered {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
 .exercise-progress {
   height: 7px;
   overflow: hidden;
@@ -3305,31 +3257,6 @@ button:disabled {
   margin: 7px 0 0;
   color: var(--muted);
   font-size: 12px;
-}
-
-.question-jump-list {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 14px;
-}
-
-.question-jump-list a {
-  display: grid;
-  min-height: 32px;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: #fff;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.question-jump-list a.answered {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
-  background: var(--accent-soft);
-  color: var(--ink);
 }
 
 .correct-answer {
@@ -3364,10 +3291,6 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
-  .question-jump-list {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
-  }
-
   .exercise-title-cell,
   .schedule-cell,
   .submission-count-cell {
@@ -3538,7 +3461,6 @@ body,
 .inline-create-file,
 .folder-create-card,
 .doc-add-block,
-.choice-row,
 .forum-post-author {
   background: #faf8f4;
 }
@@ -3942,22 +3864,6 @@ body,
 .library-layout .library-view-toggle svg {
   width: 18px;
   height: 18px;
-}
-
-.choice-list {
-  gap: 6px;
-}
-
-.choice-row {
-  border-color: transparent;
-  border-radius: 8px;
-  padding: 10px 12px;
-}
-
-.choice-row:hover,
-.choice-row:focus-within {
-  border-color: #e1cda9;
-  background: var(--accent-soft);
 }
 
 .editor-meta-strip {

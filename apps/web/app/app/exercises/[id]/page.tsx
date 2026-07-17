@@ -1,4 +1,5 @@
 import { ExerciseRunner } from "./ExerciseRunner";
+import "./exercise-runner.css";
 
 export default async function ExerciseDetailPage({
   params,
