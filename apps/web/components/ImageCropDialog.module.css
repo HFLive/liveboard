@@ -1,0 +1,98 @@
+.cropModal {
+  width: min(640px, 100%);
+}
+
+.cropBody {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
+.cropBody > .muted {
+  margin: 0;
+  text-align: center;
+}
+
+.cropStage {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
+  touch-action: none;
+  user-select: none;
+}
+
+.cropDim {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.cropStage img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 55vh;
+}
+
+.cropFrame {
+  position: absolute;
+  border: 2px solid #fff;
+  cursor: move;
+  touch-action: none;
+}
+
+.cropFrame::after {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  content: "";
+  pointer-events: none;
+}
+
+.cropHandle {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  touch-action: none;
+}
+
+.cropHandle::after {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--accent);
+  content: "";
+}
+
+.cropHandle.nw {
+  top: -14px;
+  left: -14px;
+  cursor: nwse-resize;
+}
+
+.cropHandle.ne {
+  top: -14px;
+  right: -14px;
+  cursor: nesw-resize;
+}
+
+.cropHandle.sw {
+  bottom: -14px;
+  left: -14px;
+  cursor: nesw-resize;
+}
+
+.cropHandle.se {
+  right: -14px;
+  bottom: -14px;
+  cursor: nwse-resize;
+}

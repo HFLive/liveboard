@@ -10,7 +10,6 @@ import {
   Files,
   MessageSquare,
   Presentation,
-  Settings,
   Users,
 } from "lucide-react";
 import type { UserSummary } from "@liveboard/shared";
@@ -152,16 +151,6 @@ export function AppNav() {
                 : "加载中…"}
             </small>
           </span>
-        </Link>
-        <Link
-          aria-current={
-            isActive(pathname, APP_ROUTES.profile) ? "page" : undefined
-          }
-          className="nav-button"
-          href={APP_ROUTES.profile}
-          title="个人设置"
-        >
-          <Settings aria-hidden="true" />
         </Link>
         <LogoutButton />
       </div>
