@@ -109,6 +109,73 @@
   min-width: 154px;
 }
 
+.files-layout .workbench-main > .panel-head .breadcrumb {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  margin-top: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.files-layout .workbench-main > .panel-head .breadcrumb span {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.files-layout .workbench-main > .panel-head .breadcrumb svg {
+  flex: 0 0 auto;
+}
+
+.files-layout .workbench-main > .panel-head .breadcrumb button {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.files-layout .workbench-main > .panel-head .toolbar-row {
+  flex: 0 0 auto;
+}
+
+.breadcrumb-back {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+}
+
+.breadcrumb-back:hover {
+  background: #e9e7e2;
+  color: var(--text);
+}
+
+.breadcrumb-back svg {
+  width: 15px;
+  height: 15px;
+}
+
+.panel-head-home {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+}
+
+.panel-head-home:hover {
+  color: var(--accent-dark);
+}
+
 .content-draft-tag {
   flex: 0 0 auto;
   border-radius: 5px;
@@ -127,7 +194,7 @@
 }
 
 .file-tree .tree-folder-item {
-  grid-template-columns: 22px minmax(0, 1fr) 28px;
+  grid-template-columns: 22px minmax(0, 1fr);
   gap: 2px;
 }
 
@@ -180,7 +247,7 @@
   height: 22px;
 }
 
-.tree-file-item .item-icon {
+.file-tree .tree-item .item-icon {
   width: 14px;
   height: 14px;
   color: var(--muted);

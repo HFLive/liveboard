@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import {
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   ChevronDown,
   ChevronRight,
@@ -91,6 +92,17 @@ const SORT_OPTIONS = [
   { value: "name", label: "名称" },
   { value: "type", label: "类型" },
 ] as const;
+
+// 记录最近打开的目录，供新标签页中的“返回文档”回到同一位置。
+const ACTIVE_FOLDER_STORAGE_KEY = "liveboard:content-active-folder";
+
+function persistActiveFolder(folderId: string | null) {
+  if (folderId) {
+    window.localStorage.setItem(ACTIVE_FOLDER_STORAGE_KEY, folderId);
+  } else {
+    window.localStorage.removeItem(ACTIVE_FOLDER_STORAGE_KEY);
+  }
+}
 
 function canCreateFolder(level: PermissionLevel | null) {
   return level === "owner" || level === "editor";
@@ -179,8 +191,6 @@ export function ContentClient() {
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
-  const [openFolderMenu, setOpenFolderMenu] =
-    useState<FloatingMenuState | null>(null);
   const [openContentRowMenu, setOpenContentRowMenu] =
     useState<ContentRowMenuState | null>(null);
   const [movingFolderId, setMovingFolderId] = useState<string | null>(null);
@@ -229,8 +239,14 @@ export function ContentClient() {
   const activeFolder = flatFolders.find(
     (folder) => folder.id === activeFolderId,
   );
-  const canCreateFolderHere = canCreateFolder(activeFolder?.permission ?? null);
-  const canCreateFileHere = canCreateFile(activeFolder?.permission ?? null);
+  const isRootView = activeFolderId === null;
+  // 后端允许任何登录用户创建顶层文件夹，根目录始终提供“新建文件夹”。
+  const canCreateFolderHere = isRootView
+    ? true
+    : canCreateFolder(activeFolder?.permission ?? null);
+  const canCreateFileHere = isRootView
+    ? false
+    : canCreateFile(activeFolder?.permission ?? null);
   const pinnedItems = useMemo(
     () => collectPinnedContent(activeFolder),
     [activeFolder],
@@ -246,7 +262,9 @@ export function ContentClient() {
     [pinnedItems],
   );
   const sortedChildFolders = useMemo(() => {
-    const children = [...(activeFolder?.children ?? [])];
+    const children = [
+      ...(isRootView ? folders : (activeFolder?.children ?? [])),
+    ];
 
     return children.sort((left, right) => {
       if (contentSortMode === "updated") {
@@ -258,7 +276,7 @@ export function ContentClient() {
 
       return left.name.localeCompare(right.name, "zh-CN");
     });
-  }, [activeFolder?.children, contentSortMode]);
+  }, [activeFolder?.children, contentSortMode, folders, isRootView]);
   const sortedFiles = useMemo(() => {
     const nextFiles = [...files];
 
@@ -337,21 +355,26 @@ export function ContentClient() {
   async function load() {
     const folderResult = await getFolderTree();
     const nextFlatFolders = flattenFolders(folderResult.folders);
-    const firstFolder = folderResult.folders[0]?.id ?? null;
+    // activeFolderId 为 null 表示停留在顶层“/”，不自动进入任何文件夹；
+    // 此时回退到 localStorage 中最近打开的目录，目录已不存在则回到顶层。
+    // 注意：开发模式 StrictMode 会重复执行挂载 effect，这里必须保持幂等。
+    const candidateFolderId =
+      activeFolderId ?? window.localStorage.getItem(ACTIVE_FOLDER_STORAGE_KEY);
     const selectedFolderId =
-      activeFolderId &&
-      nextFlatFolders.some((folder) => folder.id === activeFolderId)
-        ? activeFolderId
-        : firstFolder;
+      candidateFolderId &&
+      nextFlatFolders.some((folder) => folder.id === candidateFolderId)
+        ? candidateFolderId
+        : null;
 
     setFolders(folderResult.folders);
     setCanManagePins(folderResult.canManagePins);
     setActiveFolderId(selectedFolderId);
-
-    const fileResult = await listFiles(selectedFolderId ?? undefined);
-    setFiles(fileResult.files);
+    persistActiveFolder(selectedFolderId);
 
     if (selectedFolderId) {
+      const fileResult = await listFiles(selectedFolderId);
+      setFiles(fileResult.files);
+
       const [grantResult] = await Promise.all([
         listPermissionGrants("folder", selectedFolderId),
         loadAssignableGroups(selectedFolderId),
@@ -359,6 +382,9 @@ export function ContentClient() {
       setGrants(grantResult.grants);
       setInheritedGrants(grantResult.inheritedGrants);
     } else {
+      setFiles([]);
+      setGrants([]);
+      setInheritedGrants([]);
       setGroups([]);
       setGrantGroupId("");
       setCanManageGrants(false);
@@ -388,7 +414,6 @@ export function ContentClient() {
   }
 
   async function openPermissions(target: PermissionTarget) {
-    setOpenFolderMenu(null);
     setOpenContentRowMenu(null);
     setError(null);
 
@@ -423,7 +448,6 @@ export function ContentClient() {
 
   useEffect(() => {
     function closeFloatingMenus() {
-      setOpenFolderMenu(null);
       setOpenContentRowMenu(null);
       setShowCreateMenu(false);
     }
@@ -496,7 +520,6 @@ export function ContentClient() {
         setFiles(updatedActiveFolder.files);
       }
       setCanManagePins(result.canManagePins);
-      setOpenFolderMenu(null);
       setOpenContentRowMenu(null);
       setMessage(successMessage);
     } catch (caught) {
@@ -540,6 +563,7 @@ export function ContentClient() {
 
   async function selectFolder(folderId: string) {
     setActiveFolderId(folderId);
+    persistActiveFolder(folderId);
     setShowCreateMenu(false);
     setError(null);
     const [fileResult, grantResult] = await Promise.all([
@@ -550,6 +574,27 @@ export function ContentClient() {
     setFiles(fileResult.files);
     setGrants(grantResult.grants);
     setInheritedGrants(grantResult.inheritedGrants);
+  }
+
+  function selectRoot() {
+    setActiveFolderId(null);
+    persistActiveFolder(null);
+    setFiles([]);
+    setGrants([]);
+    setInheritedGrants([]);
+    setGroups([]);
+    setCanManageGrants(false);
+    setShowCreateMenu(false);
+    setOpenContentRowMenu(null);
+    setError(null);
+  }
+
+  function goToParentFolder() {
+    if (activeFolder?.parentId) {
+      void selectFolder(activeFolder.parentId);
+    } else {
+      selectRoot();
+    }
   }
 
   async function onCreateFolder(event: FormEvent<HTMLFormElement>) {
@@ -681,26 +726,11 @@ export function ContentClient() {
     return { x, y };
   }
 
-  function toggleFolderMenu(folder: FlatFolderNode, button: HTMLButtonElement) {
-    setOpenContentRowMenu(null);
-    setOpenFolderMenu((current) => {
-      if (current?.id === folder.id) {
-        return null;
-      }
-
-      return {
-        id: folder.id,
-        ...getFloatingMenuPosition(button, 5),
-      };
-    });
-  }
-
   function toggleContentRowMenu(
     targetType: "folder" | "file",
     id: string,
     button: HTMLButtonElement,
   ) {
-    setOpenFolderMenu(null);
     setOpenContentRowMenu((current) => {
       if (current?.targetType === targetType && current.id === id) {
         return null;
@@ -709,7 +739,10 @@ export function ContentClient() {
       return {
         id,
         targetType,
-        ...getFloatingMenuPosition(button, canManagePins ? 6 : 5),
+        ...getFloatingMenuPosition(
+          button,
+          canManagePins && activeFolderId !== null ? 6 : 5,
+        ),
       };
     });
   }
@@ -745,7 +778,6 @@ export function ContentClient() {
     setFolderName("");
     setShowCreateFolder(true);
     setShowCreateMenu(false);
-    setOpenFolderMenu(null);
   }
 
   function folderPathLabel(folderId: string) {
@@ -771,7 +803,6 @@ export function ContentClient() {
 
     setMovingFolderId(folder.id);
     setFolderMoveTargetId(folder.parentId ?? fallbackFolder);
-    setOpenFolderMenu(null);
     setOpenContentRowMenu(null);
   }
 
@@ -913,7 +944,6 @@ export function ContentClient() {
     });
     setDeleteFolderStep(1);
     setDeleteFolderConfirmation("");
-    setOpenFolderMenu(null);
     setOpenContentRowMenu(null);
   }
 
@@ -933,7 +963,6 @@ export function ContentClient() {
 
     try {
       await deleteFolder(deleteFolderTarget.id, deleteFolderTarget.name);
-      setOpenFolderMenu(null);
       const removedFolderIds = getFolderDescendantIds(deleteFolderTarget.id);
       removedFolderIds.add(deleteFolderTarget.id);
       if (activeFolderId && removedFolderIds.has(activeFolderId)) {
@@ -954,7 +983,6 @@ export function ContentClient() {
   function beginRenameFolder(folder: FolderNode) {
     setEditingFolderId(folder.id);
     setFolderRename(folder.name);
-    setOpenFolderMenu(null);
     setOpenContentRowMenu(null);
   }
 
@@ -993,12 +1021,16 @@ export function ContentClient() {
             打开
           </button>
         ) : (
-          <Link href={contentDetail(item.file.id)}>
+          <Link
+            href={contentDetail(item.file.id)}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
             <FileText aria-hidden="true" />
             打开
           </Link>
         )}
-        {canManagePins ? (
+        {canManagePins && activeFolderId !== null ? (
           <button
             disabled={isUpdatingPins}
             onClick={() =>
@@ -1167,6 +1199,8 @@ export function ContentClient() {
                 aria-label={label}
                 className="content-file-link"
                 href={contentDetail(item.file.id)}
+                rel="noopener noreferrer"
+                target="_blank"
                 title={label}
               >
                 <FileText aria-hidden="true" />
@@ -1243,6 +1277,8 @@ export function ContentClient() {
           <Link
             className="tree-main-button"
             href={contentDetail(row.file.id)}
+            rel="noopener noreferrer"
+            target="_blank"
             title={row.file.title}
           >
             <span className="tree-label">
@@ -1286,7 +1322,6 @@ export function ContentClient() {
         ) : (
           <div
             className={`tree-item tree-folder-item${folder.id === activeFolderId ? " active" : ""}`}
-            data-menu-root="true"
             style={treeDepthStyle(folder.depth)}
           >
             {hasChildren ? (
@@ -1316,60 +1351,6 @@ export function ContentClient() {
                 <span title={folder.name}>{folder.name}</span>
               </span>
             </button>
-            <button
-              className="icon-button subtle"
-              onClick={(event) => toggleFolderMenu(folder, event.currentTarget)}
-              title="文件夹操作"
-              type="button"
-            >
-              <MoreHorizontal aria-hidden="true" />
-            </button>
-            {openFolderMenu?.id === folder.id ? (
-              <div
-                className="context-menu floating-context-menu"
-                style={{ left: openFolderMenu.x, top: openFolderMenu.y }}
-              >
-                {canCreateFolder(folder.permission) ? (
-                  <button
-                    onClick={() => beginCreateFolder(folder.id)}
-                    type="button"
-                  >
-                    <Plus aria-hidden="true" />
-                    新建文件夹
-                  </button>
-                ) : null}
-                <button onClick={() => beginRenameFolder(folder)} type="button">
-                  <Pencil aria-hidden="true" />
-                  重命名
-                </button>
-                <button onClick={() => beginMoveFolder(folder)} type="button">
-                  <MoveRight aria-hidden="true" />
-                  移动到…
-                </button>
-                <button
-                  onClick={() =>
-                    void openPermissions({
-                      type: "folder",
-                      id: folder.id,
-                      name: folder.name,
-                      isRoot: folder.parentId === null,
-                    })
-                  }
-                  type="button"
-                >
-                  <Users aria-hidden="true" />
-                  权限设置
-                </button>
-                <button
-                  className="danger"
-                  onClick={() => beginDeleteFolder(folder)}
-                  type="button"
-                >
-                  <Trash2 aria-hidden="true" />
-                  删除文件夹
-                </button>
-              </div>
-            ) : null}
           </div>
         )}
         {movingFolderId === folder.id ? (
@@ -1516,8 +1497,15 @@ export function ContentClient() {
           <div className="panel-head">
             <div>
               <h2>
-                <Folder aria-hidden="true" className="heading-icon" />
-                位置
+                <button
+                  className="panel-head-home"
+                  onClick={selectRoot}
+                  title="返回顶层"
+                  type="button"
+                >
+                  <Folder aria-hidden="true" className="heading-icon" />
+                  位置
+                </button>
               </h2>
             </div>
           </div>
@@ -1542,24 +1530,34 @@ export function ContentClient() {
 
         <div className="workbench-main">
           <div className="panel-head">
-            <div>
-              <h2>
-                <FileText aria-hidden="true" className="heading-icon" />
-                文档
-              </h2>
-              <div className="breadcrumb" aria-label="当前位置">
-                {activeFolderPath.map((folder, index) => (
+            {isRootView ? null : (
+              <button
+                aria-label="返回上一级"
+                className="breadcrumb-back"
+                onClick={goToParentFolder}
+                title="返回上一级"
+                type="button"
+              >
+                <ArrowLeft aria-hidden="true" />
+              </button>
+            )}
+            <div className="breadcrumb" aria-label="当前位置">
+              {isRootView ? (
+                <span>顶层</span>
+              ) : (
+                activeFolderPath.map((folder, index) => (
                   <span key={folder.id}>
                     {index > 0 ? <ChevronRight aria-hidden="true" /> : null}
                     <button
                       onClick={() => void selectFolder(folder.id)}
+                      title={folder.name}
                       type="button"
                     >
                       {folder.name}
                     </button>
                   </span>
-                ))}
-              </div>
+                ))
+              )}
             </div>
             <div className="toolbar-row">
               <SortIconSelect
@@ -1577,7 +1575,6 @@ export function ContentClient() {
                     aria-haspopup="menu"
                     className="button secondary"
                     onClick={() => {
-                      setOpenFolderMenu(null);
                       setOpenContentRowMenu(null);
                       setShowCreateMenu((current) => !current);
                     }}
@@ -1680,6 +1677,8 @@ export function ContentClient() {
                           aria-label={file.title}
                           className="content-file-link"
                           href={contentDetail(file.id)}
+                          rel="noopener noreferrer"
+                          target="_blank"
                         >
                           <FileText aria-hidden="true" />
                           {file.status === "draft" ? (
@@ -1725,18 +1724,33 @@ export function ContentClient() {
                 unpinnedFiles.length === 0 ? (
                   <tr className="content-empty-row">
                     <td className="empty-cell" colSpan={3}>
-                      <div className="empty-panel">
-                        <strong>当前文件夹还是空的</strong>
-                        <span>可以新建文档、教案、课程或练习集。</span>
-                        <button
-                          className="button secondary"
-                          onClick={() => setShowCreateFile(true)}
-                          type="button"
-                        >
-                          <Plus aria-hidden="true" className="button-icon" />
-                          创建文档
-                        </button>
-                      </div>
+                      {isRootView ? (
+                        <div className="empty-panel">
+                          <strong>还没有文件夹</strong>
+                          <span>先创建一个位置来存放文件。</span>
+                          <button
+                            className="button secondary"
+                            onClick={() => beginCreateFolder(null)}
+                            type="button"
+                          >
+                            <Plus aria-hidden="true" className="button-icon" />
+                            新建文件夹
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="empty-panel">
+                          <strong>当前文件夹还是空的</strong>
+                          <span>可以新建文档、教案、课程或练习集。</span>
+                          <button
+                            className="button secondary"
+                            onClick={() => setShowCreateFile(true)}
+                            type="button"
+                          >
+                            <Plus aria-hidden="true" className="button-icon" />
+                            创建文档
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ) : null}
