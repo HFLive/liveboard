@@ -299,10 +299,12 @@ export function PermissionGroupsClient() {
         <section className="workbench-main">
           {selectedGroup ? (
             <section className="permission-group-detail">
-              <header className="permission-group-hero">
+              <header className="panel-head">
                 <div>
                   <h2>{selectedGroup.name}</h2>
-                  <p>{selectedGroup.description || "未填写描述"}</p>
+                  <p className="muted">
+                    {selectedGroup.description || "未填写描述"}
+                  </p>
                 </div>
               </header>
 

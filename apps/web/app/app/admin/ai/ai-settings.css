@@ -5,61 +5,32 @@
 .ai-settings-page .ai-settings-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 38px;
+  gap: 16px;
   width: min(900px, 100%);
   min-width: 0;
 }
 
-.ai-settings-page .ai-assistant-summary {
+.ai-settings-page .ai-panel {
+  overflow: hidden;
+  border: 1px solid #d8d5ce;
+  border-radius: 14px;
+  background: transparent;
+}
+
+.ai-settings-page .ai-panel > .panel-head h2 {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 28px;
-  min-width: 0;
-  padding: 6px 0;
 }
 
-.ai-settings-page .ai-section-copy,
-.ai-settings-page .ai-config-section-head > div {
-  min-width: 0;
-}
-
-.ai-settings-page .ai-section-title {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-
-.ai-settings-page .ai-section-title > svg {
-  width: 19px;
-  height: 19px;
-  color: var(--accent);
-}
-
-.ai-settings-page .ai-section-title h2,
-.ai-settings-page .ai-config-section-head h2 {
-  margin: 0;
-  color: var(--text);
-  font-size: 17px;
-}
-
-.ai-settings-page .ai-section-title > span {
+.ai-settings-page .ai-status-badge {
+  margin-left: 8px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 650;
 }
 
-.ai-settings-page .ai-section-title > span.is-on {
+.ai-settings-page .ai-status-badge.is-on {
   color: var(--accent-dark);
-}
-
-.ai-settings-page .ai-section-copy > p,
-.ai-settings-page .ai-config-section-head p {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
 }
 
 .ai-settings-page .ai-summary-actions {
@@ -86,26 +57,18 @@
   accent-color: var(--accent);
 }
 
-.ai-settings-page .ai-config-section {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  min-width: 0;
-}
-
-.ai-settings-page .ai-config-section-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-  min-width: 0;
+.ai-settings-page .ai-assistant-current {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .ai-settings-page .ai-config-list {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
-  border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
 }
 
 .ai-settings-page .ai-config-row {
@@ -114,8 +77,12 @@
   justify-content: space-between;
   gap: 20px;
   min-width: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
-  padding: 15px 2px;
+  border-bottom: 1px solid #e3e0d9;
+  padding: 12px 16px;
+}
+
+.ai-settings-page .ai-config-row:last-child {
+  border-bottom: 0;
 }
 
 .ai-settings-page .ai-config-row-main {
@@ -180,7 +147,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 18px 2px;
+  padding: 18px 16px;
 }
 
 .ai-settings-page .ai-config-empty p {
@@ -294,7 +261,7 @@
   gap: 16px;
   min-width: 0;
   border-radius: var(--radius-sm);
-  background: var(--panel-soft);
+  background: #f3f1ec;
   padding: 10px 12px;
 }
 
@@ -323,8 +290,7 @@
 }
 
 @media (max-width: 680px) {
-  .ai-settings-page .ai-assistant-summary,
-  .ai-settings-page .ai-config-section-head {
+  .ai-settings-page .ai-panel > .panel-head {
     align-items: stretch;
     flex-direction: column;
   }
@@ -333,20 +299,12 @@
     justify-content: space-between;
   }
 
-  .ai-settings-page .ai-config-section-head .button {
-    align-self: flex-start;
-  }
-
   .ai-settings-page .ai-provider-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 520px) {
-  .ai-settings-page .ai-settings-layout {
-    gap: 32px;
-  }
-
   .ai-settings-page .ai-config-row {
     align-items: flex-start;
   }

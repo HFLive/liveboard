@@ -129,7 +129,7 @@ export function ForumSettingsClient() {
   }
 
   return (
-    <div className="workspace">
+    <div className="workspace forum-admin-page">
       <header className="page-head">
         <div>
           <p className="page-eyebrow">管理中心</p>
@@ -144,8 +144,8 @@ export function ForumSettingsClient() {
       {message ? <p className="success-text">{message}</p> : null}
 
       <section className="workbench forum-admin-layout">
-        <aside className="action-panel">
-          <div className="panel-title-row">
+        <aside className="forum-admin-side">
+          <div className="panel-head">
             <h2>
               <MessageSquare aria-hidden="true" className="heading-icon" />
               版块

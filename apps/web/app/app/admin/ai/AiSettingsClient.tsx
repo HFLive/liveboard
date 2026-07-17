@@ -382,47 +382,54 @@ export function AiSettingsClient() {
       {message ? <p className="success-text">{message}</p> : null}
 
       <section className="ai-settings-layout">
-        <section className="ai-assistant-summary">
-          <div className="ai-section-copy">
-            <div className="ai-section-title">
-              <Bot aria-hidden="true" />
-              <h2>AI 助手</h2>
-              <span className={settings?.enabled ? "is-on" : ""}>
-                {settings?.enabled ? "已启用" : "未启用"}
-              </span>
+        <section className="ai-panel">
+          <div className="panel-head">
+            <div>
+              <h2>
+                <Bot aria-hidden="true" className="heading-icon" />
+                AI 助手
+                <span
+                  className={
+                    settings?.enabled
+                      ? "ai-status-badge is-on"
+                      : "ai-status-badge"
+                  }
+                >
+                  {settings?.enabled ? "已启用" : "未启用"}
+                </span>
+              </h2>
             </div>
-            <p>
-              {settings?.activeConfig
-                ? `当前使用 ${settings.activeConfig.name} · ${settings.activeConfig.model || "未配置模型"}`
-                : "选择一个模型配置后即可启用。"}
-            </p>
+            <div className="ai-summary-actions">
+              <button
+                className="button secondary"
+                onClick={() => setContextModalOpen(true)}
+                type="button"
+              >
+                <Settings2 aria-hidden="true" className="button-icon" />
+                回答范围
+              </button>
+              <label className="ai-compact-switch">
+                <input
+                  checked={globalForm.enabled}
+                  disabled={savingGlobal}
+                  onChange={(event) => onToggleAssistant(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>启用</span>
+              </label>
+            </div>
           </div>
-          <div className="ai-summary-actions">
-            <button
-              className="button secondary"
-              onClick={() => setContextModalOpen(true)}
-              type="button"
-            >
-              <Settings2 aria-hidden="true" className="button-icon" />
-              回答范围
-            </button>
-            <label className="ai-compact-switch">
-              <input
-                checked={globalForm.enabled}
-                disabled={savingGlobal}
-                onChange={(event) => onToggleAssistant(event.target.checked)}
-                type="checkbox"
-              />
-              <span>启用</span>
-            </label>
-          </div>
+          <p className="ai-assistant-current">
+            {settings?.activeConfig
+              ? `当前使用 ${settings.activeConfig.name} · ${settings.activeConfig.model || "未配置模型"}`
+              : "选择一个模型配置后即可启用。"}
+          </p>
         </section>
 
-        <section className="ai-config-section">
-          <div className="ai-config-section-head">
+        <section className="ai-panel">
+          <div className="panel-head">
             <div>
               <h2>模型配置</h2>
-              <p>保存不同服务商或模型，需要时切换当前连接。</p>
             </div>
             <button className="button" onClick={startNewConfig} type="button">
               <Plus aria-hidden="true" className="button-icon" />
@@ -454,7 +461,7 @@ export function AiSettingsClient() {
                     <div className="ai-config-row-actions">
                       {!active ? (
                         <button
-                          className="button ghost"
+                          className="button secondary"
                           disabled={activating}
                           onClick={() => onActivateConfig(config)}
                           type="button"

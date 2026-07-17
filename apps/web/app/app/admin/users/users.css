@@ -1,0 +1,69 @@
+/* 成员管理页：主面板与弹窗内部结构的路由专属样式。
+   面板外框、标题栏、表格与按钮沿用 .workspace 全局规则。 */
+
+/* 批量导入弹窗：.import-form 原本服务折叠面板，弹窗内不需要额外的
+   顶部分隔线与第二份内边距，与 .modal-body 保持一致。 */
+.admin-users-page .modal-body.import-form {
+  border-top: 0;
+  padding: 14px;
+}
+
+/* 导入预览：无边框浅底信息块，不做白色卡片。 */
+.admin-users-page .import-preview {
+  border-color: transparent;
+  border-radius: 10px;
+  background: #f3f1ec;
+  padding: 10px 12px;
+}
+
+/* 导入结果：同一浅底信息块，单元格之间只保留单层分隔线。 */
+.admin-users-page .import-result {
+  overflow: hidden;
+  border-color: transparent;
+  border-radius: 10px;
+  background: #f3f1ec;
+}
+
+.admin-users-page .import-result span {
+  border-right-color: #e3e0d9;
+  padding: 10px 12px;
+}
+
+/* 编辑弹窗的只读信息：标签值连续行 + 单层分隔线，不再使用色块网格。 */
+.admin-users-page .profile-readonly-grid {
+  gap: 0;
+}
+
+.admin-users-page .profile-readonly-grid div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 0;
+  border-right: 0;
+  border-bottom: 1px solid #e3e0d9;
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 0;
+}
+
+.admin-users-page .profile-readonly-grid div:last-child {
+  border-bottom: 0;
+}
+
+.admin-users-page .profile-readonly-grid strong {
+  min-width: 0;
+  text-align: right;
+}
+
+@media (max-width: 720px) {
+  /* 窄屏堆叠行保持透明连续行，不回落为白色卡片。 */
+  .admin-users-page .responsive-table tr {
+    border-bottom-color: #e3e0d9;
+    background: transparent;
+  }
+
+  .admin-users-page .responsive-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+}

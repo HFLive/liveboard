@@ -449,7 +449,7 @@ export function LibraryClient() {
                     target="_blank"
                   >
                     <Download aria-hidden="true" className="button-icon" />
-                    打开
+                    下载
                   </a>
                   <button
                     className="button danger"

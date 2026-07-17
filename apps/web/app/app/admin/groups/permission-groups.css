@@ -15,11 +15,18 @@
 }
 
 .permission-groups-layout .workbench-side,
-.permission-groups-layout .workbench-main,
 .permission-group-list-panel,
 .permission-group-detail,
 .permission-group-settings,
 .permission-group-members {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* 右栏只保留详情面板一层外框，workbench-main 不再叠加边框。 */
+.permission-groups-workspace .permission-groups-layout .workbench-main {
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -80,12 +87,6 @@
   padding: 9px 10px;
 }
 
-.group-list-item:hover,
-.group-list-item.active {
-  background: #e9e7e2;
-  box-shadow: none;
-}
-
 .group-list-item small {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -101,15 +102,15 @@
   padding: 0;
 }
 
-.permission-group-hero {
-  min-height: 68px;
-  border-bottom: 1px solid var(--line);
-  background: transparent;
-  padding: 0 0 14px;
+/* 组名头部复用全局 .panel-head：浅暖灰底 + 底部分隔线。 */
+.permission-groups-workspace .permission-group-detail > .panel-head {
+  padding: 13px 16px;
 }
 
-.permission-group-hero h2 {
-  font-size: 24px;
+.permission-groups-workspace .permission-group-detail > .panel-head p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .permission-group-detail-grid {
@@ -159,7 +160,7 @@
 .permission-member-list {
   display: block;
   width: 100%;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid #e3e0d9;
   background: transparent;
   margin-top: 0;
 }
@@ -170,19 +171,14 @@
   gap: 10px;
   min-height: 58px;
   border: 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid #e3e0d9;
   border-radius: 0;
   background: transparent;
   padding: 9px 2px;
 }
 
 .permission-member-row:last-child {
-  border-right: 0;
-  border-bottom: 1px solid var(--line);
-  border-left: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 9px 2px;
+  border-bottom: 0;
 }
 
 .permission-member-row > span:nth-child(2) {
@@ -225,9 +221,9 @@
 
 .permission-member-picker {
   margin-bottom: 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: #f3f1ec;
   padding: 10px;
 }
 
@@ -252,10 +248,6 @@
   background: transparent;
   text-align: left;
   padding: 7px;
-}
-
-.permission-member-candidates button:hover {
-  background: #f1efeb;
 }
 
 .permission-member-candidates button > span:nth-child(2) {

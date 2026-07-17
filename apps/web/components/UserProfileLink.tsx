@@ -14,7 +14,12 @@ export function UserProfileLink({
   children,
 }: UserProfileLinkProps) {
   return (
-    <Link className={className} href={userProfile(user.id)}>
+    <Link
+      className={className}
+      href={userProfile(user.id)}
+      rel="noopener noreferrer"
+      target="_blank"
+    >
       {children ?? user.displayName}
     </Link>
   );

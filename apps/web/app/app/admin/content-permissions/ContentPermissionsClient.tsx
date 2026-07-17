@@ -5,7 +5,6 @@ import type {
   PermissionGroupSummary,
   PermissionLevel,
 } from "@liveboard/shared";
-import { ShieldCheck } from "lucide-react";
 import { AdminSubnav } from "@/components/admin/AdminSubnav";
 import {
   deletePermissionGrant,
@@ -121,19 +120,16 @@ export function ContentPermissionsClient() {
       {message ? <p className="success-text">{message}</p> : null}
 
       <section className="content-permission-overview">
-        <ShieldCheck aria-hidden="true" />
-        <div>
-          <h2>{workspace?.name ?? "文档默认权限"}</h2>
-          <p>
-            这里设置 workspace
-            的基础权限。顶层文件夹、子文件夹和文件会逐级继承；某一级单独设置的例外权限优先生效。
-          </p>
-          <p>系统管理员始终可以管理全部文档，不受下方设置影响。</p>
-        </div>
+        <h2>{workspace?.name ?? "文档默认权限"}</h2>
+        <p>
+          这里设置 workspace
+          的基础权限。顶层文件夹、子文件夹和文件会逐级继承；某一级单独设置的例外权限优先生效。
+        </p>
+        <p>系统管理员始终可以管理全部文档，不受下方设置影响。</p>
       </section>
 
       <section className="content-permission-panel">
-        <div className="content-permission-head">
+        <div className="panel-head content-permission-head">
           <div>
             <h2>权限组默认权限</h2>
             <p>没有默认权限的组，只能通过具体文件夹或文件获得访问权限。</p>
