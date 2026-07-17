@@ -37,7 +37,7 @@
   font: inherit;
   font-weight: 700;
   line-height: 1.25;
-  min-height: 28px;
+  min-height: 42px;
   margin: 0;
   padding: 0;
   text-align: left;
@@ -61,7 +61,7 @@
   > tbody
   > tr:not(.content-empty-row)
   > td {
-  height: 28px;
+  height: 42px;
   padding-top: 0;
   padding-bottom: 0;
   vertical-align: middle;

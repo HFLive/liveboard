@@ -576,40 +576,40 @@ button:disabled {
 }
 
 .metric-strip {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-  border: 0;
-  border-radius: 0;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid #d8d5ce;
+  border-radius: 14px;
   background: transparent;
-  overflow: visible;
 }
 
 .metric {
+  flex: 1 1 0;
   display: grid;
-  gap: 8px;
-  min-height: 84px;
-  border: 1px solid rgba(207, 217, 211, 0.72);
-  border-radius: var(--radius-lg);
-  background: #fff;
-  box-shadow: var(--shadow-xs);
-  padding: 14px 16px;
+  gap: 4px;
+  min-height: 0;
+  border: 0;
+  border-left: 1px solid #e3e0d9;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 11px 14px;
 }
 
-.metric:last-child {
-  border-right: 1px solid rgba(207, 217, 211, 0.72);
+.metric:first-child {
+  border-left: 0;
 }
 
 .metric span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
 .metric strong {
   color: var(--text);
-  font-size: 24px;
-  font-weight: 720;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .table-wrap {
@@ -1938,78 +1938,105 @@ button:disabled {
 
 /* Admin and profile */
 
+/* Admin navigation follows the forum segmented control: no shared tray,
+   quiet standalone options, and one soft active item. */
 .admin-subnav {
-  gap: 4px;
-  border-color: rgba(207, 217, 211, 0.72);
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: var(--shadow-xs);
-  padding: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
 }
 
 .admin-subnav a {
-  min-height: 38px;
+  min-height: 30px;
   border: 0;
   border-radius: 8px;
-  padding: 0 11px;
-  font-size: 13px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 9px;
+  font-size: 12px;
   font-weight: 600;
 }
 
 .admin-subnav a:hover {
-  border-color: transparent;
-  background: var(--panel-soft);
+  background: #eeebe5;
+  color: var(--text-soft);
 }
 
 .admin-subnav a.active {
-  border-color: transparent;
-  background: var(--accent-soft);
-  color: var(--accent-dark);
+  background: #e9e7e2;
+  color: var(--text);
 }
 
+/* The admin hub is one transparent panel of continuous cells divided by
+   single hairlines, not a grid of floating cards. */
 .admin-hub-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #d8d5ce;
+  border-radius: 14px;
+  background: transparent;
 }
 
 .admin-hub-card {
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 14px;
-  min-height: 140px;
-  border-color: rgba(207, 217, 211, 0.72);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
-  padding: 20px;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-height: 0;
+  border: 0;
+  border-top: 1px solid #e3e0d9;
+  border-left: 1px solid #e3e0d9;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 12px 14px;
+}
+
+.admin-hub-card:nth-child(odd) {
+  border-left: 0;
+}
+
+.admin-hub-card:nth-child(-n + 2) {
+  border-top: 0;
+}
+
+.admin-hub-card:nth-child(odd):last-child {
+  grid-column: 1 / -1;
 }
 
 .admin-hub-card:hover {
-  border-color: #afc2b7;
-  background: #fff;
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-2px);
+  border-color: #e3e0d9;
+  background: #f0eee8;
+  box-shadow: none;
+  transform: none;
 }
 
 .admin-hub-card > svg {
-  width: 24px;
-  height: 24px;
-  border-radius: 10px;
-  box-sizing: content-box;
-  background: var(--accent-soft);
-  color: var(--accent-dark);
-  padding: 9px;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  background: transparent;
+  color: var(--text-soft);
+  padding: 0;
 }
 
 .admin-hub-card span {
-  gap: 7px;
+  gap: 3px;
+  min-width: 0;
 }
 
 .admin-hub-card strong {
-  font-size: 17px;
+  font-size: 13px;
 }
 
 .admin-hub-card small {
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .permission-groups-layout,
@@ -2268,24 +2295,19 @@ button:disabled {
 
 .profile-layout .password-disclosure {
   overflow: hidden;
-  border: 1px solid transparent;
-  border-radius: 10px;
+  border: 1px solid #d8d5ce;
+  border-radius: 14px;
   background: transparent;
-}
-
-.profile-layout .password-disclosure[open] {
-  border-color: var(--line);
-  background: var(--surface-raised);
 }
 
 .profile-layout .password-disclosure summary {
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 40px;
+  min-height: 0;
   cursor: pointer;
   list-style: none;
-  padding: 6px 8px;
+  padding: 13px 16px;
 }
 
 .profile-layout .password-disclosure summary::-webkit-details-marker {
@@ -2293,15 +2315,23 @@ button:disabled {
 }
 
 .profile-layout .password-disclosure summary::after {
+  width: 7px;
+  height: 7px;
   margin-left: auto;
-  color: var(--muted);
-  content: "+";
-  font-size: 17px;
-  font-weight: 760;
+  border-right: 1.6px solid var(--muted);
+  border-bottom: 1.6px solid var(--muted);
+  content: "";
+  transform: rotate(45deg);
+  transition: transform 140ms ease;
+}
+
+.profile-layout .password-disclosure[open] summary {
+  border-bottom: 1px solid #d8d5ce;
+  background: #f4f2ee;
 }
 
 .profile-layout .password-disclosure[open] summary::after {
-  content: "-";
+  transform: rotate(225deg);
 }
 
 .profile-layout .password-disclosure summary span {
@@ -2311,12 +2341,7 @@ button:disabled {
   min-width: 0;
   color: var(--text);
   font-size: 14px;
-  font-weight: 700;
-}
-
-.profile-layout .password-disclosure summary small {
-  color: var(--muted);
-  font-size: 12px;
+  font-weight: 650;
 }
 
 .profile-layout .password-disclosure .heading-icon {
@@ -2327,8 +2352,7 @@ button:disabled {
 .profile-layout .password-disclosure .disclosure-body {
   display: grid;
   gap: 12px;
-  border-top: 1px solid var(--line);
-  padding: 12px;
+  padding: 14px 16px;
 }
 
 .profile-layout .password-disclosure .button {
@@ -2356,11 +2380,11 @@ button:disabled {
 }
 
 .profile-readonly-grid div {
-  min-height: 82px;
+  min-height: 0;
   border: 0;
   border-radius: 10px;
   background: var(--panel-soft);
-  padding: 14px;
+  padding: 12px;
 }
 
 /* Responsive application frame */
@@ -2504,10 +2528,6 @@ button:disabled {
     top: 30px;
   }
 
-  .metric-strip {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .files-layout,
   .library-layout,
   .forum-shell,
@@ -2526,10 +2546,6 @@ button:disabled {
   .sticky-panel,
   .review-queue {
     position: static;
-  }
-
-  .admin-hub-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2801,26 +2817,16 @@ button:disabled {
   }
 
   .metric-strip {
-    display: flex;
-    gap: 10px;
-    overflow-x: auto;
-    padding-bottom: 3px;
-    scroll-snap-type: x proximity;
-    scrollbar-width: none;
-  }
-
-  .metric-strip::-webkit-scrollbar {
-    display: none;
+    flex-direction: column;
   }
 
   .metric {
-    flex: 0 0 138px;
-    min-height: 80px;
-    scroll-snap-align: start;
+    border-left: 0;
+    border-top: 1px solid #e3e0d9;
   }
 
-  .metric strong {
-    font-size: 22px;
+  .metric:first-child {
+    border-top: 0;
   }
 
   .responsive-table tr {
@@ -3005,7 +3011,6 @@ button:disabled {
   .admin-subnav {
     flex-wrap: nowrap;
     overflow-x: auto;
-    padding: 5px;
     scrollbar-width: none;
   }
 
@@ -3015,21 +3020,19 @@ button:disabled {
 
   .admin-hub-grid {
     grid-template-columns: 1fr;
-    gap: 12px;
   }
 
-  .admin-hub-card {
-    min-height: 112px;
-    padding: 16px;
+  .admin-hub-card,
+  .admin-hub-card:nth-child(odd) {
+    border-left: 0;
   }
 
-  .profile-readonly-grid {
-    grid-template-columns: 1fr;
+  .admin-hub-card:nth-child(-n + 2) {
+    border-top: 1px solid #e3e0d9;
   }
 
-  .profile-readonly-grid div,
-  .profile-readonly-grid div:last-child {
-    border: 0;
+  .admin-hub-card:first-child {
+    border-top: 0;
   }
 
   .modal-backdrop {
@@ -3407,8 +3410,6 @@ body,
 .card,
 .surface,
 .asset-detail-panel,
-.metric,
-.admin-hub-card,
 .forum-category-panel,
 .forum-feed,
 .forum-thread-detail,
@@ -3452,7 +3453,7 @@ body,
 .profile-readonly-grid div,
 .asset-preview,
 .asset-detail-preview {
-  background: #f6f4ef;
+  background: #f3f1ec;
 }
 
 .modal-foot,
@@ -3510,8 +3511,7 @@ body,
   background: var(--accent-soft);
 }
 
-.asset-card:hover,
-.admin-hub-card:hover {
+.asset-card:hover {
   border-color: var(--line-strong);
   box-shadow: none;
   transform: none;
@@ -3522,14 +3522,12 @@ body,
   box-shadow: 0 0 0 3px rgba(183, 121, 31, 0.11);
 }
 
-.admin-hub-card > svg,
 .forum-thread-category,
 .timezone-chip.active {
   background: var(--accent-soft);
   color: var(--accent-dark);
 }
 
-.admin-subnav a.active,
 .segmented-control button.active {
   background: #fffaf0;
   color: var(--accent-dark);
@@ -3768,8 +3766,6 @@ body,
 .action-panel,
 .surface,
 .asset-detail-panel,
-.metric,
-.admin-hub-card,
 .forum-category-panel,
 .forum-feed,
 .forum-thread-detail,
@@ -3778,33 +3774,6 @@ body,
 .ai-sidebar,
 .ai-chat-panel {
   border-radius: 10px;
-}
-
-.metric-strip {
-  display: flex;
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
-}
-
-.metric {
-  flex: 1 1 0;
-  min-height: 72px;
-  border: 0;
-  border-right: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  padding: 13px 16px;
-}
-
-.metric:last-child {
-  border-right: 0;
-}
-
-.metric strong {
-  font-size: 20px;
 }
 
 .library-layout .list-toolbar {
@@ -4068,51 +4037,6 @@ body,
   padding: 0;
 }
 
-.admin-hub-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0;
-  overflow: hidden;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-
-.admin-hub-card {
-  min-height: 94px;
-  grid-template-columns: 36px minmax(0, 1fr);
-  gap: 12px;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  padding: 17px 8px;
-}
-
-.admin-hub-card:nth-child(odd) {
-  border-right: 1px solid var(--line);
-  padding-right: 24px;
-}
-
-.admin-hub-card:nth-child(even) {
-  padding-left: 24px;
-}
-
-.admin-hub-card:nth-last-child(-n + 2) {
-  border-bottom: 0;
-}
-
-.admin-hub-card:hover {
-  border-color: var(--line);
-  background: #faf8f4;
-}
-
-.admin-hub-card > svg {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: transparent;
-  padding: 6px;
-}
-
 .settings-status-list {
   display: grid;
   margin: 0;
@@ -4199,42 +4123,6 @@ body,
 
   .login-brand-link {
     margin-bottom: 36px;
-  }
-
-  .metric-strip {
-    gap: 8px;
-    overflow-x: auto;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .metric {
-    flex: 0 0 128px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: #fff;
-  }
-
-  .admin-hub-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .admin-hub-card,
-  .admin-hub-card:nth-child(odd),
-  .admin-hub-card:nth-child(even) {
-    min-height: 82px;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-    padding: 14px 4px;
-  }
-
-  .admin-hub-card:nth-last-child(2) {
-    border-bottom: 1px solid var(--line);
-  }
-
-  .admin-hub-card:last-child {
-    border-bottom: 0;
   }
 
   .forum-compose-workspace .page-head {
@@ -6376,24 +6264,6 @@ body .success-text::before {
   padding: 8px 10px;
 }
 
-.workspace:not(.ai-workspace) .metric-strip {
-  gap: 6px;
-}
-
-.workspace:not(.ai-workspace) .metric {
-  gap: 6px;
-  min-height: 59px;
-  padding: 10px 11px;
-}
-
-.workspace:not(.ai-workspace) .metric span {
-  font-size: 10px;
-}
-
-.workspace:not(.ai-workspace) .metric strong {
-  font-size: 18px;
-}
-
 .workspace:not(.ai-workspace) .table :is(th, td) {
   padding: 9px 10px;
 }
@@ -6492,56 +6362,6 @@ body .success-text::before {
   border-radius: 9px;
   padding: 8px 10px;
   font-size: 11px;
-}
-
-/* The management landing page uses dedicated cards instead of the shared
-   card component, so compact its own navigation and hub tiles explicitly. */
-.workspace:not(.ai-workspace) .admin-subnav {
-  gap: 3px;
-  border-radius: 12px;
-  padding: 4px;
-}
-
-.workspace:not(.ai-workspace) .admin-subnav a {
-  min-height: 30px;
-  border-radius: 8px;
-  padding: 0 8px;
-  font-size: 12px;
-}
-
-.workspace:not(.ai-workspace) .admin-hub-card {
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 8px;
-  min-height: 66px;
-  padding: 12px 6px;
-}
-
-.workspace:not(.ai-workspace) .admin-hub-card:nth-child(odd) {
-  padding-right: 17px;
-}
-
-.workspace:not(.ai-workspace) .admin-hub-card:nth-child(even) {
-  padding-left: 17px;
-}
-
-.workspace:not(.ai-workspace) .admin-hub-card > svg {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  padding: 4px;
-}
-
-.workspace:not(.ai-workspace) .admin-hub-card span {
-  gap: 5px;
-}
-
-.workspace:not(.ai-workspace) .admin-hub-card strong {
-  font-size: 14px;
-}
-
-.workspace:not(.ai-workspace) .admin-hub-card small {
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 /* Dense workbench visual language: one clear filled primary action, tonal
@@ -6722,24 +6542,6 @@ body .success-text::before {
   border: 0;
   border-radius: 0;
   background: transparent;
-  box-shadow: none;
-}
-
-.workspace:not(.ai-workspace) .admin-subnav {
-  border-color: transparent;
-  background: #eeebe5;
-  box-shadow: none;
-}
-
-.workspace:not(.ai-workspace) .admin-subnav a {
-  border-color: transparent;
-}
-
-.workspace:not(.ai-workspace) .admin-hub-grid {
-  background: transparent;
-}
-
-.workspace:not(.ai-workspace) .admin-hub-card {
   box-shadow: none;
 }
 

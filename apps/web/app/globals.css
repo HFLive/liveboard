@@ -2741,7 +2741,7 @@ p.muted {
 
 .profile-readonly-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   border: 1px solid var(--line);
   background: var(--panel-soft);
 }
@@ -6041,18 +6041,8 @@ p.muted {
   .admin-ai-grid,
   .admin-ai-grid.three,
   .grid,
-  .profile-readonly-grid,
   .form-grid.two {
     grid-template-columns: 1fr;
-  }
-
-  .profile-readonly-grid div {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .profile-readonly-grid div:last-child {
-    border-bottom: 0;
   }
 
   .page-head,

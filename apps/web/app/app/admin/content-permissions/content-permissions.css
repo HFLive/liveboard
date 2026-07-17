@@ -7,77 +7,86 @@
   width: min(880px, 100%);
 }
 
+/* 说明区：无边框 muted 段落，不再是带底色的信息块。 */
 .content-permission-overview {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
-  gap: 14px;
-  margin-top: 22px;
-  border: 1px solid var(--line);
-  background: #f7f6f3;
-  padding: 18px 20px;
-}
-
-.content-permission-overview > svg {
-  width: 24px;
-  height: 24px;
-  margin-top: 2px;
-  color: #776b4f;
+  gap: 4px;
+  margin-top: 18px;
+  padding: 0 2px;
 }
 
 .content-permission-overview h2,
-.content-permission-panel h2,
-.content-permission-overview p,
+.content-permission-overview p {
+  margin: 0;
+}
+
+.content-permission-overview h2 {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.content-permission-overview p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* 面板：透明底 + 1px 外框，标题区复用全局 .panel-head 浅暖灰底。 */
+.content-permission-panel {
+  margin-top: 16px;
+  border: 1px solid #d8d5ce;
+  border-radius: 14px;
+  background: transparent;
+}
+
+.content-permissions-workspace
+  .content-permission-panel
+  .content-permission-head {
+  align-items: center;
+  border-radius: 13px 13px 0 0;
+  padding: 13px 16px;
+}
+
+.content-permission-head h2,
 .content-permission-head p {
   margin: 0;
 }
 
-.content-permission-overview h2,
-.content-permission-panel h2 {
-  font-size: 16px;
+.content-permission-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
-.content-permission-overview p,
 .content-permission-head p {
-  margin-top: 5px;
+  margin: 0;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.content-permission-panel {
-  margin-top: 18px;
-  border-top: 1px solid var(--line-strong);
-}
-
-.content-permission-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 18px 2px 14px;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .content-permission-head > span {
   flex: 0 0 auto;
-  border: 0;
+  border-radius: 7px;
   background: #efede8;
   color: var(--muted);
-  padding: 4px 8px;
-  font-size: 12px;
+  padding: 3px 8px;
+  font-size: 11px;
 }
 
-.content-permission-list {
-  border-top: 1px solid var(--line);
-}
-
+/* 权限行：面板内连续行，行间单层分隔线。 */
 .content-permission-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 180px;
   align-items: center;
   gap: 18px;
   min-width: 0;
-  border-bottom: 1px solid var(--line);
-  padding: 14px 2px;
+  border-bottom: 1px solid #e3e0d9;
+  padding: 12px 16px;
+}
+
+.content-permission-row:last-child {
+  border-bottom: 0;
 }
 
 .content-permission-row > div {
@@ -114,15 +123,9 @@
 }
 
 @media (max-width: 620px) {
-  .content-permission-overview {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 16px;
-  }
-
   .content-permission-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
-    padding: 14px 0;
   }
 
   .content-permission-row span {

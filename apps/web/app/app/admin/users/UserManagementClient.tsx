@@ -304,7 +304,7 @@ export function UserManagementClient() {
   }
 
   return (
-    <div className="workspace">
+    <div className="workspace admin-users-page">
       <header className="page-head">
         <div>
           <p className="page-eyebrow">管理中心</p>

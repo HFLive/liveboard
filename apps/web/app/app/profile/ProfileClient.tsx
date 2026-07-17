@@ -331,6 +331,20 @@ export function ProfileClient() {
               />
               <small className="muted">{bio.length}/500</small>
             </label>
+            {profileMessage ? (
+              <p className="success-text">{profileMessage}</p>
+            ) : null}
+            <div className="button-row left">
+              <button className="button" disabled={savingProfile} type="submit">
+                {savingProfile ? "保存中" : "保存信息"}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <aside className="workbench-side">
+          <section className="action-panel profile-account-panel">
+            <h2>账号信息</h2>
             <div className="profile-readonly-grid">
               <div>
                 <span>登录账号</span>
@@ -345,25 +359,13 @@ export function ProfileClient() {
                 <strong>{user ? userStatusLabel(user.status) : "-"}</strong>
               </div>
             </div>
-            {profileMessage ? (
-              <p className="success-text">{profileMessage}</p>
-            ) : null}
-            <div className="button-row left">
-              <button className="button" disabled={savingProfile} type="submit">
-                {savingProfile ? "保存中" : "保存信息"}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <aside className="workbench-side">
+          </section>
           <details className="password-disclosure">
             <summary>
               <span>
                 <KeyRound aria-hidden="true" className="heading-icon" />
                 修改密码
               </span>
-              <small>安全操作</small>
             </summary>
             <form className="form disclosure-body" onSubmit={onChangePassword}>
               <label className="label">
@@ -400,7 +402,7 @@ export function ProfileClient() {
                 <p className="success-text">{passwordMessage}</p>
               ) : null}
               <button
-                className="button secondary"
+                className="button"
                 disabled={savingPassword}
                 type="submit"
               >

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Lock, MessageSquare, Plus, Search } from "lucide-react";
+import { MessageSquare, Plus, Search } from "lucide-react";
 import type {
   ForumCategorySummary,
   ForumThreadSummary,
@@ -198,8 +198,6 @@ export function ForumClient() {
                   />
                   <span className="forum-topic-content">
                     <span className="forum-topic-meta">
-                      <b>{category?.name ?? "未分类"}</b>
-                      <span>·</span>
                       {thread.isAnonymous ? (
                         <span>匿名用户</span>
                       ) : (
@@ -218,22 +216,28 @@ export function ForumClient() {
                           />
                         </span>
                       ) : null}
-                      <span>·</span>
-                      <span>{formatRelativeTime(thread.lastActivityAt)}</span>
-                      {thread.status === "locked" ? (
-                        <span className={`forum-list-status ${thread.status}`}>
-                          <Lock aria-hidden="true" />
-                          已锁定
-                        </span>
-                      ) : null}
                     </span>
                     <strong className="forum-topic-title">
-                      <Link href={forumThread(thread.id)}>{thread.title}</Link>
+                      <span className="forum-category-tag">
+                        {category?.name ?? "未分类"}
+                      </span>
+                      {thread.status === "locked" ? (
+                        <span className="forum-lock-tag">已锁定</span>
+                      ) : null}
+                      <Link
+                        href={forumThread(thread.id)}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                      >
+                        {thread.title}
+                      </Link>
                     </strong>
                     {thread.excerpt ? <p>{thread.excerpt}</p> : null}
                     <span className="forum-topic-footer">
                       <MessageSquare aria-hidden="true" />
                       {replyCount} 条回复
+                      <span aria-hidden="true">·</span>
+                      <span>{formatRelativeTime(thread.lastActivityAt)}</span>
                     </span>
                   </span>
                 </article>

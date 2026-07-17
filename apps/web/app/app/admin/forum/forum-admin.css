@@ -1,0 +1,57 @@
+/* 论坛设置页：版块侧栏与编辑面板的路由专属样式。
+   面板外框、标题栏、表单控件与按钮沿用 .workspace 全局规则。 */
+
+/* 左侧版块面板：透明背景 + 1px 外框 + 14px 圆角，与全站高密度工作区一致。 */
+.forum-admin-page .forum-admin-side {
+  display: grid;
+  align-content: start;
+  gap: 0;
+  min-width: 0;
+  border: 1px solid #d8d5ce;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* 标题区复用全局 .panel-head，只需贴合面板顶部内圆角。 */
+.forum-admin-page .forum-admin-side > .panel-head {
+  border-radius: 13px 13px 0 0;
+}
+
+/* 版块列表：透明连续行，行间单层分隔线，不使用独立卡片。 */
+.forum-admin-page .forum-admin-category-list {
+  gap: 0;
+}
+
+.forum-admin-page .forum-admin-category-row {
+  min-height: 0;
+  border: 0;
+  border-bottom: 1px solid #e3e0d9;
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.forum-admin-page .forum-admin-category-row:hover {
+  border-color: transparent;
+  background: #f0eee8;
+}
+
+.forum-admin-page .forum-admin-category-row.active,
+.forum-admin-page .forum-admin-category-row.active:hover {
+  border-color: transparent;
+  background: var(--accent-soft);
+}
+
+/* 末行的 hover 与选中背景由行自身绘制，必须贴合面板底部内圆角。 */
+.forum-admin-page .forum-admin-category-row:last-child {
+  border-bottom: 0;
+  border-radius: 0 0 13px 13px;
+}
+
+/* 版块信息表单：与紧凑工作区一致的间距。 */
+.forum-admin-page .profile-form {
+  gap: 12px;
+  padding: 14px 16px;
+}
