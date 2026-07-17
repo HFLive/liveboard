@@ -1,22 +1,7 @@
 "use client";
 
-import {
-  ChangeEvent,
-  FormEvent,
-  MouseEvent,
-  PointerEvent,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import {
-  Camera,
-  ImagePlus,
-  KeyRound,
-  Upload,
-  UserRound,
-  X,
-} from "lucide-react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { Camera, ImagePlus, KeyRound, UserRound } from "lucide-react";
 import type { UserProfile } from "@liveboard/shared";
 import {
   apiResourceUrl,
@@ -27,13 +12,44 @@ import {
   uploadProfileBanner,
 } from "@/lib/api";
 import { roleLabel, userStatusLabel } from "@/lib/labels";
+import { ImageCropDialog } from "@/components/ImageCropDialog";
 
 const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
 const MAX_BANNER_UPLOAD_BYTES = 5 * 1024 * 1024;
-const AVATAR_CANVAS_SIZE = 512;
-const AVATAR_CROP_VIEW_SIZE = 280;
+const AVATAR_OUTPUT_SIZE = 512;
+const BANNER_OUTPUT_WIDTH = 1600;
+const BANNER_OUTPUT_HEIGHT = 400;
 
-type CropOffset = { x: number; y: number };
+type CropTarget = "avatar" | "banner";
+
+const CROP_CONFIG: Record<
+  CropTarget,
+  {
+    title: string;
+    aspect: number;
+    outputWidth: number;
+    outputHeight: number;
+    outputFileName: string;
+    confirmLabel: string;
+  }
+> = {
+  avatar: {
+    title: "裁剪头像",
+    aspect: 1,
+    outputWidth: AVATAR_OUTPUT_SIZE,
+    outputHeight: AVATAR_OUTPUT_SIZE,
+    outputFileName: "avatar.webp",
+    confirmLabel: "确认头像",
+  },
+  banner: {
+    title: "裁剪 Banner",
+    aspect: BANNER_OUTPUT_WIDTH / BANNER_OUTPUT_HEIGHT,
+    outputWidth: BANNER_OUTPUT_WIDTH,
+    outputHeight: BANNER_OUTPUT_HEIGHT,
+    outputFileName: "banner.webp",
+    confirmLabel: "确认 Banner",
+  },
+};
 
 export function ProfileClient() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -47,19 +63,11 @@ export function ProfileClient() {
   const [error, setError] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
-  const [avatarSourceUrl, setAvatarSourceUrl] = useState<string | null>(null);
-  const [avatarZoom, setAvatarZoom] = useState(1);
-  const [avatarOffset, setAvatarOffset] = useState<CropOffset>({ x: 0, y: 0 });
-  const [avatarDragging, setAvatarDragging] = useState(false);
-  const [avatarDragStart, setAvatarDragStart] = useState<{
-    pointer: CropOffset;
-    offset: CropOffset;
-  } | null>(null);
-  const [savingAvatar, setSavingAvatar] = useState(false);
-  const [savingBanner, setSavingBanner] = useState(false);
+  const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
+  const [cropSourceUrl, setCropSourceUrl] = useState<string | null>(null);
+  const [savingCrop, setSavingCrop] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
-  const avatarImageRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
     getMe()
@@ -75,11 +83,11 @@ export function ProfileClient() {
 
   useEffect(() => {
     return () => {
-      if (avatarSourceUrl) {
-        URL.revokeObjectURL(avatarSourceUrl);
+      if (cropSourceUrl) {
+        URL.revokeObjectURL(cropSourceUrl);
       }
     };
-  }, [avatarSourceUrl]);
+  }, [cropSourceUrl]);
 
   async function onSaveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -110,7 +118,10 @@ export function ProfileClient() {
     }
   }
 
-  async function onSelectBanner(event: ChangeEvent<HTMLInputElement>) {
+  function selectCropFile(
+    event: ChangeEvent<HTMLInputElement>,
+    target: CropTarget,
+  ) {
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -119,25 +130,69 @@ export function ProfileClient() {
     setError(null);
     setProfileMessage(null);
 
+    const label = target === "avatar" ? "头像" : "Banner";
+    const maxBytes =
+      target === "avatar" ? MAX_AVATAR_UPLOAD_BYTES : MAX_BANNER_UPLOAD_BYTES;
+
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setError("Banner 仅支持 PNG、JPEG 或 WebP 图片");
+      setError(`${label}仅支持 PNG、JPEG 或 WebP 图片`);
       return;
     }
 
-    if (file.size > MAX_BANNER_UPLOAD_BYTES) {
-      setError("Banner 图片不能超过 5MB");
+    if (file.size > maxBytes) {
+      setError(
+        target === "avatar"
+          ? "头像图片不能超过 2MB"
+          : "Banner 图片不能超过 5MB",
+      );
       return;
     }
 
-    setSavingBanner(true);
+    if (cropSourceUrl) {
+      URL.revokeObjectURL(cropSourceUrl);
+    }
+
+    setCropSourceUrl(URL.createObjectURL(file));
+    setCropTarget(target);
+  }
+
+  function closeCropDialog() {
+    if (cropSourceUrl) {
+      URL.revokeObjectURL(cropSourceUrl);
+    }
+    setCropSourceUrl(null);
+    setCropTarget(null);
+  }
+
+  async function onConfirmCrop(file: File) {
+    if (!cropTarget) return;
+
+    setError(null);
+    setSavingCrop(true);
+
     try {
-      const result = await uploadProfileBanner(file);
+      const result =
+        cropTarget === "avatar"
+          ? await uploadAvatar(file)
+          : await uploadProfileBanner(file);
       setUser(result.user);
-      setProfileMessage("Banner 已更新");
+      if (cropTarget === "avatar") {
+        window.dispatchEvent(new Event("liveboard:profile-updated"));
+      }
+      setProfileMessage(
+        cropTarget === "avatar" ? "头像已更新" : "Banner 已更新",
+      );
+      closeCropDialog();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Banner 上传失败");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : cropTarget === "avatar"
+            ? "头像上传失败"
+            : "Banner 上传失败",
+      );
     } finally {
-      setSavingBanner(false);
+      setSavingCrop(false);
     }
   }
 
@@ -168,102 +223,6 @@ export function ProfileClient() {
       setError(caught instanceof Error ? caught.message : "修改密码失败");
     } finally {
       setSavingPassword(false);
-    }
-  }
-
-  function onSelectAvatar(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-
-    if (!file) return;
-
-    setError(null);
-    setProfileMessage(null);
-
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setError("头像仅支持 PNG、JPEG 或 WebP 图片");
-      return;
-    }
-
-    if (file.size > MAX_AVATAR_UPLOAD_BYTES) {
-      setError("头像图片不能超过 2MB");
-      return;
-    }
-
-    if (avatarSourceUrl) {
-      URL.revokeObjectURL(avatarSourceUrl);
-    }
-
-    setAvatarSourceUrl(URL.createObjectURL(file));
-    setAvatarZoom(1);
-    setAvatarOffset({ x: 0, y: 0 });
-  }
-
-  function closeAvatarEditor() {
-    if (avatarSourceUrl) {
-      URL.revokeObjectURL(avatarSourceUrl);
-    }
-    setAvatarSourceUrl(null);
-    setAvatarDragging(false);
-    setAvatarDragStart(null);
-  }
-
-  function onAvatarPointerDown(event: PointerEvent<HTMLDivElement>) {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setAvatarDragging(true);
-    setAvatarDragStart({
-      pointer: { x: event.clientX, y: event.clientY },
-      offset: avatarOffset,
-    });
-  }
-
-  function onAvatarPointerMove(event: PointerEvent<HTMLDivElement>) {
-    if (!avatarDragging || !avatarDragStart) return;
-
-    const nextOffset = {
-      x: avatarDragStart.offset.x + event.clientX - avatarDragStart.pointer.x,
-      y: avatarDragStart.offset.y + event.clientY - avatarDragStart.pointer.y,
-    };
-    setAvatarOffset(limitAvatarOffset(nextOffset, avatarZoom));
-  }
-
-  function onAvatarPointerUp(event: PointerEvent<HTMLDivElement>) {
-    event.currentTarget.releasePointerCapture(event.pointerId);
-    setAvatarDragging(false);
-    setAvatarDragStart(null);
-  }
-
-  function onBackdropMouseDown(event: MouseEvent<HTMLDivElement>) {
-    if (event.target === event.currentTarget && !savingAvatar) {
-      closeAvatarEditor();
-    }
-  }
-
-  async function onConfirmAvatar() {
-    const image = avatarImageRef.current;
-
-    if (!image) {
-      setError("头像图片尚未加载完成");
-      return;
-    }
-
-    setError(null);
-    setSavingAvatar(true);
-
-    try {
-      const file = await renderAvatarFile(image, avatarZoom, avatarOffset);
-      if (file.size > MAX_AVATAR_UPLOAD_BYTES) {
-        throw new Error("裁剪后的头像仍超过 2MB，请换一张更小的图片");
-      }
-      const result = await uploadAvatar(file);
-      setUser(result.user);
-      window.dispatchEvent(new Event("liveboard:profile-updated"));
-      setProfileMessage("头像已更新");
-      closeAvatarEditor();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "头像上传失败");
-    } finally {
-      setSavingAvatar(false);
     }
   }
 
@@ -309,18 +268,18 @@ export function ProfileClient() {
                 <input
                   accept="image/png,image/jpeg,image/webp"
                   className="sr-only"
-                  onChange={onSelectBanner}
+                  onChange={(event) => selectCropFile(event, "banner")}
                   ref={bannerInputRef}
                   type="file"
                 />
                 <button
                   className="button secondary"
-                  disabled={savingBanner}
+                  disabled={savingCrop}
                   onClick={() => bannerInputRef.current?.click()}
                   type="button"
                 >
                   <ImagePlus aria-hidden="true" className="button-icon" />
-                  {savingBanner ? "上传中" : "更换 Banner"}
+                  {savingCrop ? "上传中" : "更换 Banner"}
                 </button>
               </div>
             </div>
@@ -338,7 +297,7 @@ export function ProfileClient() {
                 <input
                   accept="image/png,image/jpeg,image/webp"
                   className="sr-only"
-                  onChange={onSelectAvatar}
+                  onChange={(event) => selectCropFile(event, "avatar")}
                   ref={avatarInputRef}
                   type="file"
                 />
@@ -452,158 +411,20 @@ export function ProfileClient() {
         </aside>
       </section>
 
-      {avatarSourceUrl ? (
-        <div
-          className="modal-backdrop"
-          onMouseDown={onBackdropMouseDown}
-          role="presentation"
-        >
-          <div
-            aria-modal="true"
-            className="modal-panel avatar-crop-modal"
-            role="dialog"
-          >
-            <div className="modal-head">
-              <div>
-                <h2>裁剪头像</h2>
-              </div>
-              <button
-                aria-label="关闭"
-                className="inline-icon-button"
-                disabled={savingAvatar}
-                onClick={closeAvatarEditor}
-                type="button"
-              >
-                <X aria-hidden="true" />
-              </button>
-            </div>
-            <div className="modal-body avatar-crop-body">
-              <div
-                className={
-                  avatarDragging
-                    ? "avatar-crop-stage dragging"
-                    : "avatar-crop-stage"
-                }
-                onPointerDown={onAvatarPointerDown}
-                onPointerMove={onAvatarPointerMove}
-                onPointerUp={onAvatarPointerUp}
-              >
-                <img
-                  alt=""
-                  draggable={false}
-                  onLoad={() => setAvatarOffset({ x: 0, y: 0 })}
-                  ref={avatarImageRef}
-                  src={avatarSourceUrl}
-                  style={{
-                    transform: `translate(${avatarOffset.x}px, ${avatarOffset.y}px) scale(${avatarZoom})`,
-                  }}
-                />
-              </div>
-              <label className="label avatar-zoom-label">
-                缩放
-                <input
-                  max="3"
-                  min="1"
-                  onChange={(event) => {
-                    const nextZoom = Number(event.target.value);
-                    setAvatarZoom(nextZoom);
-                    setAvatarOffset((current) =>
-                      limitAvatarOffset(current, nextZoom),
-                    );
-                  }}
-                  step="0.05"
-                  type="range"
-                  value={avatarZoom}
-                />
-              </label>
-            </div>
-            <div className="modal-foot">
-              <div className="button-row">
-                <button
-                  className="button secondary"
-                  disabled={savingAvatar}
-                  onClick={closeAvatarEditor}
-                  type="button"
-                >
-                  取消
-                </button>
-                <button
-                  className="button"
-                  disabled={savingAvatar}
-                  onClick={onConfirmAvatar}
-                  type="button"
-                >
-                  <Upload aria-hidden="true" className="button-icon" />
-                  {savingAvatar ? "上传中" : "确认头像"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {cropTarget && cropSourceUrl ? (
+        <ImageCropDialog
+          aspect={CROP_CONFIG[cropTarget].aspect}
+          confirmLabel={CROP_CONFIG[cropTarget].confirmLabel}
+          onCancel={closeCropDialog}
+          onConfirm={(file) => void onConfirmCrop(file)}
+          outputFileName={CROP_CONFIG[cropTarget].outputFileName}
+          outputHeight={CROP_CONFIG[cropTarget].outputHeight}
+          outputWidth={CROP_CONFIG[cropTarget].outputWidth}
+          saving={savingCrop}
+          sourceUrl={cropSourceUrl}
+          title={CROP_CONFIG[cropTarget].title}
+        />
       ) : null}
     </div>
   );
-}
-
-function limitAvatarOffset(offset: CropOffset, zoom: number) {
-  const limit = ((zoom - 1) * AVATAR_CROP_VIEW_SIZE) / 2;
-
-  return {
-    x: Math.max(-limit, Math.min(limit, offset.x)),
-    y: Math.max(-limit, Math.min(limit, offset.y)),
-  };
-}
-
-async function renderAvatarFile(
-  image: HTMLImageElement,
-  zoom: number,
-  offset: CropOffset,
-) {
-  const canvas = document.createElement("canvas");
-  canvas.width = AVATAR_CANVAS_SIZE;
-  canvas.height = AVATAR_CANVAS_SIZE;
-  const context = canvas.getContext("2d");
-
-  if (!context) {
-    throw new Error("浏览器无法处理头像图片");
-  }
-
-  const naturalSize = Math.min(image.naturalWidth, image.naturalHeight);
-  const sourceSize = naturalSize / zoom;
-  const sourceX =
-    (image.naturalWidth - sourceSize) / 2 -
-    (offset.x / AVATAR_CROP_VIEW_SIZE) * sourceSize;
-  const sourceY =
-    (image.naturalHeight - sourceSize) / 2 -
-    (offset.y / AVATAR_CROP_VIEW_SIZE) * sourceSize;
-  const safeSourceX = Math.max(
-    0,
-    Math.min(image.naturalWidth - sourceSize, sourceX),
-  );
-  const safeSourceY = Math.max(
-    0,
-    Math.min(image.naturalHeight - sourceSize, sourceY),
-  );
-
-  context.drawImage(
-    image,
-    safeSourceX,
-    safeSourceY,
-    sourceSize,
-    sourceSize,
-    0,
-    0,
-    AVATAR_CANVAS_SIZE,
-    AVATAR_CANVAS_SIZE,
-  );
-
-  const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, "image/webp", 0.9);
-  });
-
-  if (!blob) {
-    throw new Error("头像图片处理失败");
-  }
-
-  return new File([blob], "avatar.webp", { type: "image/webp" });
 }
