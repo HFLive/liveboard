@@ -986,11 +986,7 @@ export function updateFile(input: {
   });
 }
 
-export function createFile(input: {
-  folderId: string;
-  title: string;
-  type: FileSummary["type"];
-}) {
+export function createFile(input: { folderId: string; title: string }) {
   return request<{ file: FileSummary }>("/files", {
     method: "POST",
     body: JSON.stringify(input),

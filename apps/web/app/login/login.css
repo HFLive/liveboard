@@ -1,0 +1,90 @@
+/* 登录页：安静居中的扁平卡片。 */
+
+.login-wrap {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  background: var(--bg);
+  padding: 24px;
+}
+
+.login-card {
+  width: min(400px, 100%);
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  padding: 30px 28px;
+}
+
+.login-brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.login-brand-link span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--rail);
+  color: var(--rail-ink);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.login-brand-link strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.login-card-head {
+  margin: 22px 0 18px;
+}
+
+.login-card-head h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+}
+
+.login-card-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.login-support {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.login-card .login-form .input,
+.login-card .login-submit {
+  min-height: 42px;
+}
+
+/* 与全站主操作一致：深色实心按钮，而不是旧版琥珀色。 */
+.login-card .login-submit {
+  border-color: var(--text);
+  background: var(--text);
+  box-shadow: none;
+}
+
+.login-card .login-submit:hover {
+  border-color: var(--text);
+  background: var(--text);
+}
+
+@media (max-width: 460px) {
+  .login-wrap {
+    align-items: start;
+    padding: 20px 14px;
+  }
+}

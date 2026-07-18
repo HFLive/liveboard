@@ -10,6 +10,7 @@ import {
   updateForumCategory,
 } from "@/lib/api";
 import { AdminSubnav } from "@/components/admin/AdminSubnav";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 type CategoryDraft = {
   name: string;
@@ -210,7 +211,7 @@ export function ForumSettingsClient() {
               </label>
               <label className="label">
                 描述
-                <textarea
+                <AutoTextarea
                   className="textarea"
                   maxLength={140}
                   value={editDraft.description}
@@ -299,7 +300,7 @@ export function ForumSettingsClient() {
               </label>
               <label className="label">
                 描述
-                <textarea
+                <AutoTextarea
                   className="textarea"
                   maxLength={140}
                   placeholder="版块说明"

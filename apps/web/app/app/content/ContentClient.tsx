@@ -1,6 +1,13 @@
 "use client";
 
-import { Fragment, FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  FormEvent,
+  MouseEvent as ReactMouseEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import {
@@ -25,7 +32,6 @@ import {
 import type {
   ContentPinTarget,
   FileSummary,
-  FileType,
   FolderNode,
   PermissionLevel,
   PermissionGroupSummary,
@@ -48,15 +54,12 @@ import {
   updateContentPins,
   upsertPermissionGrant,
 } from "@/lib/api";
-import { fileTypeLabel, formatDateTime, permissionLabel } from "@/lib/labels";
+import { formatDateTime, permissionLabel } from "@/lib/labels";
 import { contentDetail } from "@/lib/routes";
 import { SortIconSelect } from "@/components/SortIconSelect";
 import { MarkdownImportButton } from "./MarkdownImportButton";
 
 type FlatFolderNode = FolderNode & { depth: number };
-type ContentTreeRow =
-  | { kind: "folder"; folder: FolderNode; depth: number }
-  | { kind: "file"; file: FileSummary; depth: number };
 type PinnedContentItem =
   | { kind: "folder"; folder: FolderNode; pinnedOrder: number }
   | { kind: "file"; file: FileSummary; pinnedOrder: number };
@@ -85,12 +88,11 @@ type DeleteFolderTarget = {
   descendantCount: number;
   fileCount: number;
 };
-type ContentSortMode = "name" | "updated" | "type";
+type ContentSortMode = "name" | "updated";
 
 const SORT_OPTIONS = [
   { value: "updated", label: "最近更新" },
   { value: "name", label: "名称" },
-  { value: "type", label: "类型" },
 ] as const;
 
 // 记录最近打开的目录，供新标签页中的“返回文档”回到同一位置。
@@ -119,31 +121,18 @@ function flattenFolders(folders: FolderNode[], depth = 0): FlatFolderNode[] {
   ]);
 }
 
-function flattenVisibleContent(
+// 左侧位置树只展示文件夹，作为纯粹的层级导航；文档统一在右侧表格呈现。
+function flattenVisibleFolders(
   folders: FolderNode[],
   collapsedFolderIds: Set<string>,
   depth = 0,
-): ContentTreeRow[] {
-  return folders.flatMap((folder) => {
-    const rows: ContentTreeRow[] = [{ kind: "folder", folder, depth }];
-
-    if (collapsedFolderIds.has(folder.id)) {
-      return rows;
-    }
-
-    rows.push(
-      ...flattenVisibleContent(folder.children, collapsedFolderIds, depth + 1),
-      ...[...folder.files]
-        .sort((left, right) => left.title.localeCompare(right.title, "zh-CN"))
-        .map((file): ContentTreeRow => ({
-          kind: "file",
-          file,
-          depth: depth + 1,
-        })),
-    );
-
-    return rows;
-  });
+): FlatFolderNode[] {
+  return folders.flatMap((folder) => [
+    { ...folder, depth },
+    ...(collapsedFolderIds.has(folder.id)
+      ? []
+      : flattenVisibleFolders(folder.children, collapsedFolderIds, depth + 1)),
+  ]);
 }
 
 function collectPinnedContent(
@@ -207,7 +196,6 @@ export function ContentClient() {
   const [folderParentId, setFolderParentId] = useState("");
   const [folderRename, setFolderRename] = useState("");
   const [fileTitle, setFileTitle] = useState("");
-  const [fileType, setFileType] = useState<FileType>("doc");
   const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
   const [grants, setGrants] = useState<PermissionGrantSummary[]>([]);
   const [inheritedGrants, setInheritedGrants] = useState<
@@ -232,8 +220,8 @@ export function ContentClient() {
   const [isUpdatingPins, setIsUpdatingPins] = useState(false);
 
   const flatFolders = useMemo(() => flattenFolders(folders), [folders]);
-  const visibleTreeRows = useMemo(
-    () => flattenVisibleContent(folders, collapsedFolderIds),
+  const visibleTreeFolders = useMemo(
+    () => flattenVisibleFolders(folders, collapsedFolderIds),
     [collapsedFolderIds, folders],
   );
   const activeFolder = flatFolders.find(
@@ -286,14 +274,6 @@ export function ContentClient() {
           new Date(right.updatedAt).getTime() -
           new Date(left.updatedAt).getTime()
         );
-      }
-
-      if (contentSortMode === "type") {
-        const typeComparison = fileTypeLabel(left.type).localeCompare(
-          fileTypeLabel(right.type),
-          "zh-CN",
-        );
-        if (typeComparison !== 0) return typeComparison;
       }
 
       return left.title.localeCompare(right.title, "zh-CN");
@@ -631,7 +611,6 @@ export function ContentClient() {
       await createFile({
         folderId: activeFolderId,
         title: fileTitle,
-        type: fileType,
       });
       setFileTitle("");
       setShowCreateFile(false);
@@ -986,6 +965,26 @@ export function ContentClient() {
     setOpenContentRowMenu(null);
   }
 
+  function onContentRowClick(
+    event: ReactMouseEvent<HTMLTableRowElement>,
+    item: ContentRowItem,
+  ) {
+    const target = event.target;
+
+    if (
+      target instanceof HTMLElement &&
+      target.closest("a, button, [data-menu-root='true']")
+    ) {
+      return;
+    }
+
+    if (item.kind === "folder") {
+      void selectFolder(item.folder.id);
+    } else {
+      window.open(contentDetail(item.file.id), "_blank", "noopener,noreferrer");
+    }
+  }
+
   function renderContentRowContextMenu(item: ContentRowItem) {
     const isFolder = item.kind === "folder";
     const id = isFolder ? item.folder.id : item.file.id;
@@ -1181,7 +1180,10 @@ export function ContentClient() {
 
     return (
       <Fragment key={`${item.kind}:${id}`}>
-        <tr className="content-pinned-row">
+        <tr
+          className="content-pinned-row"
+          onClick={(event) => onContentRowClick(event, item)}
+        >
           <td data-label="文件名">
             {isFolder ? (
               <button
@@ -1265,34 +1267,9 @@ export function ContentClient() {
     );
   }
 
-  function renderContentTreeRow(row: ContentTreeRow) {
-    if (row.kind === "file") {
-      return (
-        <div
-          className="tree-item tree-file-item"
-          key={`file:${row.file.id}`}
-          style={treeDepthStyle(row.depth)}
-        >
-          <span aria-hidden="true" className="tree-toggle-spacer" />
-          <Link
-            className="tree-main-button"
-            href={contentDetail(row.file.id)}
-            rel="noopener noreferrer"
-            target="_blank"
-            title={row.file.title}
-          >
-            <span className="tree-label">
-              <FileText aria-hidden="true" className="item-icon" />
-              <span>{row.file.title}</span>
-            </span>
-          </Link>
-        </div>
-      );
-    }
-
-    const folder: FlatFolderNode = { ...row.folder, depth: row.depth };
+  function renderContentTreeRow(folder: FlatFolderNode) {
     const isCollapsed = collapsedFolderIds.has(folder.id);
-    const hasChildren = folder.children.length > 0 || folder.files.length > 0;
+    const hasChildren = folder.children.length > 0;
 
     return (
       <div className="tree-row-wrap" key={`folder:${folder.id}`}>
@@ -1351,6 +1328,11 @@ export function ContentClient() {
                 <span title={folder.name}>{folder.name}</span>
               </span>
             </button>
+            {folder.fileCount > 0 ? (
+              <em aria-hidden="true" className="tree-count">
+                {folder.fileCount}
+              </em>
+            ) : null}
           </div>
         )}
         {movingFolderId === folder.id ? (
@@ -1494,23 +1476,8 @@ export function ContentClient() {
 
       <section className="workbench files-layout">
         <aside className="folder-panel">
-          <div className="panel-head">
-            <div>
-              <h2>
-                <button
-                  className="panel-head-home"
-                  onClick={selectRoot}
-                  title="返回顶层"
-                  type="button"
-                >
-                  <Folder aria-hidden="true" className="heading-icon" />
-                  位置
-                </button>
-              </h2>
-            </div>
-          </div>
           <div className="file-tree">
-            {visibleTreeRows.map(renderContentTreeRow)}
+            {visibleTreeFolders.map(renderContentTreeRow)}
             {flatFolders.length === 0 && !showCreateFolder ? (
               <div className="empty-panel">
                 <strong>还没有文件夹</strong>
@@ -1565,9 +1532,6 @@ export function ContentClient() {
                 options={SORT_OPTIONS}
                 value={contentSortMode}
               />
-              {canCreateFileHere ? (
-                <MarkdownImportButton onImport={onImportMarkdown} />
-              ) : null}
               {canCreateFolderHere || canCreateFileHere ? (
                 <div className="new-content-menu" data-menu-root="true">
                   <button
@@ -1612,6 +1576,12 @@ export function ContentClient() {
                           创建文档
                         </button>
                       ) : null}
+                      {canCreateFileHere ? (
+                        <MarkdownImportButton
+                          menuItem
+                          onImport={onImportMarkdown}
+                        />
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -1620,17 +1590,16 @@ export function ContentClient() {
           </div>
           <div className="table-wrap">
             <table className="table responsive-table content-items-table">
-              <thead>
-                <tr>
-                  <th>文件名</th>
-                  <th>最近更新</th>
-                  <th aria-label="操作" />
-                </tr>
-              </thead>
               <tbody>
                 {pinnedItems.map(renderPinnedTableRow)}
                 {unpinnedChildFolders.map((folder) => (
-                  <tr className="content-folder-row" key={folder.id}>
+                  <tr
+                    className="content-folder-row"
+                    key={folder.id}
+                    onClick={(event) =>
+                      onContentRowClick(event, { kind: "folder", folder })
+                    }
+                  >
                     <td data-label="文件名">
                       <button
                         className="content-folder-link"
@@ -1671,7 +1640,12 @@ export function ContentClient() {
                 ))}
                 {unpinnedFiles.map((file) => (
                   <Fragment key={file.id}>
-                    <tr className="content-file-row">
+                    <tr
+                      className="content-file-row"
+                      onClick={(event) =>
+                        onContentRowClick(event, { kind: "file", file })
+                      }
+                    >
                       <td data-label="文件名">
                         <Link
                           aria-label={file.title}
@@ -2138,22 +2112,6 @@ export function ContentClient() {
                   value={fileTitle}
                   onChange={(event) => setFileTitle(event.target.value)}
                 />
-              </label>
-              <label className="label">
-                文档类型
-                <select
-                  className="select"
-                  value={fileType}
-                  onChange={(event) =>
-                    setFileType(event.target.value as FileType)
-                  }
-                >
-                  <option value="doc">普通文档</option>
-                  <option value="book">书本</option>
-                  <option value="lesson">教案</option>
-                  <option value="course">课程</option>
-                  <option value="exercise_set">练习集</option>
-                </select>
               </label>
               <div className="notice-box">
                 <span>

@@ -17,6 +17,7 @@ import {
   submissionStatusLabel,
 } from "@/lib/labels";
 import { APP_ROUTES } from "@/lib/routes";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 type AnswerState = Record<string, string | string[] | boolean>;
 
@@ -628,7 +629,7 @@ function QuestionInput({
 
   if (question.type === "short_answer") {
     return (
-      <textarea
+      <AutoTextarea
         className="textarea"
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}

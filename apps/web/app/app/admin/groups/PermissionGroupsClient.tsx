@@ -24,6 +24,7 @@ import {
 import { userStatusLabel } from "@/lib/labels";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import { AdminSubnav } from "@/components/admin/AdminSubnav";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 export function PermissionGroupsClient() {
   const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
@@ -433,7 +434,7 @@ export function PermissionGroupsClient() {
                     </label>
                     <label className="label">
                       用途说明
-                      <textarea
+                      <AutoTextarea
                         className="textarea"
                         rows={3}
                         value={editDescription}
@@ -498,7 +499,7 @@ export function PermissionGroupsClient() {
               </label>
               <label className="label">
                 描述
-                <textarea
+                <AutoTextarea
                   className="textarea"
                   placeholder="描述这个权限组负责的成员范围"
                   value={description}

@@ -34,6 +34,7 @@ import {
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/labels";
 import { contentDetail } from "@/lib/routes";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 type ChatMessage = {
   id: string;
@@ -613,7 +614,7 @@ export function AiAssistantClient() {
           {aiError ? <p className="ai-inline-error">{aiError}</p> : null}
 
           <form className="home-ai-composer" onSubmit={onAsk}>
-            <textarea
+            <AutoTextarea
               ref={questionInputRef}
               onChange={(event) => setQuestion(event.target.value)}
               onKeyDown={(event) => {

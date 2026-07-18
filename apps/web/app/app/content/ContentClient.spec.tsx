@@ -96,14 +96,18 @@ describe("ContentClient folder deletion", () => {
     vi.mocked(deleteFolder).mockResolvedValue({ ok: true });
   });
 
-  it("shows files in the location tree and collapses folder contents", async () => {
+  it("shows only folders in the location tree and collapses them", async () => {
     render(<ContentClient />);
 
     const tree = document.querySelector(".file-tree");
     expect(tree).not.toBeNull();
     await within(tree as HTMLElement).findByTitle("课程资料");
+    // 位置树只展示文件夹，文档统一在右侧表格呈现
     expect(
-      within(tree as HTMLElement).getByRole("link", { name: "课程导读" }),
+      within(tree as HTMLElement).queryByRole("link", { name: "课程导读" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(tree as HTMLElement).getByRole("button", { name: "第一章" }),
     ).toBeInTheDocument();
 
     fireEvent.click(
@@ -113,7 +117,7 @@ describe("ContentClient folder deletion", () => {
     );
 
     expect(
-      within(tree as HTMLElement).queryByRole("link", { name: "课程导读" }),
+      within(tree as HTMLElement).queryByRole("button", { name: "第一章" }),
     ).not.toBeInTheDocument();
     expect(
       within(tree as HTMLElement).getByRole("button", {
@@ -155,11 +159,10 @@ describe("ContentClient folder deletion", () => {
     expect(document.querySelector(".content-pinned-panel")).toBeNull();
     const table = screen.getByRole("table");
     const tableRows = within(table).getAllByRole("row");
-    expect(tableRows[0]).toHaveTextContent("文件名最近更新");
+    expect(tableRows[0]).toHaveClass("content-pinned-row");
+    expect(tableRows[0]).toHaveTextContent("第一章");
     expect(tableRows[1]).toHaveClass("content-pinned-row");
-    expect(tableRows[1]).toHaveTextContent("第一章");
-    expect(tableRows[2]).toHaveClass("content-pinned-row");
-    expect(tableRows[2]).toHaveTextContent("课程导读");
+    expect(tableRows[1]).toHaveTextContent("课程导读");
     expect(
       within(table).getAllByRole("link", { name: "课程导读" }),
     ).toHaveLength(1);
@@ -282,7 +285,7 @@ describe("ContentClient folder deletion", () => {
       screen.getByRole("heading", { name: "创建文档" }),
     ).toBeInTheDocument();
     expect(screen.getByText("文档名称")).toBeInTheDocument();
-    expect(screen.getByText("文档类型")).toBeInTheDocument();
+    expect(screen.queryByText("文档类型")).not.toBeInTheDocument();
   });
 
   it("hides creation and Markdown import actions without write permission", async () => {
@@ -350,7 +353,7 @@ describe("ContentClient folder deletion", () => {
     ).toBeInTheDocument();
   });
 
-  it("goes up one level from the back button and to the top from the location heading", async () => {
+  it("goes up one level from the back button", async () => {
     render(<ContentClient />);
 
     const table = screen.getByRole("table");
@@ -385,19 +388,6 @@ describe("ContentClient folder deletion", () => {
 
     // 顶层文件夹的上一级是顶层“/”
     fireEvent.click(screen.getByRole("button", { name: "返回上一级" }));
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: "返回上一级" }),
-      ).not.toBeInTheDocument(),
-    );
-    expect(
-      within(screen.getByRole("table")).getByRole("button", {
-        name: "课程资料",
-      }),
-    ).toBeInTheDocument();
-
-    await enterFolderFromTree("课程资料");
-    fireEvent.click(screen.getByRole("button", { name: "位置" }));
     await waitFor(() =>
       expect(
         screen.queryByRole("button", { name: "返回上一级" }),

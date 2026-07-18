@@ -51,8 +51,9 @@ class CreateFileDto {
   @IsString()
   title!: string;
 
+  @IsOptional()
   @IsIn(["book", "lesson", "course", "exercise_set", "doc", "asset"])
-  type!: FileType;
+  type?: FileType;
 }
 
 class UpdateFolderDto {

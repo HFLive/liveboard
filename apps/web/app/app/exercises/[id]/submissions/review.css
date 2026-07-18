@@ -1,39 +1,18 @@
 /* 练习批改页：提交队列与批改详情的路由专属样式。
-   面板外框、标题栏底色与全站高密度工作区保持一致。 */
+   扁平工作区：无外框，结构由分隔线与分栏竖线提供。 */
 
-.review-page .review-queue,
-.review-page .review-detail {
-  border: 1px solid #d8d5ce;
-  border-radius: 14px;
-  background: transparent;
-  box-shadow: none;
-}
-
-.review-page .review-queue {
-  overflow: hidden;
-}
-
-.review-page .review-queue > .panel-head {
-  border-radius: 13px 13px 0 0;
-}
-
-/* 队列高度不随筛选变化，列表内部滚动，避免粘性定位随右侧
-   详情高度变化在吸附与归位之间切换造成面板上下跳动。 */
+/* 提交队列：行之间用间距分隔，hover 用全局统一圆角灰底。 */
 .review-page .submission-list {
+  display: grid;
+  gap: 2px;
   max-height: calc(100vh - 260px);
   overflow-y: auto;
 }
 
-/* 提交队列：透明连续行，行间单层分隔线，hover 用全局统一灰。 */
 .review-page .submission-row {
   border: 0;
-  border-bottom: 1px solid #e3e0d9;
   background: transparent;
   padding: 10px 12px;
-}
-
-.review-page .submission-row:last-child {
-  border-bottom: 0;
 }
 
 .review-page .submission-row.active {
@@ -41,7 +20,7 @@
   box-shadow: none;
 }
 
-/* 批改详情：头部为与面板一致的浅暖灰标题区。 */
+/* 批改详情：头部为与其他面板一致的文字标题区。 */
 .review-page .review-form {
   gap: 0;
   padding: 0;
@@ -52,9 +31,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid #d8d5ce;
-  border-radius: 13px 13px 0 0;
-  background: #f4f2ee;
+  border-bottom: 1px solid var(--line-strong);
   padding: 13px 16px;
 }
 
@@ -85,7 +62,7 @@
   display: grid;
   gap: 10px;
   border: 0;
-  border-bottom: 1px solid #e3e0d9;
+  border-bottom: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
   padding: 12px 0;
@@ -120,7 +97,7 @@
 .review-page .answer-body {
   border: 0;
   border-radius: 8px;
-  background: #f4f2ee;
+  background: var(--fill-subtle);
   padding: 10px 12px;
 }
 

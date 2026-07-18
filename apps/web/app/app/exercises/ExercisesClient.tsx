@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardCheck, ClipboardList, Plus, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ClipboardCheck, Plus, Search } from "lucide-react";
 import { ExerciseSetSummary, listExerciseSets } from "@/lib/api";
 import { formatDateTime, submissionStatusLabel } from "@/lib/labels";
 import { APP_ROUTES, exerciseDetail, exerciseSubmissions } from "@/lib/routes";
@@ -10,6 +11,7 @@ import { APP_ROUTES, exerciseDetail, exerciseSubmissions } from "@/lib/routes";
 type ExerciseFilter = "all" | "not_started" | "submitted" | "graded";
 
 export function ExercisesClient() {
+  const router = useRouter();
   const [exerciseSets, setExerciseSets] = useState<ExerciseSetSummary[]>([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ExerciseFilter>("all");
@@ -57,18 +59,6 @@ export function ExercisesClient() {
       {error ? <p className="error-text">{error}</p> : null}
 
       <section className="workbench-main">
-        <div className="panel-head">
-          <div>
-            <h2>
-              <ClipboardList aria-hidden="true" className="heading-icon" />
-              练习列表
-            </h2>
-          </div>
-          <Link className="button" href={APP_ROUTES.exercisesNew}>
-            <Plus aria-hidden="true" className="button-icon" />
-            创建练习
-          </Link>
-        </div>
         <div className="list-toolbar">
           <label className="search-field">
             <Search aria-hidden="true" />
@@ -78,35 +68,41 @@ export function ExercisesClient() {
               onChange={(event) => setQuery(event.target.value)}
             />
           </label>
-          <div className="segmented-control" aria-label="练习状态筛选">
-            <button
-              className={filter === "all" ? "active" : ""}
-              onClick={() => setFilter("all")}
-              type="button"
-            >
-              全部
-            </button>
-            <button
-              className={filter === "not_started" ? "active" : ""}
-              onClick={() => setFilter("not_started")}
-              type="button"
-            >
-              未开始
-            </button>
-            <button
-              className={filter === "submitted" ? "active" : ""}
-              onClick={() => setFilter("submitted")}
-              type="button"
-            >
-              待处理
-            </button>
-            <button
-              className={filter === "graded" ? "active" : ""}
-              onClick={() => setFilter("graded")}
-              type="button"
-            >
-              已批改
-            </button>
+          <div className="exercise-toolbar-actions">
+            <div className="segmented-control" aria-label="练习状态筛选">
+              <button
+                className={filter === "all" ? "active" : ""}
+                onClick={() => setFilter("all")}
+                type="button"
+              >
+                全部
+              </button>
+              <button
+                className={filter === "not_started" ? "active" : ""}
+                onClick={() => setFilter("not_started")}
+                type="button"
+              >
+                未开始
+              </button>
+              <button
+                className={filter === "submitted" ? "active" : ""}
+                onClick={() => setFilter("submitted")}
+                type="button"
+              >
+                待处理
+              </button>
+              <button
+                className={filter === "graded" ? "active" : ""}
+                onClick={() => setFilter("graded")}
+                type="button"
+              >
+                已批改
+              </button>
+            </div>
+            <Link className="button" href={APP_ROUTES.exercisesNew}>
+              <Plus aria-hidden="true" className="button-icon" />
+              创建练习
+            </Link>
           </div>
         </div>
         <div className="table-wrap">
@@ -123,7 +119,19 @@ export function ExercisesClient() {
             </thead>
             <tbody>
               {filteredExerciseSets.map((exercise) => (
-                <tr key={exercise.id}>
+                <tr
+                  className="exercise-row-link"
+                  key={exercise.id}
+                  onClick={(event) => {
+                    if (
+                      event.target instanceof HTMLElement &&
+                      event.target.closest("a, button")
+                    ) {
+                      return;
+                    }
+                    router.push(exerciseDetail(exercise.id));
+                  }}
+                >
                   <td data-label="练习">
                     <div className="exercise-title-cell">
                       <Link href={exerciseDetail(exercise.id)}>
@@ -163,12 +171,6 @@ export function ExercisesClient() {
                   </td>
                   <td data-label="操作">
                     <div className="table-actions compact">
-                      <Link
-                        className="table-action"
-                        href={exerciseDetail(exercise.id)}
-                      >
-                        {exercise.canManage ? "查看" : "作答"}
-                      </Link>
                       {exercise.canManage ? (
                         <Link
                           className="table-action"

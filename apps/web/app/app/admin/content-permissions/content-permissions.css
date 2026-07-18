@@ -31,11 +31,9 @@
   line-height: 1.55;
 }
 
-/* 面板：透明底 + 1px 外框，标题区复用全局 .panel-head 浅暖灰底。 */
+/* 面板：扁平无外框，标题区复用全局 .panel-head。 */
 .content-permission-panel {
   margin-top: 16px;
-  border: 1px solid #d8d5ce;
-  border-radius: 14px;
   background: transparent;
 }
 
@@ -43,7 +41,6 @@
   .content-permission-panel
   .content-permission-head {
   align-items: center;
-  border-radius: 13px 13px 0 0;
   padding: 13px 16px;
 }
 
@@ -68,25 +65,25 @@
 .content-permission-head > span {
   flex: 0 0 auto;
   border-radius: 7px;
-  background: #efede8;
+  background: var(--fill-active);
   color: var(--muted);
   padding: 3px 8px;
   font-size: 11px;
 }
 
-/* 权限行：面板内连续行，行间单层分隔线。 */
+/* 权限行：行之间用间距分隔。 */
+.content-permission-list {
+  display: grid;
+  gap: 2px;
+}
+
 .content-permission-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 180px;
   align-items: center;
   gap: 18px;
   min-width: 0;
-  border-bottom: 1px solid #e3e0d9;
   padding: 12px 16px;
-}
-
-.content-permission-row:last-child {
-  border-bottom: 0;
 }
 
 .content-permission-row > div {

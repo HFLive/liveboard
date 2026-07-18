@@ -1,243 +1,159 @@
-/* Public home owns its responsive layout here so later global redesign rules
-   cannot restore desktop grid constraints on narrow screens. */
+/* 未登录首页：安静的居中首屏 + 扁平功能列表。 */
 
-.marketing-page .marketing-text-link {
+.marketing-page {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+.marketing-page .marketing-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px max(24px, 6vw);
+}
+
+.marketing-page .marketing-brand {
   display: inline-flex;
   align-items: center;
-  min-height: 46px;
-  color: var(--text-soft);
-  padding: 0 4px;
-  font-size: 14px;
-  font-weight: 650;
+  gap: 9px;
+  color: var(--text);
   text-decoration: none;
 }
 
-.marketing-page .marketing-text-link:hover {
+.marketing-page .marketing-brand span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--rail);
+  color: var(--rail-ink);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.marketing-page .marketing-brand strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.marketing-page .marketing-login-link {
+  color: var(--text-soft);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.marketing-page .marketing-login-link:hover {
   color: var(--text);
   text-decoration: underline;
   text-underline-offset: 4px;
 }
 
-@media (max-width: 960px) {
-  .marketing-page {
-    overflow-x: clip;
-  }
+.marketing-page .marketing-hero {
+  display: grid;
+  align-content: center;
+  gap: clamp(48px, 9vh, 96px);
+  width: min(880px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: clamp(48px, 12vh, 140px) 0 64px;
+}
 
+.marketing-page .marketing-copy {
+  max-width: 620px;
+}
+
+.marketing-page .marketing-copy h1 {
+  margin: 0;
+  font-size: clamp(30px, 4.5vw, 44px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.marketing-page .marketing-copy p {
+  margin: 14px 0 0;
+  color: var(--text-soft);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.marketing-page .marketing-actions {
+  margin-top: 28px;
+}
+
+.marketing-page .home-primary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  border-radius: 10px;
+  background: var(--rail);
+  color: var(--rail-ink);
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.marketing-page .home-primary-button:hover {
+  filter: brightness(1.15);
+}
+
+.marketing-page .home-primary-button .button-icon.right {
+  width: 15px;
+  height: 15px;
+}
+
+.marketing-page .marketing-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+  border-top: 1px solid var(--line);
+  padding-top: 28px;
+}
+
+.marketing-page .marketing-feature-grid article {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.marketing-page .marketing-feature-grid svg {
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+
+.marketing-page .marketing-feature-grid h3 {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.marketing-page .marketing-feature-grid p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
   .marketing-page .marketing-hero {
-    min-height: auto;
-  }
-
-  .marketing-page .marketing-hero-inner {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-    gap: 42px;
-    width: min(100% - 40px, 720px);
-    padding: 42px 0 64px;
-  }
-
-  .marketing-page .marketing-copy,
-  .marketing-page .marketing-scene {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .marketing-page .marketing-copy p:not(.marketing-kicker) {
-    width: min(560px, 100%);
-    overflow-wrap: break-word;
-    word-break: normal;
-    writing-mode: horizontal-tb;
+    gap: 40px;
+    padding-top: 64px;
   }
 
   .marketing-page .marketing-feature-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
   }
 }
 
-@media (max-width: 760px) {
-  .marketing-page .marketing-nav,
-  .marketing-page .marketing-hero-inner,
-  .marketing-page .marketing-section {
-    width: calc(100% - 32px);
-  }
-
-  .marketing-page .marketing-nav {
-    padding: 16px 0;
-  }
-
-  .marketing-page .marketing-brand {
-    gap: 9px;
-  }
-
-  .marketing-page .marketing-brand span {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-  }
-
-  .marketing-page .marketing-brand strong {
-    font-size: 15px;
-  }
-
-  .marketing-page .marketing-nav-link {
-    display: none;
-  }
-
-  .marketing-page .marketing-hero-inner {
-    gap: 32px;
-    padding: 34px 0 48px;
-  }
-
-  .marketing-page .marketing-copy h1 {
-    max-width: 100%;
-    font-size: clamp(48px, 15vw, 64px);
-    line-height: 0.96;
-    letter-spacing: -0.05em;
-  }
-
-  .marketing-page .marketing-copy p:not(.marketing-kicker) {
-    margin-top: 18px;
-    font-size: 16px;
-    line-height: 1.65;
-  }
-
-  .marketing-page .marketing-actions {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 24px;
-  }
-
-  .marketing-page .marketing-actions .home-primary-button {
-    flex: 0 0 auto;
-  }
-
-  .marketing-page .scene-window-main {
-    width: 100%;
-    min-height: 300px;
-    height: 300px;
-    border-radius: 16px;
-  }
-
-  .marketing-page .scene-window-bar {
-    padding: 10px;
-  }
-
-  .marketing-page .scene-window-bar span {
-    width: 8px;
-    height: 8px;
-  }
-
-  .marketing-page .scene-app {
-    grid-template-columns: 92px minmax(0, 1fr);
-    min-width: 0;
-  }
-
-  .marketing-page .scene-app aside {
-    gap: 5px;
-    min-width: 0;
-    padding: 11px 9px;
-    font-size: 10px;
-  }
-
-  .marketing-page .scene-app aside b {
-    margin-bottom: 5px;
-    font-size: 11px;
-  }
-
-  .marketing-page .scene-app aside span {
-    padding: 7px 6px;
-    white-space: nowrap;
-  }
-
-  .marketing-page .scene-content {
-    min-width: 0;
-    gap: 9px;
-    overflow: hidden;
-    padding: 13px 12px;
-  }
-
-  .marketing-page .scene-path,
-  .marketing-page .scene-document-meta {
-    overflow: hidden;
-    font-size: 10px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .marketing-page .scene-document-head {
-    min-width: 0;
-    gap: 8px;
-    margin-top: 2px;
-  }
-
-  .marketing-page .scene-document-head h2 {
-    min-width: 0;
-    overflow: hidden;
-    font-size: 17px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .marketing-page .scene-document-head span {
-    flex: 0 0 auto;
-    padding: 4px 6px;
-    font-size: 9px;
-  }
-
-  .marketing-page .scene-note {
-    gap: 4px;
-    padding: 10px 11px;
-  }
-
-  .marketing-page .scene-note strong,
-  .marketing-page .scene-note p,
-  .marketing-page .scene-outline span {
-    font-size: 10px;
-  }
-
-  .marketing-page .scene-note p {
-    display: -webkit-box;
-    overflow: hidden;
-    line-height: 1.45;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
-
-  .marketing-page .scene-outline span {
-    padding: 7px 1px;
-  }
-
-  .marketing-page .marketing-section {
-    padding: 54px 0;
-  }
-
-  .marketing-page .marketing-section-head {
-    margin-bottom: 20px;
-  }
-
+@media (max-width: 460px) {
   .marketing-page .marketing-feature-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-  }
-
-  .marketing-page .marketing-feature-grid article {
-    min-height: 0;
-    gap: 10px;
-    padding: 20px;
-  }
-
-  .marketing-page .marketing-feature-grid h3 {
-    margin-top: 4px;
-  }
-}
-
-@media (max-width: 380px) {
-  .marketing-page .scene-app {
-    grid-template-columns: 82px minmax(0, 1fr);
-  }
-
-  .marketing-page .scene-app aside span {
-    padding-inline: 4px;
   }
 }

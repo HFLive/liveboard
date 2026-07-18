@@ -5,9 +5,12 @@ import { Download } from "lucide-react";
 
 export function MarkdownImportButton({
   disabled = false,
+  menuItem = false,
   onImport,
 }: {
   disabled?: boolean;
+  /** 在“新建”下拉菜单中作为菜单项渲染。 */
+  menuItem?: boolean;
   onImport: (file: File) => Promise<void>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -38,9 +41,10 @@ export function MarkdownImportButton({
         type="file"
       />
       <button
-        className="button secondary"
+        className={menuItem ? undefined : "button secondary"}
         disabled={disabled || importing}
         onClick={() => inputRef.current?.click()}
+        role={menuItem ? "menuitem" : undefined}
         type="button"
       >
         <Download aria-hidden="true" className="button-icon" />

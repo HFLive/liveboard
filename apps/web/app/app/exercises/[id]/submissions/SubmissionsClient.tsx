@@ -11,6 +11,7 @@ import {
   submissionStatusLabel,
 } from "@/lib/labels";
 import { APP_ROUTES } from "@/lib/routes";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 export function SubmissionsClient({
   exerciseSetId,
@@ -295,7 +296,7 @@ export function SubmissionsClient({
 
                 <label className="label">
                   总体反馈
-                  <textarea
+                  <AutoTextarea
                     className="textarea"
                     onChange={(event) =>
                       setFeedback((current) => ({

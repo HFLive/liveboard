@@ -14,6 +14,7 @@ import {
 import { roleLabel, userStatusLabel } from "@/lib/labels";
 import { AdminSubnav } from "@/components/admin/AdminSubnav";
 import { UserProfileLink } from "@/components/UserProfileLink";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 type UserEditDraft = {
   displayName: string;
@@ -499,7 +500,7 @@ export function UserManagementClient() {
               </label>
               <label className="label">
                 CSV 内容
-                <textarea
+                <AutoTextarea
                   className="textarea mono-textarea"
                   placeholder="username,displayName,password,systemRole"
                   rows={8}

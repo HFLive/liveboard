@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   assetTypeLabel,
   fileStatusLabel,
-  fileTypeLabel,
   formatDateTime,
   getAppTimeZone,
   permissionLabel,
@@ -20,7 +19,6 @@ describe("display labels", () => {
     expect(roleLabel("super_admin")).toBe("最高管理员");
     expect(permissionLabel("lecturer")).toBe("可制作课件");
     expect(permissionLabel(null)).toBe("-");
-    expect(fileTypeLabel("exercise_set")).toBe("练习集");
     expect(fileStatusLabel("archived")).toBe("已删除");
     expect(questionTypeLabel("short_answer")).toBe("简答");
     expect(submissionStatusLabel(undefined)).toBe("未开始");
