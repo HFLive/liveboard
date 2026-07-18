@@ -171,17 +171,19 @@ export function StorageManagementClient() {
                       {formatStorageSize(item.storageQuotaBytes)}
                     </td>
                     <td data-label="使用率">
-                      <div
-                        aria-label={`已使用 ${rawPercent}%`}
-                        aria-valuemax={100}
-                        aria-valuemin={0}
-                        aria-valuenow={meterPercent}
-                        className="storage-meter"
-                        role="progressbar"
-                      >
-                        <span style={{ width: `${meterPercent}%` }} />
+                      <div className="storage-usage">
+                        <div
+                          aria-label={`已使用 ${rawPercent}%`}
+                          aria-valuemax={100}
+                          aria-valuemin={0}
+                          aria-valuenow={meterPercent}
+                          className="storage-meter"
+                          role="progressbar"
+                        >
+                          <span style={{ width: `${meterPercent}%` }} />
+                        </div>
+                        <small className="muted">{rawPercent}%</small>
                       </div>
-                      <small className="muted">{rawPercent}%</small>
                     </td>
                     <td data-label="调整上限">
                       <form

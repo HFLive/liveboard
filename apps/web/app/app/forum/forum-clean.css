@@ -831,11 +831,6 @@
   transform: translateX(-50%);
 }
 
-.forum-compose-guide {
-  border-radius: 8px;
-  box-shadow: none;
-}
-
 @media (max-width: 980px) {
   .forum-home .forum-feed-toolbar {
     grid-template-columns: minmax(220px, 1fr) auto auto;

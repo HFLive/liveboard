@@ -1474,6 +1474,99 @@ export function ContentClient() {
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
 
+      <div className="panel-head content-path-head">
+        {isRootView ? null : (
+          <button
+            aria-label="返回上一级"
+            className="breadcrumb-back"
+            onClick={goToParentFolder}
+            title="返回上一级"
+            type="button"
+          >
+            <ArrowLeft aria-hidden="true" />
+          </button>
+        )}
+        <div className="breadcrumb" aria-label="当前位置">
+          {isRootView ? (
+            <span>顶层</span>
+          ) : (
+            activeFolderPath.map((folder, index) => (
+              <span key={folder.id}>
+                {index > 0 ? <ChevronRight aria-hidden="true" /> : null}
+                <button
+                  onClick={() => void selectFolder(folder.id)}
+                  title={folder.name}
+                  type="button"
+                >
+                  {folder.name}
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+        <div className="toolbar-row">
+          <SortIconSelect
+            onChange={setContentSortMode}
+            options={SORT_OPTIONS}
+            value={contentSortMode}
+          />
+          {canCreateFolderHere || canCreateFileHere ? (
+            <div className="new-content-menu" data-menu-root="true">
+              <button
+                aria-expanded={showCreateMenu}
+                aria-haspopup="menu"
+                className="button secondary"
+                onClick={() => {
+                  setOpenContentRowMenu(null);
+                  setShowCreateMenu((current) => !current);
+                }}
+                type="button"
+              >
+                <Plus aria-hidden="true" className="button-icon" />
+                新建
+                <ChevronDown aria-hidden="true" className="button-icon" />
+              </button>
+              {showCreateMenu ? (
+                <div
+                  className="context-menu right new-content-options"
+                  role="menu"
+                >
+                  {canCreateFolderHere ? (
+                    <button
+                      onClick={() => beginCreateFolder(activeFolderId)}
+                      role="menuitem"
+                      type="button"
+                    >
+                      <Folder aria-hidden="true" />
+                      新建文件夹
+                    </button>
+                  ) : null}
+                  {canCreateFileHere ? (
+                    <button
+                      onClick={() => {
+                        setShowCreateMenu(false);
+                        setShowCreateFile(true);
+                      }}
+                      role="menuitem"
+                      type="button"
+                    >
+                      <FileText aria-hidden="true" />
+                      创建文档
+                    </button>
+                  ) : null}
+                  {canCreateFileHere ? (
+                    <MarkdownImportButton
+                      menuItem
+                      onImport={onImportMarkdown}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
       <section className="workbench files-layout">
         <aside className="folder-panel">
           <div className="file-tree">
@@ -1496,98 +1589,6 @@ export function ContentClient() {
         </aside>
 
         <div className="workbench-main">
-          <div className="panel-head">
-            {isRootView ? null : (
-              <button
-                aria-label="返回上一级"
-                className="breadcrumb-back"
-                onClick={goToParentFolder}
-                title="返回上一级"
-                type="button"
-              >
-                <ArrowLeft aria-hidden="true" />
-              </button>
-            )}
-            <div className="breadcrumb" aria-label="当前位置">
-              {isRootView ? (
-                <span>顶层</span>
-              ) : (
-                activeFolderPath.map((folder, index) => (
-                  <span key={folder.id}>
-                    {index > 0 ? <ChevronRight aria-hidden="true" /> : null}
-                    <button
-                      onClick={() => void selectFolder(folder.id)}
-                      title={folder.name}
-                      type="button"
-                    >
-                      {folder.name}
-                    </button>
-                  </span>
-                ))
-              )}
-            </div>
-            <div className="toolbar-row">
-              <SortIconSelect
-                onChange={setContentSortMode}
-                options={SORT_OPTIONS}
-                value={contentSortMode}
-              />
-              {canCreateFolderHere || canCreateFileHere ? (
-                <div className="new-content-menu" data-menu-root="true">
-                  <button
-                    aria-expanded={showCreateMenu}
-                    aria-haspopup="menu"
-                    className="button secondary"
-                    onClick={() => {
-                      setOpenContentRowMenu(null);
-                      setShowCreateMenu((current) => !current);
-                    }}
-                    type="button"
-                  >
-                    <Plus aria-hidden="true" className="button-icon" />
-                    新建
-                    <ChevronDown aria-hidden="true" className="button-icon" />
-                  </button>
-                  {showCreateMenu ? (
-                    <div
-                      className="context-menu right new-content-options"
-                      role="menu"
-                    >
-                      {canCreateFolderHere ? (
-                        <button
-                          onClick={() => beginCreateFolder(activeFolderId)}
-                          role="menuitem"
-                          type="button"
-                        >
-                          <Folder aria-hidden="true" />
-                          新建文件夹
-                        </button>
-                      ) : null}
-                      {canCreateFileHere ? (
-                        <button
-                          onClick={() => {
-                            setShowCreateMenu(false);
-                            setShowCreateFile(true);
-                          }}
-                          role="menuitem"
-                          type="button"
-                        >
-                          <FileText aria-hidden="true" />
-                          创建文档
-                        </button>
-                      ) : null}
-                      {canCreateFileHere ? (
-                        <MarkdownImportButton
-                          menuItem
-                          onImport={onImportMarkdown}
-                        />
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          </div>
           <div className="table-wrap">
             <table className="table responsive-table content-items-table">
               <tbody>

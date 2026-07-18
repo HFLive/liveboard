@@ -28,11 +28,11 @@
 
 /* 课件列表行与全局扁平工作区一致：行分隔线顶到屏幕左右边缘。 */
 @media (min-width: 1121px) {
-  .workspace:not(.ai-workspace) > .teaching-list-panel > .teaching-deck-list {
+  .workspace > .teaching-list-panel > .teaching-deck-list {
     margin-inline: calc(0px - var(--page-gutter));
   }
 
-  .workspace:not(.ai-workspace) > .teaching-list-panel .teaching-deck-row {
+  .workspace > .teaching-list-panel .teaching-deck-row {
     padding-inline: calc(var(--page-gutter) + 11px);
   }
 }
