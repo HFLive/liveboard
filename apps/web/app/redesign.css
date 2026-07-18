@@ -163,15 +163,6 @@ textarea {
   padding: 10px 0 16px;
 }
 
-.rail-section-label {
-  color: rgba(233, 242, 237, 0.42);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  padding: 0 10px 8px;
-  text-transform: uppercase;
-}
-
 .rail-link {
   gap: 11px;
   min-height: 42px;
@@ -310,10 +301,6 @@ textarea {
   font-size: 24px;
 }
 
-.page-toolbar {
-  min-height: 40px;
-}
-
 .muted {
   color: var(--muted);
 }
@@ -373,13 +360,6 @@ p.muted {
 
 .action-panel.quiet {
   background: var(--panel-soft);
-}
-
-.action-row {
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--panel-soft);
-  padding: 12px;
 }
 
 .card {
@@ -568,12 +548,12 @@ button:disabled {
 
 .metric-strip {
   display: flex;
-  gap: 20px;
+  gap: 56px;
   background: transparent;
 }
 
 .metric {
-  flex: 1 1 0;
+  flex: 0 0 auto;
   display: grid;
   gap: 4px;
   min-height: 0;
@@ -906,25 +886,6 @@ button:disabled {
   background: var(--fill-subtle);
 }
 
-.ai-brand-panel {
-  min-height: 58px;
-  border-bottom-color: var(--line);
-  background: #fff;
-  padding: 14px 16px;
-}
-
-.ai-service-status {
-  color: var(--accent-dark);
-}
-
-.ai-service-status::after {
-  margin-left: 1px;
-  color: var(--text-soft);
-  content: "LiveBoard AI";
-  font-size: 14px;
-  font-weight: 700;
-}
-
 .ai-sidebar-head {
   background: var(--fill-subtle);
   padding: 14px 12px 8px;
@@ -1046,18 +1007,12 @@ button:disabled {
   white-space: nowrap;
 }
 
-.ai-chat-toolbar-actions {
-  display: flex;
-  gap: 7px;
-}
-
 .ai-chat-toolbar .button {
   min-height: 36px;
   padding: 0 11px;
   font-size: 12px;
 }
 
-.ai-history-toggle,
 .ai-mobile-backdrop {
   display: none;
 }
@@ -1161,10 +1116,6 @@ button:disabled {
   padding: 13px 14px;
 }
 
-.composer-meta {
-  font-size: 11px;
-}
-
 /* Content library and editor */
 
 .files-layout {
@@ -1205,10 +1156,7 @@ button:disabled {
   font-weight: 600;
 }
 
-.folder-create-form,
-.tree-inline-form,
-.inline-create-file,
-.folder-create-card {
+.tree-inline-form {
   border-color: var(--line);
   background: var(--fill-subtle);
 }
@@ -1428,37 +1376,11 @@ button:disabled {
   box-shadow: var(--shadow-xs);
 }
 
-.forum-panel-title,
 .forum-feed-head {
   min-height: 64px;
   border-bottom-color: var(--line);
   background: #fff;
   padding: 13px 15px;
-}
-
-.forum-feed-tools {
-  flex-wrap: wrap;
-}
-
-.forum-thread-row {
-  min-height: 84px;
-  border-bottom-color: var(--line);
-  padding: 15px 16px;
-}
-
-.forum-thread-row:hover {
-  background: var(--fill-subtle);
-}
-
-.forum-thread-category {
-  border-radius: var(--radius-pill);
-  background: var(--accent-soft);
-  color: var(--accent-dark);
-  padding: 3px 7px;
-}
-
-.forum-thread-row strong {
-  font-size: 15px;
 }
 
 .forum-post-row {
@@ -1592,11 +1514,6 @@ button:disabled {
 .group-list-item em {
   border: 0;
   border-radius: var(--radius-pill);
-}
-
-.permission-group-hero {
-  border-bottom-color: var(--line);
-  padding: 24px;
 }
 
 .permission-group-settings,
@@ -1922,8 +1839,6 @@ button:disabled {
     padding: 4px 0 16px;
   }
 
-  .rail-brand-copy,
-  .rail-section-label,
   .rail-user-copy {
     display: none;
   }
@@ -2025,22 +1940,9 @@ button:disabled {
   opacity: 0.32;
 }
 
-.compact-choice-list {
-  max-height: 168px;
-  overflow-y: auto;
-}
-
 .field-hint {
   color: var(--muted);
   font-size: 12px;
-}
-
-.compact-notice {
-  display: block;
-  margin: 0;
-  padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 500;
 }
 
 .exercise-progress {
@@ -2183,7 +2085,6 @@ body,
 .table th,
 .table td,
 .modal-head,
-.ai-brand-panel,
 .ai-chat-toolbar,
 .home-ai-composer {
   border-color: var(--line);
@@ -2193,7 +2094,6 @@ body,
 .list-toolbar,
 .table,
 .modal-head,
-.ai-brand-panel,
 .ai-chat-toolbar,
 .home-ai-composer {
   background: #fff;
@@ -2201,7 +2101,6 @@ body,
 
 .table th,
 .action-panel.quiet,
-.action-row,
 .notice-box,
 .import-preview,
 .publish-summary,
@@ -2213,10 +2112,7 @@ body,
 }
 
 .modal-foot,
-.folder-create-form,
 .tree-inline-form,
-.inline-create-file,
-.folder-create-card,
 .doc-add-block,
 .forum-post-author {
   background: var(--fill-subtle);
@@ -2229,7 +2125,6 @@ body,
 .table tr:hover td:not(.empty-cell),
 .tree-item:hover,
 .asset-list-row:hover,
-.forum-thread-row:hover,
 .doc-block:hover,
 .doc-block:focus-within {
   background: var(--fill-subtle);
@@ -2273,7 +2168,6 @@ body,
   box-shadow: 0 0 0 3px rgba(183, 121, 31, 0.11);
 }
 
-.forum-thread-category,
 .timezone-chip.active {
   background: var(--accent-soft);
   color: var(--accent-dark);
@@ -2424,10 +2318,6 @@ body,
   min-height: 0;
 }
 
-.presenter-layout.single-slide {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .presenter-outline {
   align-content: start;
   overflow: auto;
@@ -2453,10 +2343,6 @@ body,
   padding: 18px;
 }
 
-.presenter-stage-toolbar {
-  display: none;
-}
-
 .presenter-slide {
   width: min(100%, calc((100dvh - 152px) * 16 / 9));
   max-height: calc(100dvh - 152px);
@@ -2472,14 +2358,6 @@ body,
   padding: clamp(30px, 4vw, 58px);
 }
 
-.presenter-slide-title {
-  margin: 0 0 2px;
-  font-size: clamp(28px, 3.2vw, 42px);
-  font-weight: 680;
-  line-height: 1.18;
-  letter-spacing: -0.025em;
-}
-
 .presenter-controls {
   width: min(100%, calc((100dvh - 152px) * 16 / 9));
   justify-self: center;
@@ -2493,15 +2371,6 @@ body,
   padding: 18px;
 }
 
-.presenter-stage:fullscreen .presenter-stage-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
 .presenter-shell.focus-mode {
   grid-template-rows: minmax(0, 1fr);
 }
@@ -2510,25 +2379,8 @@ body,
   display: none;
 }
 
-.presenter-shell.focus-mode .presenter-stage-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
 .presenter-shell.focus-mode .presenter-stage {
   grid-template-rows: auto minmax(0, 1fr) auto;
-}
-
-.presenter-shell.focus-mode .presenter-stage-fullscreen-toggle {
-  display: inline-flex;
-}
-
-.presenter-stage:fullscreen .presenter-stage-fullscreen-toggle {
-  display: inline-flex;
 }
 
 .presenter-stage:fullscreen .presenter-slide {
@@ -2538,7 +2390,7 @@ body,
 }
 
 @media (max-width: 1000px) {
-  .presenter-layout:not(.single-slide) {
+  .presenter-layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
   }
@@ -2651,14 +2503,6 @@ body,
     background: transparent;
   }
 
-  .library-workspace .page-toolbar {
-    width: auto;
-  }
-
-  .library-workspace .page-toolbar > .button {
-    width: auto;
-  }
-
   .library-layout .list-toolbar .toolbar-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
@@ -2768,10 +2612,6 @@ body,
     padding: 24px 20px;
   }
 
-  .presenter-slide-title {
-    font-size: 27px;
-  }
-
   .presenter-controls {
     width: 100%;
     grid-template-columns: 44px minmax(80px, 1fr) 44px;
@@ -2811,44 +2651,10 @@ body,
 
 /* Forum workspace */
 
-.forum-home-head {
-  align-items: flex-end;
-}
-
-.forum-overview-strip {
-  display: flex;
-  gap: 22px;
-  border-bottom: 1px solid var(--line);
-  padding: 0 2px 14px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.forum-overview-strip span {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-}
-
-.forum-overview-strip strong {
-  color: var(--ink);
-  font-size: 16px;
-}
-
 .forum-home .forum-shell {
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 18px;
-}
-
-.forum-home .forum-panel-title {
-  min-height: 50px;
-  border-bottom: 1px solid var(--line);
-  padding: 0 14px;
-}
-
-.forum-home .forum-panel-title h2 {
-  font-size: 14px;
 }
 
 .forum-home .forum-feed {
@@ -2865,33 +2671,8 @@ body,
   padding: 14px 16px;
 }
 
-.forum-feed-title {
-  display: grid;
-  gap: 3px;
-}
-
-.forum-feed-title h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.forum-feed-title span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
 .forum-feed-toolbar .forum-search {
   width: 100%;
-}
-
-.forum-filter-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel-soft);
-  padding: 9px 14px;
 }
 
 .forum-sort-control {
@@ -2900,112 +2681,6 @@ body,
   gap: 8px;
   color: var(--muted);
   font-size: 12px;
-}
-
-.forum-home .forum-thread-row {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) 58px 18px;
-  align-items: center;
-  gap: 13px;
-  min-height: 124px;
-  border-bottom: 1px solid var(--line);
-  padding: 16px 17px;
-}
-
-.forum-home .forum-thread-row:last-child {
-  border-bottom: 0;
-}
-
-.forum-home .forum-thread-row:hover {
-  background: var(--accent-soft);
-}
-
-.forum-author-avatar {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel-soft);
-  color: var(--text-soft);
-  font-size: 13px;
-  font-weight: 750;
-}
-
-.forum-thread-kicker {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.forum-list-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.forum-list-status svg {
-  width: 12px;
-}
-
-.forum-home .forum-thread-main > strong {
-  display: block;
-  margin-top: 7px;
-  color: var(--ink);
-  font-size: 16px;
-  line-height: 1.4;
-}
-
-.forum-home .forum-thread-main > p {
-  display: -webkit-box;
-  overflow: hidden;
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.55;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.forum-home .forum-thread-main > small {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.forum-home .forum-thread-main > small span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.forum-home .forum-thread-main > small svg {
-  width: 13px;
-}
-
-.forum-home .forum-thread-stat {
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-  color: var(--muted);
-}
-
-.forum-home .forum-thread-stat > svg {
-  width: 16px;
-}
-
-.forum-home .forum-thread-stat strong {
-  color: var(--ink);
-  font-size: 15px;
-}
-
-.forum-row-arrow {
-  width: 16px;
-  color: var(--muted);
 }
 
 .forum-thread-skeleton {
@@ -3112,54 +2787,6 @@ body,
   font-weight: 500;
 }
 
-.forum-compose-guide {
-  position: sticky;
-  top: 76px;
-  display: grid;
-  gap: 6px;
-  border-radius: 10px;
-  padding: 20px;
-}
-
-.forum-compose-guide > span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.forum-compose-guide > strong {
-  font-size: 17px;
-}
-
-.forum-compose-guide > p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.forum-compose-guide > div {
-  margin-top: 12px;
-  border-top: 1px solid var(--line);
-  padding-top: 16px;
-}
-
-.forum-compose-guide h2 {
-  margin: 0 0 9px;
-  font-size: 13px;
-}
-
-.forum-compose-guide ul {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  color: var(--muted);
-  padding-left: 18px;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
 .forum-thread-detail {
   width: min(980px, 100%);
   margin-inline: auto;
@@ -3183,49 +2810,15 @@ body,
   .forum-compose-layout {
     grid-template-columns: 1fr;
   }
-
-  .forum-compose-guide {
-    display: none;
-  }
 }
 
 @media (max-width: 760px) {
-  .forum-overview-strip {
-    gap: 14px;
-    overflow-x: auto;
-  }
-
   .forum-feed-toolbar {
     grid-template-columns: 1fr;
   }
 
-  .forum-filter-row {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .forum-sort-control {
     justify-content: space-between;
-  }
-
-  .forum-home .forum-thread-row {
-    grid-template-columns: 34px minmax(0, 1fr) 42px;
-    gap: 10px;
-    min-height: 116px;
-    padding: 14px 12px;
-  }
-
-  .forum-author-avatar {
-    width: 34px;
-    height: 34px;
-  }
-
-  .forum-row-arrow {
-    display: none;
-  }
-
-  .forum-home .forum-thread-main > p {
-    -webkit-line-clamp: 1;
   }
 
   .forum-category-picker > div {
@@ -3248,10 +2841,6 @@ body,
   gap: 10px;
 }
 
-.forum-home .forum-panel-title {
-  display: none;
-}
-
 .forum-home .forum-feed {
   border: 0;
   border-radius: 0;
@@ -3265,62 +2854,10 @@ body,
   padding: 10px 0;
 }
 
-.forum-filter-row {
-  border-bottom: 1px solid var(--line);
-  background: transparent;
-  padding: 8px 0;
-}
-
 .forum-home .forum-thread-list {
   overflow: hidden;
   border-radius: 9px;
   background: #fff;
-}
-
-.forum-home .forum-thread-row {
-  grid-template-columns: 34px minmax(0, 1fr) 52px;
-  min-height: 112px;
-  border-right: 0;
-  border-left: 0;
-  padding: 14px 16px;
-}
-
-.forum-home .forum-thread-row:hover {
-  background: #f8f7f4;
-}
-
-.forum-home .forum-author-avatar {
-  width: 34px;
-  height: 34px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--fill-subtle);
-}
-
-.forum-home .forum-thread-category {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  padding: 0;
-}
-
-.forum-home .forum-thread-main > strong {
-  margin-top: 5px;
-}
-
-.forum-home .forum-row-arrow {
-  display: none;
-}
-
-.forum-home .forum-thread-stat {
-  align-self: center;
-}
-
-.forum-thread-summary {
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  padding: 0 4px;
 }
 
 .forum-thread-detail {
@@ -3453,8 +2990,7 @@ body,
   background: #fff;
 }
 
-.forum-compose-layout .forum-new-shell,
-.forum-compose-guide {
+.forum-compose-layout .forum-new-shell {
   box-shadow: none;
 }
 
@@ -3467,16 +3003,6 @@ body,
 }
 
 @media (max-width: 760px) {
-  .forum-home .forum-thread-row {
-    grid-template-columns: 30px minmax(0, 1fr) 38px;
-    padding-inline: 10px;
-  }
-
-  .forum-home .forum-author-avatar {
-    width: 30px;
-    height: 30px;
-  }
-
   .forum-thread-detail .forum-post-author,
   .forum-thread-detail .forum-post-content,
   .forum-thread-detail .forum-comment-row {
@@ -3500,10 +3026,6 @@ body,
   gap: 14px;
   min-height: 54px;
   padding: 7px 0;
-}
-
-.forum-feed-toolbar .forum-feed-title {
-  min-width: 140px;
 }
 
 .forum-feed-toolbar .search-field {
@@ -3531,54 +3053,6 @@ body,
 
 .forum-home .forum-thread-list {
   border-radius: 0;
-}
-
-.forum-home .forum-thread-row {
-  grid-template-columns: 28px minmax(0, 1fr) 46px;
-  gap: 10px;
-  min-height: 84px;
-  padding: 10px 12px;
-}
-
-.forum-home .forum-author-avatar {
-  width: 28px;
-  height: 28px;
-  font-size: 11px;
-}
-
-.forum-home .forum-thread-main {
-  gap: 2px;
-}
-
-.forum-home .forum-thread-main > strong {
-  margin-top: 2px;
-  font-size: 15px;
-}
-
-.forum-home .forum-thread-main > p {
-  overflow: hidden;
-  margin-top: 2px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  -webkit-line-clamp: 1;
-}
-
-.forum-home .forum-thread-main > small {
-  gap: 10px;
-  margin-top: 3px;
-}
-
-.forum-home .forum-thread-stat {
-  grid-template-columns: auto auto;
-  gap: 4px;
-}
-
-.forum-home .forum-thread-stat > svg {
-  width: 14px;
-}
-
-.forum-home .forum-thread-stat small {
-  display: none;
 }
 
 .forum-thread-skeleton {
@@ -3744,10 +3218,6 @@ body,
 
 .quiz-source-field {
   max-width: 100%;
-}
-
-.quiz-source-notice {
-  margin: -8px 0 0;
 }
 
 .quiz-settings-grid {
@@ -4189,47 +3659,11 @@ body,
   height: 15px;
 }
 
-.editor-action-bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-width: 0;
-}
-
-.editor-action-bar .button-row {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.forum-thread-topline .forum-thread-summary {
-  margin-left: auto;
-}
-
 @media (max-width: 760px) {
   .library-layout .list-toolbar .toolbar-row > .button {
     grid-column: 1 / -1;
     justify-content: center;
     width: 100%;
-  }
-
-  .editor-action-bar {
-    align-items: stretch;
-  }
-
-  .editor-action-bar .button-row {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    width: 100%;
-  }
-
-  .editor-action-bar .button,
-  .editor-action-bar .editor-more-menu {
-    width: 100%;
-  }
-
-  .editor-action-bar .button,
-  .editor-action-bar .editor-more-menu > summary {
-    justify-content: center;
   }
 
   .editor-more-menu > .context-menu {
@@ -4560,206 +3994,200 @@ body .success-text::before {
 
 /* Compact density for every application workspace except the AI chat.
    Resize the components themselves; never scale the page canvas. */
-.workspace:not(.ai-workspace) {
+.workspace {
   gap: 15px;
   width: min(1440px, 100%);
 }
 
-.app-main:has(.workspace:not(.ai-workspace)) {
+.app-main:has(.workspace) {
   background: var(--bg);
 }
 
-.workspace:not(.ai-workspace) :is(.workbench, .grid, .form) {
+.workspace :is(.workbench, .grid, .form) {
   gap: 11px;
 }
 
-.workspace:not(.ai-workspace) .button-row {
+.workspace .button-row {
   gap: 6px;
 }
 
-.workspace:not(.ai-workspace) :is(.button, .button.secondary, .button.danger) {
+.workspace :is(.button, .button.secondary, .button.danger) {
   min-height: 31px;
   border-radius: 10px;
   padding: 0 11px;
   font-size: 13px;
 }
 
-.workspace:not(.ai-workspace) :is(.icon-button, .inline-icon-button) {
+.workspace :is(.icon-button, .inline-icon-button) {
   width: 28px;
   height: 28px;
   border-radius: 10px;
 }
 
-.workspace:not(.ai-workspace) .icon-button.subtle {
+.workspace .icon-button.subtle {
   width: 26px;
   height: 26px;
 }
 
-.workspace:not(.ai-workspace) :is(.input, .select, .textarea, .table-input) {
+.workspace :is(.input, .select, .textarea, .table-input) {
   min-height: 31px;
   border-radius: 10px;
   padding: 6px 8px;
   font-size: 13px;
 }
 
-.workspace:not(.ai-workspace) .label {
+.workspace .label {
   gap: 5px;
   font-size: 13px;
 }
 
-.workspace:not(.ai-workspace) :is(.search-field, .permission-group-search) {
+.workspace :is(.search-field, .permission-group-search) {
   min-height: 29px;
   border-radius: 10px;
 }
 
-.workspace:not(.ai-workspace) .search-field input {
+.workspace .search-field input {
   min-height: 30px;
   font-size: 13px;
 }
 
-.workspace:not(.ai-workspace) .segmented-control {
+.workspace .segmented-control {
   gap: 2px;
   border-radius: 10px;
   padding: 2px;
 }
 
-.workspace:not(.ai-workspace) .segmented-control button {
+.workspace .segmented-control button {
   min-height: 28px;
   border-radius: 8px;
   padding: 0 8px;
   font-size: 12px;
 }
 
-.workspace:not(.ai-workspace)
-  :is(.badge, .publish-state-badge, .forum-status-badge) {
+.workspace :is(.badge, .publish-state-badge, .forum-status-badge) {
   padding: 3px 6px;
   font-size: 10px;
 }
 
-.workspace:not(.ai-workspace) .panel-head {
+.workspace .panel-head {
   min-height: 36px;
   padding: 5px 11px;
 }
 
-.workspace:not(.ai-workspace)
-  :is(.panel-head h2, .action-panel h2, .section h2) {
+.workspace :is(.panel-head h2, .action-panel h2, .section h2) {
   font-size: 14px;
 }
 
-.workspace:not(.ai-workspace) .panel-title-row {
+.workspace .panel-title-row {
   min-height: 26px;
 }
 
-.workspace:not(.ai-workspace) .action-panel {
+.workspace .action-panel {
   gap: 10px;
   padding: 13px;
 }
 
-.workspace:not(.ai-workspace) .action-row {
-  padding: 8px;
-}
-
-.workspace:not(.ai-workspace) .card {
+.workspace .card {
   padding: 14px;
 }
 
-.workspace:not(.ai-workspace) .list-toolbar {
+.workspace .list-toolbar {
   min-height: 40px;
   padding: 6px 10px;
 }
 
-.workspace:not(.ai-workspace) .table :is(th, td) {
+.workspace .table :is(th, td) {
   padding: 6px 10px;
 }
 
-.workspace:not(.ai-workspace) .table th {
+.workspace .table th {
   font-size: 11px;
 }
 
-.workspace:not(.ai-workspace) .table td {
+.workspace .table td {
   font-size: 13px;
 }
 
-.workspace:not(.ai-workspace) .table-action {
+.workspace .table-action {
   min-height: 28px;
   border-radius: 6px;
   padding: 0 7px;
   font-size: 12px;
 }
 
-.workspace:not(.ai-workspace) .empty-panel {
+.workspace .empty-panel {
   gap: 6px;
   padding: 34px 14px;
 }
 
-.workspace:not(.ai-workspace) .empty-panel strong {
+.workspace .empty-panel strong {
   font-size: 14px;
 }
 
-.workspace:not(.ai-workspace) .context-menu {
+.workspace .context-menu {
   min-width: 124px;
   border-radius: 12px;
   padding: 4px;
 }
 
-.workspace:not(.ai-workspace) .context-menu :is(button, a) {
+.workspace .context-menu :is(button, a) {
   min-height: 28px;
   border-radius: 8px;
   padding: 0 7px;
   font-size: 11px;
 }
 
-.workspace:not(.ai-workspace) .modal-backdrop {
+.workspace .modal-backdrop {
   padding: 14px;
 }
 
-.workspace:not(.ai-workspace) .modal-panel {
+.workspace .modal-panel {
   width: min(430px, 100%);
   border-radius: 18px;
 }
 
-.workspace:not(.ai-workspace) :is(.modal-head, .modal-foot) {
+.workspace :is(.modal-head, .modal-foot) {
   padding: 13px 14px;
 }
 
-.workspace:not(.ai-workspace) .modal-head h2 {
+.workspace .modal-head h2 {
   font-size: 15px;
 }
 
-.workspace:not(.ai-workspace) .modal-body {
+.workspace .modal-body {
   gap: 11px;
   padding: 14px;
 }
 
-.workspace:not(.ai-workspace)
+.workspace
   :is(.notice-box, .import-preview, .publish-summary, .settings-preview-panel) {
   padding: 9px;
 }
 
-.workspace:not(.ai-workspace) .permission-modal {
+.workspace .permission-modal {
   width: min(434px, calc(100vw - 24px));
 }
 
-.workspace:not(.ai-workspace) .permission-modal .modal-head {
+.workspace .permission-modal .modal-head {
   min-height: 52px;
 }
 
-.workspace:not(.ai-workspace) .permission-modal .modal-body.permission-panel {
+.workspace .permission-modal .modal-body.permission-panel {
   padding: 14px 15px 17px;
 }
 
-.workspace:not(.ai-workspace) .permission-modal .permission-add-row {
+.workspace .permission-modal .permission-add-row {
   gap: 6px;
   padding: 7px;
 }
 
-.workspace:not(.ai-workspace) .permission-modal .grant-row {
+.workspace .permission-modal .grant-row {
   gap: 7px;
   min-height: 40px;
   padding: 7px 2px;
 }
 
-.workspace:not(.ai-workspace) :is(.error-text, .success-text) {
+.workspace :is(.error-text, .success-text) {
   gap: 6px;
   min-width: min(210px, calc(100vw - 18px));
   max-width: min(322px, calc(100vw - 18px));
@@ -4770,53 +4198,52 @@ body .success-text::before {
 
 /* Dense workbench visual language: one clear filled primary action, tonal
    secondary actions, and borderless inline controls on continuous surfaces. */
-.workspace:not(.ai-workspace) :is(.button, .button.secondary, .button.danger) {
+.workspace :is(.button, .button.secondary, .button.danger) {
   border-color: transparent;
   box-shadow: none;
 }
 
-.workspace:not(.ai-workspace) .button {
+.workspace .button {
   background: var(--text);
   color: #fff;
 }
 
-.workspace:not(.ai-workspace) .button:hover:not(:disabled) {
+.workspace .button:hover:not(:disabled) {
   border-color: transparent;
   background: var(--text);
 }
 
-.workspace:not(.ai-workspace) .button.secondary {
+.workspace .button.secondary {
   border-color: transparent;
   background: var(--fill-hover);
   color: var(--text-soft);
 }
 
-.workspace:not(.ai-workspace) .button.secondary:hover:not(:disabled) {
+.workspace .button.secondary:hover:not(:disabled) {
   border-color: transparent;
   background: #e3dfd7;
   color: var(--text);
 }
 
-.workspace:not(.ai-workspace) .button.danger {
+.workspace .button.danger {
   border-color: transparent;
   background: #f8e9e7;
   color: #a23d37;
 }
 
-.workspace:not(.ai-workspace) .button.danger:hover:not(:disabled) {
+.workspace .button.danger:hover:not(:disabled) {
   border-color: transparent;
   background: #f2dcd9;
   color: #842f2a;
 }
 
-.workspace:not(.ai-workspace)
-  :is(.icon-button, .icon-button.subtle, .inline-icon-button) {
+.workspace :is(.icon-button, .icon-button.subtle, .inline-icon-button) {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
 }
 
-.workspace:not(.ai-workspace)
+.workspace
   :is(.icon-button, .icon-button.subtle, .inline-icon-button):hover:not(
     :disabled
   ) {
@@ -4824,50 +4251,47 @@ body .success-text::before {
   background: var(--fill-hover);
 }
 
-.workspace:not(.ai-workspace) .table-action {
+.workspace .table-action {
   border-color: transparent;
   background: transparent;
   color: var(--muted);
   font-weight: 650;
 }
 
-.workspace:not(.ai-workspace) .table-action:hover:not(:disabled) {
+.workspace .table-action:hover:not(:disabled) {
   border-color: transparent;
   background: var(--fill-hover);
   color: var(--text);
 }
 
-.workspace:not(.ai-workspace) :is(.input, .select, .textarea, .table-input) {
+.workspace :is(.input, .select, .textarea, .table-input) {
   border-color: transparent;
   background: var(--fill-subtle);
   box-shadow: none;
 }
 
-.workspace:not(.ai-workspace)
-  :is(.input, .select, .textarea, .table-input):hover {
+.workspace :is(.input, .select, .textarea, .table-input):hover {
   border-color: transparent;
   background: var(--fill-hover);
 }
 
-.workspace:not(.ai-workspace)
-  :is(.input, .select, .textarea, .table-input):focus {
+.workspace :is(.input, .select, .textarea, .table-input):focus {
   border-color: var(--accent-dark);
   background: #fff;
   box-shadow: 0 0 0 2px rgba(181, 138, 74, 0.14);
 }
 
-.workspace:not(.ai-workspace) :is(.search-field, .permission-group-search) {
+.workspace :is(.search-field, .permission-group-search) {
   border-color: transparent;
   background: var(--fill-hover);
   box-shadow: none;
 }
 
-.workspace:not(.ai-workspace) input[placeholder^="搜索"]:not(:focus) {
+.workspace input[placeholder^="搜索"]:not(:focus) {
   background: var(--fill-hover);
 }
 
-.workspace:not(.ai-workspace)
-  :is(.search-field, .permission-group-search):focus-within {
+.workspace :is(.search-field, .permission-group-search):focus-within {
   border-color: var(--accent-dark);
   background: #fff;
   box-shadow: 0 0 0 2px rgba(181, 138, 74, 0.14);
@@ -4875,7 +4299,7 @@ body .success-text::before {
 
 /* Flat workspace: panels no longer draw rounded frames. Structure comes from
    full-width divider lines and the vertical rail between layout columns. */
-.workspace:not(.ai-workspace)
+.workspace
   :is(
     .workbench-main,
     .folder-panel,
@@ -4903,14 +4327,14 @@ body .success-text::before {
   flex-direction: column;
 }
 
-.workspace:not(.ai-workspace) {
+.workspace {
   display: flex;
   flex: 1 0 auto;
   flex-direction: column;
 }
 
 @media (min-width: 1121px) {
-  .workspace:not(.ai-workspace)
+  .workspace
     :is(
       .workbench,
       .files-layout,
@@ -4928,7 +4352,7 @@ body .success-text::before {
     min-height: 0;
   }
 
-  .workspace:not(.ai-workspace)
+  .workspace
     :is(
       .workbench,
       .files-layout,
@@ -4941,7 +4365,7 @@ body .success-text::before {
     padding-left: var(--page-gutter);
   }
 
-  .workspace:not(.ai-workspace)
+  .workspace
     :is(
       .workbench,
       .files-layout,
@@ -4954,7 +4378,7 @@ body .success-text::before {
     padding-right: var(--page-gutter);
   }
 
-  .workspace:not(.ai-workspace)
+  .workspace
     :is(
       .workbench,
       .files-layout,
@@ -4973,7 +4397,7 @@ body .success-text::before {
 
   /* The right column's header line runs back to the rail so the two
      structure lines intersect instead of stopping short. */
-  .workspace:not(.ai-workspace)
+  .workspace
     :is(
       .workbench,
       .files-layout,
@@ -4991,7 +4415,7 @@ body .success-text::before {
 
   /* Header rows in both columns share one height, so their divider lines
      form a single continuous line across the layout. */
-  .workspace:not(.ai-workspace)
+  .workspace
     :is(
       .workbench,
       .files-layout,
@@ -5002,7 +4426,7 @@ body .success-text::before {
     )
     > :first-child
     > :is(.panel-head, .list-toolbar),
-  .workspace:not(.ai-workspace)
+  .workspace
     :is(
       .workbench,
       .files-layout,
@@ -5020,7 +4444,7 @@ body .success-text::before {
 
   /* Structural lines ignore the column gutter and run edge to edge;
      content keeps the gutter via restored padding. */
-  .workspace:not(.ai-workspace)
+  .workspace
     :is(
       .workbench,
       .files-layout,
@@ -5035,7 +4459,7 @@ body .success-text::before {
     padding-left: calc(var(--page-gutter) + 11px);
   }
 
-  .workspace:not(.ai-workspace)
+  .workspace
     :is(
       .workbench,
       .files-layout,
@@ -5050,7 +4474,7 @@ body .success-text::before {
     padding-right: calc(var(--page-gutter) + 11px);
   }
 
-  .workspace:not(.ai-workspace)
+  .workspace
     :is(
       .workbench,
       .files-layout,
@@ -5064,7 +4488,7 @@ body .success-text::before {
     margin-left: calc(0px - var(--page-gutter));
   }
 
-  .workspace:not(.ai-workspace)
+  .workspace
     :is(
       .workbench,
       .files-layout,
@@ -5080,67 +4504,59 @@ body .success-text::before {
 
   /* Single-panel pages bleed the same way so table and header dividers run
      edge to edge. */
-  .workspace:not(.ai-workspace) > .workbench-main {
+  .workspace > .workbench-main {
     margin-inline: calc(0px - var(--page-gutter));
     padding-inline: var(--page-gutter);
   }
 
-  .workspace:not(.ai-workspace)
-    > .workbench-main
-    > :is(.panel-head, .list-toolbar) {
+  .workspace > .workbench-main > :is(.panel-head, .list-toolbar) {
     margin-inline: calc(0px - var(--page-gutter));
     padding-inline: calc(var(--page-gutter) + 11px);
   }
 
-  .workspace:not(.ai-workspace) > .workbench-main > .table-wrap {
+  .workspace > .workbench-main > .table-wrap {
     margin-inline: calc(0px - var(--page-gutter));
   }
 }
 
 /* Stretched side columns and action panels stack their rows from the top
    instead of spreading them across the full pane height. */
-.workspace:not(.ai-workspace) :is(.workbench-side, .action-panel) {
+.workspace :is(.workbench-side, .action-panel) {
   align-content: start;
 }
 
 /* Sections stacked in a side column separate with one horizontal line. */
-.workspace:not(.ai-workspace) .workbench-side > * + * {
+.workspace .workbench-side > * + * {
   border-top: 1px solid var(--line);
   padding-top: 14px;
 }
 
-.workspace:not(.ai-workspace) :is(.panel-head, .list-toolbar) {
+.workspace :is(.panel-head, .list-toolbar) {
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.workspace:not(.ai-workspace) .modal-panel {
+.workspace .modal-panel {
   border-color: transparent;
 }
 
-.workspace:not(.ai-workspace) .library-view-toggle {
+.workspace .library-view-toggle {
   border-color: transparent;
   background: var(--fill-hover);
 }
 
-.workspace:not(.ai-workspace) .library-view-toggle button.active {
+.workspace .library-view-toggle button.active {
   box-shadow: none;
 }
 
-.workspace:not(.ai-workspace)
-  :is(
-    .folder-create-form,
-    .tree-inline-form,
-    .inline-create-file,
-    .folder-create-card
-  ) {
+.workspace :is(.tree-inline-form) {
   border-color: transparent;
   background: var(--fill-subtle);
 }
 
-.workspace:not(.ai-workspace) .forum-category-picker button {
+.workspace .forum-category-picker button {
   min-height: 50px;
   border-color: transparent;
   border-radius: 10px;
@@ -5148,43 +4564,42 @@ body .success-text::before {
   padding: 8px 9px;
 }
 
-.workspace:not(.ai-workspace) .forum-category-picker button:hover {
+.workspace .forum-category-picker button:hover {
   border-color: transparent;
   background: var(--fill-hover);
 }
 
-.workspace:not(.ai-workspace) .forum-category-picker button.active {
+.workspace .forum-category-picker button.active {
   border-color: transparent;
   background: var(--accent-soft);
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.workspace:not(.ai-workspace) .asset-card {
+.workspace .asset-card {
   border-color: transparent;
   border-radius: 12px;
   background: var(--fill-subtle);
 }
 
-.workspace:not(.ai-workspace) .asset-card:hover {
+.workspace .asset-card:hover {
   border-color: transparent;
   background: var(--fill-subtle);
   box-shadow: none;
   transform: none;
 }
 
-.workspace:not(.ai-workspace) .asset-card.active {
+.workspace .asset-card.active {
   border-color: transparent;
   background: var(--accent-soft);
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.workspace:not(.ai-workspace)
-  :is(.switch-row, .timezone-chip, .library-picker-row) {
+.workspace :is(.switch-row, .timezone-chip, .library-picker-row) {
   border-color: transparent;
   background: var(--fill-subtle);
 }
 
-.workspace:not(.ai-workspace)
+.workspace
   :is(
     .files-layout,
     .library-layout,
@@ -5198,7 +4613,7 @@ body .success-text::before {
 /* Bled two-pane layouts drop the column gap so the left column's divider
    line reaches the vertical rail (must come after the density gap rule). */
 @media (min-width: 1121px) {
-  .workspace:not(.ai-workspace)
+  .workspace
     :is(
       .workbench,
       .files-layout,
@@ -5211,118 +4626,113 @@ body .success-text::before {
   }
 }
 
-.workspace:not(.ai-workspace) .file-tree {
+.workspace .file-tree {
   gap: 1px;
   padding: 6px;
 }
 
-.workspace:not(.ai-workspace) .tree-item {
+.workspace .tree-item {
   min-height: 26px;
   border-radius: 8px;
   padding-top: 3px;
   padding-bottom: 3px;
 }
 
-.workspace:not(.ai-workspace) .asset-grid {
+.workspace .asset-grid {
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 10px;
   padding: 11px;
 }
 
-.workspace:not(.ai-workspace) .asset-info {
+.workspace .asset-info {
   padding: 9px;
 }
 
-.workspace:not(.ai-workspace) .asset-actions {
+.workspace .asset-actions {
   padding: 6px 8px;
 }
 
-.workspace:not(.ai-workspace) .asset-list {
+.workspace .asset-list {
   padding: 6px;
 }
 
-.workspace:not(.ai-workspace) .asset-list-row {
+.workspace .asset-list-row {
   min-height: 41px;
   border-radius: 8px;
   padding: 6px 8px;
 }
 
-.workspace:not(.ai-workspace) .group-list-item {
+.workspace .group-list-item {
   min-height: 38px;
   border-radius: 8px;
 }
 
-.workspace:not(.ai-workspace) .permission-group-hero {
-  padding: 17px;
-}
-
-.workspace:not(.ai-workspace)
-  :is(.permission-group-settings, .permission-group-members) {
+.workspace :is(.permission-group-settings, .permission-group-members) {
   padding: 15px 17px;
 }
 
 /* Panel heads are plain text headers separated by one full-width line. */
-.workspace:not(.ai-workspace) .panel-head {
+.workspace .panel-head {
   border-bottom: 1px solid var(--line-strong);
   background: transparent;
 }
 
-.workspace:not(.ai-workspace) .list-toolbar {
+.workspace .list-toolbar {
   border-bottom: 1px solid var(--line-strong);
   background: transparent;
 }
 
 /* Toolbar selects and secondary actions are peers, so they use one fill. */
-.workspace:not(.ai-workspace) :is(.panel-head, .list-toolbar) .select {
+.workspace :is(.panel-head, .list-toolbar) .select {
   background: var(--fill-hover);
 }
 
-.workspace:not(.ai-workspace) .table {
+.workspace .table {
   border-spacing: 0 6px;
   background: transparent;
 }
 
 /* Data rows are separated by space instead of hairlines; hovering a row gives
    it a rounded fill like the AI history list. */
-.workspace:not(.ai-workspace) .table-wrap {
+.workspace .table-wrap {
   padding-inline: 8px;
 }
 
-.workspace:not(.ai-workspace) .table td {
+.workspace .table td {
   border-bottom: 0;
   background: transparent;
 }
 
-.workspace:not(.ai-workspace) .table th {
+.workspace .table th {
   border-bottom: 1px solid var(--line-strong);
   background: transparent;
   color: var(--muted);
 }
 
-.workspace:not(.ai-workspace) .table tr:hover td:not(.empty-cell) {
+.workspace .table tr:hover td:not(.empty-cell) {
   background: var(--fill-hover);
 }
 
-.workspace:not(.ai-workspace) .table tr:hover td:first-child:not(.empty-cell) {
+.workspace .table tr:hover td:first-child:not(.empty-cell) {
   border-top-left-radius: 10px;
   border-bottom-left-radius: 10px;
 }
 
-.workspace:not(.ai-workspace) .table tr:hover td:last-child:not(.empty-cell) {
+.workspace .table tr:hover td:last-child:not(.empty-cell) {
   border-top-right-radius: 10px;
   border-bottom-right-radius: 10px;
 }
 
 /* Empty rows are status content, not interactive list items. Keep them on the
    page background even when the pointer is over the table row. */
-.workspace:not(.ai-workspace) .table .empty-cell,
-.workspace:not(.ai-workspace) .table tr:hover .empty-cell {
+.workspace .table .empty-cell,
+.workspace .table tr:hover .empty-cell {
   background: var(--bg);
 }
 
 /* All status filters and compact view switches follow the forum control:
    no shared tray, quiet standalone options, and one soft active item. */
-.workspace:not(.ai-workspace) .segmented-control {
+.workspace .segmented-control {
   gap: 1px;
   border: 0;
   border-radius: 0;
@@ -5330,7 +4740,7 @@ body .success-text::before {
   padding: 0;
 }
 
-.workspace:not(.ai-workspace) .segmented-control button {
+.workspace .segmented-control button {
   min-height: 30px;
   border: 0;
   border-radius: 8px;
@@ -5340,29 +4750,29 @@ body .success-text::before {
   box-shadow: none;
 }
 
-.workspace:not(.ai-workspace) .segmented-control button:hover:not(:disabled) {
+.workspace .segmented-control button:hover:not(:disabled) {
   background: var(--fill-hover);
   color: var(--text-soft);
 }
 
-.workspace:not(.ai-workspace) .segmented-control button.active {
+.workspace .segmented-control button.active {
   background: var(--fill-active);
   color: var(--text);
   box-shadow: none;
 }
 
-.workspace:not(.ai-workspace) .library-view-toggle {
+.workspace .library-view-toggle {
   border: 0;
   background: transparent;
   padding: 0;
 }
 
-.workspace:not(.ai-workspace) .library-view-toggle button.active {
+.workspace .library-view-toggle button.active {
   background: var(--fill-active);
   box-shadow: none;
 }
 
-.workspace:not(.ai-workspace)
+.workspace
   :is(
     .tree-item,
     .asset-list-row,
@@ -5376,32 +4786,30 @@ body .success-text::before {
 
 /* Interactive list rows use the same rounded hover fill as the AI history
    list. Selected rows keep their own active-state color. */
-.workspace:not(.ai-workspace)
+.workspace
   :is(
     .tree-item,
     .asset-card,
     .asset-list-row,
     .group-list-item,
     .submission-row,
-    .forum-thread-row,
     .forum-topic,
     .teaching-deck-row
   ) {
   border-radius: 10px;
 }
 
-.workspace:not(.ai-workspace)
+.workspace
   :is(
     .tree-item,
     .asset-card,
     .asset-list-row,
     .group-list-item,
     .submission-row,
-    .forum-thread-row,
     .forum-topic,
     .teaching-deck-row
   ):not(.active):hover,
-.workspace:not(.ai-workspace) .permission-member-candidates button:hover {
+.workspace .permission-member-candidates button:hover {
   background: var(--fill-hover);
 }
 

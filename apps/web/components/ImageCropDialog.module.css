@@ -8,11 +8,6 @@
   gap: 12px;
 }
 
-.cropBody > .muted {
-  margin: 0;
-  text-align: center;
-}
-
 .cropStage {
   position: relative;
   display: inline-block;

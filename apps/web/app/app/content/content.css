@@ -1,21 +1,16 @@
 /* 文档页线条做减法：左右栏之间不用贯通竖线，标题区不加横线，
-   层级靠留白和表格自身结构表达。 */
+   层级靠留白和表格自身结构表达。路径头部位于两栏之上。 */
 @media (min-width: 1121px) {
-  .workspace:not(.ai-workspace) .files-layout > * + * {
+  .workspace .files-layout > * + * {
     margin-top: 0;
     border-left: 0;
     padding-top: 0;
     padding-left: 24px;
   }
+}
 
-  .workspace:not(.ai-workspace) .files-layout .panel-head {
-    border-bottom: 0;
-  }
-
-  .workspace:not(.ai-workspace) .files-layout > * + * > .panel-head {
-    margin-left: 0;
-    padding-left: 11px;
-  }
+.workspace .content-path-head {
+  border-bottom: 0;
 }
 
 .folder-delete-modal {
@@ -76,11 +71,7 @@
   color: var(--accent);
 }
 
-.workspace:not(.ai-workspace)
-  .content-items-table
-  > tbody
-  > tr:not(.content-empty-row)
-  > td {
+.workspace .content-items-table > tbody > tr:not(.content-empty-row) > td {
   height: 42px;
   padding-top: 0;
   padding-bottom: 0;
@@ -133,7 +124,7 @@
   min-width: 154px;
 }
 
-.files-layout .workbench-main > .panel-head .breadcrumb {
+.content-path-head .breadcrumb {
   flex: 1 1 auto;
   flex-wrap: nowrap;
   margin-top: 0;
@@ -141,16 +132,16 @@
   overflow: hidden;
 }
 
-.files-layout .workbench-main > .panel-head .breadcrumb span {
+.content-path-head .breadcrumb span {
   min-width: 0;
   overflow: hidden;
 }
 
-.files-layout .workbench-main > .panel-head .breadcrumb svg {
+.content-path-head .breadcrumb svg {
   flex: 0 0 auto;
 }
 
-.files-layout .workbench-main > .panel-head .breadcrumb button {
+.content-path-head .breadcrumb button {
   display: block;
   max-width: 100%;
   min-width: 0;
@@ -159,7 +150,7 @@
   white-space: nowrap;
 }
 
-.files-layout .workbench-main > .panel-head .toolbar-row {
+.content-path-head .toolbar-row {
   flex: 0 0 auto;
 }
 
@@ -305,11 +296,7 @@
     min-height: 28px;
   }
 
-  .workspace:not(.ai-workspace)
-    .content-items-table
-    > tbody
-    > tr:not(.content-empty-row)
-    > td {
+  .workspace .content-items-table > tbody > tr:not(.content-empty-row) > td {
     height: auto;
     padding-top: 9px;
     padding-bottom: 9px;
@@ -319,7 +306,7 @@
     width: auto;
   }
 
-  .files-layout .workbench-main > .panel-head .toolbar-row {
+  .content-path-head .toolbar-row {
     width: 100%;
   }
 
