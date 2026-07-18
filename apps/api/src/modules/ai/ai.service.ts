@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
   ServiceUnavailableException,
@@ -16,6 +17,7 @@ interface UpdateAiSettingsInput {
   enabled?: boolean;
   maxContextFiles?: number;
   maxContextChars?: number;
+  defaultCallLimit?: number;
 }
 
 interface AiProviderConfigInput {
@@ -129,6 +131,52 @@ export class AiService {
     };
   }
 
+  async consumeCallQuota(userId: string) {
+    // 所有 AI 调用入口的统一配额消耗点：后续其他功能调用 AI 前也必须先调用此方法，
+    // 保证每次向 AI 提问恰好消耗一次调用次数。
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { aiCallCount: true, aiCallLimit: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    const settings = await this.getOrCreateSettings();
+    const effectiveLimit = user.aiCallLimit ?? settings.defaultCallLimit;
+    const consumed = await this.prisma.user.updateMany({
+      where: { id: userId, aiCallCount: { lt: effectiveLimit } },
+      data: { aiCallCount: { increment: 1 } },
+    });
+
+    if (consumed.count === 0) {
+      throw new HttpException("已达到 AI 调用次数限额，请联系管理员调整", 429);
+    }
+  }
+
+  async getUsage(userId: string | null) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { aiCallCount: true, aiCallLimit: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    const settings = await this.getOrCreateSettings();
+
+    return {
+      used: user.aiCallCount,
+      limit: user.aiCallLimit ?? settings.defaultCallLimit,
+    };
+  }
+
   async updateSettings(userId: string | null, input: UpdateAiSettingsInput) {
     await this.ensureAdmin(userId);
 
@@ -145,6 +193,16 @@ export class AiService {
 
     if (input.maxContextChars !== undefined) {
       data.maxContextChars = input.maxContextChars;
+    }
+
+    if (input.defaultCallLimit !== undefined) {
+      if (
+        !Number.isInteger(input.defaultCallLimit) ||
+        input.defaultCallLimit < 0
+      ) {
+        throw new BadRequestException("默认 AI 调用限额必须是非负整数");
+      }
+      data.defaultCallLimit = input.defaultCallLimit;
     }
 
     data.updatedById = userId;
@@ -422,6 +480,8 @@ export class AiService {
     if (!activeConfig.baseUrl || !activeConfig.model || !activeConfig.apiKey) {
       throw new ServiceUnavailableException("AI 配置不完整，请联系管理员");
     }
+
+    await this.consumeCallQuota(userId);
 
     const contextFiles = await this.buildContext(userId, question, {
       maxFiles: settings.maxContextFiles,
@@ -990,6 +1050,7 @@ export class AiService {
       } | null;
       maxContextFiles: number;
       maxContextChars: number;
+      defaultCallLimit: number;
       updatedAt: Date;
     },
     configs: Array<{
@@ -1012,6 +1073,7 @@ export class AiService {
       configs: configs.map((config) => this.toPublicProviderConfig(config)),
       maxContextFiles: settings.maxContextFiles,
       maxContextChars: settings.maxContextChars,
+      defaultCallLimit: settings.defaultCallLimit,
       updatedAt: settings.updatedAt.toISOString(),
     };
   }

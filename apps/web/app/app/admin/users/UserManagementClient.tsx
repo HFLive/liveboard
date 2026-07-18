@@ -1,7 +1,11 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
-import type { SystemRole, UserSummary } from "@liveboard/shared";
+import type {
+  AdminUserSummary,
+  SystemRole,
+  UserSummary,
+} from "@liveboard/shared";
 import { FileUp, Pencil, Plus, X } from "lucide-react";
 import {
   createUser,
@@ -21,6 +25,7 @@ type UserEditDraft = {
   systemRole: SystemRole;
   status: UserSummary["status"];
   password: string;
+  aiCallLimit: string;
 };
 
 type ImportUserDraft = {
@@ -161,7 +166,7 @@ function parseUserImportCsv(text: string): ParsedImport {
 }
 
 export function UserManagementClient() {
-  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [actor, setActor] = useState<UserSummary | null>(null);
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -264,7 +269,7 @@ export function UserManagementClient() {
     }
   }
 
-  function startEdit(user: UserSummary) {
+  function startEdit(user: AdminUserSummary) {
     setError(null);
     setMessage(null);
     setEditingUserId(user.id);
@@ -273,6 +278,7 @@ export function UserManagementClient() {
       systemRole: user.systemRole,
       status: user.status,
       password: "",
+      aiCallLimit: user.aiCallLimit === null ? "" : String(user.aiCallLimit),
     });
   }
 
@@ -289,12 +295,31 @@ export function UserManagementClient() {
     setError(null);
     setMessage(null);
 
+    const trimmedAiCallLimit = editDraft.aiCallLimit.trim();
+    let aiCallLimit: number | null | undefined;
+
+    if (trimmedAiCallLimit !== "") {
+      const parsed = Number(trimmedAiCallLimit);
+
+      if (!Number.isInteger(parsed) || parsed < 0) {
+        setError("AI 调用限额需为不小于 0 的整数");
+        return;
+      }
+
+      aiCallLimit = parsed;
+    } else {
+      aiCallLimit = null;
+    }
+
+    const currentAiCallLimit = editingUser?.aiCallLimit ?? null;
+
     try {
       await updateUser(userId, {
         displayName: editDraft.displayName,
         systemRole: editDraft.systemRole,
         status: editDraft.status,
         password: editDraft.password || undefined,
+        ...(aiCallLimit !== currentAiCallLimit ? { aiCallLimit } : {}),
       });
       setMessage("成员信息已更新");
       cancelEdit();
@@ -352,6 +377,7 @@ export function UserManagementClient() {
                   <th>登录账号</th>
                   <th>系统权限</th>
                   <th>状态</th>
+                  <th>AI 调用</th>
                   <th>操作</th>
                 </tr>
               </thead>
@@ -369,6 +395,14 @@ export function UserManagementClient() {
                     </td>
                     <td data-label="系统权限">{roleLabel(user.systemRole)}</td>
                     <td data-label="状态">{userStatusLabel(user.status)}</td>
+                    <td data-label="AI 调用">
+                      {user.aiCallCount} 次
+                      <span className="muted">
+                        {" "}
+                        /{" "}
+                        {user.aiCallLimit === null ? "默认" : user.aiCallLimit}
+                      </span>
+                    </td>
                     <td data-label="操作">
                       {actorIsSuperAdmin || user.systemRole === "member" ? (
                         <button
@@ -684,6 +718,25 @@ export function UserManagementClient() {
                     })
                   }
                 />
+              </label>
+              <label className="label">
+                AI 调用限额
+                <input
+                  className="input"
+                  min={0}
+                  placeholder="留空则跟随默认限额"
+                  type="number"
+                  value={editDraft.aiCallLimit}
+                  onChange={(event) =>
+                    setEditDraft({
+                      ...editDraft,
+                      aiCallLimit: event.target.value,
+                    })
+                  }
+                />
+                <small className="field-hint">
+                  已使用 {editingUser.aiCallCount} 次；留空则跟随默认限额。
+                </small>
               </label>
             </div>
             <div className="modal-foot">

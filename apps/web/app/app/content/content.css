@@ -1,16 +1,37 @@
-/* 文档页线条做减法：左右栏之间不用贯通竖线，标题区不加横线，
-   层级靠留白和表格自身结构表达。路径头部位于两栏之上。 */
+/* 文档页标题区不加横线，左右栏之间保留一道竖线分隔，
+   层级靠留白和表格自身结构表达。路径头部位于两栏之上。
+   两栏内容贴近侧栏与竖线，只保留必要呼吸间距。 */
 @media (min-width: 1121px) {
+  .workspace .files-layout > :first-child {
+    padding-left: 10px;
+  }
+
   .workspace .files-layout > * + * {
     margin-top: 0;
-    border-left: 0;
+    border-left: 1px solid var(--line-strong);
     padding-top: 0;
-    padding-left: 24px;
+    padding-left: 4px;
+  }
+
+  /* 表格行间距（border-spacing）会在首行上方多出 6px，
+     上移抵消，使右栏首行与左栏树首行顶端对齐。 */
+  .files-layout .table-wrap {
+    margin-top: -6px;
   }
 }
 
 .workspace .content-path-head {
   border-bottom: 0;
+}
+
+/* 路径头部与两栏之间、左栏树顶部不留多余空隙。 */
+.content-path-head + .files-layout {
+  margin-top: -12px;
+}
+
+.files-layout .file-tree {
+  padding-top: 0;
+  padding-left: 0;
 }
 
 .folder-delete-modal {
@@ -76,6 +97,10 @@
   padding-top: 0;
   padding-bottom: 0;
   vertical-align: middle;
+}
+
+.files-layout .content-items-table > tbody > tr > td:first-child {
+  padding-left: 8px;
 }
 
 .content-items-table > tbody > tr:not(.content-empty-row) {
@@ -175,6 +200,11 @@
 .breadcrumb-back svg {
   width: 15px;
   height: 15px;
+}
+
+/* 顶层视图隐藏返回按钮但保留占位，路径文字与文件夹视图保持同一位置。 */
+.breadcrumb-back.is-hidden {
+  visibility: hidden;
 }
 
 .content-draft-tag {

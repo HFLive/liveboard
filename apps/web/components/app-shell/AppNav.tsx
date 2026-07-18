@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bot,
   ClipboardList,
@@ -12,8 +12,8 @@ import {
   Presentation,
   Users,
 } from "lucide-react";
-import type { UserSummary } from "@liveboard/shared";
-import { apiResourceUrl, getMe } from "@/lib/api";
+import type { AiUsageSummary, UserSummary } from "@liveboard/shared";
+import { apiResourceUrl, getAiUsage, getMe } from "@/lib/api";
 import { APP_ROUTES, userProfile } from "@/lib/routes";
 import { LogoutButton } from "./LogoutButton";
 
@@ -35,12 +35,24 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+const USAGE_HOVER_DELAY_MS = 150;
+
 export function AppNav() {
   const pathname = usePathname();
   const isPresentationRoute =
     /^\/app\/(?:content\/[^/]+|teaching\/[^/]+)\/present$/.test(pathname);
   const [user, setUser] = useState<UserSummary | null>(null);
   const [userLoaded, setUserLoaded] = useState(false);
+  const [usage, setUsage] = useState<AiUsageSummary | null>(null);
+  const [usageFailed, setUsageFailed] = useState(false);
+  const [usageOpen, setUsageOpen] = useState(false);
+  const [usagePosition, setUsagePosition] = useState<{
+    left: number;
+    bottom: number;
+  } | null>(null);
+  const railFooterRef = useRef<HTMLDivElement | null>(null);
+  const usageHoverTimerRef = useRef<number | null>(null);
+  const usageLoadingRef = useRef(false);
   const displayName = userLoaded ? (user?.displayName ?? "未登录") : "账户信息";
   const userInitial = userLoaded
     ? displayName.trim().slice(0, 1).toUpperCase() || "L"
@@ -81,6 +93,75 @@ export function AppNav() {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (usageHoverTimerRef.current !== null) {
+        window.clearTimeout(usageHoverTimerRef.current);
+      }
+    };
+  }, []);
+
+  function loadUsage() {
+    if (usageLoadingRef.current) {
+      return;
+    }
+
+    usageLoadingRef.current = true;
+    getAiUsage()
+      .then((result) => {
+        setUsage(result);
+        setUsageFailed(false);
+      })
+      .catch(() => {
+        setUsageFailed(true);
+      })
+      .finally(() => {
+        usageLoadingRef.current = false;
+      });
+  }
+
+  function onAccountMouseEnter() {
+    if (!user) {
+      return;
+    }
+
+    if (usageHoverTimerRef.current !== null) {
+      window.clearTimeout(usageHoverTimerRef.current);
+    }
+
+    usageHoverTimerRef.current = window.setTimeout(() => {
+      usageHoverTimerRef.current = null;
+      const rect = railFooterRef.current?.getBoundingClientRect();
+
+      if (!rect) {
+        return;
+      }
+
+      setUsagePosition({
+        left: rect.left,
+        bottom: window.innerHeight - rect.top + 8,
+      });
+      setUsageOpen(true);
+      loadUsage();
+    }, USAGE_HOVER_DELAY_MS);
+  }
+
+  function onAccountMouseLeave() {
+    if (usageHoverTimerRef.current !== null) {
+      window.clearTimeout(usageHoverTimerRef.current);
+      usageHoverTimerRef.current = null;
+    }
+
+    setUsageOpen(false);
+  }
+
+  const usagePercent = usage
+    ? usage.limit === 0
+      ? 100
+      : Math.min(100, Math.round((usage.used / usage.limit) * 100))
+    : 0;
+  const usageExceeded = usage ? usage.used >= usage.limit : false;
+
   if (isPresentationRoute) {
     return null;
   }
@@ -118,7 +199,12 @@ export function AppNav() {
         })}
       </nav>
 
-      <div className="rail-footer">
+      <div
+        className="rail-footer"
+        onMouseEnter={onAccountMouseEnter}
+        onMouseLeave={onAccountMouseLeave}
+        ref={railFooterRef}
+      >
         <Link
           aria-current={
             user && isActive(pathname, userProfile(user.id))
@@ -131,6 +217,8 @@ export function AppNav() {
               : "rail-user"
           }
           href={user ? userProfile(user.id) : APP_ROUTES.profile}
+          rel="noopener noreferrer"
+          target="_blank"
           title="个人主页"
         >
           <span className="rail-avatar" aria-hidden="true">
@@ -146,6 +234,38 @@ export function AppNav() {
         </Link>
         <LogoutButton />
       </div>
+
+      {usageOpen && user && usagePosition && (usage || usageFailed) ? (
+        <div
+          className="rail-usage-popover"
+          role="status"
+          style={{ left: usagePosition.left, bottom: usagePosition.bottom }}
+        >
+          <p className="rail-usage-title">
+            AI 调用
+            {usage ? <span>{usagePercent}%</span> : null}
+          </p>
+          {usage ? (
+            <>
+              <div className="rail-usage-bar" aria-hidden="true">
+                <div
+                  className={
+                    usageExceeded
+                      ? "rail-usage-bar-fill is-over"
+                      : "rail-usage-bar-fill"
+                  }
+                  style={{ width: `${usagePercent}%` }}
+                />
+              </div>
+              <p className="rail-usage-meta">
+                已用 {usage.used} / {usage.limit} 次
+              </p>
+            </>
+          ) : (
+            <p className="rail-usage-meta">无法获取用量</p>
+          )}
+        </div>
+      ) : null}
     </aside>
   );
 }

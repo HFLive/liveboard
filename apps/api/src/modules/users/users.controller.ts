@@ -61,6 +61,12 @@ class UpdateUserDto {
   @IsInt()
   @Min(0)
   storageQuotaBytes?: number;
+
+  // null 表示恢复为跟随 workspace 默认限额
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  aiCallLimit?: number | null;
 }
 
 class ImportUserRowDto {

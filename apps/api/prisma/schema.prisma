@@ -86,6 +86,8 @@ model User {
   systemRole        SystemRole
   status            UserStatus @default(active)
   storageQuotaBytes Int        @default(536870912)
+  aiCallCount       Int        @default(0)
+  aiCallLimit       Int?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
@@ -478,6 +480,7 @@ model AiSettings {
   activeConfigId  String?  @unique
   maxContextFiles Int      @default(6)
   maxContextChars Int      @default(12000)
+  defaultCallLimit Int     @default(100)
   updatedById     String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

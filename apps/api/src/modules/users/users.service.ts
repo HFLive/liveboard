@@ -9,6 +9,7 @@ import {
 import {
   isSuperAdmin,
   isSystemAdmin,
+  type AdminUserSummary,
   type SystemRole,
   type UserSummary,
 } from "@liveboard/shared";
@@ -40,6 +41,7 @@ export interface UpdateUserInput {
   status?: UserSummary["status"];
   password?: string;
   storageQuotaBytes?: number;
+  aiCallLimit?: number | null;
 }
 
 export interface UserStorageSummary {
@@ -66,14 +68,18 @@ export class UsersService {
     private readonly permissions: PermissionsService,
   ) {}
 
-  async listUsers(actorUserId: string | null): Promise<UserSummary[]> {
+  async listUsers(actorUserId: string | null): Promise<AdminUserSummary[]> {
     await this.requireAdmin(actorUserId);
 
     const users = await this.prisma.user.findMany({
       orderBy: [{ createdAt: "asc" }],
     });
 
-    return users.map((user) => this.toSummary(user));
+    return users.map((user) => ({
+      ...this.toSummary(user),
+      aiCallCount: user.aiCallCount,
+      aiCallLimit: user.aiCallLimit,
+    }));
   }
 
   async listVisibilityUsers(
@@ -508,6 +514,7 @@ export class UsersService {
       status?: UserSummary["status"];
       passwordHash?: string;
       storageQuotaBytes?: number;
+      aiCallLimit?: number | null;
       sessionVersion?: { increment: number };
     } = {};
 
@@ -556,6 +563,19 @@ export class UsersService {
         throw new BadRequestException("容量上限必须是非负整数");
       }
       data.storageQuotaBytes = input.storageQuotaBytes;
+    }
+
+    if (input.aiCallLimit !== undefined) {
+      if (input.aiCallLimit === null) {
+        data.aiCallLimit = null;
+      } else if (
+        !Number.isInteger(input.aiCallLimit) ||
+        input.aiCallLimit < 0
+      ) {
+        throw new BadRequestException("AI 调用限额必须是非负整数");
+      } else {
+        data.aiCallLimit = input.aiCallLimit;
+      }
     }
 
     let updated: typeof target | null = null;

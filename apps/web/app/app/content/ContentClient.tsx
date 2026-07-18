@@ -1475,17 +1475,19 @@ export function ContentClient() {
       {message ? <p className="success-text">{message}</p> : null}
 
       <div className="panel-head content-path-head">
-        {isRootView ? null : (
-          <button
-            aria-label="返回上一级"
-            className="breadcrumb-back"
-            onClick={goToParentFolder}
-            title="返回上一级"
-            type="button"
-          >
-            <ArrowLeft aria-hidden="true" />
-          </button>
-        )}
+        <button
+          aria-label="返回上一级"
+          className={
+            isRootView ? "breadcrumb-back is-hidden" : "breadcrumb-back"
+          }
+          disabled={isRootView}
+          onClick={goToParentFolder}
+          tabIndex={isRootView ? -1 : undefined}
+          title="返回上一级"
+          type="button"
+        >
+          <ArrowLeft aria-hidden="true" />
+        </button>
         <div className="breadcrumb" aria-label="当前位置">
           {isRootView ? (
             <span>顶层</span>

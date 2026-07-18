@@ -360,9 +360,10 @@ describe("ContentClient folder deletion", () => {
     expect(
       await within(table).findByRole("button", { name: "课程资料" }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "返回上一级" }),
-    ).not.toBeInTheDocument();
+    // 顶层时返回按钮隐藏占位且不可点击，保持路径文字位置一致
+    const backAtRoot = screen.getByRole("button", { name: "返回上一级" });
+    expect(backAtRoot).toBeDisabled();
+    expect(backAtRoot).toHaveClass("is-hidden");
 
     await enterFolderFromTree("课程资料");
     fireEvent.click(
@@ -389,9 +390,9 @@ describe("ContentClient folder deletion", () => {
     // 顶层文件夹的上一级是顶层“/”
     fireEvent.click(screen.getByRole("button", { name: "返回上一级" }));
     await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: "返回上一级" }),
-      ).not.toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: "返回上一级" })).toHaveClass(
+        "is-hidden",
+      ),
     );
     expect(
       within(screen.getByRole("table")).getByRole("button", {

@@ -270,6 +270,57 @@ textarea {
   line-height: 0;
 }
 
+.rail-usage-popover {
+  position: fixed;
+  z-index: 200;
+  width: 200px;
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-popover);
+  padding: 10px 12px;
+}
+
+.rail-usage-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 0 7px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.rail-usage-title span {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.rail-usage-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--fill-active);
+  overflow: hidden;
+}
+
+.rail-usage-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.rail-usage-bar-fill.is-over {
+  background: var(--danger);
+}
+
+.rail-usage-meta {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .app-main {
   min-height: 100dvh;
   padding: var(--page-gutter);
@@ -1974,7 +2025,7 @@ button:disabled {
 .review-queue-tools {
   display: grid;
   gap: 9px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
   padding: 10px;
 }
 
@@ -4282,13 +4333,9 @@ body .success-text::before {
 }
 
 .workspace :is(.search-field, .permission-group-search) {
-  border-color: transparent;
-  background: var(--fill-hover);
+  border-color: var(--line);
+  background: #fff;
   box-shadow: none;
-}
-
-.workspace input[placeholder^="搜索"]:not(:focus) {
-  background: var(--fill-hover);
 }
 
 .workspace :is(.search-field, .permission-group-search):focus-within {
@@ -4678,7 +4725,7 @@ body .success-text::before {
 }
 
 .workspace .list-toolbar {
-  border-bottom: 1px solid var(--line-strong);
+  border-bottom: 0;
   background: transparent;
 }
 

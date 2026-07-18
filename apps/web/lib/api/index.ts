@@ -1,4 +1,8 @@
 import type {
+  AdminUserSummary,
+  AiProviderConfigSummary,
+  AiSettingsSummary,
+  AiUsageSummary,
   ContentBlockType,
   ContentPinTarget,
   FileSummary,
@@ -119,7 +123,7 @@ export function changePassword(input: {
 }
 
 export function listUsers() {
-  return request<{ users: UserSummary[] }>("/admin/users");
+  return request<{ users: AdminUserSummary[] }>("/admin/users");
 }
 
 export function listVisibilityUsers() {
@@ -231,6 +235,7 @@ export function updateUser(
     status?: UserSummary["status"];
     password?: string;
     storageQuotaBytes?: number;
+    aiCallLimit?: number | null;
   },
 ) {
   return request<{ user: UserSummary }>(`/admin/users/${userId}`, {
@@ -279,27 +284,9 @@ export function updateSystemSettings(input: Partial<{ timeZone: string }>) {
   });
 }
 
-export interface AiProviderConfig {
-  id: string;
-  name: string;
-  providerName: string;
-  baseUrl: string;
-  model: string;
-  apiKeyConfigured: boolean;
-  apiKeyPreview: string;
-  createdAt: string;
-  updatedAt: string;
-}
+export type AiProviderConfig = AiProviderConfigSummary;
 
-export interface AiSettings {
-  enabled: boolean;
-  activeConfigId: string | null;
-  activeConfig: AiProviderConfig | null;
-  configs: AiProviderConfig[];
-  maxContextFiles: number;
-  maxContextChars: number;
-  updatedAt: string;
-}
+export type AiSettings = AiSettingsSummary;
 
 export function getAiSettings() {
   return request<{ settings: AiSettings }>("/admin/ai/settings");
@@ -310,6 +297,7 @@ export function updateAiSettings(
     enabled: boolean;
     maxContextFiles: number;
     maxContextChars: number;
+    defaultCallLimit: number;
   }>,
 ) {
   return request<{ settings: AiSettings }>("/admin/ai/settings", {
@@ -403,6 +391,11 @@ export interface AiStatus {
 
 export function getAiStatus() {
   return request<{ status: AiStatus }>("/ai/status");
+}
+
+export async function getAiUsage(): Promise<AiUsageSummary> {
+  const result = await request<{ usage: AiUsageSummary }>("/ai/usage");
+  return result.usage;
 }
 
 export function listAiConversations() {
