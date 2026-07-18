@@ -4,11 +4,7 @@
 }
 
 .teaching-list-panel {
-  overflow: visible;
-  border: 1px solid #d8d5ce;
-  border-radius: 14px;
   background: transparent;
-  box-shadow: none;
 }
 
 .teaching-list-panel .list-toolbar {
@@ -22,10 +18,23 @@
 .teaching-deck-list {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
 }
 
 .teaching-list-panel .search-field {
   width: min(420px, 100%);
+}
+
+/* 课件列表行与全局扁平工作区一致：行分隔线顶到屏幕左右边缘。 */
+@media (min-width: 1121px) {
+  .workspace:not(.ai-workspace) > .teaching-list-panel > .teaching-deck-list {
+    margin-inline: calc(0px - var(--page-gutter));
+  }
+
+  .workspace:not(.ai-workspace) > .teaching-list-panel .teaching-deck-row {
+    padding-inline: calc(var(--page-gutter) + 11px);
+  }
 }
 
 .teaching-deck-row {
@@ -34,12 +43,13 @@
   justify-content: space-between;
   gap: 20px;
   min-width: 0;
+  margin-inline: 8px;
   padding: 14px;
   border: 0;
 }
 
-.teaching-deck-row + .teaching-deck-row {
-  border-top: 1px solid #d8d5ce;
+.teaching-deck-row-link {
+  cursor: pointer;
 }
 
 .teaching-deck-main {
@@ -53,7 +63,7 @@
 .teaching-deck-main > a {
   overflow: hidden;
   color: var(--ink);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -61,7 +71,7 @@
 
 .teaching-deck-main > span {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .teaching-deck-actions,
@@ -99,9 +109,15 @@
   flex-direction: column;
   gap: 16px;
   min-width: 0;
-  padding: 20px;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  padding: 0;
+  background: transparent;
+}
+
+@media (min-width: 821px) {
+  .teaching-compose-panel {
+    border-left: 1px solid var(--line);
+    padding-left: 20px;
+  }
 }
 
 .teaching-block-picker {
@@ -214,7 +230,7 @@
 .teaching-control .input:hover,
 .teaching-control .select:hover {
   border-color: #aebdb4;
-  background: #fdfefd;
+  background: var(--surface-raised);
 }
 
 .teaching-control .input:focus,
@@ -368,7 +384,7 @@
   height: 100dvh;
   min-width: 0;
   overflow: hidden;
-  background: #e9ecea;
+  background: var(--fill-subtle);
 }
 
 .teaching-presenter-topbar {
@@ -403,8 +419,8 @@
 .teaching-presenter-topbar .teaching-page-count {
   flex: 0 0 auto;
   border-radius: 999px;
-  background: #f0f3f1;
-  color: #667069;
+  background: var(--fill-subtle);
+  color: var(--muted);
   padding: 4px 8px;
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
@@ -427,7 +443,7 @@
 
 .teaching-presenter-topbar .button:hover {
   border-color: transparent;
-  background: #f0f3f1;
+  background: var(--fill-subtle);
   color: #1f2521;
 }
 
@@ -437,7 +453,7 @@
 }
 
 .teaching-slide-source {
-  color: #667069;
+  color: var(--muted);
   font-size: 0.78rem;
   font-weight: 650;
 }
@@ -457,7 +473,7 @@
       rgba(255, 255, 255, 0.65),
       transparent 42%
     ),
-    #e9ecea;
+    var(--fill-subtle);
 }
 
 .teaching-slide-source {
@@ -647,7 +663,7 @@
   width: 100vw;
   height: 100dvh;
   padding: 16px 28px 14px;
-  background: #e9ecea;
+  background: var(--fill-subtle);
 }
 
 .teaching-presenter.focus-mode .teaching-presenter-topbar {

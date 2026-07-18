@@ -1,6 +1,5 @@
 import type {
   FileStatus,
-  FileType,
   PermissionLevel,
   QuestionType,
   SubmissionStatus,
@@ -48,19 +47,6 @@ export function permissionLabel(level: PermissionLevel | null | undefined) {
   };
 
   return level ? (labels[level] ?? level) : "-";
-}
-
-export function fileTypeLabel(type: FileType) {
-  const labels: Record<FileType, string> = {
-    book: "书本",
-    lesson: "教案",
-    course: "课程",
-    exercise_set: "练习集",
-    doc: "文档",
-    asset: "附件",
-  };
-
-  return labels[type] ?? type;
 }
 
 export function fileStatusLabel(status: FileStatus) {

@@ -2,7 +2,7 @@
    library feel visually separate from the other dense workspaces. */
 .workspace.library-workspace .asset-card.active {
   border-color: #c8c2b7;
-  background: #f0eee8;
+  background: var(--fill-hover);
   box-shadow: none;
 }
 
@@ -13,13 +13,13 @@
 }
 
 .workspace.library-workspace .asset-list-row.active {
-  background: #e9e7e2;
+  background: var(--fill-active);
   color: var(--text);
   box-shadow: none;
 }
 
 .workspace.library-workspace .asset-list-row.active:hover {
-  background: #e5e2dc;
+  background: var(--line);
 }
 
 .workspace.library-workspace .asset-reference-modal {

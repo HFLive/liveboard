@@ -158,9 +158,9 @@
 }
 
 .permission-member-list {
-  display: block;
+  display: grid;
+  gap: 2px;
   width: 100%;
-  border-top: 1px solid #e3e0d9;
   background: transparent;
   margin-top: 0;
 }
@@ -171,14 +171,9 @@
   gap: 10px;
   min-height: 58px;
   border: 0;
-  border-bottom: 1px solid #e3e0d9;
-  border-radius: 0;
+  border-radius: 10px;
   background: transparent;
-  padding: 9px 2px;
-}
-
-.permission-member-row:last-child {
-  border-bottom: 0;
+  padding: 9px 10px;
 }
 
 .permission-member-row > span:nth-child(2) {
@@ -201,7 +196,7 @@
   height: 32px;
   place-items: center;
   border-radius: 50%;
-  background: #e7e5e0;
+  background: var(--fill-active);
   color: var(--text-soft);
   font-size: 12px;
   font-weight: 700;
@@ -223,7 +218,7 @@
   margin-bottom: 14px;
   border: 1px solid transparent;
   border-radius: 10px;
-  background: #f3f1ec;
+  background: var(--fill-subtle);
   padding: 10px;
 }
 

@@ -9,7 +9,6 @@ import type {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Upload,
   GripVertical,
   Image,
@@ -54,13 +53,9 @@ import {
   getTableRows,
   RenderBlockContent,
 } from "./ContentBlockRenderer";
-import {
-  assetTypeLabel,
-  fileStatusLabel,
-  fileTypeLabel,
-  permissionLabel,
-} from "@/lib/labels";
-import { APP_ROUTES, contentDetail } from "@/lib/routes";
+import { assetTypeLabel, permissionLabel } from "@/lib/labels";
+import { APP_ROUTES } from "@/lib/routes";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 const blockShortcuts: Array<{ command: string; type: ContentBlockType }> = [
   { command: "/h1", type: "heading_1" },
@@ -199,7 +194,7 @@ export function RichTextBlockEditor({
           ∑<span>行内公式</span>
         </button>
       </div>
-      <textarea
+      <AutoTextarea
         className={`doc-block-input ${block.type}`}
         onBlur={onSave}
         onChange={(event) => onChange(event.target.value)}
@@ -1025,7 +1020,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
 
     if (block.type === "math") {
       return (
-        <textarea
+        <AutoTextarea
           className="doc-block-input math"
           onBlur={() => void onSaveBlock(block)}
           onChange={(event) =>
@@ -1049,7 +1044,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
     }
 
     return (
-      <textarea
+      <AutoTextarea
         className={
           block.type === "code"
             ? "doc-block-input code"
@@ -1066,11 +1061,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
 
   return (
     <div className="workspace">
-      <Link className="page-back-link" href={contentDetail(fileId)}>
-        <ArrowLeft aria-hidden="true" />
-        返回文档
-      </Link>
-      <section className="page-head compact">
+      <section className="page-head compact editor-title-bar">
         <div>
           <input
             className="title-input"
@@ -1081,18 +1072,6 @@ export function FileEditor({ fileId }: { fileId: string }) {
           />
           <div className="editor-meta-strip" aria-label="文件信息">
             <span>
-              <strong>类型</strong>
-              {file ? fileTypeLabel(file.type) : "-"}
-            </span>
-            <span>
-              <strong>状态</strong>
-              {file ? fileStatusLabel(file.status) : "-"}
-            </span>
-            <span>
-              <strong>权限</strong>
-              {permissionLabel(file?.permission)}
-            </span>
-            <span>
               <strong>内容</strong>
               {blocks.length} 块
             </span>
@@ -1102,12 +1081,6 @@ export function FileEditor({ fileId }: { fileId: string }) {
             </span>
           </div>
         </div>
-      </section>
-
-      {error ? <p className="error-text">{error}</p> : null}
-      {message ? <p className="success-text">{message}</p> : null}
-
-      <section className="editor-action-bar" aria-label="文件操作">
         <div className="button-row">
           {isPublished ? (
             <span className="publish-state-badge">已发布</span>
@@ -1169,6 +1142,9 @@ export function FileEditor({ fileId }: { fileId: string }) {
           </details>
         </div>
       </section>
+
+      {error ? <p className="error-text">{error}</p> : null}
+      {message ? <p className="success-text">{message}</p> : null}
 
       <section className="editor-workspace">
         <div className="editor-split">
@@ -1275,7 +1251,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
                       ))}
                   </select>
                   {["divider", "table", "image"].includes(newType) ? null : (
-                    <textarea
+                    <AutoTextarea
                       className="doc-new-block-input"
                       onChange={(event) => onNewTextChange(event.target.value)}
                       onKeyDown={(event) => {

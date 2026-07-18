@@ -121,39 +121,6 @@ export function ForumClient() {
       {error ? <p className="error-text">{error}</p> : null}
 
       <section className="forum-shell" aria-label="论坛工作区">
-        <nav className="forum-category-panel" aria-label="论坛版块">
-          <div className="forum-panel-title">
-            <h2>版块</h2>
-          </div>
-          <div className="forum-category-list">
-            <button
-              className={`forum-category-button ${activeCategoryId === "all" ? "active" : ""}`}
-              onClick={() => setActiveCategoryId("all")}
-              type="button"
-            >
-              <span>
-                <strong>全部帖子</strong>
-                <small>浏览论坛中的所有内容</small>
-              </span>
-              <em>{threads.length}</em>
-            </button>
-            {categories.map((category) => (
-              <button
-                className={`forum-category-button ${activeCategoryId === category.id ? "active" : ""}`}
-                key={category.id}
-                onClick={() => setActiveCategoryId(category.id)}
-                type="button"
-              >
-                <span>
-                  <strong>{category.name}</strong>
-                  <small>{category.description ?? "暂无说明"}</small>
-                </span>
-                <em>{category.threadCount}</em>
-              </button>
-            ))}
-          </div>
-        </nav>
-
         <section className="forum-feed">
           <div className="forum-feed-head forum-feed-toolbar">
             <label className="search-field forum-search">
@@ -165,6 +132,19 @@ export function ForumClient() {
                 value={query}
               />
             </label>
+            <select
+              aria-label="选择版块"
+              className="select compact-select"
+              value={activeCategoryId}
+              onChange={(event) => setActiveCategoryId(event.target.value)}
+            >
+              <option value="all">全部帖子（{threads.length}）</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}（{category.threadCount}）
+                </option>
+              ))}
+            </select>
             <SortIconSelect
               className="forum-sort-control"
               onChange={setSortMode}
@@ -190,7 +170,23 @@ export function ForumClient() {
               const category = categoryById.get(thread.categoryId);
               const replyCount = Math.max(0, thread.postCount - 1);
               return (
-                <article className="forum-topic" key={thread.id}>
+                <article
+                  className="forum-topic forum-topic-link"
+                  key={thread.id}
+                  onClick={(event) => {
+                    if (
+                      event.target instanceof HTMLElement &&
+                      event.target.closest("a, button")
+                    ) {
+                      return;
+                    }
+                    window.open(
+                      forumThread(thread.id),
+                      "_blank",
+                      "noopener,noreferrer",
+                    );
+                  }}
+                >
                   <ForumUserAvatar
                     className="forum-topic-avatar"
                     isAnonymous={thread.isAnonymous}

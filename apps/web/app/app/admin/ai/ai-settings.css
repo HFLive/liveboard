@@ -11,9 +11,6 @@
 }
 
 .ai-settings-page .ai-panel {
-  overflow: hidden;
-  border: 1px solid #d8d5ce;
-  border-radius: 14px;
   background: transparent;
 }
 
@@ -77,12 +74,7 @@
   justify-content: space-between;
   gap: 20px;
   min-width: 0;
-  border-bottom: 1px solid #e3e0d9;
   padding: 12px 16px;
-}
-
-.ai-settings-page .ai-config-row:last-child {
-  border-bottom: 0;
 }
 
 .ai-settings-page .ai-config-row-main {
@@ -261,7 +253,7 @@
   gap: 16px;
   min-width: 0;
   border-radius: var(--radius-sm);
-  background: #f3f1ec;
+  background: var(--fill-subtle);
   padding: 10px 12px;
 }
 

@@ -431,7 +431,6 @@ export class AiService {
       .map((file, index) =>
         [
           `资料 ${index + 1}: ${file.title}`,
-          `类型: ${file.type}`,
           `更新时间: ${file.updatedAt.toISOString()}`,
           file.text,
         ].join("\n"),

@@ -48,10 +48,9 @@ describe("FileViewer", () => {
       "href",
       "/app/content/file-1/edit",
     );
-    expect(screen.getByRole("link", { name: "返回文档" })).toHaveAttribute(
-      "href",
-      "/app/content",
-    );
+    expect(
+      screen.queryByRole("link", { name: "返回文档" }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not show the edit link to a viewer", async () => {

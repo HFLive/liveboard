@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { roleLabel, userStatusLabel } from "@/lib/labels";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
 const MAX_BANNER_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -321,7 +322,7 @@ export function ProfileClient() {
             </label>
             <label className="label">
               个人简介
-              <textarea
+              <AutoTextarea
                 className="textarea profile-bio-input"
                 maxLength={500}
                 onChange={(event) => setBio(event.target.value)}

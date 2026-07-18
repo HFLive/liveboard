@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  ArrowLeft,
   Lock,
   MessageSquareReply,
   Pencil,
@@ -36,6 +35,7 @@ import { UserProfileLink } from "@/components/UserProfileLink";
 import { ForumUserAvatar } from "../ForumUserAvatar";
 import { ForumImagePicker } from "../ForumImagePicker";
 import { ForumPostImages } from "../ForumPostImages";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 interface ForumThreadClientProps {
   threadId: string;
@@ -508,7 +508,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                   className="forum-nested-reply-form"
                   onSubmit={(event) => handleReply(event, replyPost.id)}
                 >
-                  <textarea
+                  <AutoTextarea
                     autoFocus
                     className="textarea"
                     maxLength={8000}
@@ -557,11 +557,6 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
 
   return (
     <div className="workspace forum-workspace">
-      <Link className="page-back-link" href={APP_ROUTES.forum}>
-        <ArrowLeft aria-hidden="true" />
-        返回论坛
-      </Link>
-
       {error ? <p className="error-text">{error}</p> : null}
 
       {thread ? (
@@ -748,7 +743,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                   ) : null}
                   {editingPostId === postStructure.mainPost.id ? (
                     <div className="forum-post-edit-form">
-                      <textarea
+                      <AutoTextarea
                         className="textarea"
                         maxLength={8000}
                         value={postDraft}
@@ -847,7 +842,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                             className="forum-nested-reply-form"
                             onSubmit={(event) => handleReply(event, post.id)}
                           >
-                            <textarea
+                            <AutoTextarea
                               autoFocus
                               className="textarea"
                               maxLength={8000}
@@ -908,7 +903,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                   />
                   写回复
                 </span>
-                <textarea
+                <AutoTextarea
                   className="textarea"
                   maxLength={8000}
                   value={reply}

@@ -10,9 +10,18 @@
   height: calc(100dvh - 48px);
   min-height: 620px;
   overflow: hidden;
-  border: 1px solid #dedbd5;
-  border-radius: 18px;
-  background: #fff;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* 与全站扁平化一致：去除大圆角外框，工作区出血到页面边缘，
+   侧栏与对话区之间以竖线分隔。 */
+@media (min-width: 1041px) {
+  .ai-workspace .ai-workbench {
+    height: 100dvh;
+    margin: calc(0px - var(--page-gutter));
+  }
 }
 
 .ai-workspace .ai-sidebar {
@@ -22,7 +31,7 @@
   min-width: 0;
   overflow: hidden;
   border: 0;
-  border-right: 1px solid #e5e2dc;
+  border-right: 1px solid var(--line);
   border-radius: 0;
   background: #f7f6f3;
   box-shadow: none;
@@ -131,7 +140,7 @@
 
 .ai-workspace .history-group h3 {
   padding: 8px 9px 4px;
-  color: #8a867f;
+  color: var(--muted);
   font-size: 10px;
   font-weight: 650;
 }
@@ -191,7 +200,7 @@
   overflow: hidden;
   border: 0;
   border-radius: 0;
-  background: #fff;
+  background: transparent;
   box-shadow: none;
 }
 
@@ -200,7 +209,7 @@
   z-index: 4;
   min-height: 62px;
   border: 0;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(247, 246, 243, 0.9);
   padding: 10px 18px 10px 22px;
   backdrop-filter: blur(10px);
 }
@@ -249,7 +258,7 @@
   gap: 14px;
   min-width: 0;
   overflow-y: auto;
-  background: #fff;
+  background: transparent;
   padding: 42px max(28px, calc((100% - 900px) / 2)) 70px;
   scroll-padding-bottom: 40px;
 }
@@ -353,9 +362,9 @@
 .ai-workspace .chat-source-link {
   display: inline-flex;
   align-items: center;
-  border: 1px solid #dedbd5;
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
-  background: #faf9f7;
+  background: var(--fill-subtle);
   padding: 6px 10px;
   color: var(--text-soft);
   font-size: 12px;
@@ -437,7 +446,7 @@
 
 .ai-workspace .ai-suggestion-list button:hover:not(:disabled) {
   border-color: #cbc6bd;
-  background: #faf9f7;
+  background: var(--fill-subtle);
   color: var(--text);
 }
 
@@ -530,7 +539,7 @@
 
 .ai-workspace .ai-disclaimer {
   margin: 0 auto 10px;
-  color: #8a867f;
+  color: var(--muted);
   font-size: 11px;
   line-height: 1.4;
   text-align: center;
@@ -551,7 +560,7 @@
     left: 0;
     display: grid;
     width: min(272px, calc(100% - 44px));
-    border-right: 1px solid #dedbd5;
+    border-right: 1px solid var(--line-strong);
     box-shadow: 18px 0 48px rgba(28, 24, 18, 0.18);
     transform: translateX(-110%);
     transition: transform 180ms ease;

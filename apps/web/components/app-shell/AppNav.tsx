@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import type { UserSummary } from "@liveboard/shared";
 import { apiResourceUrl, getMe } from "@/lib/api";
-import { roleLabel } from "@/lib/labels";
 import { APP_ROUTES, userProfile } from "@/lib/routes";
 import { LogoutButton } from "./LogoutButton";
 
@@ -143,13 +142,6 @@ export function AppNav() {
           </span>
           <span className="rail-user-copy">
             <span>{displayName}</span>
-            <small>
-              {userLoaded
-                ? user
-                  ? roleLabel(user.systemRole)
-                  : "请重新登录"
-                : "加载中…"}
-            </small>
           </span>
         </Link>
         <LogoutButton />

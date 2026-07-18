@@ -26,6 +26,7 @@ import {
 import { UserVisibilityPicker } from "@/components/UserVisibilityPicker";
 import { questionTypeLabel } from "@/lib/labels";
 import { APP_ROUTES } from "@/lib/routes";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 const questionTypes: Array<{ value: QuestionType; label: string }> = [
   { value: "single_choice", label: questionTypeLabel("single_choice") },
@@ -600,7 +601,7 @@ export function NewExerciseClient() {
 
             <label className="label quiz-prompt-field">
               题目
-              <textarea
+              <AutoTextarea
                 className="textarea"
                 onChange={(event) => setPrompt(event.target.value)}
                 placeholder="输入题目内容"

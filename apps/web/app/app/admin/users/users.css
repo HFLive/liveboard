@@ -12,7 +12,7 @@
 .admin-users-page .import-preview {
   border-color: transparent;
   border-radius: 10px;
-  background: #f3f1ec;
+  background: var(--fill-subtle);
   padding: 10px 12px;
 }
 
@@ -21,11 +21,11 @@
   overflow: hidden;
   border-color: transparent;
   border-radius: 10px;
-  background: #f3f1ec;
+  background: var(--fill-subtle);
 }
 
 .admin-users-page .import-result span {
-  border-right-color: #e3e0d9;
+  border-right-color: var(--line);
   padding: 10px 12px;
 }
 
@@ -41,7 +41,7 @@
   gap: 10px;
   min-height: 0;
   border-right: 0;
-  border-bottom: 1px solid #e3e0d9;
+  border-bottom: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
   padding: 8px 0;
@@ -59,7 +59,7 @@
 @media (max-width: 720px) {
   /* 窄屏堆叠行保持透明连续行，不回落为白色卡片。 */
   .admin-users-page .responsive-table tr {
-    border-bottom-color: #e3e0d9;
+    border-bottom-color: var(--line);
     background: transparent;
   }
 

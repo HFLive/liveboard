@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { APP_ROUTES, forumThread } from "@/lib/routes";
 import { ForumImagePicker } from "../ForumImagePicker";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 export function NewForumThreadClient() {
   const router = useRouter();
@@ -168,7 +169,7 @@ export function NewForumThreadClient() {
               正文
               <small>{body.length}/8000</small>
             </span>
-            <textarea
+            <AutoTextarea
               className="textarea"
               maxLength={8000}
               value={body}

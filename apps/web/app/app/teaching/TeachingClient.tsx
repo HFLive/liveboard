@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { MoreHorizontal, Play, Plus, Search, Trash2 } from "lucide-react";
+import { MoreHorizontal, Plus, Search, Trash2 } from "lucide-react";
 import type { TeachingDeckSummary } from "@liveboard/shared";
 import { deleteTeachingDeck, listTeachingDecks } from "@/lib/api";
 import { UserProfileLink } from "@/components/UserProfileLink";
@@ -10,6 +11,7 @@ import { formatDateTime } from "@/lib/labels";
 import { APP_ROUTES, teachingEdit, teachingPresent } from "@/lib/routes";
 
 export function TeachingClient() {
+  const router = useRouter();
   const [decks, setDecks] = useState<TeachingDeckSummary[]>([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +74,19 @@ export function TeachingClient() {
         </div>
         <div className="teaching-deck-list">
           {filtered.map((deck) => (
-            <article className="teaching-deck-row" key={deck.id}>
+            <article
+              className="teaching-deck-row teaching-deck-row-link"
+              key={deck.id}
+              onClick={(event) => {
+                if (
+                  event.target instanceof HTMLElement &&
+                  event.target.closest("a, button, summary")
+                ) {
+                  return;
+                }
+                router.push(teachingPresent(deck.id));
+              }}
+            >
               <div className="teaching-deck-main">
                 <Link href={teachingPresent(deck.id)}>{deck.title}</Link>
                 <span>
@@ -85,13 +99,6 @@ export function TeachingClient() {
                 </span>
               </div>
               <div className="teaching-deck-actions">
-                <Link
-                  className="button secondary"
-                  href={teachingPresent(deck.id)}
-                >
-                  <Play aria-hidden="true" className="button-icon" />
-                  展示
-                </Link>
                 {deck.canEdit ? (
                   <details className="editor-more-menu">
                     <summary

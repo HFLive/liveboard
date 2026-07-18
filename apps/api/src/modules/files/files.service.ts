@@ -34,7 +34,7 @@ export interface CreateFolderInput {
 export interface CreateFileInput {
   folderId: string;
   title: string;
-  type: FileType;
+  type?: FileType;
 }
 
 export interface UpdateFolderInput {
@@ -555,7 +555,7 @@ export class FilesService {
         workspaceId: folder.workspaceId,
         folderId: folder.id,
         title: input.title,
-        type: input.type,
+        type: input.type ?? "doc",
         createdById: userId,
         updatedById: userId,
       },

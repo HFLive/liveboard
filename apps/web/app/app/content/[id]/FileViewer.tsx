@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Edit3 } from "lucide-react";
+import { Edit3 } from "lucide-react";
 import type { ContentBlock, FileDetail } from "@/lib/api";
 import { getFile, listBlocks } from "@/lib/api";
-import { fileStatusLabel, fileTypeLabel, permissionLabel } from "@/lib/labels";
-import { APP_ROUTES, contentEdit } from "@/lib/routes";
+import { fileStatusLabel, permissionLabel } from "@/lib/labels";
+import { contentEdit } from "@/lib/routes";
 import { RenderBlockContent } from "./ContentBlockRenderer";
 
 function canEditContent(permission: FileDetail["permission"]) {
@@ -47,11 +47,6 @@ export function FileViewer({ fileId }: { fileId: string }) {
 
   return (
     <div className="content-viewer workspace">
-      <Link className="page-back-link" href={APP_ROUTES.content}>
-        <ArrowLeft aria-hidden="true" />
-        返回文档
-      </Link>
-
       {error ? <p className="error-text">{error}</p> : null}
 
       {loading ? (
@@ -62,9 +57,7 @@ export function FileViewer({ fileId }: { fileId: string }) {
             <div>
               <h1>{file.title}</h1>
               <div className="content-viewer-meta" aria-label="文件信息">
-                <span>{fileTypeLabel(file.type)}</span>
                 <span>{fileStatusLabel(file.status)}</span>
-                <span>{permissionLabel(file.permission)}</span>
                 <span>{blocks.length} 个内容块</span>
               </div>
             </div>

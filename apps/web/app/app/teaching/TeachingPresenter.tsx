@@ -22,6 +22,7 @@ import {
 import { APP_ROUTES, teachingEdit } from "@/lib/routes";
 import { RenderBlockContent } from "../content/[id]/ContentBlockRenderer";
 import { buildTeachingSlides } from "./teachingSlides";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 type AnswerValue = string | string[] | boolean;
 
@@ -420,7 +421,7 @@ function QuestionField({
     );
   }
   return question.type === "short_answer" ? (
-    <textarea
+    <AutoTextarea
       onChange={(event) => onChange(event.target.value)}
       placeholder="输入回答"
       value={typeof value === "string" ? value : ""}

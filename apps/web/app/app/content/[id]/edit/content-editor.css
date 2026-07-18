@@ -2,7 +2,7 @@
   min-height: 31px;
   border: 0;
   border-radius: 10px;
-  background: #eeebe5;
+  background: var(--fill-hover);
   color: var(--text-soft);
   padding: 0 11px;
   font-size: 13px;
@@ -10,7 +10,7 @@
 }
 
 .editor-action-bar .publish-state-badge.muted {
-  background: #eeebe5;
+  background: var(--fill-hover);
   color: var(--muted);
 }
 

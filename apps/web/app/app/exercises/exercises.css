@@ -1,3 +1,48 @@
 .table .exercise-empty-row > .empty-cell {
   background: var(--bg);
 }
+
+.exercise-row-link {
+  cursor: pointer;
+}
+
+.exercise-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 练习列表页内容边距放宽：分隔线保持贯通，标题与列表内容距屏幕边缘 40px。 */
+@media (min-width: 1121px) {
+  .workspace:not(.ai-workspace) > .workbench-main {
+    padding-inline: 40px;
+  }
+
+  .workspace:not(.ai-workspace)
+    > .workbench-main
+    > :is(.panel-head, .list-toolbar) {
+    margin-inline: -40px;
+    padding-inline: 51px;
+  }
+
+  .workspace:not(.ai-workspace) > .workbench-main > .table-wrap {
+    margin-inline: -40px;
+  }
+
+  /* 行的分隔线仍贯通到屏幕边缘，但单元格内容与标题对齐。 */
+  .workspace:not(.ai-workspace)
+    > .workbench-main
+    > .table-wrap
+    .table
+    :is(th, td):first-child {
+    padding-left: 51px;
+  }
+
+  .workspace:not(.ai-workspace)
+    > .workbench-main
+    > .table-wrap
+    .table
+    :is(th, td):last-child {
+    padding-right: 51px;
+  }
+}
