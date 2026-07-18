@@ -327,3 +327,23 @@
     white-space: normal;
   }
 }
+
+.ai-settings-page .ai-call-limit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ai-settings-page .ai-call-limit-row .label {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.ai-settings-page .ai-call-limit-row .input {
+  width: 110px;
+}
+
+.ai-settings-page .ai-call-limit-hint {
+  margin: 6px 0 0;
+}

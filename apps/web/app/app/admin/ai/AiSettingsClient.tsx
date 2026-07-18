@@ -69,6 +69,7 @@ interface GlobalSettingsForm {
   enabled: boolean;
   maxContextFiles: string;
   maxContextChars: string;
+  defaultCallLimit: string;
 }
 
 interface ProviderConfigForm {
@@ -126,6 +127,7 @@ export function AiSettingsClient() {
     enabled: false,
     maxContextFiles: "6",
     maxContextChars: "12000",
+    defaultCallLimit: "0",
   });
   const [configForm, setConfigForm] =
     useState<ProviderConfigForm>(emptyConfigForm);
@@ -151,6 +153,7 @@ export function AiSettingsClient() {
       enabled: result.enabled,
       maxContextFiles: result.maxContextFiles.toString(),
       maxContextChars: result.maxContextChars.toString(),
+      defaultCallLimit: result.defaultCallLimit.toString(),
     });
 
     const nextConfig =
@@ -210,6 +213,32 @@ export function AiSettingsClient() {
       setMessage(enabled ? "AI 助手已启用" : "AI 助手已停用");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "更新 AI 助手失败");
+    } finally {
+      setSavingGlobal(false);
+    }
+  }
+
+  async function onSaveCallLimit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setMessage(null);
+
+    const defaultCallLimit = Number(globalForm.defaultCallLimit);
+
+    if (!Number.isInteger(defaultCallLimit) || defaultCallLimit < 0) {
+      setError("默认调用限额需为不小于 0 的整数");
+      return;
+    }
+
+    setSavingGlobal(true);
+    try {
+      const result = await updateAiSettings({ defaultCallLimit });
+      applySettings(result.settings, configForm.id);
+      setMessage("默认调用限额已保存");
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "保存默认调用限额失败",
+      );
     } finally {
       setSavingGlobal(false);
     }
@@ -423,6 +452,35 @@ export function AiSettingsClient() {
             {settings?.activeConfig
               ? `当前使用 ${settings.activeConfig.name} · ${settings.activeConfig.model || "未配置模型"}`
               : "选择一个模型配置后即可启用。"}
+          </p>
+          <form className="ai-call-limit-row" onSubmit={onSaveCallLimit}>
+            <label className="label" htmlFor="ai-call-limit-input">
+              默认调用限额
+            </label>
+            <input
+              className="input"
+              id="ai-call-limit-input"
+              min={0}
+              onChange={(event) =>
+                setGlobalForm((current) => ({
+                  ...current,
+                  defaultCallLimit: event.target.value,
+                }))
+              }
+              type="number"
+              value={globalForm.defaultCallLimit}
+            />
+            <span className="muted">次/人</span>
+            <button
+              className="button secondary"
+              disabled={savingGlobal}
+              type="submit"
+            >
+              保存限额
+            </button>
+          </form>
+          <p className="field-hint ai-call-limit-hint">
+            每位成员的 AI 调用次数上限；在成员管理中编辑成员可设置例外。
           </p>
         </section>
 

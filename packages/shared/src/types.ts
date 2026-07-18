@@ -62,6 +62,40 @@ export interface UserProfile extends UserSummary {
   bannerUrl: string | null;
 }
 
+// 管理端用户列表专用：在 UserSummary 基础上附带 AI 调用配额信息
+export interface AdminUserSummary extends UserSummary {
+  aiCallCount: number;
+  aiCallLimit: number | null;
+}
+
+export interface AiProviderConfigSummary {
+  id: string;
+  name: string;
+  providerName: string;
+  baseUrl: string;
+  model: string;
+  apiKeyConfigured: boolean;
+  apiKeyPreview: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiSettingsSummary {
+  enabled: boolean;
+  activeConfigId: string | null;
+  activeConfig: AiProviderConfigSummary | null;
+  configs: AiProviderConfigSummary[];
+  maxContextFiles: number;
+  maxContextChars: number;
+  defaultCallLimit: number;
+  updatedAt: string;
+}
+
+export interface AiUsageSummary {
+  used: number;
+  limit: number;
+}
+
 export interface PermissionGroupMemberSummary {
   id: string;
   user: UserSummary;

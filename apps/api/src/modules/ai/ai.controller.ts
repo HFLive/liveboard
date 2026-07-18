@@ -41,6 +41,11 @@ class UpdateAiSettingsDto {
   @Min(1000)
   @Max(40000)
   maxContextChars?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  defaultCallLimit?: number;
 }
 
 class CreateAiProviderConfigDto {
@@ -165,6 +170,11 @@ export class AiController {
   @Get("ai/status")
   async status(@CurrentUserId() userId: string | null) {
     return { status: await this.aiService.getAvailability(userId) };
+  }
+
+  @Get("ai/usage")
+  async usage(@CurrentUserId() userId: string | null) {
+    return { usage: await this.aiService.getUsage(userId) };
   }
 
   @Get("ai/conversations")

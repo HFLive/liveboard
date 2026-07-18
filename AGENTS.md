@@ -133,6 +133,7 @@ docker compose up --build -d
 - 上传内容不得以内联方式提供 SVG；只有经过文件头识别的 PNG、JPEG、GIF 和 WebP 可以内联，其他类型强制下载并使用 `nosniff`。安全图片响应使用 `Cross-Origin-Resource-Policy: same-site`，以支持本地 Web 与 API 不同端口的预览；下载型附件继续使用 `same-origin`。
 - AI 服务商 API Key 使用 `AI_ENCRYPTION_KEY` 进行 AES-GCM 加密后存入数据库；生产部署必须保留该密钥，否则已有配置无法解密。
 - AI 请求由 Redis 实施单用户窗口限流和并发限制；流式请求在浏览器断开后必须取消上游请求。Nginx 必须关闭 API 代理缓冲并保留长于模型请求的读取超时。
+- AI 调用按次数限额：`User.aiCallCount` 累计用量，`User.aiCallLimit` 为成员例外（null 跟随 `AiSettings.defaultCallLimit`）。`AiService.consumeCallQuota` 是所有 AI 调用的统一消耗点（原子条件递增，超限抛 429），任何新增 AI 调用入口必须先经过它；消耗发生在配置校验之后，AI 未启用或配置不完整时不扣次数。
 - 图片和附件区块写入 `assetId` 时，服务端必须校验附件工作区和重新引用权限；归档文件中的旧区块不得继续授予附件下载权限。
 - 所有 schema 变更都应提交 Prisma migration，不使用 `db push`；测试数据库需要重建时使用 `pnpm db:reset`。
 - Release 部署必须自动生成 `SESSION_SECRET`、数据库密码和 MinIO 凭据。HTTP IP 模式使用 `SESSION_COOKIE_SECURE=false`；配置 HTTPS 后改为 `true`。
@@ -213,5 +214,6 @@ UI 修改额外确认：
 - 2026-07-18：文档页左侧位置树改为纯文件夹导航（参考 VS Code/Finder 侧栏），不再展示文档；文档统一在右侧表格呈现，消除树与表格重复展示同一批文档。新增或恢复树内文档展示需先评估是否破坏这一分工。
 - 2026-07-18：全站 CSS 死代码清理：经全源码交叉比对删除约 70 个未使用类、220 个规则块（globals.css 与 redesign.css 净减约 1240 行），涉及旧首页 `home-shell`/`home-quick-card`、旧 AI 界面 `ai-hero-bar`/`ai-brand-panel`/`ai-chat-head`、旧论坛列表 `forum-thread-row`/`forum-compose-guide`、权限组旧 hero、`editor-action-bar`、`presenter-stage-toolbar` 等已下线界面。重新引入同名类前先确认不是恢复已删除的旧界面。活样式仍存在同一选择器在 globals.css 与 redesign.css 多轮定义的情况（约 280 组），属有意的覆盖分层，合并前需逐条比对级联。
 - 2026-07-18：AI 对话页取消样式特例，与其他页面并列：redesign.css 和路由 CSS 中全部 `.workspace:not(.ai-workspace)`（131 处）改为 `.workspace`，AI 页同样继承全站密度、扁平工作区和组件规则；`ai-workspace.css` 继续以 `.ai-workspace` 前缀承载该路由专属布局（对话流、侧栏、输入区），平级时后加载的路由样式优先。2026-07-14 与 2026-07-15 纪要中"AI 页保持原有密度/非 AI 页"的表述由本条取代。
+- 2026-07-18：新增 AI 调用限额（按次数、累计制不自动重置）：`AiSettings.defaultCallLimit` 为默认限额（默认 100，最高管理员在 AI 设置中调整），`User.aiCallLimit` 为成员例外（管理员在成员编辑弹窗设置，留空恢复默认）。侧栏账户行 hover 浮窗展示用量进度条（`GET /ai/usage`）。管理端用户列表/更新接口携带 `aiCallCount`/`aiCallLimit`，但 `toSummary` 等非管理序列化不暴露配额字段。
 
 后续纪要只记录会影响未来开发判断的决策、迁移或故障原因，不记录每个微小样式调整。

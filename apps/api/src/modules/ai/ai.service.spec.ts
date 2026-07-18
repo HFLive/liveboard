@@ -23,12 +23,13 @@ describe("AiService", () => {
     activeConfig: config,
     maxContextFiles: 6,
     maxContextChars: 12000,
+    defaultCallLimit: 100,
     updatedById: "admin-1",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
   };
   const prisma = {
-    user: { findUnique: jest.fn() },
+    user: { findUnique: jest.fn(), updateMany: jest.fn() },
     workspace: { findFirst: jest.fn() },
     aiSettings: { upsert: jest.fn(), update: jest.fn() },
     aiProviderConfig: {
@@ -60,6 +61,7 @@ describe("AiService", () => {
       systemRole: "super_admin",
       status: "active",
     });
+    prisma.user.updateMany.mockResolvedValue({ count: 1 });
     prisma.workspace.findFirst.mockResolvedValue({ id: "workspace-1" });
     prisma.aiSettings.upsert.mockResolvedValue(settings);
     prisma.aiSettings.update.mockResolvedValue(settings);
