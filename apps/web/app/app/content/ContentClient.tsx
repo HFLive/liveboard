@@ -54,8 +54,9 @@ import {
   updateContentPins,
   upsertPermissionGrant,
 } from "@/lib/api";
-import { formatDateTime, permissionLabel } from "@/lib/labels";
+import { formatRelativeTime, permissionLabel } from "@/lib/labels";
 import { contentDetail } from "@/lib/routes";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { SortIconSelect } from "@/components/SortIconSelect";
 import { MarkdownImportButton } from "./MarkdownImportButton";
 
@@ -307,6 +308,7 @@ export function ContentClient() {
 
     return path;
   }, [activeFolderId, flatFolders]);
+  useDocumentTitle(activeFolderPath.at(-1)?.name ?? "文档");
   const groupGrants = useMemo(
     () => grants.filter((grant) => grant.group),
     [grants],
@@ -1216,7 +1218,7 @@ export function ContentClient() {
               </Link>
             )}
           </td>
-          <td data-label="最近更新">{formatDateTime(updatedAt)}</td>
+          <td data-label="最近更新">{formatRelativeTime(updatedAt)}</td>
           <td data-label="操作">
             <div className="content-pinned-actions" data-menu-root="true">
               {canManagePins ? (
@@ -1614,7 +1616,7 @@ export function ContentClient() {
                       </button>
                     </td>
                     <td data-label="最近更新">
-                      {formatDateTime(folder.updatedAt)}
+                      {formatRelativeTime(folder.updatedAt)}
                     </td>
                     <td data-label="操作">
                       <div className="row-menu-wrap" data-menu-root="true">
@@ -1670,7 +1672,7 @@ export function ContentClient() {
                         </Link>
                       </td>
                       <td data-label="最近更新">
-                        {formatDateTime(file.updatedAt)}
+                        {formatRelativeTime(file.updatedAt)}
                       </td>
                       <td data-label="操作">
                         <div className="row-menu-wrap" data-menu-root="true">

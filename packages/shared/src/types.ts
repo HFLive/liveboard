@@ -146,6 +146,8 @@ export interface TeachingDeckSummary {
   itemCount: number;
   createdBy: UserSummary;
   canEdit: boolean;
+  /** 仅最高管理员可见：当前用户既非创建者也不在可见范围内。 */
+  viaSuperAdmin?: boolean;
   createdAt: string;
   updatedAt: string;
 }

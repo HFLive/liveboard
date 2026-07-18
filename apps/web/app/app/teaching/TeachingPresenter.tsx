@@ -326,7 +326,7 @@ function EmbeddedExercise({ exerciseSetId }: { exerciseSetId: string }) {
   return (
     <div className="embedded-exercise">
       <div className="embedded-exercise-head">
-        <h2>{exercise?.file.title ?? "加载练习…"}</h2>
+        <h2>{exercise?.title ?? "加载练习…"}</h2>
         <span>{exercise?.questions.length ?? 0} 道题</span>
       </div>
       <div className="embedded-question-list">

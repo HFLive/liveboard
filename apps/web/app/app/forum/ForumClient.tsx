@@ -8,6 +8,7 @@ import type {
   ForumThreadSummary,
 } from "@liveboard/shared";
 import { listForumOverview } from "@/lib/api";
+import { formatRelativeTime } from "@/lib/labels";
 import { APP_ROUTES, forumThread } from "@/lib/routes";
 import { SortIconSelect } from "@/components/SortIconSelect";
 import { UserProfileLink } from "@/components/UserProfileLink";
@@ -21,22 +22,6 @@ const SORT_OPTIONS = [
   { value: "newest", label: "最新发布" },
   { value: "replies", label: "回复最多" },
 ] as const;
-
-const relativeTime = new Intl.RelativeTimeFormat("zh-CN", { numeric: "auto" });
-
-function formatRelativeTime(value: string) {
-  const difference = new Date(value).getTime() - Date.now();
-  const minutes = Math.round(difference / 60_000);
-  if (Math.abs(minutes) < 60) return relativeTime.format(minutes, "minute");
-  const hours = Math.round(minutes / 60);
-  if (Math.abs(hours) < 24) return relativeTime.format(hours, "hour");
-  const days = Math.round(hours / 24);
-  if (Math.abs(days) < 30) return relativeTime.format(days, "day");
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(value));
-}
 
 export function ForumClient() {
   const [categories, setCategories] = useState<ForumCategorySummary[]>([]);
@@ -212,6 +197,12 @@ export function ForumClient() {
                           />
                         </span>
                       ) : null}
+                      <span className="forum-topic-footer">
+                        <MessageSquare aria-hidden="true" />
+                        {replyCount} 条回复
+                        <span aria-hidden="true">·</span>
+                        <span>{formatRelativeTime(thread.lastActivityAt)}</span>
+                      </span>
                     </span>
                     <strong className="forum-topic-title">
                       <span className="forum-category-tag">
@@ -229,12 +220,6 @@ export function ForumClient() {
                       </Link>
                     </strong>
                     {thread.excerpt ? <p>{thread.excerpt}</p> : null}
-                    <span className="forum-topic-footer">
-                      <MessageSquare aria-hidden="true" />
-                      {replyCount} 条回复
-                      <span aria-hidden="true">·</span>
-                      <span>{formatRelativeTime(thread.lastActivityAt)}</span>
-                    </span>
                   </span>
                 </article>
               );

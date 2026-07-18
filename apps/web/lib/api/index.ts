@@ -1117,10 +1117,14 @@ export function deleteTeachingDeck(id: string) {
 
 export interface ExerciseSetSummary {
   id: string;
-  fileId: string;
+  /** 历史关联的 exercise_set 文件，新建练习不再创建，可为空。 */
+  fileId: string | null;
   title: string;
+  createdBy: UserSummary;
   questionCount: number;
   canManage: boolean;
+  /** 仅最高管理员可见：当前用户既非创建者也不在可见范围内。 */
+  viaSuperAdmin?: boolean;
   submissionCount: number;
   pendingReviewCount: number;
   openAt: string | null;
@@ -1179,8 +1183,10 @@ export interface ExerciseQuestion {
 
 export interface ExerciseSetDetail {
   id: string;
-  fileId: string;
-  file: { title: string; createdById: string };
+  title: string;
+  createdById: string;
+  /** 历史关联的 exercise_set 文件，可为空。 */
+  fileId: string | null;
   openAt: string | null;
   dueAt: string | null;
   allowMultipleSubmissions: boolean;

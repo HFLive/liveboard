@@ -79,6 +79,34 @@ export function formatDateTime(value: string | null | undefined) {
   }).format(date);
 }
 
+const relativeTime = new Intl.RelativeTimeFormat("zh-CN", { numeric: "auto" });
+
+/** 相对时间（"5 分钟前""昨天""3 天后"），超过 30 天回退到月-日。 */
+export function formatRelativeTime(value: string | null | undefined) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  const difference = date.getTime() - Date.now();
+  const minutes = Math.round(difference / 60_000);
+  if (Math.abs(minutes) < 60) return relativeTime.format(minutes, "minute");
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 24) return relativeTime.format(hours, "hour");
+  const days = Math.round(hours / 24);
+  if (Math.abs(days) < 30) return relativeTime.format(days, "day");
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: getAppTimeZone(),
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
 export function assetTypeLabel(mimeType: string, filename: string) {
   const extension = filename.includes(".")
     ? filename.split(".").pop()?.toUpperCase()

@@ -1,5 +1,8 @@
 import "./content-viewer.css";
 import { FileViewer } from "./FileViewer";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "文档" };
 
 export default async function FileDetailPage({
   params,

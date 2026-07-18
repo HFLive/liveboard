@@ -14,10 +14,13 @@ import {
 } from "lucide-react";
 import { AdminSubnav } from "@/components/admin/AdminSubnav";
 import { APP_ROUTES } from "@/lib/routes";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { getMe } from "@/lib/api";
 
 export default function AdminPage() {
   const [role, setRole] = useState<SystemRole | null>(null);
+
+  useDocumentTitle("管理中心");
 
   useEffect(() => {
     getMe()

@@ -6,7 +6,7 @@ import { ArrowLeft, CheckCircle2, Search } from "lucide-react";
 import { gradeSubmission, listSubmissions, SubmissionSummary } from "@/lib/api";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import {
-  formatDateTime,
+  formatRelativeTime,
   questionTypeLabel,
   submissionStatusLabel,
 } from "@/lib/labels";
@@ -181,7 +181,7 @@ export function SubmissionsClient({
                       user={submission.user}
                     />
                   </strong>
-                  <small>{formatDateTime(submission.submittedAt)}</small>
+                  <small>{formatRelativeTime(submission.submittedAt)}</small>
                 </span>
                 <em>{submissionStatusLabel(submission.status)}</em>
                 <b>
