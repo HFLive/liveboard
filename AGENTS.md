@@ -215,5 +215,8 @@ UI 修改额外确认：
 - 2026-07-18：全站 CSS 死代码清理：经全源码交叉比对删除约 70 个未使用类、220 个规则块（globals.css 与 redesign.css 净减约 1240 行），涉及旧首页 `home-shell`/`home-quick-card`、旧 AI 界面 `ai-hero-bar`/`ai-brand-panel`/`ai-chat-head`、旧论坛列表 `forum-thread-row`/`forum-compose-guide`、权限组旧 hero、`editor-action-bar`、`presenter-stage-toolbar` 等已下线界面。重新引入同名类前先确认不是恢复已删除的旧界面。活样式仍存在同一选择器在 globals.css 与 redesign.css 多轮定义的情况（约 280 组），属有意的覆盖分层，合并前需逐条比对级联。
 - 2026-07-18：AI 对话页取消样式特例，与其他页面并列：redesign.css 和路由 CSS 中全部 `.workspace:not(.ai-workspace)`（131 处）改为 `.workspace`，AI 页同样继承全站密度、扁平工作区和组件规则；`ai-workspace.css` 继续以 `.ai-workspace` 前缀承载该路由专属布局（对话流、侧栏、输入区），平级时后加载的路由样式优先。2026-07-14 与 2026-07-15 纪要中"AI 页保持原有密度/非 AI 页"的表述由本条取代。
 - 2026-07-18：新增 AI 调用限额（按次数、累计制不自动重置）：`AiSettings.defaultCallLimit` 为默认限额（默认 100，最高管理员在 AI 设置中调整），`User.aiCallLimit` 为成员例外（管理员在成员编辑弹窗设置，留空恢复默认）。侧栏账户行 hover 浮窗展示用量进度条（`GET /ai/usage`）。管理端用户列表/更新接口携带 `aiCallCount`/`aiCallLimit`，但 `toSummary` 等非管理序列化不暴露配额字段。
+- 2026-07-18：测验与文档文件夹解耦：`ExerciseSet` 自带 `title` 和 `createdById`（migration 从原 exercise_set 文件回填），`fileId` 变为仅历史数据使用的可选关联。创建测验不再要求任何文件夹的授课权限，任何登录用户都可创建；查看答案、批改和管理权限统一为"创建者或系统管理员"，作答访问维持创建者 + 可见范围 + 最高管理员。列表项 `viaSuperAdmin` 标记仅最高管理员因特权可见的内容，前端标题以流动彩虹文字（`.rainbow-text`）标识。ExercisesService 不再依赖 PermissionsService。
+- 2026-07-19：侧栏收窄至 116px：LB 标志与导航间距同步收紧，导航项内容居中；账户区只保留头像（新标签页进个人主页）和退出按钮，不再显示用户名；AI 额度为常驻紧凑条（位于账户区分隔横线正上方，上行"AI 额度 + 百分比"、下行进度条），hover 头像的浮窗只展示头像和显示名，退出按钮不提供任何 hover 浮层。练习列表的作者显示在"X 道题"之前；界面不再展示"X 个内容块"（课件列表、文档查看页元信息已移除）。
+- 2026-07-19：无底色图标按钮（`.nav-button`、`.inline-icon-button`、`.icon-button`、`.table-action`、`.breadcrumb-back`、树折叠/置顶/三点菜单按钮、AI 页复制与历史三点按钮等）的 hover 不再添加背景，只做图标/文字颜色高亮；有底色或带边框的文字按钮、菜单项和行 hover 保持原有背景反馈。
 
 后续纪要只记录会影响未来开发判断的决策、迁移或故障原因，不记录每个微小样式调整。

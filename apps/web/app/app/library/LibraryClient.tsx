@@ -20,7 +20,11 @@ import {
   listLibraryAssets,
   uploadAsset,
 } from "@/lib/api";
-import { assetTypeLabel, formatDateTime } from "@/lib/labels";
+import {
+  assetTypeLabel,
+  formatDateTime,
+  formatRelativeTime,
+} from "@/lib/labels";
 import { contentDetail, teachingPresent } from "@/lib/routes";
 import { SortIconSelect } from "@/components/SortIconSelect";
 
@@ -324,7 +328,7 @@ export function LibraryClient() {
                       </span>
                       <small>
                         {formatFileSize(asset.sizeBytes)} /{" "}
-                        {formatDateTime(asset.createdAt)}
+                        {formatRelativeTime(asset.createdAt)}
                       </small>
                     </div>
                     <div className="asset-actions">

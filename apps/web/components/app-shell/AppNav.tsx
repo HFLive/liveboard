@@ -50,7 +50,7 @@ export function AppNav() {
     left: number;
     bottom: number;
   } | null>(null);
-  const railFooterRef = useRef<HTMLDivElement | null>(null);
+  const accountLinkRef = useRef<HTMLAnchorElement | null>(null);
   const usageHoverTimerRef = useRef<number | null>(null);
   const usageLoadingRef = useRef(false);
   const displayName = userLoaded ? (user?.displayName ?? "未登录") : "账户信息";
@@ -94,6 +94,13 @@ export function AppNav() {
   }, []);
 
   useEffect(() => {
+    if (user) {
+      loadUsage();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  useEffect(() => {
     return () => {
       if (usageHoverTimerRef.current !== null) {
         window.clearTimeout(usageHoverTimerRef.current);
@@ -131,7 +138,7 @@ export function AppNav() {
 
     usageHoverTimerRef.current = window.setTimeout(() => {
       usageHoverTimerRef.current = null;
-      const rect = railFooterRef.current?.getBoundingClientRect();
+      const rect = accountLinkRef.current?.getBoundingClientRect();
 
       if (!rect) {
         return;
@@ -199,71 +206,77 @@ export function AppNav() {
         })}
       </nav>
 
-      <div
-        className="rail-footer"
-        onMouseEnter={onAccountMouseEnter}
-        onMouseLeave={onAccountMouseLeave}
-        ref={railFooterRef}
-      >
-        <Link
-          aria-current={
-            user && isActive(pathname, userProfile(user.id))
-              ? "page"
-              : undefined
-          }
-          className={
-            user && isActive(pathname, userProfile(user.id))
-              ? "rail-user active"
-              : "rail-user"
-          }
-          href={user ? userProfile(user.id) : APP_ROUTES.profile}
-          rel="noopener noreferrer"
-          target="_blank"
-          title="个人主页"
-        >
-          <span className="rail-avatar" aria-hidden="true">
-            {user?.avatarUrl ? (
-              <img alt="" src={apiResourceUrl(user.avatarUrl)} />
-            ) : (
-              userInitial
-            )}
-          </span>
-          <span className="rail-user-copy">
-            <span>{displayName}</span>
-          </span>
-        </Link>
-        <LogoutButton />
+      <div className="rail-footer">
+        {user && usage ? (
+          <div
+            aria-label={`AI 额度已用 ${usage.used} / ${usage.limit} 次`}
+            className="rail-usage-strip"
+            role="status"
+          >
+            <div className="rail-usage-strip-head">
+              <span>AI 额度</span>
+              <span>{usagePercent}%</span>
+            </div>
+            <span className="rail-usage-strip-bar" aria-hidden="true">
+              <span
+                className={
+                  usageExceeded
+                    ? "rail-usage-bar-fill is-over"
+                    : "rail-usage-bar-fill"
+                }
+                style={{ width: `${usagePercent}%` }}
+              />
+            </span>
+          </div>
+        ) : null}
+        <div className="rail-account-row">
+          <Link
+            aria-current={
+              user && isActive(pathname, userProfile(user.id))
+                ? "page"
+                : undefined
+            }
+            className={
+              user && isActive(pathname, userProfile(user.id))
+                ? "rail-user active"
+                : "rail-user"
+            }
+            href={user ? userProfile(user.id) : APP_ROUTES.profile}
+            onMouseEnter={onAccountMouseEnter}
+            onMouseLeave={onAccountMouseLeave}
+            ref={accountLinkRef}
+            rel="noopener noreferrer"
+            target="_blank"
+            title={displayName}
+          >
+            <span className="rail-avatar" aria-hidden="true">
+              {user?.avatarUrl ? (
+                <img alt="" src={apiResourceUrl(user.avatarUrl)} />
+              ) : (
+                userInitial
+              )}
+            </span>
+          </Link>
+          <LogoutButton />
+        </div>
       </div>
 
-      {usageOpen && user && usagePosition && (usage || usageFailed) ? (
+      {usageOpen && user && usagePosition ? (
         <div
           className="rail-usage-popover"
           role="status"
           style={{ left: usagePosition.left, bottom: usagePosition.bottom }}
         >
-          <p className="rail-usage-title">
-            AI 调用
-            {usage ? <span>{usagePercent}%</span> : null}
-          </p>
-          {usage ? (
-            <>
-              <div className="rail-usage-bar" aria-hidden="true">
-                <div
-                  className={
-                    usageExceeded
-                      ? "rail-usage-bar-fill is-over"
-                      : "rail-usage-bar-fill"
-                  }
-                  style={{ width: `${usagePercent}%` }}
-                />
-              </div>
-              <p className="rail-usage-meta">
-                已用 {usage.used} / {usage.limit} 次
-              </p>
-            </>
-          ) : (
-            <p className="rail-usage-meta">无法获取用量</p>
-          )}
+          <div className="rail-usage-user">
+            <span className="rail-avatar" aria-hidden="true">
+              {user.avatarUrl ? (
+                <img alt="" src={apiResourceUrl(user.avatarUrl)} />
+              ) : (
+                userInitial
+              )}
+            </span>
+            <strong>{displayName}</strong>
+          </div>
         </div>
       ) : null}
     </aside>

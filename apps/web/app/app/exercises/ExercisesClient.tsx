@@ -5,8 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, Plus, Search } from "lucide-react";
 import { ExerciseSetSummary, listExerciseSets } from "@/lib/api";
-import { formatDateTime, submissionStatusLabel } from "@/lib/labels";
+import {
+  formatDateTime,
+  formatRelativeTime,
+  submissionStatusLabel,
+} from "@/lib/labels";
 import { APP_ROUTES, exerciseDetail, exerciseSubmissions } from "@/lib/routes";
+import { UserProfileLink } from "@/components/UserProfileLink";
 
 type ExerciseFilter = "all" | "not_started" | "submitted" | "graded";
 
@@ -134,12 +139,26 @@ export function ExercisesClient() {
                 >
                   <td data-label="练习">
                     <div className="exercise-title-cell">
-                      <Link href={exerciseDetail(exercise.id)}>
+                      <Link
+                        className={
+                          exercise.viaSuperAdmin ? "rainbow-text" : undefined
+                        }
+                        href={exerciseDetail(exercise.id)}
+                        title={
+                          exercise.viaSuperAdmin
+                            ? "仅最高管理员可见"
+                            : undefined
+                        }
+                      >
                         {exercise.title}
                       </Link>
                       <small>
-                        {exercise.questionCount} 道题 · 更新于{" "}
-                        {formatDateTime(exercise.updatedAt)}
+                        <UserProfileLink
+                          className="user-profile-link"
+                          user={exercise.createdBy}
+                        />{" "}
+                        · {exercise.questionCount} 道题 · 更新于{" "}
+                        {formatRelativeTime(exercise.updatedAt)}
                       </small>
                     </div>
                   </td>

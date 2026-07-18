@@ -29,8 +29,9 @@ import {
   updateForumPost,
   updateForumThread,
 } from "@/lib/api";
-import { formatDateTime } from "@/lib/labels";
+import { formatRelativeTime } from "@/lib/labels";
 import { APP_ROUTES } from "@/lib/routes";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import { ForumUserAvatar } from "../ForumUserAvatar";
 import { ForumImagePicker } from "../ForumImagePicker";
@@ -44,6 +45,7 @@ interface ForumThreadClientProps {
 export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
   const router = useRouter();
   const [thread, setThread] = useState<ForumThreadDetail | null>(null);
+  useDocumentTitle(thread?.title ?? null);
   const [categories, setCategories] = useState<ForumCategorySummary[]>([]);
   const [reply, setReply] = useState("");
   const [activeReplyPostId, setActiveReplyPostId] = useState<string | null>(
@@ -231,7 +233,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
           ) : null}
         </span>
         <small className="forum-comment-time">
-          {formatDateTime(post.createdAt)}
+          {formatRelativeTime(post.createdAt)}
           {post.updatedAt !== post.createdAt ? " · 已编辑" : ""}
         </small>
       </span>
@@ -699,7 +701,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 <div className="forum-post-content">
                   <div className="forum-post-toolbar">
                     <time>
-                      {formatDateTime(postStructure.mainPost.createdAt)}
+                      {formatRelativeTime(postStructure.mainPost.createdAt)}
                       {postStructure.mainPost.updatedAt !==
                       postStructure.mainPost.createdAt
                         ? " · 已编辑"

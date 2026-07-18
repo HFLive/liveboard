@@ -6,9 +6,11 @@ import { Settings } from "lucide-react";
 import type { UserProfile } from "@liveboard/shared";
 import { apiResourceUrl, getMe, getUserProfile } from "@/lib/api";
 import { APP_ROUTES } from "@/lib/routes";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 
 export function UserProfileClient({ userId }: { userId: string }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  useDocumentTitle(profile?.displayName ?? null);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

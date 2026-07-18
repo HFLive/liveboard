@@ -432,25 +432,6 @@ strong {
   font-weight: 800;
 }
 
-.rail-user-copy {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.rail-user-copy span {
-  overflow: hidden;
-  font-size: 14px;
-  font-weight: 750;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rail-user-copy small {
-  color: var(--rail-muted);
-  font-size: 12px;
-}
-
 .rail-account-link {
   display: flex;
   align-items: center;
@@ -907,7 +888,7 @@ p.muted {
 .history-more-button:hover,
 .history-more-button[aria-expanded="true"] {
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: transparent;
   color: var(--text);
 }
 

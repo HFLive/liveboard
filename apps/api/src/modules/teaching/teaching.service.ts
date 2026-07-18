@@ -47,6 +47,10 @@ export class TeachingService {
       itemCount: deck._count.items,
       createdBy: this.toUserSummary(deck.createdBy),
       canEdit: deck.createdById === user.id || isSystemAdmin(user.systemRole),
+      viaSuperAdmin:
+        isSuperAdmin(user.systemRole) &&
+        deck.createdById !== user.id &&
+        !deck.viewers.some((viewer) => viewer.userId === user.id),
       createdAt: deck.createdAt.toISOString(),
       updatedAt: deck.updatedAt.toISOString(),
     }));
@@ -101,7 +105,7 @@ export class TeachingService {
           item.sourceFile?.title ?? this.snapshotTitle(item.snapshotJson),
         block: item.type === "content_block" ? item.snapshotJson : null,
         exerciseSetId: item.exerciseSetId,
-        exerciseTitle: item.exerciseSet?.file.title ?? null,
+        exerciseTitle: item.exerciseSet?.title ?? null,
       })),
     };
   }
@@ -266,7 +270,7 @@ export class TeachingService {
         }
         if (
           !isSuperAdmin(user.systemRole) &&
-          exercise.file.createdById !== user.id &&
+          exercise.createdById !== user.id &&
           exercise.viewers.length === 0
         ) {
           throw new ForbiddenException("无权使用选中的练习");

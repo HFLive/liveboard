@@ -32,7 +32,7 @@ import {
   type AiSourceSummary,
   type AiStatus,
 } from "@/lib/api";
-import { formatDateTime } from "@/lib/labels";
+import { formatRelativeTime } from "@/lib/labels";
 import { contentDetail } from "@/lib/routes";
 import { AutoTextarea } from "@/components/AutoTextarea";
 
@@ -463,7 +463,9 @@ export function AiAssistantClient() {
                     >
                       <span className="history-title-row">
                         <strong>{conversation.title}</strong>
-                        <time>{formatDateTime(conversation.updatedAt)}</time>
+                        <time>
+                          {formatRelativeTime(conversation.updatedAt)}
+                        </time>
                       </span>
                       <small>
                         {loadingConversationId === conversation.id

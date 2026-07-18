@@ -7,6 +7,7 @@ import type { ContentBlock, FileDetail } from "@/lib/api";
 import { getFile, listBlocks } from "@/lib/api";
 import { fileStatusLabel, permissionLabel } from "@/lib/labels";
 import { contentEdit } from "@/lib/routes";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { RenderBlockContent } from "./ContentBlockRenderer";
 
 function canEditContent(permission: FileDetail["permission"]) {
@@ -19,6 +20,7 @@ function canEditContent(permission: FileDetail["permission"]) {
 
 export function FileViewer({ fileId }: { fileId: string }) {
   const [file, setFile] = useState<FileDetail | null>(null);
+  useDocumentTitle(file?.title ?? null);
   const [blocks, setBlocks] = useState<ContentBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +60,6 @@ export function FileViewer({ fileId }: { fileId: string }) {
               <h1>{file.title}</h1>
               <div className="content-viewer-meta" aria-label="文件信息">
                 <span>{fileStatusLabel(file.status)}</span>
-                <span>{blocks.length} 个内容块</span>
               </div>
             </div>
             {canEditContent(file.permission) ? (

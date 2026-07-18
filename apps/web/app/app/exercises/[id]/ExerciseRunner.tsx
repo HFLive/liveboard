@@ -234,7 +234,7 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
       <section className="page-head">
         <div>
           <p className="page-eyebrow">练习详情</p>
-          <h1>{exerciseSet?.file.title ?? "练习详情"}</h1>
+          <h1>{exerciseSet?.title ?? "练习详情"}</h1>
           <p className="muted">
             {exerciseSet
               ? `共 ${exerciseSet.questions.length} 道题 · ${exerciseSet.dueAt ? `截止 ${formatDateTime(exerciseSet.dueAt)}` : "无截止时间"}`

@@ -29,7 +29,6 @@ export function LogoutButton() {
       className="nav-button rail-logout-button"
       disabled={loading}
       onClick={onLogout}
-      title={loading ? "正在退出" : "退出登录"}
       type="button"
     >
       <LogOut aria-hidden="true" className="rail-icon" />

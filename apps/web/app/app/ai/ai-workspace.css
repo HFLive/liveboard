@@ -346,7 +346,7 @@
 }
 
 .ai-workspace .chat-copy-button:hover {
-  background: #f2f0ec;
+  background: transparent;
   color: var(--text);
   opacity: 1;
 }

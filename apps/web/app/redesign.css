@@ -106,7 +106,7 @@ textarea {
 /* Application frame and navigation */
 
 .app-frame {
-  grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-columns: 116px minmax(0, 1fr);
   min-height: 100dvh;
   background: var(--bg);
 }
@@ -118,7 +118,7 @@ textarea {
   height: 100dvh;
   border-right: 0;
   background: var(--rail);
-  padding: 16px 12px 12px;
+  padding: 12px 8px 10px;
   scrollbar-width: none;
 }
 
@@ -131,7 +131,7 @@ textarea {
   gap: 11px;
   width: fit-content;
   border-radius: var(--radius-lg);
-  padding: 6px 8px 18px;
+  padding: 2px 4px 4px;
 }
 
 .rail-brand:hover {
@@ -160,16 +160,16 @@ textarea {
 
 .rail-nav {
   gap: 4px;
-  padding: 10px 0 16px;
+  padding: 4px 0 8px;
 }
 
 .rail-link {
-  gap: 11px;
+  gap: 18px;
   min-height: 42px;
   border: 0;
   border-radius: 10px;
   color: var(--rail-muted);
-  padding: 0 11px;
+  padding: 0 10px;
   font-size: 14px;
   font-weight: 600;
 }
@@ -201,14 +201,27 @@ textarea {
 }
 
 .rail-footer {
-  grid-template-columns: minmax(0, 1fr) 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 0;
+}
+
+.rail-account-row {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 4px;
-  border-top-color: rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding-top: 10px;
 }
 
 .rail-user {
+  display: grid;
+  grid-template-columns: 1fr;
+  place-items: center;
+  width: 42px;
+  height: 42px;
   min-width: 0;
   gap: 9px;
   border: 0;
@@ -231,13 +244,46 @@ textarea {
   object-fit: cover;
 }
 
-.rail-user-copy span {
-  font-size: 13px;
-  font-weight: 700;
+.rail-usage-strip {
+  display: grid;
+  gap: 5px;
+  padding: 0 6px;
+  color: rgba(233, 242, 237, 0.55);
+  font-size: 10px;
+  font-weight: 600;
 }
 
-.rail-user-copy small {
-  color: rgba(233, 242, 237, 0.55);
+.rail-usage-strip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.rail-usage-strip-bar {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(244, 242, 236, 0.16);
+  overflow: hidden;
+}
+
+.rail-usage-strip-bar .rail-usage-bar-fill {
+  display: block;
+}
+
+.rail-usage-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.rail-usage-user .rail-avatar {
+  width: 22px;
+  height: 22px;
+  border-color: var(--line);
   font-size: 11px;
 }
 
@@ -252,10 +298,15 @@ textarea {
 }
 
 .rail-user:hover,
-.rail-user.active,
-.nav-button:hover {
+.rail-user.active {
   border-color: transparent;
   background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.nav-button:hover {
+  border-color: transparent;
+  background: transparent;
   color: #fff;
 }
 
@@ -273,36 +324,12 @@ textarea {
 .rail-usage-popover {
   position: fixed;
   z-index: 200;
-  width: 200px;
-  max-height: calc(100dvh - 24px);
-  overflow: auto;
+  width: auto;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface-raised);
   box-shadow: var(--shadow-popover);
   padding: 10px 12px;
-}
-
-.rail-usage-title {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin: 0 0 7px;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.rail-usage-title span {
-  color: var(--muted);
-  font-weight: 600;
-}
-
-.rail-usage-bar {
-  height: 5px;
-  border-radius: 999px;
-  background: var(--fill-active);
-  overflow: hidden;
 }
 
 .rail-usage-bar-fill {
@@ -313,12 +340,6 @@ textarea {
 
 .rail-usage-bar-fill.is-over {
   background: var(--danger);
-}
-
-.rail-usage-meta {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 11px;
 }
 
 .app-main {
@@ -494,7 +515,6 @@ button:disabled {
 .icon-button.subtle:hover,
 .inline-icon-button:hover {
   border-color: var(--line-strong);
-  background: var(--panel-soft);
   color: var(--text);
 }
 
@@ -690,7 +710,7 @@ button:disabled {
 
 .table-action:hover {
   border-color: var(--line-strong);
-  background: var(--panel-soft);
+  color: var(--text);
 }
 
 .empty-panel {
@@ -1888,10 +1908,6 @@ button:disabled {
     grid-template-columns: 1fr;
     justify-items: center;
     padding: 4px 0 16px;
-  }
-
-  .rail-user-copy {
-    display: none;
   }
 
   .rail-nav {
@@ -4311,7 +4327,7 @@ body .success-text::before {
 
 .workspace .table-action:hover:not(:disabled) {
   border-color: transparent;
-  background: var(--fill-hover);
+  background: transparent;
   color: var(--text);
 }
 
@@ -4925,5 +4941,40 @@ body .success-text::before {
   .user-profile-avatar {
     width: 88px;
     height: 88px;
+  }
+}
+
+/* 最高管理员通过特殊权限看到的内容：标题使用流动彩虹文字标识。
+   表格链接选择器 .table td:first-child a 特异性为 0-2-2，
+   需要 .workspace .table .rainbow-text（0-3-0）才能覆盖。 */
+.workspace .rainbow-text,
+.workspace .table .rainbow-text {
+  background: linear-gradient(
+    90deg,
+    #e03131,
+    #f08c00,
+    #eab308,
+    #2f9e44,
+    #1971c2,
+    #7048e8,
+    #e03131
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: rainbow-text-flow 6s linear infinite;
+}
+
+@keyframes rainbow-text-flow {
+  to {
+    background-position: 300% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rainbow-text {
+    animation: none;
   }
 }

@@ -55,6 +55,7 @@ import {
 } from "./ContentBlockRenderer";
 import { assetTypeLabel, permissionLabel } from "@/lib/labels";
 import { APP_ROUTES } from "@/lib/routes";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { AutoTextarea } from "@/components/AutoTextarea";
 
 const blockShortcuts: Array<{ command: string; type: ContentBlockType }> = [
@@ -323,6 +324,7 @@ export function DocumentPreview({
 export function FileEditor({ fileId }: { fileId: string }) {
   const router = useRouter();
   const [file, setFile] = useState<FileDetail | null>(null);
+  useDocumentTitle(file ? `${file.title} - 编辑` : null);
   const [blocks, setBlocks] = useState<ContentBlock[]>([]);
   const [libraryAssets, setLibraryAssets] = useState<FileAssetSummary[]>([]);
   const [assetQuery, setAssetQuery] = useState("");

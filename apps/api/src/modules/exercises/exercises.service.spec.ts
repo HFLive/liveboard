@@ -1,19 +1,10 @@
 import { ExercisesService } from "./exercises.service";
-import type { PermissionsService } from "../permissions/permissions.service";
 import type { PrismaService } from "../prisma/prisma.service";
 
 describe("ExercisesService", () => {
-  const permissions = {
-    getEffectiveLevelForFile: jest.fn(),
-    getEffectiveLevelForFolder: jest.fn(),
-    getEffectiveLevelsForFiles: jest.fn(),
-  };
   const prisma = {
     user: {
       findUnique: jest.fn(),
-      findMany: jest.fn(),
-    },
-    folder: {
       findMany: jest.fn(),
     },
     exerciseSet: {
@@ -43,19 +34,26 @@ describe("ExercisesService", () => {
       Promise.resolve(where.id.in.map((id: string) => ({ id }))),
     );
     prisma.teachingDeckItem.count.mockResolvedValue(0);
-    service = new ExercisesService(
-      prisma as unknown as PrismaService,
-      permissions as unknown as PermissionsService,
-    );
+    service = new ExercisesService(prisma as unknown as PrismaService);
   });
 
-  it("lists quizzes with aggregated submissions and batched permissions", async () => {
+  it("lists quizzes with aggregated submissions", async () => {
     const updatedAt = new Date("2026-07-14T00:00:00Z");
     prisma.exerciseSet.findMany.mockResolvedValue([
       {
         id: "exercise-1",
-        fileId: "file-1",
-        file: { title: "章节练习", createdById: "teacher-1" },
+        fileId: null,
+        title: "章节练习",
+        createdById: "teacher-1",
+        createdBy: {
+          id: "teacher-1",
+          username: "teacher",
+          displayName: "Teacher",
+          avatarUpdatedAt: null,
+          systemRole: "member",
+          status: "active",
+        },
+        viewers: [],
         _count: { questions: 3, submissions: 12 },
         submissions: [{ status: "graded", score: 8, maxScore: 10 }],
         openAt: null,
@@ -66,33 +64,26 @@ describe("ExercisesService", () => {
     prisma.submission.groupBy.mockResolvedValue([
       { exerciseSetId: "exercise-1", _count: { _all: 2 } },
     ]);
-    permissions.getEffectiveLevelsForFiles.mockResolvedValue(
-      new Map([["file-1", "viewer"]]),
-    );
 
     const result = await service.listExerciseSets("learner-1");
 
     expect(result).toEqual([
       expect.objectContaining({
+        title: "章节练习",
         questionCount: 3,
         submissionCount: 12,
         pendingReviewCount: 2,
         latestSubmissionStatus: "graded",
       }),
     ]);
-    expect(permissions.getEffectiveLevelsForFiles).toHaveBeenCalledWith(
-      "learner-1",
-      ["file-1"],
-    );
-    expect(permissions.getEffectiveLevelForFile).not.toHaveBeenCalled();
   });
 
   it("does not expose correct answers to a learner before submission", async () => {
-    permissions.getEffectiveLevelForFile.mockResolvedValue("viewer");
     prisma.exerciseSet.findUnique.mockResolvedValue({
       id: "exercise-1",
-      fileId: "file-1",
-      file: { title: "练习", createdById: "teacher-1" },
+      fileId: null,
+      title: "练习",
+      createdById: "teacher-1",
       viewers: [{ userId: "learner-1" }],
       showAnswerAfterSubmit: true,
       submissions: [],
@@ -128,20 +119,8 @@ describe("ExercisesService", () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it("creates the backing quiz file automatically", async () => {
-    const transaction = {
-      file: {
-        create: jest.fn().mockResolvedValue({ id: "file-1" }),
-      },
-      exerciseSet: {
-        create: jest.fn().mockResolvedValue({ id: "exercise-1" }),
-      },
-    };
-    prisma.folder.findMany.mockResolvedValue([
-      { id: "folder-1", workspaceId: "workspace-1" },
-    ]);
-    permissions.getEffectiveLevelForFolder.mockResolvedValue("lecturer");
-    prisma.$transaction.mockImplementation((callback) => callback(transaction));
+  it("creates the quiz directly without requiring any folder", async () => {
+    prisma.exerciseSet.create.mockResolvedValue({ id: "exercise-1" });
 
     await service.createExerciseSet("lecturer-1", {
       title: "  章节测验  ",
@@ -155,26 +134,25 @@ describe("ExercisesService", () => {
       ],
     });
 
-    expect(transaction.file.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        folderId: "folder-1",
-        title: "章节测验",
-        type: "exercise_set",
-      }),
-    });
-    expect(transaction.exerciseSet.create).toHaveBeenCalledWith(
+    expect(prisma.exerciseSet.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ fileId: "file-1" }),
+        data: expect.objectContaining({
+          title: "章节测验",
+          createdById: "lecturer-1",
+        }),
       }),
+    );
+    expect(prisma.exerciseSet.create.mock.calls[0][0].data).not.toHaveProperty(
+      "fileId",
     );
   });
 
   it("reveals correct answers after a learner has submitted when enabled", async () => {
-    permissions.getEffectiveLevelForFile.mockResolvedValue("viewer");
     prisma.exerciseSet.findUnique.mockResolvedValue({
       id: "exercise-1",
-      fileId: "file-1",
-      file: { title: "练习", createdById: "teacher-1" },
+      fileId: null,
+      title: "练习",
+      createdById: "teacher-1",
       viewers: [{ userId: "learner-1" }],
       showAnswerAfterSubmit: true,
       submissions: [{ id: "submission-1" }],
@@ -193,11 +171,11 @@ describe("ExercisesService", () => {
   });
 
   it("rechecks single-submission eligibility inside a serializable transaction", async () => {
-    permissions.getEffectiveLevelForFile.mockResolvedValue("viewer");
     prisma.exerciseSet.findUnique.mockResolvedValue({
       id: "exercise-1",
-      fileId: "file-1",
-      file: { title: "练习", createdById: "teacher-1" },
+      fileId: null,
+      title: "练习",
+      createdById: "teacher-1",
       viewers: [{ userId: "learner-1" }],
       openAt: null,
       dueAt: null,
@@ -237,10 +215,9 @@ describe("ExercisesService", () => {
   });
 
   it("rejects grading an answer that belongs to another submission", async () => {
-    permissions.getEffectiveLevelForFile.mockResolvedValue("lecturer");
     prisma.submission.findUnique.mockResolvedValue({
       id: "submission-1",
-      exerciseSet: { fileId: "file-1", file: { title: "练习" } },
+      exerciseSet: { createdById: "lecturer-1" },
       answers: [{ id: "answer-1", question: { score: 5 }, score: null }],
     });
 
@@ -253,10 +230,9 @@ describe("ExercisesService", () => {
   });
 
   it("rejects a score higher than the question maximum", async () => {
-    permissions.getEffectiveLevelForFile.mockResolvedValue("lecturer");
     prisma.submission.findUnique.mockResolvedValue({
       id: "submission-1",
-      exerciseSet: { fileId: "file-1", file: { title: "练习" } },
+      exerciseSet: { createdById: "lecturer-1" },
       answers: [{ id: "answer-1", question: { score: 5 }, score: null }],
     });
 

@@ -13,10 +13,10 @@
     padding-left: 4px;
   }
 
-  /* 表格行间距（border-spacing）会在首行上方多出 6px，
+  /* 表格行间距（border-spacing: 0 2px）会在首行上方多出 2px，
      上移抵消，使右栏首行与左栏树首行顶端对齐。 */
   .files-layout .table-wrap {
-    margin-top: -6px;
+    margin-top: -2px;
   }
 }
 
@@ -73,7 +73,7 @@
   font: inherit;
   font-weight: 700;
   line-height: 1.25;
-  min-height: 42px;
+  min-height: 32px;
   margin: 0;
   padding: 0;
   text-align: left;
@@ -93,10 +93,14 @@
 }
 
 .workspace .content-items-table > tbody > tr:not(.content-empty-row) > td {
-  height: 42px;
+  height: 32px;
   padding-top: 0;
   padding-bottom: 0;
   vertical-align: middle;
+}
+
+.files-layout .content-items-table {
+  border-spacing: 0 2px;
 }
 
 .files-layout .content-items-table > tbody > tr > td:first-child {
@@ -193,7 +197,7 @@
 }
 
 .breadcrumb-back:hover {
-  background: var(--fill-active);
+  background: transparent;
   color: var(--text);
 }
 
@@ -256,7 +260,7 @@
 
 .tree-toggle-button:hover,
 .content-pinned-actions > button:hover:not(:disabled) {
-  background: var(--fill-active);
+  background: transparent;
   color: var(--text);
 }
 
