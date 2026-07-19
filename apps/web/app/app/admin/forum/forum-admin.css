@@ -9,6 +9,16 @@
   background: transparent;
 }
 
+.forum-admin-page .forum-admin-layout {
+  grid-template-columns: 300px minmax(0, 680px);
+  gap: 24px;
+  width: min(1020px, 100%);
+}
+
+.forum-admin-page .workbench-main {
+  min-width: 0;
+}
+
 /* 版块列表：行之间用间距分隔，hover/选中用圆角背景。 */
 .forum-admin-page .forum-admin-category-list {
   display: grid;
@@ -42,5 +52,58 @@
 /* 版块信息表单：与紧凑工作区一致的间距。 */
 .forum-admin-page .profile-form {
   gap: 12px;
-  padding: 14px 16px;
+  width: min(620px, 100%);
+  padding: 14px 0;
+}
+
+.forum-admin-page .profile-form :is(.input, .textarea) {
+  background: var(--fill-subtle);
+}
+
+@media (min-width: 1121px) {
+  /* 论坛设置内容本身不高，不使用贯穿剩余视口的结构竖线。 */
+  .workspace.forum-admin-page .forum-admin-layout {
+    align-items: start;
+    flex: 0 0 auto;
+    gap: 32px;
+    min-height: auto;
+    margin: 0;
+  }
+
+  .workspace.forum-admin-page .forum-admin-layout > :first-child,
+  .workspace.forum-admin-page .forum-admin-layout > :last-child,
+  .workspace.forum-admin-page .forum-admin-layout > * + * {
+    margin-top: 0;
+    border-left: 0;
+    padding: 0;
+  }
+
+  .workspace.forum-admin-page
+    .forum-admin-layout
+    > :is(:first-child, :last-child)
+    > .panel-head {
+    margin: 0;
+    padding-inline: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .forum-admin-page .forum-admin-layout {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .forum-admin-page .forum-admin-side {
+    padding-bottom: 14px;
+  }
+}
+
+@media (max-width: 620px) {
+  .forum-admin-page .forum-admin-side > .panel-head {
+    align-items: center;
+  }
+
+  .forum-admin-page .profile-form {
+    padding-inline: 0;
+  }
 }

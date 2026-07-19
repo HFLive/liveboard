@@ -172,7 +172,7 @@ export function ForumClient() {
               href={APP_ROUTES.forumNew}
             >
               <Plus aria-hidden="true" className="button-icon" />
-              发帖
+              <span className="forum-create-label">发帖</span>
             </Link>
           </div>
 

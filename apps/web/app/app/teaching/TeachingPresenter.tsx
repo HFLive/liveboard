@@ -40,10 +40,19 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
   const [showNavigator, setShowNavigator] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mobileManuscript, setMobileManuscript] = useState(false);
   const slides = useMemo(
     () => buildTeachingSlides(deck?.items ?? []),
     [deck?.items],
   );
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 820px)");
+    const updateMode = () => setMobileManuscript(media.matches);
+    updateMode();
+    media.addEventListener("change", updateMode);
+    return () => media.removeEventListener("change", updateMode);
+  }, []);
 
   useEffect(() => {
     getTeachingDeck(deckId)
@@ -54,14 +63,16 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
   }, [deckId]);
 
   useEffect(() => {
+    if (mobileManuscript) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, []);
+  }, [mobileManuscript]);
 
   useEffect(() => {
+    if (mobileManuscript) return;
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, button, a")) return;
@@ -86,7 +97,7 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focusMode, slides.length]);
+  }, [focusMode, mobileManuscript, slides.length]);
 
   useEffect(() => {
     function onFullscreenChange() {
@@ -124,6 +135,7 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
   const full = isFullscreen || focusMode;
 
   useLayoutEffect(() => {
+    if (mobileManuscript) return;
     const slide = slideRef.current;
     if (!slide || !activeSlide) return;
     const fitGroupId = activeSlide.fitGroupId;
@@ -170,7 +182,11 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
       window.removeEventListener("resize", scheduleFit);
       images.forEach((image) => image.removeEventListener("load", scheduleFit));
     };
-  }, [activeSlide, full]);
+  }, [activeSlide, full, mobileManuscript]);
+
+  if (mobileManuscript) {
+    return <TeachingManuscript deck={deck} error={error} />;
+  }
 
   return (
     <div className={`teaching-presenter ${focusMode ? "focus-mode" : ""}`}>
@@ -370,6 +386,53 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
       ) : null}
     </div>
   );
+}
+
+function TeachingManuscript({
+  deck,
+  error,
+}: {
+  deck: TeachingDeckDetail | null;
+  error: string | null;
+}) {
+  return (
+    <div className="teaching-manuscript">
+      <header className="teaching-manuscript-topbar">
+        <Link aria-label="返回课件" href={APP_ROUTES.teaching} title="返回课件">
+          <ArrowLeft aria-hidden="true" />
+        </Link>
+        <h1>{deck?.title ?? "课件"}</h1>
+      </header>
+
+      {error ? <p className="error-text">{error}</p> : null}
+      <article className="teaching-manuscript-body">
+        {!deck && !error ? <p className="muted">正在加载课件…</p> : null}
+        {deck?.items.length === 0 ? (
+          <p className="muted">课件暂无内容。</p>
+        ) : null}
+        {deck?.items.map((item, index) => {
+          const source = manuscriptSource(item);
+          const previousSource =
+            index > 0 ? manuscriptSource(deck.items[index - 1]!) : null;
+          return (
+            <section
+              className={`teaching-manuscript-block ${source !== previousSource ? "source-start" : ""}`}
+              key={item.id}
+            >
+              {source !== previousSource ? (
+                <div className="teaching-manuscript-source">{source}</div>
+              ) : null}
+              <SlideContent item={item} />
+            </section>
+          );
+        })}
+      </article>
+    </div>
+  );
+}
+
+function manuscriptSource(item: TeachingDeckItem) {
+  return item.type === "exercise" ? "课堂练习" : item.sourceFileTitle || "文档";
 }
 
 function SlideContent({ item }: { item: TeachingDeckItem }) {

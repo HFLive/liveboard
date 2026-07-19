@@ -7,11 +7,13 @@ import { useEffect, useRef, useState } from "react";
 import {
   Bot,
   Bell,
+  ChevronDown,
   ClipboardList,
   Database,
   Files,
   MessageSquare,
   Presentation,
+  UserCircle,
   Users,
   X,
 } from "lucide-react";
@@ -21,7 +23,9 @@ import type {
   UserSummary,
 } from "@liveboard/shared";
 import {
+  AI_USAGE_CONSUMED_EVENT,
   apiResourceUrl,
+  dismissActivity,
   getAiUsage,
   getMe,
   listActivity,
@@ -63,6 +67,7 @@ export function AppNav() {
   const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
   const [activityUnreadCount, setActivityUnreadCount] = useState(0);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [usagePosition, setUsagePosition] = useState<{
     left: number;
     bottom: number;
@@ -71,6 +76,7 @@ export function AppNav() {
   const activeNavLinkRef = useRef<HTMLAnchorElement | null>(null);
   const usageHoverTimerRef = useRef<number | null>(null);
   const usageLoadingRef = useRef(false);
+  const usageReloadPendingRef = useRef(false);
   const displayName = userLoaded ? (user?.displayName ?? "未登录") : "账户信息";
   const userInitial = userLoaded
     ? displayName.trim().slice(0, 1).toUpperCase() || "L"
@@ -79,6 +85,15 @@ export function AppNav() {
     user && ["super_admin", "admin"].includes(user.systemRole)
       ? navItems
       : navItems.filter((item) => item.href !== APP_ROUTES.admin);
+  const activeNavItem = visibleNavItems.find((item) =>
+    isActive(pathname, item.href),
+  );
+  const currentNavItem =
+    activeNavItem ??
+    (pathname === APP_ROUTES.profile || pathname.startsWith("/app/users/")
+      ? { label: "个人主页", Icon: UserCircle }
+      : { label: "LiveBoard", Icon: Bot });
+  const ActiveNavIcon = currentNavItem.Icon;
 
   useEffect(() => {
     let active = true;
@@ -120,6 +135,10 @@ export function AppNav() {
   }, [pathname, user?.id]);
 
   useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
     if (user) {
       loadUsage();
       void loadActivity();
@@ -144,6 +163,7 @@ export function AppNav() {
 
   function loadUsage() {
     if (usageLoadingRef.current) {
+      usageReloadPendingRef.current = true;
       return;
     }
 
@@ -158,8 +178,31 @@ export function AppNav() {
       })
       .finally(() => {
         usageLoadingRef.current = false;
+        if (usageReloadPendingRef.current) {
+          usageReloadPendingRef.current = false;
+          loadUsage();
+        }
       });
   }
+
+  useEffect(() => {
+    if (!user) return;
+
+    function onAiUsageConsumed() {
+      setUsage((current) =>
+        current
+          ? { ...current, used: Math.min(current.used + 1, current.limit) }
+          : current,
+      );
+      loadUsage();
+    }
+
+    window.addEventListener(AI_USAGE_CONSUMED_EVENT, onAiUsageConsumed);
+    return () =>
+      window.removeEventListener(AI_USAGE_CONSUMED_EVENT, onAiUsageConsumed);
+    // loadUsage 使用 ref 串行刷新；仅在登录用户变化时重新绑定。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   async function loadActivity() {
     try {
@@ -176,6 +219,7 @@ export function AppNav() {
   async function toggleActivity() {
     const nextOpen = !activityOpen;
     setActivityOpen(nextOpen);
+    setMobileMenuOpen(false);
     setUsageOpen(false);
     if (nextOpen) {
       const result = await loadActivity();
@@ -190,6 +234,21 @@ export function AppNav() {
           // 保留未读状态，下次打开时重试。
         }
       }
+    }
+  }
+
+  async function onDismissActivity(item: ActivityItem) {
+    setActivityItems((current) =>
+      current.filter((candidate) => candidate.id !== item.id),
+    );
+    if (item.unread) {
+      setActivityUnreadCount((current) => Math.max(0, current - 1));
+    }
+
+    try {
+      await dismissActivity(item.id);
+    } catch {
+      await loadActivity();
     }
   }
 
@@ -240,7 +299,9 @@ export function AppNav() {
   }
 
   return (
-    <aside className="app-rail">
+    <aside
+      className={mobileMenuOpen ? "app-rail mobile-menu-open" : "app-rail"}
+    >
       <Link
         aria-label="LiveBoard 首页"
         className="rail-brand"
@@ -252,6 +313,25 @@ export function AppNav() {
         </span>
       </Link>
 
+      <button
+        aria-expanded={mobileMenuOpen}
+        aria-label={mobileMenuOpen ? "关闭主菜单" : "打开主菜单"}
+        className="rail-mobile-menu-toggle"
+        onClick={() => {
+          setActivityOpen(false);
+          setMobileMenuOpen((current) => !current);
+        }}
+        type="button"
+      >
+        <ActiveNavIcon aria-hidden="true" />
+        <span>{currentNavItem.label}</span>
+        {mobileMenuOpen ? (
+          <X aria-hidden="true" />
+        ) : (
+          <ChevronDown aria-hidden="true" />
+        )}
+      </button>
+
       <nav className="rail-nav" aria-label="主导航">
         {visibleNavItems.map((item) => {
           const Icon = item.Icon;
@@ -260,9 +340,12 @@ export function AppNav() {
           return (
             <Link
               aria-current={active ? "page" : undefined}
-              className={active ? "rail-link active" : "rail-link"}
+              className={`${active ? "rail-link active" : "rail-link"}${
+                item.href === APP_ROUTES.admin ? " mobile-complex-nav" : ""
+              }`}
               href={item.href}
               key={item.href}
+              onClick={() => setMobileMenuOpen(false)}
               ref={active ? activeNavLinkRef : undefined}
               title={item.label}
             >
@@ -271,6 +354,16 @@ export function AppNav() {
             </Link>
           );
         })}
+        <div className="rail-mobile-account-actions">
+          <Link
+            href={user ? userProfile(user.id) : APP_ROUTES.profile}
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <UserCircle aria-hidden="true" />
+            <span>个人主页</span>
+          </Link>
+          <LogoutButton />
+        </div>
       </nav>
 
       <div className="rail-footer">
@@ -384,21 +477,31 @@ export function AppNav() {
           </div>
           <div className="rail-activity-list">
             {activityItems.map((item) => (
-              <Link
-                href={item.href as Route}
-                key={item.id}
-                onClick={() => setActivityOpen(false)}
-              >
-                <span className={`activity-kind ${item.kind}`}>
-                  {activityKindLabel(item.kind)}
-                </span>
-                <span>
-                  <strong>{item.title}</strong>
-                  <small>
-                    {item.detail} · {formatRelativeTime(item.occurredAt)}
-                  </small>
-                </span>
-              </Link>
+              <div className="rail-activity-item" key={item.id}>
+                <Link
+                  href={item.href as Route}
+                  onClick={() => setActivityOpen(false)}
+                >
+                  <span className={`activity-kind ${item.kind}`}>
+                    {activityKindLabel(item.kind)}
+                  </span>
+                  <span>
+                    <strong>{item.title}</strong>
+                    <small>
+                      {item.detail} · {formatRelativeTime(item.occurredAt)}
+                    </small>
+                  </span>
+                </Link>
+                <button
+                  aria-label={`移除消息“${item.title}”`}
+                  className="rail-activity-dismiss"
+                  onClick={() => void onDismissActivity(item)}
+                  title="移除消息"
+                  type="button"
+                >
+                  <X aria-hidden="true" />
+                </button>
+              </div>
             ))}
             {activityItems.length === 0 ? (
               <div className="rail-activity-empty">

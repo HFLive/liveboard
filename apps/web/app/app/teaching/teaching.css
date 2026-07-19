@@ -909,6 +909,202 @@
 }
 
 @media (max-width: 820px) {
+  .app-frame:has(.teaching-manuscript) {
+    display: block;
+    min-height: 100dvh;
+  }
+
+  .app-frame:has(.teaching-manuscript) .app-main {
+    width: 100%;
+    min-width: 0;
+    min-height: 100dvh;
+    overflow: visible;
+    padding: 0;
+  }
+
+  .teaching-manuscript {
+    min-height: 100dvh;
+    background: var(--bg);
+  }
+
+  .teaching-manuscript-topbar {
+    position: sticky;
+    z-index: 20;
+    top: 0;
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) 36px;
+    align-items: center;
+    min-height: 56px;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+    padding: 6px 10px;
+    backdrop-filter: blur(12px);
+  }
+
+  .teaching-manuscript-topbar > a {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    color: var(--text-soft);
+  }
+
+  .teaching-manuscript-topbar > a:hover {
+    background: var(--fill-hover);
+    color: var(--text);
+  }
+
+  .teaching-manuscript-topbar svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .teaching-manuscript-topbar h1 {
+    overflow: hidden;
+    margin: 0;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 680;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .teaching-manuscript-body {
+    width: min(680px, 100%);
+    margin: 0 auto;
+    padding: 24px 20px max(72px, env(safe-area-inset-bottom));
+  }
+
+  .teaching-manuscript-block {
+    min-width: 0;
+    margin: 0 0 18px;
+  }
+
+  .teaching-manuscript-block.source-start {
+    margin-top: 36px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+  }
+
+  .teaching-manuscript-block.source-start:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .teaching-manuscript-source {
+    margin-bottom: 18px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 650;
+  }
+
+  .teaching-manuscript-block > :first-child:not(.teaching-manuscript-source),
+  .teaching-manuscript-block
+    > .teaching-manuscript-source
+    + :is(div, p, h1, h2, h3, h4, h5, h6) {
+    margin-top: 0;
+  }
+
+  .teaching-manuscript-block :is(h1, h2, h3, h4, h5, h6) {
+    margin: 1.4em 0 0.55em;
+    color: var(--text);
+    line-height: 1.28;
+    overflow-wrap: anywhere;
+  }
+
+  .teaching-manuscript-block h1 {
+    font-size: 28px;
+  }
+
+  .teaching-manuscript-block h2 {
+    font-size: 23px;
+  }
+
+  .teaching-manuscript-block h3 {
+    font-size: 19px;
+  }
+
+  .teaching-manuscript-block :is(h4, h5, h6) {
+    font-size: 17px;
+  }
+
+  .teaching-manuscript-block :is(p, li, blockquote) {
+    font-size: 15px;
+    line-height: 1.78;
+    overflow-wrap: anywhere;
+  }
+
+  .teaching-manuscript-block :is(ul, ol) {
+    padding-left: 1.4em;
+  }
+
+  .teaching-manuscript-block blockquote {
+    margin-inline: 0;
+    border-left: 3px solid var(--line-strong);
+    padding-left: 14px;
+    color: var(--text-soft);
+  }
+
+  .teaching-manuscript-block .render-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .teaching-manuscript-block :is(.render-image, img) {
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    max-height: none;
+    object-fit: contain;
+  }
+
+  .teaching-manuscript-block
+    :is(.teaching-image-fill, .teaching-image-original) {
+    width: 100%;
+    height: auto;
+  }
+
+  .teaching-manuscript .embedded-exercise {
+    gap: 14px;
+  }
+
+  .teaching-manuscript .embedded-exercise-head {
+    align-items: center;
+    padding-bottom: 10px;
+  }
+
+  .teaching-manuscript .embedded-exercise-head h2 {
+    font-size: 20px;
+  }
+
+  .teaching-manuscript .embedded-question-list {
+    gap: 20px;
+  }
+
+  .teaching-manuscript .embedded-question > strong {
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  .teaching-manuscript .embedded-options {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .teaching-manuscript .embedded-options label {
+    min-height: 42px;
+    border-color: var(--line);
+    border-radius: 9px;
+    background: transparent;
+  }
+
+  .teaching-manuscript .embedded-exercise > .button {
+    align-self: flex-start;
+  }
+
   .teaching-editor-layout {
     grid-template-columns: minmax(0, 1fr);
   }

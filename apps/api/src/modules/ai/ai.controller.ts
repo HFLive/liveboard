@@ -291,8 +291,6 @@ export class AiController {
           createdAt: turn.userMessage.createdAt.toISOString(),
         },
       });
-      writeStreamEvent(res, { type: "sources", sources: prepared.sources });
-
       let answer = "";
       try {
         await this.aiService.streamChatCompletion(
@@ -303,10 +301,14 @@ export class AiController {
           },
           abortController.signal,
         );
-        const assistantMessage = await this.aiService.saveAssistantMessage(
-          turn.conversation.id,
+        const finalized = this.aiService.finalizeGeneratedAnswer(
           answer,
           prepared.sources,
+        );
+        const assistantMessage = await this.aiService.saveAssistantMessage(
+          turn.conversation.id,
+          finalized.answer,
+          finalized.sources,
         );
         if (!res.destroyed) {
           writeStreamEvent(res, {
@@ -315,7 +317,7 @@ export class AiController {
               id: assistantMessage.id,
               role: assistantMessage.role,
               content: assistantMessage.content,
-              sources: prepared.sources,
+              sources: finalized.sources,
               createdAt: assistantMessage.createdAt.toISOString(),
             },
           });
@@ -323,10 +325,14 @@ export class AiController {
         }
       } catch (caught) {
         if (answer) {
-          await this.aiService.saveAssistantMessage(
-            turn.conversation.id,
+          const finalized = this.aiService.finalizeGeneratedAnswer(
             `${answer}\n\n（生成中断）`,
             prepared.sources,
+          );
+          await this.aiService.saveAssistantMessage(
+            turn.conversation.id,
+            finalized.answer,
+            finalized.sources,
           );
         }
         if (!res.destroyed) {

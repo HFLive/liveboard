@@ -1,4 +1,4 @@
-import { Controller, Get, Post } from "@nestjs/common";
+import { Controller, Delete, Get, Param, Post } from "@nestjs/common";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import { ActivityService } from "./activity.service";
 
@@ -14,5 +14,13 @@ export class ActivityController {
   @Post("read")
   markRead(@CurrentUserId() userId: string | null) {
     return this.activity.markRead(userId);
+  }
+
+  @Delete(":activityId")
+  dismiss(
+    @CurrentUserId() userId: string | null,
+    @Param("activityId") activityId: string,
+  ) {
+    return this.activity.dismiss(userId, activityId);
   }
 }

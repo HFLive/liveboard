@@ -1,5 +1,6 @@
 import { AppNav } from "@/components/app-shell/AppNav";
 import { AppSettingsProvider } from "@/components/app-shell/AppSettingsProvider";
+import { MobileRouteGuard } from "@/components/app-shell/MobileRouteGuard";
 
 export default function AppLayout({
   children,
@@ -14,7 +15,9 @@ export default function AppLayout({
       <div className="app-frame">
         <AppNav />
         <main className="app-main" id="main-content">
-          <AppSettingsProvider>{children}</AppSettingsProvider>
+          <AppSettingsProvider>
+            <MobileRouteGuard>{children}</MobileRouteGuard>
+          </AppSettingsProvider>
         </main>
       </div>
     </>

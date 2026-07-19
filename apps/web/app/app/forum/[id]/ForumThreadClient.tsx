@@ -472,7 +472,6 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     }
   }
 
-  const statusText = thread?.status === "locked" ? "已锁定" : "开放";
   const postStructure = useMemo(() => {
     const posts = thread?.posts ?? [];
     const mainPost = posts[0] ?? null;
@@ -639,15 +638,14 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       {thread ? (
         <section className="forum-thread-detail surface">
           <header className="forum-thread-top">
-            <div className="forum-thread-topline">
-              <span>帖子状态</span>
-              <em className={`forum-status-badge ${thread.status}`}>
-                {thread.status === "locked" ? (
+            {thread.status === "locked" ? (
+              <div className="forum-thread-topline">
+                <em className="forum-status-badge locked">
                   <Lock aria-hidden="true" />
-                ) : null}
-                {statusText}
-              </em>
-            </div>
+                  已锁定
+                </em>
+              </div>
+            ) : null}
             {editingThread ? (
               <form className="forum-thread-edit-form" onSubmit={saveThread}>
                 <input
@@ -690,6 +688,38 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
               </form>
             ) : null}
             <div className="forum-thread-actions">
+              <div className="forum-thread-search">
+                <label className="search-field">
+                  <Search aria-hidden="true" />
+                  <input
+                    aria-label="在帖子内搜索"
+                    onChange={(event) => setPostSearch(event.target.value)}
+                    placeholder="在帖子内搜索"
+                    value={postSearch}
+                  />
+                </label>
+                {postSearch.trim() ? (
+                  <div className="forum-thread-search-results">
+                    <span>{searchResults.length} 条匹配</span>
+                    {searchResults.slice(0, 8).map((post, index) => (
+                      <button
+                        key={post.id}
+                        onClick={() =>
+                          document
+                            .getElementById(`forum-post-${post.id}`)
+                            ?.scrollIntoView({
+                              behavior: "smooth",
+                              block: "center",
+                            })
+                        }
+                        type="button"
+                      >
+                        {index + 1}. {post.body.slice(0, 36)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
               <button
                 className="button secondary"
                 disabled={actionLoading || thread.followRequired}
@@ -701,92 +731,61 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 ) : (
                   <Bell aria-hidden="true" className="button-icon" />
                 )}
-                {thread.followRequired
-                  ? "已自动关注"
-                  : thread.followed
-                    ? "取消关注"
-                    : "关注主题"}
+                <span className="forum-action-label">
+                  {thread.followRequired
+                    ? "已自动关注"
+                    : thread.followed
+                      ? "取消关注"
+                      : "关注主题"}
+                </span>
               </button>
               {thread.canEdit && !editingThread ? (
                 <button
-                  className="button secondary"
+                  className="button secondary forum-moderation-action"
                   disabled={actionLoading}
                   onClick={startEditThread}
                   type="button"
                 >
                   <Pencil aria-hidden="true" className="button-icon" />
-                  编辑帖子
+                  <span className="forum-action-label">编辑帖子</span>
                 </button>
               ) : null}
               {thread.canModerate ? (
                 thread.status === "locked" ? (
                   <button
-                    className="button secondary"
+                    className="button secondary forum-moderation-action"
                     disabled={actionLoading}
                     onClick={() => setThreadStatus("open")}
                     type="button"
                   >
                     <Unlock aria-hidden="true" className="button-icon" />
-                    解锁
+                    <span className="forum-action-label">解锁</span>
                   </button>
                 ) : (
                   <button
-                    className="button secondary"
+                    className="button secondary forum-moderation-action"
                     disabled={actionLoading}
                     onClick={() => setThreadStatus("locked")}
                     type="button"
                   >
                     <Lock aria-hidden="true" className="button-icon" />
-                    锁定
+                    <span className="forum-action-label">锁定</span>
                   </button>
                 )
               ) : null}
               {thread.canDelete ? (
                 <button
-                  className="button danger"
+                  className="button danger forum-moderation-action"
                   disabled={actionLoading}
                   onClick={deleteThread}
                   type="button"
                 >
                   <Trash2 aria-hidden="true" className="button-icon" />
-                  删除帖子
+                  <span className="forum-action-label">删除帖子</span>
                 </button>
               ) : null}
             </div>
           </header>
-
-          <div className="forum-thread-search">
-            <label className="search-field">
-              <Search aria-hidden="true" />
-              <input
-                aria-label="在帖子内搜索"
-                onChange={(event) => setPostSearch(event.target.value)}
-                placeholder="在帖子内搜索"
-                value={postSearch}
-              />
-            </label>
-            {postSearch.trim() ? (
-              <div className="forum-thread-search-results">
-                <span>{searchResults.length} 条匹配</span>
-                {searchResults.slice(0, 8).map((post, index) => (
-                  <button
-                    key={post.id}
-                    onClick={() =>
-                      document
-                        .getElementById(`forum-post-${post.id}`)
-                        ?.scrollIntoView({
-                          behavior: "smooth",
-                          block: "center",
-                        })
-                    }
-                    type="button"
-                  >
-                    {index + 1}. {post.body.slice(0, 36)}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
 
           <div className="forum-post-list">
             {postStructure.mainPost ? (

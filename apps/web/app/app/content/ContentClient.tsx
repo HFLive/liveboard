@@ -1468,7 +1468,7 @@ export function ContentClient() {
   }
 
   return (
-    <div className="workspace">
+    <div className="workspace content-workspace">
       <header className="page-head">
         <div>
           <p className="page-eyebrow">文档工作区</p>

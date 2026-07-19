@@ -396,7 +396,7 @@ export function AiSettingsClient() {
   }
 
   return (
-    <div className="workspace ai-settings-page">
+    <div className="workspace admin-workspace ai-settings-page">
       <header className="page-head">
         <div>
           <p className="page-eyebrow">管理中心</p>

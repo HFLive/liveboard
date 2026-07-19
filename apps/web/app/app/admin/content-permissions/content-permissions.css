@@ -4,7 +4,7 @@
 
 .content-permission-overview,
 .content-permission-panel {
-  width: min(880px, 100%);
+  width: min(960px, 100%);
 }
 
 /* 说明区：无边框 muted 段落，不再是带底色的信息块。 */
@@ -79,11 +79,20 @@
 
 .content-permission-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px;
+  grid-template-columns: minmax(0, 1fr) 200px;
   align-items: center;
   gap: 18px;
   min-width: 0;
   padding: 12px 16px;
+}
+
+.content-permission-row:hover {
+  border-radius: 10px;
+  background: var(--fill-hover);
+}
+
+.content-permission-row .select {
+  background: var(--fill-subtle);
 }
 
 .content-permission-row > div {

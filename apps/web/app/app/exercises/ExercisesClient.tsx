@@ -52,7 +52,7 @@ export function ExercisesClient() {
   }, []);
 
   return (
-    <div className="workspace">
+    <div className="workspace exercises-workspace">
       <header className="page-head">
         <div>
           <p className="page-eyebrow">教学活动</p>
