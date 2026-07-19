@@ -1,5 +1,5 @@
 .permission-groups-workspace {
-  width: min(1180px, 100%);
+  width: 100%;
   gap: 16px;
 }
 
@@ -8,8 +8,8 @@
 }
 
 .permission-groups-layout {
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 22px;
   border: 0;
   background: transparent;
 }
@@ -115,7 +115,7 @@
 
 .permission-group-detail-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) 260px;
   align-items: start;
   gap: 32px;
   padding-top: 18px;
@@ -174,6 +174,12 @@
   border-radius: 10px;
   background: transparent;
   padding: 9px 10px;
+}
+
+/* 旧全局样式曾给最后一位成员补底线；新版列表依靠行间距与 hover 分层，
+   这条底线叠加行圆角后会变成没有语义的弧形长线。 */
+.permission-member-list > .permission-member-row:last-child {
+  border-bottom: 0;
 }
 
 .permission-member-row > span:nth-child(3) {
@@ -274,6 +280,11 @@
   padding-left: 24px;
 }
 
+.permission-group-settings .input,
+.permission-group-settings .textarea {
+  background: var(--fill-subtle);
+}
+
 .permission-group-form-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -332,5 +343,15 @@
     border-left: 0;
     padding-top: 20px;
     padding-left: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .permission-groups-workspace .permission-group-list-panel > .panel-title-row {
+    align-items: center;
+  }
+
+  .permission-groups-workspace .permission-group-detail > .panel-head {
+    padding-inline: 0;
   }
 }

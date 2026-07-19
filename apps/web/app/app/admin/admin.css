@@ -1,0 +1,154 @@
+/* 管理中心共享布局：保留扁平工作区，用稳定的间距、局部浅底和列宽
+   建立层级，避免依赖通长横线或页面级卡片。 */
+.admin-workspace {
+  gap: 14px;
+}
+
+.admin-workspace > .admin-subnav {
+  flex-wrap: nowrap;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.admin-workspace > .admin-subnav::-webkit-scrollbar {
+  display: none;
+}
+
+.admin-workspace > .admin-subnav a {
+  flex: 0 0 auto;
+}
+
+.admin-workspace .panel-head {
+  min-height: 42px;
+}
+
+.admin-list-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.admin-list-count {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.admin-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1.1fr);
+  align-items: start;
+  gap: 28px;
+  width: min(1120px, 100%);
+  padding-top: 8px;
+}
+
+.admin-overview-grid .admin-task-panel {
+  padding-top: 0;
+}
+
+.admin-entry-panel {
+  min-width: 0;
+}
+
+.admin-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.admin-entry-link {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  border-radius: 10px;
+  color: var(--text);
+  padding: 10px;
+  text-decoration: none;
+}
+
+.admin-entry-link:hover {
+  background: var(--fill-hover);
+}
+
+.admin-entry-link > svg {
+  width: 17px;
+  height: 17px;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.admin-entry-link > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.admin-entry-link strong {
+  font-size: 13px;
+}
+
+.admin-entry-link small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.admin-storage-page .metric-strip {
+  width: min(620px, 100%);
+  gap: 4px;
+}
+
+.admin-storage-page .metric {
+  border-radius: 9px;
+  background: var(--fill-subtle);
+  padding: 9px 12px;
+}
+
+.admin-storage-page > .workbench-main {
+  width: 100%;
+}
+
+.admin-storage-page .quota-form {
+  min-width: 150px;
+}
+
+@media (max-width: 900px) {
+  .admin-overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+}
+
+@media (max-width: 620px) {
+  .admin-workspace {
+    gap: 12px;
+  }
+
+  .admin-workspace > .admin-subnav {
+    margin-inline: -2px;
+    width: calc(100% + 4px);
+  }
+
+  .admin-entry-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-entry-link {
+    padding: 9px 6px;
+  }
+
+  .admin-storage-page .metric-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-storage-page .metric {
+    padding: 8px;
+  }
+}

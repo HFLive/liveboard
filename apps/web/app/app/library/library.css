@@ -22,6 +22,100 @@
   background: var(--line);
 }
 
+/* 文件详情始终脱离文档流。选择文件只能叠加浮窗，不能改变列表宽度。 */
+.workspace.library-workspace .library-layout,
+.workspace.library-workspace .library-layout.has-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.workspace.library-workspace .asset-detail-backdrop {
+  position: fixed;
+  z-index: 770;
+  inset: 0;
+  display: block;
+  border: 0;
+  background: rgba(35, 31, 25, 0.24);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.workspace.library-workspace .asset-detail-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.workspace.library-workspace .asset-detail-panel {
+  position: fixed;
+  z-index: 780;
+  /* 桌面工作区自身向上出血 20px，因此使用 44px 得到 24px 可见留白。 */
+  top: 44px;
+  right: 24px;
+  bottom: 24px;
+  width: min(360px, calc(100vw - 40px));
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg);
+  box-shadow: -10px 12px 34px rgba(45, 39, 30, 0.16);
+  pointer-events: none;
+  transform: translateX(calc(100% + 40px));
+  transition: transform 180ms ease;
+}
+
+.workspace.library-workspace .asset-detail-panel.open {
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.workspace.library-workspace .asset-detail-close {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  color: var(--text-soft);
+}
+
+@media (max-width: 760px) {
+  .workspace.library-workspace .library-layout,
+  .workspace.library-workspace .library-layout.has-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace.library-workspace .asset-detail-backdrop {
+    inset: 58px 0 0;
+  }
+
+  .workspace.library-workspace .asset-detail-panel {
+    top: auto;
+    right: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    left: 8px;
+    width: auto;
+    height: auto;
+    max-height: min(520px, calc(100dvh - 82px));
+    border-radius: 16px;
+    box-shadow: 0 -10px 32px rgba(45, 39, 30, 0.14);
+    transform: translateY(calc(100% + 20px));
+  }
+
+  .workspace.library-workspace .asset-detail-panel.open {
+    transform: translateY(0);
+  }
+}
+
 .workspace.library-workspace .asset-reference-modal {
   width: min(520px, 100%);
 }

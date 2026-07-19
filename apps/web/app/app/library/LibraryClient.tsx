@@ -48,7 +48,7 @@ export function LibraryClient() {
   const [sort, setSort] = useState<AssetSort>("newest");
   const [view, setView] = useState<AssetView>("grid");
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
-  const [showMobileDetail, setShowMobileDetail] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<FileAssetSummary | null>(
     null,
@@ -123,17 +123,24 @@ export function LibraryClient() {
   }, []);
 
   useEffect(() => {
-    if (!showMobileDetail || !window.matchMedia("(max-width: 760px)").matches) {
-      return;
-    }
+    if (!showDetail) return;
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setSelectedAssetId(null);
+      setShowDetail(false);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+
     return () => {
       document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
     };
-  }, [showMobileDetail]);
+  }, [showDetail]);
 
   useEffect(() => {
     if (
@@ -141,18 +148,18 @@ export function LibraryClient() {
       !filteredAssets.some((asset) => asset.id === selectedAssetId)
     ) {
       setSelectedAssetId(null);
-      setShowMobileDetail(false);
+      setShowDetail(false);
     }
   }, [filteredAssets, selectedAssetId]);
 
   function selectAsset(assetId: string) {
     setSelectedAssetId(assetId);
-    setShowMobileDetail(true);
+    setShowDetail(true);
   }
 
   function clearSelection() {
     setSelectedAssetId(null);
-    setShowMobileDetail(false);
+    setShowDetail(false);
   }
 
   function clearSelectionFromBackground(event: MouseEvent<HTMLDivElement>) {
@@ -270,11 +277,7 @@ export function LibraryClient() {
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
 
-      <section
-        className={
-          selectedAsset ? "library-layout has-detail" : "library-layout"
-        }
-      >
+      <section className="library-layout">
         <div className="workbench-main" onClick={clearSelectionFromBackground}>
           <div className="list-toolbar">
             <label className="search-field">
@@ -490,16 +493,16 @@ export function LibraryClient() {
           <>
             <button
               aria-label="关闭文件详情"
-              className={`asset-detail-backdrop ${showMobileDetail ? "open" : ""}`}
+              className={`asset-detail-backdrop ${showDetail ? "open" : ""}`}
               onClick={clearSelection}
               type="button"
             />
 
             <aside
-              aria-label="文件详情"
-              className={`asset-detail-panel sticky-panel ${
-                showMobileDetail ? "mobile-open" : ""
-              }`}
+              aria-labelledby="asset-detail-title"
+              aria-modal="true"
+              className={`asset-detail-panel ${showDetail ? "open" : ""}`}
+              role="dialog"
             >
               <button
                 aria-label="关闭文件详情"
@@ -519,7 +522,7 @@ export function LibraryClient() {
                 )}
               </div>
               <div className="asset-detail-body">
-                <h2>{selectedAsset.filename}</h2>
+                <h2 id="asset-detail-title">{selectedAsset.filename}</h2>
                 <dl>
                   <div>
                     <dt>类型</dt>

@@ -263,7 +263,7 @@ export function PermissionGroupsClient() {
   }
 
   return (
-    <div className="workspace permission-groups-workspace">
+    <div className="workspace admin-workspace permission-groups-workspace">
       <header className="page-head">
         <div>
           <h1>权限组</h1>

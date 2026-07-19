@@ -109,6 +109,17 @@ model User {
   visibleExerciseSets        ExerciseSetViewer[]
   createdExerciseSets        ExerciseSet[]           @relation("ExerciseSetCreatedBy")
   uploadedAssets             FileAsset[]             @relation("FileAssetUploader")
+  activityDismissals         ActivityDismissal[]
+}
+
+model ActivityDismissal {
+  userId      String
+  activityId  String
+  dismissedAt DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, activityId])
+  @@index([userId, dismissedAt])
 }
 
 model Workspace {

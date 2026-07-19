@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import type { ActivityItem } from "@liveboard/shared";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -8,57 +13,76 @@ export class ActivityService {
 
   async list(userId: string | null) {
     const user = await this.requireUser(userId);
+    return this.listForUser(user);
+  }
+
+  private async listForUser(user: {
+    id: string;
+    username: string;
+    activityReadAt: Date | null;
+  }) {
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const [exercises, submissions, files, forumThreads] = await Promise.all([
-      this.prisma.exerciseSet.findMany({
-        where: {
-          updatedAt: { gte: since },
-          OR: [
-            { createdById: user.id },
-            { viewers: { some: { userId: user.id } } },
-          ],
-        },
-        orderBy: { updatedAt: "desc" },
-        take: 10,
-      }),
-      this.prisma.submission.findMany({
-        where: { userId: user.id, gradedAt: { not: null, gte: since } },
-        include: { exerciseSet: { select: { title: true } } },
-        orderBy: { gradedAt: "desc" },
-        take: 10,
-      }),
-      this.prisma.file.findMany({
-        where: {
-          createdById: user.id,
-          status: { not: "archived" },
-          updatedAt: { gte: since },
-        },
-        orderBy: { updatedAt: "desc" },
-        take: 10,
-      }),
-      this.prisma.forumThread.findMany({
-        where: {
-          lastActivityAt: { gte: since },
-          OR: [
-            { authorId: user.id },
-            { userStates: { some: { userId: user.id, followed: true } } },
-            {
-              posts: {
-                some: {
-                  body: { contains: `@${user.username}`, mode: "insensitive" },
+    const [exercises, submissions, files, forumThreads, dismissals] =
+      await Promise.all([
+        this.prisma.exerciseSet.findMany({
+          where: {
+            updatedAt: { gte: since },
+            OR: [
+              { createdById: user.id },
+              { viewers: { some: { userId: user.id } } },
+            ],
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 10,
+        }),
+        this.prisma.submission.findMany({
+          where: { userId: user.id, gradedAt: { not: null, gte: since } },
+          include: { exerciseSet: { select: { title: true } } },
+          orderBy: { gradedAt: "desc" },
+          take: 10,
+        }),
+        this.prisma.file.findMany({
+          where: {
+            createdById: user.id,
+            status: { not: "archived" },
+            updatedAt: { gte: since },
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 10,
+        }),
+        this.prisma.forumThread.findMany({
+          where: {
+            lastActivityAt: { gte: since },
+            OR: [
+              { authorId: user.id },
+              { userStates: { some: { userId: user.id, followed: true } } },
+              {
+                posts: {
+                  some: {
+                    body: {
+                      contains: `@${user.username}`,
+                      mode: "insensitive",
+                    },
+                  },
                 },
               },
-            },
-          ],
-        },
-        include: { category: { select: { name: true } } },
-        orderBy: { lastActivityAt: "desc" },
-        take: 10,
-      }),
-    ]);
+            ],
+          },
+          include: { category: { select: { name: true } } },
+          orderBy: { lastActivityAt: "desc" },
+          take: 10,
+        }),
+        this.prisma.activityDismissal.findMany({
+          where: { userId: user.id, dismissedAt: { gte: since } },
+          select: { activityId: true },
+        }),
+      ]);
 
     const readAt = user.activityReadAt;
     const isUnread = (date: Date) => !readAt || date > readAt;
+    const dismissedIds = new Set(
+      dismissals.map((dismissal) => dismissal.activityId),
+    );
     const items: ActivityItem[] = [
       ...exercises.map((exercise) => ({
         id: `exercise-${exercise.id}-${exercise.updatedAt.toISOString()}`,
@@ -100,6 +124,7 @@ export class ActivityService {
         unread: isUnread(thread.lastActivityAt),
       })),
     ]
+      .filter((item) => !dismissedIds.has(item.id))
       .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))
       .slice(0, 24);
 
@@ -114,6 +139,29 @@ export class ActivityService {
       data: { activityReadAt },
     });
     return { activityReadAt: activityReadAt.toISOString() };
+  }
+
+  async dismiss(userId: string | null, activityId: string) {
+    const user = await this.requireUser(userId);
+
+    if (!activityId || activityId.length > 300) {
+      throw new BadRequestException("Invalid activity id");
+    }
+
+    const existing = await this.prisma.activityDismissal.findUnique({
+      where: { userId_activityId: { userId: user.id, activityId } },
+    });
+    if (existing) return { dismissed: true };
+
+    const current = await this.listForUser(user);
+    if (!current.items.some((item) => item.id === activityId)) {
+      throw new NotFoundException("Activity not found");
+    }
+
+    await this.prisma.activityDismissal.create({
+      data: { userId: user.id, activityId },
+    });
+    return { dismissed: true };
   }
 
   private async requireUser(userId: string | null) {

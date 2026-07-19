@@ -108,7 +108,7 @@ export function ContentPermissionsClient() {
   }
 
   return (
-    <div className="workspace content-permissions-workspace">
+    <div className="workspace admin-workspace content-permissions-workspace">
       <header className="page-head">
         <div>
           <h1>文档权限</h1>

@@ -1,4 +1,4 @@
-/* 文档查看页：整页全宽左对齐，状态以标签形式放在标题前同一行。 */
+/* 文档查看页：顶部操作保持全宽，正文使用居中的可读栏。 */
 
 .workspace.content-viewer {
   width: 100%;
@@ -76,6 +76,7 @@
   display: grid;
   grid-template-columns: minmax(0, 860px);
   align-items: start;
+  justify-content: center;
   gap: 28px;
 }
 
@@ -120,11 +121,11 @@
   color: var(--text);
 }
 
-/* 正文左对齐并保留可读行宽，不再整体居中。 */
+/* 正文文字保持正常左对齐，整列在页面中居中。 */
 .content-viewer-document {
   width: 100%;
   max-width: 860px;
-  margin: 0;
+  margin: 0 auto;
   padding: 28px 0 64px;
 }
 
@@ -166,6 +167,7 @@
   .content-viewer-body,
   .content-viewer-body.has-toc {
     grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
     gap: 0;
   }
 

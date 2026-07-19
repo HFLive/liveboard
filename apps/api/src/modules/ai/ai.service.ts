@@ -491,15 +491,19 @@ export class AiService {
       input.conversationId,
       prepared.settings,
     );
-    const answer = await this.callChatCompletion(
+    const generatedAnswer = await this.callChatCompletion(
       prepared.settings,
       prepared.question,
       prepared.contextText,
     );
+    const { answer, sources } = this.finalizeGeneratedAnswer(
+      generatedAnswer,
+      prepared.sources,
+    );
     const assistantMessage = await this.saveAssistantMessage(
       turn.conversation.id,
       answer,
-      prepared.sources,
+      sources,
     );
 
     return {
@@ -514,7 +518,7 @@ export class AiService {
       }),
       assistantMessage: this.toMessageSummary(assistantMessage),
       answer,
-      sources: prepared.sources,
+      sources,
     };
   }
 
@@ -548,10 +552,12 @@ export class AiService {
 
     await this.consumeCallQuota(userId);
 
-    const contextFiles = await this.buildContext(userId, question, {
-      maxFiles: settings.maxContextFiles,
-      maxChars: settings.maxContextChars,
-    });
+    const contextFiles = isConversationalPrompt(question)
+      ? []
+      : await this.buildContext(userId, question, {
+          maxFiles: settings.maxContextFiles,
+          maxChars: settings.maxContextChars,
+        });
     const contextText = contextFiles
       .map((file, index) =>
         [
@@ -597,6 +603,24 @@ export class AiService {
       onDelta,
       signal,
     );
+  }
+
+  finalizeGeneratedAnswer(answer: string, sources: AiSourceSummary[]) {
+    const citedIndexes = new Set<number>();
+    for (const match of answer.matchAll(/[\[【]资料\s*(\d+)[\]】]/g)) {
+      const index = Number(match[1]) - 1;
+      if (Number.isInteger(index) && index >= 0 && index < sources.length) {
+        citedIndexes.add(index);
+      }
+    }
+
+    return {
+      answer: answer
+        .replace(/[\[【]资料\s*\d+[\]】]/g, "")
+        .replace(/[ \t]+\n/g, "\n")
+        .trim(),
+      sources: sources.filter((_, index) => citedIndexes.has(index)),
+    };
   }
 
   async createConversationTurn(
@@ -725,11 +749,15 @@ export class AiService {
       }
 
       const searchable = `${file.title}\n${text}`.toLowerCase();
-      const score =
-        keywords.reduce(
-          (total, keyword) => total + countOccurrences(searchable, keyword),
-          0,
-        ) + (file.status === "published" ? 0.25 : 0);
+      const relevanceScore = keywords.reduce(
+        (total, keyword) =>
+          total + countOccurrences(searchable, keyword) * keyword.length,
+        0,
+      );
+      if (relevanceScore <= 0) {
+        continue;
+      }
+      const score = relevanceScore + (file.status === "published" ? 0.25 : 0);
 
       visible.push({
         id: file.id,
@@ -962,7 +990,9 @@ export class AiService {
   ) {
     const systemPrompt = [
       "你是 LiveBoard 的教学资料助手。",
-      "回答必须基于用户有权限访问的资料上下文，资料不足时要明确说明不足，并给出可验证的下一步建议。",
+      "用户只是寒暄或进行无需资料的普通对话时，直接自然回答，不要牵强引用资料。",
+      "需要资料时，回答必须基于用户有权限访问的资料上下文；资料不足时要明确说明不足，并给出可验证的下一步建议。",
+      "每当使用某份资料中的信息时，在相关陈述后标注对应编号，例如 [资料1]；只标注实际使用的资料，不要添加单独的参考文献列表。",
       "不要编造文件中没有的信息。回答使用简洁、专业的中文。",
     ].join("\n");
 
@@ -1333,12 +1363,34 @@ function maskApiKey(value: string) {
 }
 
 function tokenize(value: string) {
-  return value
+  const segments = value
     .toLowerCase()
     .split(/[\s,，。.!！?？;；:：()[\]{}"'“”‘’<>《》、/\\|-]+/)
     .map((item) => item.trim())
-    .filter((item) => item.length >= 2)
-    .slice(0, 16);
+    .filter((item) => item.length >= 2);
+  const tokens: string[] = [];
+
+  for (const segment of segments) {
+    tokens.push(segment);
+    if (/[\u3400-\u9fff]/.test(segment) && segment.length > 2) {
+      for (let index = 0; index < segment.length - 1; index += 1) {
+        tokens.push(segment.slice(index, index + 2));
+      }
+    }
+  }
+
+  return [...new Set(tokens)].slice(0, 24);
+}
+
+function isConversationalPrompt(value: string) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s，。.!！?？～~]+/g, "");
+
+  return /^(你好|您好|嗨|哈喽|hello|hi|早上好|上午好|下午好|晚上好|晚安|谢谢|感谢|不客气|再见|拜拜|在吗|你是谁|你能做什么|有什么功能)(呀|啊|呢|哦|啦|吗)?$/.test(
+    normalized,
+  );
 }
 
 function countOccurrences(value: string, keyword: string) {

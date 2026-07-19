@@ -61,6 +61,10 @@ describe("LibraryClient selection", () => {
 
     fireEvent.click(card);
     expect(card).toHaveClass("active");
+    expect(container.querySelector(".library-layout")).not.toHaveClass(
+      "has-detail",
+    );
+    expect(screen.getByRole("dialog", { name: "example.png" })).toBeVisible();
 
     const assetGrid = container.querySelector(".asset-grid");
     expect(assetGrid).not.toBeNull();

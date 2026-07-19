@@ -7,7 +7,7 @@
   grid-template-columns: minmax(0, 1fr) 280px;
   align-items: start;
   gap: 20px;
-  width: min(1080px, 100%);
+  width: min(1020px, 100%);
 }
 
 .system-settings-page .system-settings-form {
@@ -109,10 +109,6 @@
   .system-settings-page .system-settings-layout {
     grid-template-columns: minmax(0, 1fr);
     width: 100%;
-  }
-
-  .system-settings-page .system-settings-side {
-    order: -1;
   }
 }
 

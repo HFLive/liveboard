@@ -95,6 +95,21 @@ describe("AiService", () => {
     );
   });
 
+  it("does not retrieve documents for a greeting", async () => {
+    const buildContext = jest.fn().mockResolvedValue([]);
+    (
+      service as unknown as {
+        buildContext: jest.Mock;
+      }
+    ).buildContext = buildContext;
+
+    const prepared = await service.prepareQuestion("user-1", "你好");
+
+    expect(buildContext).not.toHaveBeenCalled();
+    expect(prepared.contextText).toBe("");
+    expect(prepared.sources).toEqual([]);
+  });
+
   it("uses the workspace timezone for the daily quota date", () => {
     expect(
       formatDateKey(new Date("2026-07-18T16:30:00.000Z"), "Asia/Shanghai"),
@@ -148,6 +163,55 @@ describe("AiService", () => {
       "user-1",
       ["file-1"],
     );
+  });
+
+  it("excludes published documents with no relevant keyword match", async () => {
+    prisma.file.findMany.mockResolvedValue([
+      {
+        id: "file-1",
+        title: "课程介绍",
+        type: "doc",
+        status: "published",
+        updatedAt: new Date("2026-01-01T00:00:00Z"),
+        blocks: [
+          { id: "block-1", type: "paragraph", dataJson: { text: "课程重点" } },
+        ],
+      },
+    ]);
+    permissions.getEffectiveLevelsForFiles.mockResolvedValue(
+      new Map([["file-1", "viewer"]]),
+    );
+
+    const prepared = await service.prepareQuestion("user-1", "设备清单");
+
+    expect(prepared.sources).toEqual([]);
+    expect(prepared.contextText).toBe("");
+  });
+
+  it("keeps only explicitly cited sources and removes citation markers", () => {
+    const sources = [
+      {
+        id: "file-1",
+        title: "资料一",
+        type: "doc",
+        updatedAt: "2026-07-19T00:00:00.000Z",
+        blocks: [],
+      },
+      {
+        id: "file-2",
+        title: "资料二",
+        type: "doc",
+        updatedAt: "2026-07-19T00:00:00.000Z",
+        blocks: [],
+      },
+    ];
+
+    expect(
+      service.finalizeGeneratedAnswer("第一项结论。[资料2]", sources),
+    ).toEqual({
+      answer: "第一项结论。",
+      sources: [sources[1]],
+    });
   });
 
   it("marks deleted and inaccessible historical sources as unavailable", async () => {

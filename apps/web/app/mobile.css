@@ -1,0 +1,996 @@
+/* Mobile application shell and route adaptations.
+   Mobile keeps the desktop visual language, but reduces simultaneous controls
+   and removes workflows that cannot be completed safely on a small screen. */
+.rail-mobile-menu-toggle,
+.rail-mobile-account-actions,
+.mobile-route-unsupported {
+  display: none;
+}
+
+.mobile-route-content {
+  display: contents;
+}
+
+.app-main:has(> .mobile-route-content > .workspace) {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 760px) {
+  .app-rail {
+    position: sticky;
+    z-index: 700;
+    top: 0;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 58px;
+    min-height: 58px;
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 7px 10px;
+  }
+
+  .rail-brand {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+  }
+
+  .rail-mark {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    font-size: 14px;
+  }
+
+  .rail-mobile-menu-toggle {
+    display: flex;
+    align-items: center;
+    justify-self: start;
+    gap: 7px;
+    min-width: 0;
+    min-height: 38px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--rail-ink);
+    padding: 0 9px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 680;
+  }
+
+  .rail-mobile-menu-toggle:hover,
+  .rail-mobile-menu-toggle[aria-expanded="true"] {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .rail-mobile-menu-toggle svg {
+    width: 17px;
+    height: 17px;
+    flex: 0 0 auto;
+  }
+
+  .rail-mobile-menu-toggle svg:last-child {
+    width: 14px;
+    height: 14px;
+    color: var(--rail-muted);
+  }
+
+  .rail-nav {
+    position: absolute;
+    z-index: 710;
+    top: 64px;
+    right: 10px;
+    left: 10px;
+    display: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    max-height: calc(100dvh - 76px);
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface-raised);
+    padding: 8px;
+    box-shadow: var(--shadow-popover);
+  }
+
+  .app-rail.mobile-menu-open .rail-nav {
+    display: grid;
+  }
+
+  .rail-link {
+    flex: none;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 9px;
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--text-soft);
+    padding: 0 11px;
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .rail-link:hover,
+  .rail-link.active {
+    border: 0;
+    background: var(--fill-active);
+    color: var(--text);
+  }
+
+  .rail-link.active::before {
+    display: none;
+  }
+
+  .rail-link .rail-icon {
+    width: 17px;
+    height: 17px;
+  }
+
+  .rail-link.mobile-complex-nav {
+    display: none;
+  }
+
+  .rail-mobile-account-actions {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 4px;
+    margin-top: 4px;
+    border-top: 1px solid var(--line);
+    padding-top: 8px;
+  }
+
+  .rail-mobile-account-actions > a,
+  .rail-mobile-account-actions > .rail-logout-button {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 9px;
+    width: 100%;
+    min-height: 40px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-soft);
+    padding: 0 11px;
+    font-size: 12px;
+    text-decoration: none;
+  }
+
+  .rail-mobile-account-actions svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .rail-footer {
+    display: flex;
+    align-items: center;
+    margin: 0;
+    border: 0;
+    padding: 0;
+  }
+
+  .rail-usage-strip,
+  .rail-account-row {
+    display: none;
+  }
+
+  .rail-activity-button {
+    justify-content: center;
+    width: 38px;
+    min-height: 38px;
+    padding: 0;
+  }
+
+  .rail-activity-button > span {
+    display: none;
+  }
+
+  .rail-activity-button em {
+    position: absolute;
+    top: 1px;
+    right: 0;
+  }
+
+  .rail-activity-popover {
+    top: 64px;
+    right: 10px;
+    bottom: auto;
+    left: 10px;
+    width: auto;
+    max-height: calc(100dvh - 76px);
+  }
+
+  .app-main {
+    min-width: 0;
+    padding: 14px;
+  }
+
+  .workspace {
+    gap: 12px;
+  }
+
+  .workspace :is(.button, .select, .input, .search-field) {
+    min-height: 36px;
+  }
+
+  .workspace :is(.panel-head, .list-toolbar) {
+    min-height: 38px;
+  }
+
+  /* Dense creation and administration workflows deliberately stop here. */
+  .mobile-route-content.is-desktop-only {
+    display: none;
+  }
+
+  .mobile-route-unsupported {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr);
+    align-items: start;
+    gap: 13px;
+    width: min(440px, 100%);
+    margin: clamp(48px, 12vh, 110px) auto 0;
+    color: var(--text);
+    padding: 10px 4px;
+  }
+
+  .mobile-route-unsupported > svg {
+    width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    background: var(--fill-active);
+    color: var(--muted);
+    padding: 9px;
+    box-sizing: content-box;
+  }
+
+  .mobile-route-unsupported strong {
+    display: block;
+    font-size: 16px;
+  }
+
+  .mobile-route-unsupported p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  /* AI: same flat surfaces as desktop, without the legacy framed shell. */
+  .app-main:has(.ai-workspace) {
+    padding: 0;
+  }
+
+  .ai-workspace {
+    width: 100%;
+    height: calc(100dvh - 58px);
+    min-height: 0;
+  }
+
+  .ai-workspace .ai-workbench {
+    height: calc(100dvh - 58px);
+    min-height: 0;
+    margin: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .ai-workspace .ai-chat-panel {
+    height: 100%;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .ai-workspace .ai-chat-toolbar {
+    min-height: 48px;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    padding: 6px 10px;
+    backdrop-filter: blur(12px);
+  }
+
+  .ai-workspace .ai-chat-title strong {
+    font-size: 13px;
+  }
+
+  .ai-workspace .home-ai-messages {
+    gap: 18px;
+    background: transparent;
+    padding: 20px 14px 34px;
+  }
+
+  .ai-workspace .chat-bubble,
+  .ai-workspace .chat-bubble.assistant {
+    max-width: 100%;
+  }
+
+  .ai-workspace .chat-bubble.user {
+    max-width: 88%;
+  }
+
+  .ai-workspace .chat-message-head {
+    min-height: 22px;
+  }
+
+  .ai-workspace .chat-bubble.user .chat-message-body {
+    border-radius: 14px;
+    background: var(--fill-subtle);
+    padding: 9px 12px;
+  }
+
+  .ai-workspace .markdown-content {
+    gap: 10px;
+  }
+
+  .ai-workspace .markdown-content p,
+  .ai-workspace .markdown-content li,
+  .ai-workspace .chat-bubble.user .markdown-content p,
+  .ai-workspace .chat-bubble.user .markdown-content li {
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+  .ai-workspace .chat-sources {
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .ai-workspace .chat-sources::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ai-workspace .chat-source-link,
+  .ai-workspace .chat-source-more-button {
+    flex: 0 0 auto;
+    min-height: 27px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--fill-subtle);
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .ai-workspace .home-ai-composer {
+    width: calc(100% - 24px);
+    margin: 0 auto 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: 15px;
+    background: #fff;
+    padding: 9px 9px 7px 12px;
+    box-shadow: none;
+  }
+
+  .ai-workspace .home-ai-composer:focus-within {
+    border-color: var(--accent-dark);
+    box-shadow: 0 0 0 2px rgba(181, 138, 74, 0.12);
+  }
+
+  .ai-workspace .home-ai-composer textarea {
+    max-height: 120px;
+    font-size: 14px;
+  }
+
+  .ai-workspace .composer-actions .composer-send-button {
+    width: 34px;
+    min-width: 34px;
+    min-height: 34px;
+  }
+
+  .ai-workspace .ai-disclaimer {
+    max-width: calc(100% - 20px);
+    margin-bottom: 6px;
+    font-size: 9px;
+  }
+
+  .ai-workspace .ai-sidebar {
+    width: min(292px, calc(100% - 36px));
+    border-right: 1px solid var(--line);
+    background: var(--bg);
+    box-shadow: 16px 0 36px rgba(28, 24, 18, 0.14);
+  }
+
+  .ai-workspace .ai-mobile-backdrop {
+    background: rgba(35, 31, 25, 0.2);
+  }
+
+  /* Route CSS loads after root CSS in Next.js; these higher-specificity rules
+     guarantee that the old mobile frame and composer shadow cannot return. */
+  .app-main .workspace.ai-workspace .ai-workbench {
+    height: calc(100dvh - 58px);
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .app-main .workspace.ai-workspace .ai-chat-panel {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .app-main .workspace.ai-workspace .ai-sidebar {
+    top: 8px;
+    bottom: 8px;
+    left: 8px;
+    width: min(286px, calc(100% - 56px));
+    height: auto;
+    max-height: none;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--bg);
+    box-shadow: 10px 12px 30px rgba(28, 24, 18, 0.14);
+  }
+
+  .app-main .workspace.ai-workspace .ai-sidebar-primary {
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .app-main .workspace.ai-workspace .ai-sidebar-new {
+    min-height: 38px;
+    padding-inline: 9px;
+  }
+
+  .app-main .workspace.ai-workspace .ai-history-search input {
+    min-height: 36px;
+    border: 0;
+    background: var(--fill-subtle);
+    padding-left: 34px;
+    font-size: 12px;
+  }
+
+  .app-main .workspace.ai-workspace .ai-sidebar-head {
+    padding: 7px 13px 4px;
+  }
+
+  .app-main .workspace.ai-workspace .ai-sidebar .history-list {
+    padding: 2px 6px 10px;
+  }
+
+  .app-main .workspace.ai-workspace .history-group + .history-group {
+    margin-top: 4px;
+  }
+
+  .app-main .workspace.ai-workspace .history-group h3 {
+    padding: 6px 8px 3px;
+  }
+
+  .app-main .workspace.ai-workspace .history-main-button {
+    min-height: 36px;
+    padding: 7px 3px 7px 9px;
+  }
+
+  .app-main .workspace.ai-workspace .history-more-button {
+    opacity: 0.55;
+  }
+
+  .app-main .workspace.ai-workspace .home-ai-composer {
+    width: calc(100% - 24px);
+    border: 1px solid var(--line-strong);
+    border-radius: 15px;
+    padding: 9px 9px 7px 12px;
+    box-shadow: none;
+  }
+
+  .app-main .workspace.ai-workspace .home-ai-composer:focus-within {
+    border-color: var(--accent-dark);
+    box-shadow: 0 0 0 2px rgba(181, 138, 74, 0.12);
+  }
+
+  .app-main
+    .workspace.ai-workspace
+    :is(.chat-source-link, .chat-source-more-button) {
+    border: 0;
+    border-radius: 8px;
+    background: var(--fill-subtle);
+  }
+
+  /* Document browser: one compact row per folder or document. */
+  .content-workspace .content-path-head {
+    gap: 6px;
+    padding-inline: 0;
+  }
+
+  .content-workspace .breadcrumb {
+    font-size: 12px;
+  }
+
+  .content-workspace .new-content-menu > .button {
+    width: 34px;
+    min-width: 34px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .content-workspace .new-content-menu > .button svg:last-child {
+    display: none;
+  }
+
+  .content-workspace .content-mobile-tabs {
+    margin: 0;
+  }
+
+  .app-main .workspace.content-workspace .files-layout {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-main .workspace.content-workspace .files-layout > .workbench-main,
+  .app-main .workspace.content-workspace .files-layout .table-wrap,
+  .app-main .workspace.content-workspace .content-items-table {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .content-workspace .content-items-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 30px;
+    align-items: center;
+    gap: 4px 8px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    padding: 10px 6px;
+  }
+
+  .content-workspace .content-items-table tbody tr:hover {
+    background: var(--fill-hover);
+  }
+
+  .content-workspace .content-items-table td {
+    display: block;
+    padding: 0;
+  }
+
+  .app-main
+    .workspace.content-workspace
+    .content-items-table
+    > tbody
+    > tr:not(.content-empty-row)
+    > td {
+    height: auto;
+    padding: 0;
+  }
+
+  .content-workspace .content-items-table td::before {
+    display: none;
+  }
+
+  .content-workspace .content-items-table td:first-child {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .content-workspace .content-items-table td:nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .content-workspace .content-items-table td:nth-child(3) {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+
+  .app-main .workspace.content-workspace .content-items-table tbody tr {
+    min-height: 58px;
+    padding: 8px 6px;
+  }
+
+  .app-main .workspace.content-workspace .content-items-table td:nth-child(2) {
+    align-self: start;
+    line-height: 1.35;
+  }
+
+  .app-main .workspace.content-workspace .content-items-table td:nth-child(3) {
+    align-self: center;
+  }
+
+  .app-main .workspace.content-workspace .content-pinned-row > td {
+    background: transparent;
+  }
+
+  .app-main .workspace.content-workspace .content-pinned-row {
+    background: var(--fill-subtle);
+  }
+
+  .app-main
+    .workspace.content-workspace
+    .content-pinned-actions
+    > button:not(.content-row-menu-button) {
+    display: none;
+  }
+
+  .app-main .workspace.content-workspace .content-pinned-actions {
+    gap: 0;
+  }
+
+  .app-main
+    .workspace.content-workspace
+    :is(.content-folder-link, .content-file-link) {
+    min-height: 26px;
+    min-width: 0;
+  }
+
+  .app-main
+    .workspace.content-workspace
+    :is(.content-folder-link, .content-file-link)
+    > span:last-of-type {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .content-viewer .content-viewer-header .button-row {
+    display: none;
+  }
+
+  /* Browsing and presentation stay available; complex editors do not. */
+  .teaching-list-panel .list-toolbar > .button,
+  .teaching-list-panel .teaching-empty .button,
+  .exercises-workspace .exercise-toolbar-actions > .button {
+    display: none;
+  }
+
+  .teaching-list-panel .list-toolbar {
+    display: block;
+  }
+
+  .teaching-list-panel .teaching-deck-row {
+    align-items: center;
+    flex-direction: row;
+    min-height: 58px;
+    padding: 10px 4px;
+  }
+
+  .teaching-list-panel .teaching-deck-main {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+  }
+
+  .teaching-list-panel .teaching-deck-actions {
+    flex: 0 0 auto;
+    width: auto;
+    margin-left: auto;
+  }
+
+  .teaching-list-panel .teaching-deck-main span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Exercise list keeps the decision-making fields and drops admin columns. */
+  .exercises-workspace .list-toolbar {
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .exercises-workspace .exercise-toolbar-actions {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .exercises-workspace .segmented-control {
+    flex: 0 0 auto;
+  }
+
+  .exercises-workspace .responsive-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 6px 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    padding: 12px 6px;
+  }
+
+  .exercises-workspace .responsive-table td {
+    display: block;
+    padding: 0;
+  }
+
+  .exercises-workspace .responsive-table td::before {
+    display: none;
+  }
+
+  .exercises-workspace .responsive-table td[data-label="练习"] {
+    grid-column: 1 / -1;
+  }
+
+  .exercises-workspace .responsive-table td[data-label="状态"] {
+    grid-column: 1;
+    color: var(--text-soft);
+    font-size: 11px;
+  }
+
+  .exercises-workspace .responsive-table td[data-label="得分"] {
+    grid-column: 2;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .exercises-workspace
+    .responsive-table
+    td:is(
+      [data-label="开放时间"],
+      [data-label="提交情况"],
+      [data-label="操作"]
+    ) {
+    display: none;
+  }
+
+  .exercises-workspace .exercise-title-cell {
+    justify-items: start;
+    text-align: left;
+  }
+
+  /* Library controls stay on two compact rows; cards form a small gallery. */
+  .library-workspace .library-layout .list-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .library-workspace .library-layout .list-toolbar .toolbar-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .library-workspace .library-layout .list-toolbar .toolbar-row > .button {
+    width: 36px;
+    min-width: 36px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .library-workspace .library-layout .asset-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 8px 0;
+  }
+
+  .library-workspace .asset-card {
+    min-width: 0;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+  }
+
+  .library-workspace .asset-info strong {
+    font-size: 12px;
+  }
+
+  .library-workspace .asset-info span,
+  .library-workspace .asset-info small,
+  .library-workspace .asset-actions {
+    font-size: 10px;
+  }
+
+  .app-main .workspace.library-workspace .asset-detail-backdrop {
+    inset: 58px 0 0;
+    background: rgba(35, 31, 25, 0.24);
+  }
+
+  .app-main .workspace.library-workspace .library-layout .asset-detail-panel {
+    top: auto;
+    right: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    left: 8px;
+    width: auto;
+    max-height: min(520px, calc(100dvh - 82px));
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--bg);
+    box-shadow: 0 -10px 32px rgba(45, 39, 30, 0.14);
+    transform: translateY(calc(100% + 20px));
+  }
+
+  .app-main
+    .workspace.library-workspace
+    .library-layout
+    .asset-detail-panel.open {
+    transform: translateY(0);
+  }
+
+  .app-main .workspace.library-workspace .asset-detail-close {
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+  }
+
+  .app-main .workspace.library-workspace .asset-detail-preview {
+    min-height: 0;
+    height: clamp(116px, 24dvh, 170px);
+    border-bottom: 1px solid var(--line);
+    background: var(--fill-subtle);
+  }
+
+  .app-main .workspace.library-workspace .asset-detail-preview img {
+    max-height: none;
+    object-fit: contain;
+  }
+
+  .app-main .workspace.library-workspace .asset-detail-body {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .app-main .workspace.library-workspace .asset-detail-body h2 {
+    padding-right: 34px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .app-main .workspace.library-workspace .asset-detail-body dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 16px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
+  }
+
+  .app-main .workspace.library-workspace .asset-detail-body dl div {
+    grid-template-columns: 58px minmax(0, 1fr);
+    border-bottom: 1px solid var(--line);
+    padding: 0;
+  }
+
+  .app-main
+    .workspace.library-workspace
+    .asset-detail-body
+    dl
+    div:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+
+  .app-main .workspace.library-workspace .asset-detail-body :is(dt, dd) {
+    background: transparent;
+    padding: 7px 0;
+    font-size: 11px;
+  }
+
+  .app-main .workspace.library-workspace .asset-detail-menu {
+    margin-top: 0;
+  }
+
+  .app-main .workspace.library-workspace .asset-detail-menu > summary {
+    min-height: 34px;
+  }
+
+  /* Forum detail toolbar: search stays left of follow and does not add a row. */
+  .forum-thread-detail .forum-thread-top {
+    align-items: center;
+    flex-flow: row wrap;
+    gap: 7px;
+    min-height: 46px;
+    padding: 7px 0;
+  }
+
+  .forum-thread-detail .forum-thread-topline {
+    flex: 0 0 auto;
+  }
+
+  .forum-thread-detail .forum-thread-actions {
+    flex: 1 1 240px;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  .forum-thread-detail .forum-thread-search {
+    flex: 1 1 170px;
+    width: auto;
+    min-width: 0;
+  }
+
+  .forum-thread-detail .forum-thread-actions > .button {
+    width: 34px;
+    min-width: 34px;
+    padding: 0;
+  }
+
+  .forum-thread-detail .forum-thread-actions .button-icon {
+    margin: 0;
+  }
+
+  .forum-thread-detail .forum-action-label,
+  .forum-thread-detail .forum-moderation-action {
+    display: none;
+  }
+
+  .forum-thread-detail .forum-status-badge {
+    font-size: 12px !important;
+  }
+
+  .forum-home .forum-feed-toolbar {
+    gap: 7px;
+  }
+
+  .forum-home .forum-create-action {
+    width: 36px;
+    min-width: 36px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .forum-home .forum-create-action .button-icon {
+    margin: 0;
+  }
+
+  .forum-home .forum-create-label {
+    display: none;
+  }
+
+  .forum-home .forum-topic {
+    border: 0;
+    padding: 10px 0;
+  }
+
+  .forum-home .forum-topic p {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .user-profile-heading {
+    align-items: flex-start;
+  }
+
+  .user-profile-heading .button {
+    width: auto;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-main {
+    padding: 12px;
+  }
+
+  .rail-nav {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rail-mobile-account-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ai-workspace .home-ai-messages {
+    padding-inline: 12px;
+  }
+}

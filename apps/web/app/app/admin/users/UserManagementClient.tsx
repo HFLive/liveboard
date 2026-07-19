@@ -395,7 +395,7 @@ export function UserManagementClient() {
   }
 
   return (
-    <div className="workspace admin-users-page">
+    <div className="workspace admin-workspace admin-users-page">
       <header className="page-head">
         <div>
           <p className="page-eyebrow">管理中心</p>
@@ -413,7 +413,14 @@ export function UserManagementClient() {
         <div className="workbench-main">
           <div className="panel-head">
             <div>
-              <h2>成员列表</h2>
+              <h2 className="admin-list-heading">
+                成员列表
+                <span className="admin-list-count">
+                  {filteredUsers.length === users.length
+                    ? `${users.length} 人`
+                    : `${filteredUsers.length} / ${users.length} 人`}
+                </span>
+              </h2>
             </div>
             <div className="button-row">
               <button

@@ -139,7 +139,7 @@ export function SystemSettingsClient() {
   }
 
   return (
-    <div className="workspace system-settings-page">
+    <div className="workspace admin-workspace system-settings-page">
       <header className="page-head">
         <div>
           <p className="page-eyebrow">管理中心</p>

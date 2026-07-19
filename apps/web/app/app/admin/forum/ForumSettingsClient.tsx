@@ -130,7 +130,7 @@ export function ForumSettingsClient() {
   }
 
   return (
-    <div className="workspace forum-admin-page">
+    <div className="workspace admin-workspace forum-admin-page">
       <header className="page-head">
         <div>
           <p className="page-eyebrow">管理中心</p>

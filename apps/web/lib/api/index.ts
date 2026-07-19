@@ -73,6 +73,13 @@ export function markActivityRead() {
   });
 }
 
+export function dismissActivity(activityId: string) {
+  return request<{ dismissed: true }>(
+    `/activity/${encodeURIComponent(activityId)}`,
+    { method: "DELETE" },
+  );
+}
+
 export function updateProfile(input: { displayName: string; bio?: string }) {
   return request<{ user: UserProfile }>("/auth/me", {
     method: "PATCH",
@@ -415,6 +422,8 @@ export async function getAiUsage(): Promise<AiUsageSummary> {
   return result.usage;
 }
 
+export const AI_USAGE_CONSUMED_EVENT = "liveboard:ai-usage-consumed";
+
 export function listAiConversations() {
   return request<{ conversations: AiConversationSummary[] }>(
     "/ai/conversations",
@@ -628,6 +637,8 @@ export async function askAiStream(
     } | null;
     throw new ApiError(body?.message ?? "AI 请求失败", response.status);
   }
+
+  window.dispatchEvent(new Event(AI_USAGE_CONSUMED_EVENT));
 
   if (!response.body) {
     throw new ApiError("浏览器不支持流式响应", response.status);

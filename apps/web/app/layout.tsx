@@ -3,6 +3,7 @@ import { ChunkLoadRecovery } from "@/components/system/ChunkLoadRecovery";
 import "./globals.css";
 import "./redesign.css";
 import "katex/dist/katex.min.css";
+import "./mobile.css";
 
 export const metadata: Metadata = {
   title: {

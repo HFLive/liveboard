@@ -6,7 +6,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
-  width: min(900px, 100%);
+  width: min(820px, 100%);
   min-width: 0;
 }
 
@@ -139,6 +139,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+  border-radius: 10px;
+  background: var(--fill-subtle);
   padding: 18px 16px;
 }
 
@@ -342,10 +344,36 @@
 
 .ai-settings-page .ai-call-limit-row .input {
   width: 110px;
+  background: var(--fill-subtle);
 }
 
 .ai-settings-page .ai-call-limit-hint {
   margin: 6px 0 0;
+}
+
+@media (max-width: 520px) {
+  .ai-settings-page .ai-call-limit-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .ai-settings-page .ai-call-limit-row .label {
+    grid-column: 1 / -1;
+  }
+
+  .ai-settings-page .ai-call-limit-row .input {
+    width: 100%;
+  }
+
+  .ai-settings-page .ai-call-limit-row .button {
+    grid-column: 1 / -1;
+    width: fit-content;
+  }
+
+  .ai-settings-page .ai-config-empty {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 .ai-risk-label {
   display: inline-flex;

@@ -106,7 +106,20 @@
 
 .forum-home .forum-create-action {
   min-height: 30px;
+  border-color: transparent;
+  background: var(--text);
+  color: #fff;
   white-space: nowrap;
+}
+
+.forum-home .forum-create-action:hover {
+  border-color: transparent;
+  background: var(--text);
+  color: #fff;
+}
+
+.forum-home .forum-create-action .forum-create-label {
+  color: inherit;
 }
 
 .forum-home .forum-thread-list {
@@ -341,28 +354,33 @@
 }
 
 .forum-thread-detail .forum-thread-actions {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 6px;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 .forum-thread-search {
   position: relative;
-  display: flex;
-  justify-content: flex-end;
-  border-bottom: 0;
-  padding: 7px 14px;
+  width: min(300px, 100%);
+  min-width: 180px;
+  margin-right: auto;
+  padding: 0;
 }
 
 .forum-thread-search .search-field {
-  width: min(300px, 100%);
+  width: 100%;
 }
 
 .forum-thread-search-results {
   position: absolute;
   z-index: 30;
   top: calc(100% - 3px);
-  right: 14px;
+  right: 0;
   display: grid;
-  width: min(360px, calc(100% - 28px));
+  width: min(360px, calc(100vw - 28px));
   max-height: 280px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -688,17 +706,22 @@
   background: #fff;
 }
 
-/* 发帖页：整页全宽左对齐，不再使用居中窄栏。 */
+/* 发帖页保留完整工作区，但把阅读和输入动作收进居中的可读栏。 */
 .workspace.forum-compose-workspace {
   width: 100%;
   max-width: none;
   margin: 0;
 }
 
+.workspace.forum-compose-workspace > .page-back-link,
+.workspace.forum-compose-workspace > .error-text,
+.workspace.forum-compose-workspace > .forum-compose-layout {
+  width: min(860px, 100%);
+  margin-inline: auto;
+}
+
 .forum-compose-layout {
   display: block;
-  width: 100%;
-  margin-inline: 0;
 }
 
 .forum-compose-layout .forum-new-shell {

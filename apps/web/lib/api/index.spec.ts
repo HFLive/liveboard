@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { API_URL } from "./client";
-import { downloadMarkdown, importMarkdown } from "./index";
+import {
+  AI_USAGE_CONSUMED_EVENT,
+  askAiStream,
+  downloadMarkdown,
+  importMarkdown,
+} from "./index";
 
 describe("Markdown API", () => {
   afterEach(() => {
@@ -80,5 +85,30 @@ describe("Markdown API", () => {
         status: 400,
       }),
     );
+  });
+});
+
+describe("AI streaming API", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("notifies the app as soon as a streamed request consumes quota", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response('{"type":"done"}\n', {
+          status: 200,
+          headers: { "Content-Type": "application/x-ndjson" },
+        }),
+      ),
+    );
+    const onConsumed = vi.fn();
+    window.addEventListener(AI_USAGE_CONSUMED_EVENT, onConsumed);
+
+    await askAiStream({ message: "测试" }, { onDelta: vi.fn() });
+
+    expect(onConsumed).toHaveBeenCalledOnce();
+    window.removeEventListener(AI_USAGE_CONSUMED_EVENT, onConsumed);
   });
 });

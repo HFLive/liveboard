@@ -108,7 +108,7 @@ export function StorageManagementClient() {
   }
 
   return (
-    <div className="workspace">
+    <div className="workspace admin-workspace admin-storage-page">
       <header className="page-head">
         <div>
           <p className="page-eyebrow">管理中心</p>
