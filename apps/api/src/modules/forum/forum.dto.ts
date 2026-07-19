@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -8,7 +10,17 @@ import {
   Min,
   MinLength,
 } from "class-validator";
+import { Type } from "class-transformer";
 import type { ForumThreadStatus } from "@liveboard/shared";
+import { ValidateNested } from "class-validator";
+
+export class ForumRelatedResourceDto {
+  @IsIn(["document", "teaching", "exercise"])
+  type!: "document" | "teaching" | "exercise";
+
+  @IsString()
+  id!: string;
+}
 
 export class CreateForumThreadDto {
   @IsString()
@@ -27,6 +39,13 @@ export class CreateForumThreadDto {
   @IsOptional()
   @IsBoolean()
   isAnonymous?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(6)
+  @ValidateNested({ each: true })
+  @Type(() => ForumRelatedResourceDto)
+  relatedResources?: ForumRelatedResourceDto[];
 }
 
 export class CreateForumPostDto {

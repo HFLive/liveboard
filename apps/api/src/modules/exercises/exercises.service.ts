@@ -152,6 +152,7 @@ export class ExercisesService {
             optionsJson: question.optionsJson as Prisma.InputJsonValue,
             answerJson: question.answerJson as Prisma.InputJsonValue,
             score: question.score,
+            required: question.required ?? true,
             sortOrder: index,
           })),
         },
@@ -318,6 +319,19 @@ export class ExercisesService {
     );
     if (unknownQuestion) {
       throw new BadRequestException("提交中包含不属于该练习的题目");
+    }
+    const unansweredRequired = exerciseSet.questions.find((question) => {
+      if (!question.required) return false;
+      const value = answerMap.get(question.id)?.answerJson;
+      return (
+        value === null ||
+        value === undefined ||
+        value === "" ||
+        (Array.isArray(value) && value.length === 0)
+      );
+    });
+    if (unansweredRequired) {
+      throw new BadRequestException("请完成所有必答题后再提交");
     }
     let totalScore = 0;
     let needsManualReview = false;

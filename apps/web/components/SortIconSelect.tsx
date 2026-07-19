@@ -29,6 +29,7 @@ export function SortIconSelect<T extends string>({
       title={`${ariaLabel}：${currentLabel}`}
     >
       <ArrowUpDown aria-hidden="true" />
+      <span>{currentLabel}</span>
       <select
         aria-label={ariaLabel}
         onChange={(event) => onChange(event.target.value as T)}

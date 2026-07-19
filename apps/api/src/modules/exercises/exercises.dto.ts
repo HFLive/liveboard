@@ -42,6 +42,10 @@ export class CreateQuestionDto {
   @IsInt()
   @Min(1)
   score!: number;
+
+  @IsOptional()
+  @IsBoolean()
+  required?: boolean;
 }
 
 export class CreateExerciseSetDto {

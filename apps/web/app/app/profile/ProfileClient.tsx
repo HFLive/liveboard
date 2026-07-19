@@ -19,7 +19,7 @@ const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
 const MAX_BANNER_UPLOAD_BYTES = 5 * 1024 * 1024;
 const AVATAR_OUTPUT_SIZE = 512;
 const BANNER_OUTPUT_WIDTH = 1600;
-const BANNER_OUTPUT_HEIGHT = 400;
+const BANNER_OUTPUT_HEIGHT = 280;
 
 type CropTarget = "avatar" | "banner";
 
@@ -63,6 +63,7 @@ export function ProfileClient() {
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSavedAt, setProfileSavedAt] = useState<Date | null>(null);
   const [savingPassword, setSavingPassword] = useState(false);
   const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
   const [cropSourceUrl, setCropSourceUrl] = useState<string | null>(null);
@@ -90,6 +91,22 @@ export function ProfileClient() {
     };
   }, [cropSourceUrl]);
 
+  const profileDirty = Boolean(
+    user &&
+    (displayName.trim() !== user.displayName ||
+      bio.trim() !== (user.bio ?? "")),
+  );
+
+  useEffect(() => {
+    const protectUnsavedChanges = (event: BeforeUnloadEvent) => {
+      if (!profileDirty) return;
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", protectUnsavedChanges);
+    return () =>
+      window.removeEventListener("beforeunload", protectUnsavedChanges);
+  }, [profileDirty]);
+
   async function onSaveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -112,6 +129,7 @@ export function ProfileClient() {
       setBio(result.user.bio ?? "");
       window.dispatchEvent(new Event("liveboard:profile-updated"));
       setProfileMessage("个人信息已保存");
+      setProfileSavedAt(new Date());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存个人信息失败");
     } finally {
@@ -336,9 +354,22 @@ export function ProfileClient() {
               <p className="success-text">{profileMessage}</p>
             ) : null}
             <div className="button-row left">
-              <button className="button" disabled={savingProfile} type="submit">
+              <button
+                className="button"
+                disabled={savingProfile || !profileDirty}
+                type="submit"
+              >
                 {savingProfile ? "保存中" : "保存信息"}
               </button>
+              <span className="save-state" aria-live="polite">
+                {savingProfile
+                  ? "正在保存"
+                  : profileDirty
+                    ? "有未保存的修改"
+                    : profileSavedAt
+                      ? `已保存 ${profileSavedAt.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`
+                      : "没有未保存的修改"}
+              </span>
             </div>
           </form>
         </div>

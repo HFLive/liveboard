@@ -396,6 +396,16 @@ export class FilesController {
     return this.assetsService.deleteLibraryAsset(userId, assetId);
   }
 
+  @Get("assets/:id/references")
+  async listAssetReferences(
+    @CurrentUserId() userId: string | null,
+    @Param("id") assetId: string,
+  ) {
+    return {
+      references: await this.assetsService.listAssetReferences(userId, assetId),
+    };
+  }
+
   @Get("assets/:id")
   async getAsset(
     @CurrentUserId() userId: string | null,

@@ -1,0 +1,541 @@
+/* 创建练习页：左侧题目列表与编辑器、右侧基础设置与发布的路由专属样式。
+   双栏竖线、面板标题与控件密度沿用 .workspace 全局规则，这里只处理内部结构。 */
+
+.quiz-builder .quiz-builder-head-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.quiz-builder .quiz-builder-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.quiz-builder .quiz-builder-head-actions .button {
+  min-height: 30px;
+  padding-inline: 8px;
+  font-size: 11px;
+}
+
+/* 题目列表：间距分隔的连续行，hover 圆角浅灰，正在编辑的行为选中态。 */
+.quiz-builder .quiz-question-list {
+  display: grid;
+  gap: 2px;
+  padding: 6px 10px 10px;
+}
+
+.quiz-builder .quiz-question-empty {
+  margin: 0;
+  padding: 14px 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.quiz-builder .quiz-question-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.quiz-builder .quiz-question-drag {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 28px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: grab;
+}
+
+.quiz-builder .quiz-question-drag:active {
+  cursor: grabbing;
+}
+
+.quiz-builder .quiz-question-drag svg {
+  width: 14px;
+}
+
+.quiz-builder .quiz-question-row:hover {
+  background: var(--fill-hover);
+}
+
+.quiz-builder .quiz-question-row.editing,
+.quiz-builder .quiz-question-row.editing:hover {
+  background: var(--accent-soft);
+}
+
+.quiz-builder .quiz-question-number {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--fill-hover);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.quiz-builder .quiz-question-row.editing .quiz-question-number {
+  background: transparent;
+  color: var(--accent-dark);
+}
+
+.quiz-builder .quiz-question-main {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.quiz-builder .quiz-question-main h3 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quiz-builder .quiz-question-main p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quiz-builder .quiz-question-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+/* 题目编辑器：与列表之间一道通长分隔线。 */
+.quiz-builder .quiz-editor {
+  display: grid;
+  gap: 16px;
+  scroll-margin-top: 80px;
+  border-top: 1px solid var(--line);
+  padding: 16px;
+}
+
+.quiz-builder .quiz-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.quiz-builder .quiz-editor-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.quiz-builder .quiz-editor-head span,
+.quiz-builder .quiz-answer-block-label,
+.quiz-builder .quiz-score-field span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.quiz-builder .quiz-editor-head strong {
+  font-size: 15px;
+}
+
+/* 题型与判断题答案统一使用分段控件。 */
+.quiz-builder .quiz-type-picker,
+.quiz-builder .quiz-tf-picker {
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.quiz-builder .quiz-answer-block {
+  display: grid;
+  gap: 7px;
+  justify-items: start;
+}
+
+.quiz-builder .quiz-prompt-field textarea {
+  min-height: 84px;
+  line-height: 1.6;
+}
+
+/* 选项编辑：连续行 + 底部弱分隔线，输入框透明。 */
+.quiz-builder .quiz-option-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.quiz-builder .quiz-option-editor-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quiz-builder .quiz-option-editor-label > span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.quiz-builder .quiz-option-editor-label small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.quiz-builder .quiz-option-list {
+  display: grid;
+}
+
+.quiz-builder .quiz-option-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border-bottom: 1px solid var(--line);
+}
+
+.quiz-builder .quiz-option-row:focus-within {
+  border-bottom-color: var(--line-strong);
+}
+
+.quiz-builder .quiz-option-row > input:first-child {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent-dark);
+}
+
+.quiz-builder .quiz-option-input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+  padding: 8px 2px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.quiz-builder .quiz-add-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  border: 0;
+  background: transparent;
+  color: var(--text-soft);
+  padding: 4px 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.quiz-builder .quiz-add-option:hover {
+  color: var(--text);
+}
+
+.quiz-builder .quiz-add-option svg {
+  width: 14px;
+}
+
+.quiz-builder .quiz-answer-field {
+  max-width: 420px;
+}
+
+/* 人工批改说明：浅填充信息块，无外框。 */
+.quiz-builder .quiz-manual-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border-radius: 10px;
+  background: var(--fill-subtle);
+  padding: 10px 12px;
+}
+
+.quiz-builder .quiz-manual-note svg {
+  flex: 0 0 auto;
+  width: 15px;
+  margin-top: 2px;
+  color: var(--text-soft);
+}
+
+.quiz-builder .quiz-manual-note span {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.quiz-builder .quiz-manual-note small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.quiz-builder .quiz-editor-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.quiz-builder .quiz-score-field {
+  display: grid;
+  gap: 5px;
+  width: 96px;
+}
+
+.quiz-builder .quiz-editor-options {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.quiz-builder .quiz-required-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  color: var(--text-soft);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.quiz-builder .quiz-required-field input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent-dark);
+}
+
+/* 右侧基础设置。 */
+.quiz-builder .quiz-settings .label small {
+  font-weight: 400;
+}
+
+.quiz-builder .quiz-rule-list {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+.quiz-builder .quiz-rule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.quiz-builder .quiz-rule-row > span {
+  display: grid;
+  gap: 2px;
+}
+
+.quiz-builder .quiz-rule-row strong {
+  font-size: 13px;
+}
+
+.quiz-builder .quiz-rule-row small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.quiz-builder .quiz-rule-row input {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent-dark);
+}
+
+.quiz-builder .quiz-visibility-button {
+  justify-self: start;
+}
+
+/* 发布面板：标签值列表 + 主操作。 */
+.quiz-builder .quiz-publish-meta {
+  display: grid;
+  margin: 0;
+}
+
+.quiz-builder .quiz-publish-meta > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 6px 0;
+}
+
+.quiz-builder .quiz-publish-meta > div:last-child {
+  border-bottom: 0;
+}
+
+.quiz-builder .quiz-publish-meta dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.quiz-builder .quiz-publish-meta dd {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: right;
+}
+
+.quiz-builder .quiz-publish-button {
+  width: 100%;
+}
+
+.quiz-builder .quiz-visibility-modal {
+  width: min(560px, 100%);
+}
+
+.quiz-builder .quiz-preview-modal {
+  width: min(760px, 100%);
+}
+
+.quiz-builder .quiz-import-modal {
+  width: min(540px, 100%);
+}
+
+.quiz-builder .quiz-preview-list {
+  display: grid;
+  gap: 0;
+  max-height: min(68vh, 720px);
+  overflow-y: auto;
+}
+
+.quiz-builder .quiz-preview-list article {
+  border-bottom: 1px solid var(--line);
+  padding: 14px 0;
+}
+
+.quiz-builder .quiz-preview-list article:last-child {
+  border-bottom: 0;
+}
+
+.quiz-builder .quiz-preview-list h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.quiz-builder .quiz-preview-list h3 small {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.quiz-builder .quiz-preview-list ol {
+  margin: 0;
+  padding-left: 28px;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.quiz-builder .quiz-preview-answer-line {
+  border-bottom: 1px solid var(--line-strong);
+  padding: 10px 2px 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 移动端吸底创建条，默认隐藏。 */
+.quiz-builder .quiz-mobile-publish {
+  display: none;
+}
+
+/* 窄屏回落为单列时保持任务顺序：先编题，再补充设置并发布。 */
+
+@media (max-width: 720px) {
+  .quiz-builder .panel-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .quiz-builder .quiz-builder-head-actions {
+    justify-content: flex-start;
+  }
+
+  .quiz-builder .quiz-editor-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .quiz-builder .quiz-editor-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .quiz-builder .quiz-score-field {
+    width: 100%;
+  }
+
+  .quiz-builder .quiz-editor-options {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .quiz-builder .quiz-editor-footer .button-row,
+  .quiz-builder .quiz-editor-footer .button {
+    width: 100%;
+  }
+
+  .quiz-builder .quiz-option-editor-label {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .quiz-builder .quiz-publish-button {
+    display: none;
+  }
+
+  .quiz-builder .quiz-mobile-publish {
+    position: sticky;
+    z-index: 80;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 4px 10px 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+    padding: 8px 10px;
+    backdrop-filter: blur(8px);
+  }
+
+  .quiz-builder .quiz-mobile-publish span {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .quiz-builder .quiz-mobile-publish .button {
+    width: auto;
+    min-width: 120px;
+  }
+}

@@ -7,10 +7,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Edit3,
+  Grid2X2,
+  Keyboard,
   Maximize2,
   Minimize2,
+  X,
 } from "lucide-react";
 import {
+  ContentBlock,
   ExerciseQuestion,
   ExerciseSetDetail,
   getExerciseSet,
@@ -33,6 +37,8 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [showNavigator, setShowNavigator] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const slides = useMemo(
     () => buildTeachingSlides(deck?.items ?? []),
@@ -199,6 +205,26 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
             </Link>
           ) : null}
           <button
+            aria-label="打开页面导航"
+            className="button secondary"
+            onClick={() => setShowNavigator((current) => !current)}
+            title="页面导航"
+            type="button"
+          >
+            <Grid2X2 aria-hidden="true" className="button-icon" />
+            <span>页面</span>
+          </button>
+          <button
+            aria-label="查看键盘帮助"
+            className="button secondary"
+            onClick={() => setShowHelp(true)}
+            title="键盘帮助"
+            type="button"
+          >
+            <Keyboard aria-hidden="true" className="button-icon" />
+            <span>快捷键</span>
+          </button>
+          <button
             aria-label={full ? "退出全屏" : "全屏展示"}
             className="button secondary"
             onClick={() => void toggleFullscreen()}
@@ -216,6 +242,36 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
       </header>
       {error ? <p className="error-text">{error}</p> : null}
       <section className="teaching-presenter-stage" ref={stageRef}>
+        {showNavigator ? (
+          <aside className="teaching-slide-navigator" aria-label="页面导航">
+            <header>
+              <strong>页面</strong>
+              <button
+                aria-label="关闭页面导航"
+                onClick={() => setShowNavigator(false)}
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </header>
+            <div>
+              {slides.map((slide, index) => (
+                <button
+                  className={index === activeIndex ? "active" : ""}
+                  key={slide.id}
+                  onClick={() => {
+                    setActiveIndex(index);
+                    setShowNavigator(false);
+                  }}
+                  type="button"
+                >
+                  <span>{index + 1}</span>
+                  <strong>{slide.sourceLabel || `第 ${index + 1} 页`}</strong>
+                </button>
+              ))}
+            </div>
+          </aside>
+        ) : null}
         <div className="teaching-slide-source">{activeSlide?.sourceLabel}</div>
         <div className="teaching-slide-viewport">
           <article
@@ -266,7 +322,52 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
             <ChevronRight />
           </button>
         </div>
+        <div className="teaching-presenter-info" aria-live="polite">
+          <span>当前：{activeSlide?.sourceLabel ?? "无内容"}</span>
+          <span>
+            下一页：{slides[activeIndex + 1]?.sourceLabel ?? "已是最后一页"}
+          </span>
+        </div>
       </section>
+      {showHelp ? (
+        <div className="teaching-help-backdrop" role="presentation">
+          <section
+            aria-labelledby="teaching-help-title"
+            aria-modal="true"
+            className="teaching-help-dialog"
+            role="dialog"
+          >
+            <header>
+              <h2 id="teaching-help-title">展示快捷键</h2>
+              <button
+                aria-label="关闭快捷键帮助"
+                onClick={() => setShowHelp(false)}
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </header>
+            <dl>
+              <div>
+                <dt>下一页</dt>
+                <dd>→ / 空格 / PageDown</dd>
+              </div>
+              <div>
+                <dt>上一页</dt>
+                <dd>← / PageUp</dd>
+              </div>
+              <div>
+                <dt>第一页 / 最后一页</dt>
+                <dd>Home / End</dd>
+              </div>
+              <div>
+                <dt>退出专注模式</dt>
+                <dd>Esc</dd>
+              </div>
+            </dl>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -276,10 +377,19 @@ function SlideContent({ item }: { item: TeachingDeckItem }) {
     return <EmbeddedExercise exerciseSetId={item.exerciseSetId} />;
   }
   return item.block ? (
-    <RenderBlockContent block={item.block} />
+    <div className={`teaching-image-${getTeachingImageFit(item.block)}`}>
+      <RenderBlockContent block={item.block} />
+    </div>
   ) : (
     <p>原文档段落不可用。</p>
   );
+}
+
+function getTeachingImageFit(block: ContentBlock) {
+  if (!block.dataJson || typeof block.dataJson !== "object") return "fit";
+  const value = (block.dataJson as { teachingImageFit?: unknown })
+    .teachingImageFit;
+  return value === "fill" || value === "original" ? value : "fit";
 }
 
 function EmbeddedExercise({ exerciseSetId }: { exerciseSetId: string }) {

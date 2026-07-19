@@ -9,6 +9,7 @@ import {
 } from "@nestjs/common";
 import { canView, isSuperAdmin } from "@liveboard/shared";
 import type { Prisma } from "@prisma/client";
+import { formatDateKey } from "../../common/date-key";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AiSecretService } from "./ai-secret.service";
@@ -136,7 +137,11 @@ export class AiService {
     // 保证每次向 AI 提问恰好消耗一次调用次数。
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { aiCallCount: true, aiCallLimit: true },
+      select: {
+        aiCallCount: true,
+        aiCallLimit: true,
+        aiCallDateKey: true,
+      },
     });
 
     if (!user) {
@@ -145,13 +150,29 @@ export class AiService {
 
     const settings = await this.getOrCreateSettings();
     const effectiveLimit = user.aiCallLimit ?? settings.defaultCallLimit;
+    const dateKey = formatDateKey(new Date(), settings.workspaceTimeZone);
+
+    if (user.aiCallDateKey !== dateKey) {
+      await this.prisma.user.updateMany({
+        where: {
+          id: userId,
+          OR: [{ aiCallDateKey: null }, { aiCallDateKey: { not: dateKey } }],
+        },
+        data: { aiCallCount: 0, aiCallDateKey: dateKey },
+      });
+    }
+
     const consumed = await this.prisma.user.updateMany({
-      where: { id: userId, aiCallCount: { lt: effectiveLimit } },
+      where: {
+        id: userId,
+        aiCallDateKey: dateKey,
+        aiCallCount: { lt: effectiveLimit },
+      },
       data: { aiCallCount: { increment: 1 } },
     });
 
     if (consumed.count === 0) {
-      throw new HttpException("已达到 AI 调用次数限额，请联系管理员调整", 429);
+      throw new HttpException("今日 AI 调用次数已达上限，明日自动恢复", 429);
     }
   }
 
@@ -162,7 +183,11 @@ export class AiService {
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { aiCallCount: true, aiCallLimit: true },
+      select: {
+        aiCallCount: true,
+        aiCallLimit: true,
+        aiCallDateKey: true,
+      },
     });
 
     if (!user) {
@@ -170,9 +195,10 @@ export class AiService {
     }
 
     const settings = await this.getOrCreateSettings();
+    const dateKey = formatDateKey(new Date(), settings.workspaceTimeZone);
 
     return {
-      used: user.aiCallCount,
+      used: user.aiCallDateKey === dateKey ? user.aiCallCount : 0,
       limit: user.aiCallLimit ?? settings.defaultCallLimit,
     };
   }
@@ -200,7 +226,7 @@ export class AiService {
         !Number.isInteger(input.defaultCallLimit) ||
         input.defaultCallLimit < 0
       ) {
-        throw new BadRequestException("默认 AI 调用限额必须是非负整数");
+        throw new BadRequestException("每日默认 AI 调用限额必须是非负整数");
       }
       data.defaultCallLimit = input.defaultCallLimit;
     }
@@ -315,7 +341,7 @@ export class AiService {
 
     const conversations = await this.prisma.aiConversation.findMany({
       where: { userId },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ pinnedAt: "desc" }, { updatedAt: "desc" }],
       take: 40,
       include: {
         messages: {
@@ -328,6 +354,7 @@ export class AiService {
     return conversations.map((conversation) => ({
       id: conversation.id,
       title: conversation.title,
+      pinned: Boolean(conversation.pinnedAt),
       createdAt: conversation.createdAt.toISOString(),
       updatedAt: conversation.updatedAt.toISOString(),
       lastMessagePreview: conversation.messages[0]?.content.slice(0, 80) ?? "",
@@ -388,6 +415,7 @@ export class AiService {
     return {
       id: conversation.id,
       title: conversation.title,
+      pinned: Boolean(conversation.pinnedAt),
       createdAt: conversation.createdAt.toISOString(),
       updatedAt: conversation.updatedAt.toISOString(),
       messages: parsedMessages.map((message) => ({
@@ -416,6 +444,43 @@ export class AiService {
 
     await this.prisma.aiConversation.delete({ where: { id: conversationId } });
     return { ok: true };
+  }
+
+  async updateConversation(
+    userId: string | null,
+    conversationId: string,
+    input: { title?: string; pinned?: boolean },
+  ) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    const conversation = await this.prisma.aiConversation.findUnique({
+      where: { id: conversationId },
+    });
+
+    if (!conversation || conversation.userId !== userId) {
+      throw new ForbiddenException("No permission to update AI conversation");
+    }
+
+    const title = input.title?.trim();
+    const updated = await this.prisma.aiConversation.update({
+      where: { id: conversationId },
+      data: {
+        ...(title ? { title } : {}),
+        ...(input.pinned !== undefined
+          ? { pinnedAt: input.pinned ? new Date() : null }
+          : {}),
+      },
+    });
+
+    return {
+      id: updated.id,
+      title: updated.title,
+      pinned: Boolean(updated.pinnedAt),
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    };
   }
 
   async ask(userId: string | null, input: AskAiInput) {
@@ -960,7 +1025,7 @@ export class AiService {
         settings.activeConfig,
       );
     }
-    return settings;
+    return { ...settings, workspaceTimeZone: workspace.timeZone };
   }
 
   private async listStoredConfigs(workspaceId: string) {
@@ -1128,12 +1193,14 @@ export class AiService {
   private toConversationSummary(conversation: {
     id: string;
     title: string;
+    pinnedAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
   }) {
     return {
       id: conversation.id,
       title: conversation.title,
+      pinned: Boolean(conversation.pinnedAt),
       createdAt: conversation.createdAt.toISOString(),
       updatedAt: conversation.updatedAt.toISOString(),
     };

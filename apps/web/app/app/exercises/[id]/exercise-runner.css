@@ -272,6 +272,13 @@
   font-style: normal;
 }
 
+.exercise-runner .runner-history-title {
+  margin: 12px 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 @media (max-width: 720px) {
   .exercise-runner .runner-submit-button {
     display: none;

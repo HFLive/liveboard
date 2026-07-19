@@ -237,12 +237,19 @@ export class TeachingService {
           if (!canView(level)) {
             throw new ForbiddenException("无权使用选中的文档段落");
           }
+          const snapshotData =
+            block.type === "image" && item.imageFit
+              ? {
+                  ...(block.dataJson as Prisma.JsonObject),
+                  teachingImageFit: item.imageFit,
+                }
+              : block.dataJson;
           const snapshot = {
             id: block.id,
             fileId: block.fileId,
             type: block.type,
             sortOrder,
-            dataJson: block.dataJson,
+            dataJson: snapshotData,
             sourceFileTitle: block.file.title,
           } as Prisma.InputJsonValue;
           return {

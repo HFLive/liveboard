@@ -6,6 +6,7 @@ import {
   File,
   Image,
   LayoutGrid,
+  MoreHorizontal,
   Rows3,
   Search,
   Trash2,
@@ -18,6 +19,7 @@ import {
   deleteLibraryAsset,
   FileAssetSummary,
   listLibraryAssets,
+  listAssetReferences,
   uploadAsset,
 } from "@/lib/api";
 import {
@@ -59,6 +61,13 @@ export function LibraryClient() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [referenceDetail, setReferenceDetail] = useState<{
+    filename: string;
+    references: AssetReferenceSummary[];
+  } | null>(null);
 
   const filteredAssets = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -77,7 +86,6 @@ export function LibraryClient() {
           kindFilter === "all" ||
           (kindFilter === "image" && isImage) ||
           (kindFilter === "file" && !isImage);
-
         return matchesQuery && matchesKind;
       })
       .sort((left, right) => {
@@ -162,6 +170,43 @@ export function LibraryClient() {
     clearSelection();
   }
 
+  function toggleAssetSelection(assetId: string) {
+    setSelectedAssetIds((current) => {
+      const next = new Set(current);
+      if (next.has(assetId)) next.delete(assetId);
+      else next.add(assetId);
+      return next;
+    });
+  }
+
+  function downloadSelected() {
+    const selected = assets.filter((asset) => selectedAssetIds.has(asset.id));
+    selected.forEach((asset, index) => {
+      window.setTimeout(() => {
+        const anchor = document.createElement("a");
+        anchor.href = asset.url;
+        anchor.download = asset.filename;
+        anchor.target = "_blank";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      }, index * 120);
+    });
+    setMessage(`已开始下载 ${selected.length} 个文件`);
+  }
+
+  async function showReferences(asset: FileAssetSummary) {
+    try {
+      const result = await listAssetReferences(asset.id);
+      setReferenceDetail({
+        filename: asset.filename,
+        references: result.references,
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "加载引用来源失败");
+    }
+  }
+
   async function onUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -218,14 +263,18 @@ export function LibraryClient() {
         <div>
           <p className="page-eyebrow">资源管理</p>
           <h1>文件</h1>
-          <p className="muted">集中上传、检索和复用图片与附件资源。</p>
+          <p className="muted">管理你上传的图片与附件资源。</p>
         </div>
       </header>
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
 
-      <section className="library-layout">
+      <section
+        className={
+          selectedAsset ? "library-layout has-detail" : "library-layout"
+        }
+      >
         <div className="workbench-main" onClick={clearSelectionFromBackground}>
           <div className="list-toolbar">
             <label className="search-field">
@@ -289,6 +338,27 @@ export function LibraryClient() {
             </div>
           </div>
 
+          {selectedAssetIds.size > 0 ? (
+            <div className="library-batch-bar">
+              <span>已选择 {selectedAssetIds.size} 个文件</span>
+              <button
+                className="button secondary"
+                onClick={downloadSelected}
+                type="button"
+              >
+                <Download aria-hidden="true" className="button-icon" />
+                批量下载
+              </button>
+              <button
+                className="button secondary"
+                onClick={() => setSelectedAssetIds(new Set())}
+                type="button"
+              >
+                取消选择
+              </button>
+            </div>
+          ) : null}
+
           {view === "grid" ? (
             <div className="asset-grid">
               {filteredAssets.map((asset) => {
@@ -313,6 +383,17 @@ export function LibraryClient() {
                     role="button"
                     tabIndex={0}
                   >
+                    <label
+                      className="asset-select-control"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        aria-label={`选择 ${asset.filename}`}
+                        checked={selectedAssetIds.has(asset.id)}
+                        onChange={() => toggleAssetSelection(asset.id)}
+                        type="checkbox"
+                      />
+                    </label>
                     <div className="asset-preview">
                       {isImage ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -333,17 +414,6 @@ export function LibraryClient() {
                     </div>
                     <div className="asset-actions">
                       <span>{asset.referenceCount ?? 0} 处引用</span>
-                      <button
-                        className="inline-icon-button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setDeleteTarget(asset);
-                        }}
-                        title="删除"
-                        type="button"
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </button>
                     </div>
                   </article>
                 );
@@ -360,7 +430,7 @@ export function LibraryClient() {
                 const Icon = isImage ? Image : File;
 
                 return (
-                  <button
+                  <article
                     className={
                       selectedAsset?.id === asset.id
                         ? "asset-list-row active"
@@ -368,18 +438,45 @@ export function LibraryClient() {
                     }
                     key={asset.id}
                     onClick={() => selectAsset(asset.id)}
-                    type="button"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        selectAsset(asset.id);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
                   >
                     <Icon aria-hidden="true" />
                     <span>
                       <strong>{asset.filename}</strong>
                       <small title={asset.mimeType}>
                         {assetTypeLabel(asset.mimeType, asset.filename)}
+                        {asset.createdAt
+                          ? ` · ${formatRelativeTime(asset.createdAt)}`
+                          : ""}
                       </small>
                     </span>
                     <em>{formatFileSize(asset.sizeBytes)}</em>
-                    <em>{asset.referenceCount ?? 0} 处引用</em>
-                  </button>
+                    <button
+                      className="asset-reference-button"
+                      disabled={!asset.referenceCount}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void showReferences(asset);
+                      }}
+                      type="button"
+                    >
+                      {asset.referenceCount ?? 0} 处引用
+                    </button>
+                    <input
+                      aria-label={`选择 ${asset.filename}`}
+                      checked={selectedAssetIds.has(asset.id)}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={() => toggleAssetSelection(asset.id)}
+                      type="checkbox"
+                    />
+                  </article>
                 );
               })}
               {filteredAssets.length === 0 ? (
@@ -389,30 +486,30 @@ export function LibraryClient() {
           )}
         </div>
 
-        <button
-          aria-label="关闭文件详情"
-          className={`asset-detail-backdrop ${showMobileDetail ? "open" : ""}`}
-          onClick={clearSelection}
-          type="button"
-        />
+        {selectedAsset ? (
+          <>
+            <button
+              aria-label="关闭文件详情"
+              className={`asset-detail-backdrop ${showMobileDetail ? "open" : ""}`}
+              onClick={clearSelection}
+              type="button"
+            />
 
-        <aside
-          aria-label="文件详情"
-          className={`asset-detail-panel sticky-panel ${
-            showMobileDetail ? "mobile-open" : ""
-          }`}
-        >
-          <button
-            aria-label="关闭文件详情"
-            className="asset-detail-close"
-            onClick={clearSelection}
-            title="关闭"
-            type="button"
-          >
-            <X aria-hidden="true" />
-          </button>
-          {selectedAsset ? (
-            <>
+            <aside
+              aria-label="文件详情"
+              className={`asset-detail-panel sticky-panel ${
+                showMobileDetail ? "mobile-open" : ""
+              }`}
+            >
+              <button
+                aria-label="关闭文件详情"
+                className="asset-detail-close"
+                onClick={clearSelection}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
               <div className="asset-detail-preview">
                 {selectedAsset.mimeType.startsWith("image/") ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -446,33 +543,37 @@ export function LibraryClient() {
                     <dd>{selectedAsset.referenceCount ?? 0} 处</dd>
                   </div>
                 </dl>
-                <div className="button-row left">
-                  <a
-                    className="button secondary"
-                    href={selectedAsset.url}
-                    target="_blank"
-                  >
-                    <Download aria-hidden="true" className="button-icon" />
-                    下载
-                  </a>
-                  <button
-                    className="button danger"
-                    onClick={() => setDeleteTarget(selectedAsset)}
-                    type="button"
-                  >
-                    <Trash2 aria-hidden="true" className="button-icon" />
-                    删除
-                  </button>
-                </div>
+                <details className="editor-more-menu asset-detail-menu">
+                  <summary className="button secondary">
+                    <MoreHorizontal
+                      aria-hidden="true"
+                      className="button-icon"
+                    />
+                    文件操作
+                  </summary>
+                  <div className="context-menu">
+                    <a href={selectedAsset.url} target="_blank">
+                      <Download aria-hidden="true" /> 下载
+                    </a>
+                    <button
+                      onClick={() => void showReferences(selectedAsset)}
+                      type="button"
+                    >
+                      查看引用来源
+                    </button>
+                    <button
+                      className="danger"
+                      onClick={() => setDeleteTarget(selectedAsset)}
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" /> 删除
+                    </button>
+                  </div>
+                </details>
               </div>
-            </>
-          ) : (
-            <div className="empty-panel compact">
-              <strong>未选择文件</strong>
-              <span>选择一个文件查看详情和操作。</span>
-            </div>
-          )}
-        </aside>
+            </aside>
+          </>
+        ) : null}
       </section>
 
       {showUploadModal ? (
@@ -605,6 +706,71 @@ export function LibraryClient() {
               <button
                 className="button secondary"
                 onClick={() => setBlockedDelete(null)}
+                type="button"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {referenceDetail ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            aria-labelledby="asset-reference-title"
+            aria-modal="true"
+            className="modal-panel asset-reference-modal"
+            role="dialog"
+          >
+            <div className="modal-head">
+              <div>
+                <h2 id="asset-reference-title">引用来源</h2>
+                <p className="muted">{referenceDetail.filename}</p>
+              </div>
+              <button
+                className="icon-button subtle"
+                onClick={() => setReferenceDetail(null)}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body">
+              {referenceDetail.references.length > 0 ? (
+                <div className="asset-reference-list">
+                  {referenceDetail.references.map((reference) =>
+                    reference.targetType === "teaching_deck" ? (
+                      <a
+                        href={teachingPresent(reference.deckId)}
+                        key={`deck-${reference.deckId}-${reference.itemId}`}
+                      >
+                        <span>课件</span>
+                        <strong>{reference.deckTitle}</strong>
+                      </a>
+                    ) : (
+                      <a
+                        href={contentDetail(reference.fileId)}
+                        key={`file-${reference.fileId}-${reference.blockId}`}
+                      >
+                        <span>文档</span>
+                        <strong>{reference.fileTitle}</strong>
+                      </a>
+                    ),
+                  )}
+                </div>
+              ) : (
+                <div className="empty-panel">
+                  <strong>当前没有引用</strong>
+                  <span>这个文件可以安全删除或替换。</span>
+                </div>
+              )}
+            </div>
+            <div className="modal-foot">
+              <button
+                className="button secondary"
+                onClick={() => setReferenceDetail(null)}
                 type="button"
               >
                 关闭

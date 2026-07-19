@@ -35,6 +35,7 @@ export function ContentPermissionsClient() {
   const [savingGroupId, setSavingGroupId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [savedGroupAt, setSavedGroupAt] = useState<Record<string, Date>>({});
   const grantByGroupId = useMemo(
     () =>
       new Map(
@@ -98,6 +99,7 @@ export function ContentPermissionsClient() {
           ? `「${group.name}」的文档默认权限已更新`
           : `「${group.name}」不再获得默认文档权限`,
       );
+      setSavedGroupAt((current) => ({ ...current, [group.id]: new Date() }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存默认权限失败");
     } finally {
@@ -174,6 +176,16 @@ export function ContentPermissionsClient() {
                       <option value="no_access">禁止访问（旧设置）</option>
                     ) : null}
                   </select>
+                  <small
+                    className="content-permission-save-state"
+                    aria-live="polite"
+                  >
+                    {savingGroupId === group.id
+                      ? "保存中"
+                      : savedGroupAt[group.id]
+                        ? `已保存 ${savedGroupAt[group.id]?.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`
+                        : "更改后自动保存"}
+                  </small>
                 </label>
               </div>
             );

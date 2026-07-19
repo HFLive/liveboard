@@ -1,6 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  type Dispatch,
+  FormEvent,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { PermissionGroupSummary, UserSummary } from "@liveboard/shared";
 import {
   Check,
@@ -39,6 +46,12 @@ export function PermissionGroupsClient() {
   const [candidateQuery, setCandidateQuery] = useState("");
   const [showMemberPicker, setShowMemberPicker] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const selectedGroup =
@@ -181,29 +194,6 @@ export function PermissionGroupsClient() {
     }
   }
 
-  async function addMember(userId: string) {
-    if (!selectedGroup || !userId) {
-      return;
-    }
-
-    setError(null);
-    setMessage(null);
-
-    try {
-      const result = await addPermissionGroupMember(selectedGroup.id, userId);
-      setGroups((current) =>
-        current.map((group) =>
-          group.id === result.group.id ? result.group : group,
-        ),
-      );
-      setMessage("成员已加入权限组");
-      setCandidateQuery("");
-      setShowMemberPicker(false);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "添加成员失败");
-    }
-  }
-
   async function onRemoveMember(userId: string) {
     if (!selectedGroup) {
       return;
@@ -225,6 +215,50 @@ export function PermissionGroupsClient() {
       setMessage("成员已移出权限组");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "移除成员失败");
+    }
+  }
+
+  function toggleId(setter: Dispatch<SetStateAction<Set<string>>>, id: string) {
+    setter((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function batchAddMembers() {
+    if (!selectedGroup || selectedCandidateIds.size === 0) return;
+    setError(null);
+    try {
+      await Promise.all(
+        [...selectedCandidateIds].map((userId) =>
+          addPermissionGroupMember(selectedGroup.id, userId),
+        ),
+      );
+      setMessage(`已添加 ${selectedCandidateIds.size} 位成员`);
+      setSelectedCandidateIds(new Set());
+      setShowMemberPicker(false);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "批量添加成员失败");
+    }
+  }
+
+  async function batchRemoveMembers() {
+    if (!selectedGroup || selectedMemberIds.size === 0) return;
+    setError(null);
+    try {
+      await Promise.all(
+        [...selectedMemberIds].map((userId) =>
+          removePermissionGroupMember(selectedGroup.id, userId),
+        ),
+      );
+      setMessage(`已移除 ${selectedMemberIds.size} 位成员`);
+      setSelectedMemberIds(new Set());
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "批量移除成员失败");
     }
   }
 
@@ -342,24 +376,37 @@ export function PermissionGroupsClient() {
                       <div className="permission-member-candidates">
                         {filteredCandidates.map((user) => (
                           <div key={user.id}>
-                            <button
-                              onClick={() => void addMember(user.id)}
-                              type="button"
-                            >
+                            <label>
+                              <input
+                                aria-label={`选择 ${user.displayName}`}
+                                checked={selectedCandidateIds.has(user.id)}
+                                onChange={() =>
+                                  toggleId(setSelectedCandidateIds, user.id)
+                                }
+                                type="checkbox"
+                              />
                               <span className="permission-member-avatar">
                                 {user.displayName.charAt(0).toUpperCase()}
                               </span>
                               <span>
                                 <strong>{user.displayName}</strong>
                               </span>
-                              <Plus aria-hidden="true" />
-                            </button>
+                            </label>
                           </div>
                         ))}
                         {filteredCandidates.length === 0 ? (
                           <p className="muted">没有可添加的成员</p>
                         ) : null}
                       </div>
+                      {selectedCandidateIds.size > 0 ? (
+                        <button
+                          className="button secondary"
+                          onClick={() => void batchAddMembers()}
+                          type="button"
+                        >
+                          添加所选 {selectedCandidateIds.size} 人
+                        </button>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -372,9 +419,30 @@ export function PermissionGroupsClient() {
                     />
                   </label>
 
+                  {selectedMemberIds.size > 0 ? (
+                    <div className="permission-member-batch">
+                      <span>已选择 {selectedMemberIds.size} 人</span>
+                      <button
+                        className="button danger"
+                        onClick={() => void batchRemoveMembers()}
+                        type="button"
+                      >
+                        批量移除
+                      </button>
+                    </div>
+                  ) : null}
+
                   <div className="permission-member-list">
                     {filteredMembers.map((member) => (
                       <div className="permission-member-row" key={member.id}>
+                        <input
+                          aria-label={`选择 ${member.user.displayName}`}
+                          checked={selectedMemberIds.has(member.user.id)}
+                          onChange={() =>
+                            toggleId(setSelectedMemberIds, member.user.id)
+                          }
+                          type="checkbox"
+                        />
                         <span className="permission-member-avatar">
                           {member.user.displayName.charAt(0).toUpperCase()}
                         </span>

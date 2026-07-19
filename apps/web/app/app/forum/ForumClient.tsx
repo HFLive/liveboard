@@ -16,6 +16,7 @@ import { ForumUserAvatar } from "./ForumUserAvatar";
 
 type CategoryFilter = "all" | string;
 type SortMode = "activity" | "newest" | "replies";
+type FeedFilter = "all" | "unread" | "mentioned" | "followed";
 
 const SORT_OPTIONS = [
   { value: "activity", label: "最近活跃" },
@@ -29,6 +30,7 @@ export function ForumClient() {
   const [activeCategoryId, setActiveCategoryId] =
     useState<CategoryFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("activity");
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,13 +67,18 @@ export function ForumClient() {
       .filter((thread) => {
         const matchesCategory =
           activeCategoryId === "all" || thread.categoryId === activeCategoryId;
+        const matchesFeed =
+          feedFilter === "all" ||
+          (feedFilter === "unread" && thread.unread) ||
+          (feedFilter === "mentioned" && thread.mentioned) ||
+          (feedFilter === "followed" && thread.followed);
         const matchesQuery = normalizedQuery
           ? thread.title.toLowerCase().includes(normalizedQuery) ||
             thread.excerpt.toLowerCase().includes(normalizedQuery) ||
             thread.author.displayName.toLowerCase().includes(normalizedQuery) ||
             thread.author.username.toLowerCase().includes(normalizedQuery)
           : true;
-        return matchesCategory && matchesQuery;
+        return matchesCategory && matchesFeed && matchesQuery;
       })
       .sort((left, right) => {
         if (sortMode === "replies") {
@@ -85,12 +92,14 @@ export function ForumClient() {
         ).getTime();
         return rightTime - leftTime;
       });
-  }, [activeCategoryId, query, sortMode, threads]);
+  }, [activeCategoryId, feedFilter, query, sortMode, threads]);
 
-  const hasFilters = activeCategoryId !== "all" || Boolean(query.trim());
+  const hasFilters =
+    activeCategoryId !== "all" || feedFilter !== "all" || Boolean(query.trim());
 
   function resetFilters() {
     setActiveCategoryId("all");
+    setFeedFilter("all");
     setQuery("");
   }
 
@@ -117,6 +126,28 @@ export function ForumClient() {
                 value={query}
               />
             </label>
+            <div
+              className="segmented-control forum-feed-filter"
+              aria-label="帖子范围"
+            >
+              {(
+                [
+                  ["all", "全部"],
+                  ["unread", "未读"],
+                  ["mentioned", "提及"],
+                  ["followed", "关注"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  className={feedFilter === value ? "active" : ""}
+                  key={value}
+                  onClick={() => setFeedFilter(value)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <select
               aria-label="选择版块"
               className="select compact-select"
@@ -210,6 +241,12 @@ export function ForumClient() {
                       </span>
                       {thread.status === "locked" ? (
                         <span className="forum-lock-tag">已锁定</span>
+                      ) : null}
+                      {thread.unread ? (
+                        <span className="forum-unread-tag">未读</span>
+                      ) : null}
+                      {thread.mentioned ? (
+                        <span className="forum-mention-tag">提及你</span>
                       ) : null}
                       <Link
                         href={forumThread(thread.id)}

@@ -6,7 +6,7 @@ import type {
   SystemRole,
   UserSummary,
 } from "@liveboard/shared";
-import { FileUp, Pencil, Plus, X } from "lucide-react";
+import { FileUp, Pencil, Plus, Search, X } from "lucide-react";
 import {
   createUser,
   getMe,
@@ -182,9 +182,29 @@ export function UserManagementClient() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | SystemRole>("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | UserSummary["status"]
+  >("all");
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [batchUpdating, setBatchUpdating] = useState(false);
   const parsedImport = useMemo(() => parseUserImportCsv(csvText), [csvText]);
   const editingUser = users.find((user) => user.id === editingUserId) ?? null;
   const actorIsSuperAdmin = actor?.systemRole === "super_admin";
+  const filteredUsers = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return users.filter(
+      (user) =>
+        (roleFilter === "all" || user.systemRole === roleFilter) &&
+        (statusFilter === "all" || user.status === statusFilter) &&
+        (!normalizedQuery ||
+          user.displayName.toLowerCase().includes(normalizedQuery) ||
+          user.username.toLowerCase().includes(normalizedQuery)),
+    );
+  }, [query, roleFilter, statusFilter, users]);
 
   async function loadUsers() {
     const result = await listUsers();
@@ -302,7 +322,7 @@ export function UserManagementClient() {
       const parsed = Number(trimmedAiCallLimit);
 
       if (!Number.isInteger(parsed) || parsed < 0) {
-        setError("AI 调用限额需为不小于 0 的整数");
+        setError("每日 AI 调用限额需为不小于 0 的整数");
         return;
       }
 
@@ -326,6 +346,51 @@ export function UserManagementClient() {
       await loadUsers();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "更新用户失败");
+    }
+  }
+
+  function toggleSelectedUser(userId: string) {
+    setSelectedUserIds((current) => {
+      const next = new Set(current);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  }
+
+  async function batchSetStatus(status: UserSummary["status"]) {
+    const targets = users.filter(
+      (user) =>
+        selectedUserIds.has(user.id) &&
+        user.id !== actor?.id &&
+        (actorIsSuperAdmin || user.systemRole === "member"),
+    );
+    if (!targets.length) {
+      setError("所选成员中没有可批量修改的账号");
+      return;
+    }
+
+    setBatchUpdating(true);
+    setError(null);
+    try {
+      await Promise.all(
+        targets.map((user) =>
+          updateUser(user.id, {
+            displayName: user.displayName,
+            systemRole: user.systemRole,
+            status,
+          }),
+        ),
+      );
+      setMessage(
+        `已${status === "active" ? "启用" : "停用"} ${targets.length} 位成员`,
+      );
+      setSelectedUserIds(new Set());
+      await loadUsers();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "批量更新成员失败");
+    } finally {
+      setBatchUpdating(false);
     }
   }
 
@@ -369,21 +434,96 @@ export function UserManagementClient() {
               </button>
             </div>
           </div>
+          <div className="admin-user-filters">
+            <label className="search-field">
+              <Search aria-hidden="true" />
+              <input
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="搜索显示名或登录账号"
+                value={query}
+              />
+            </label>
+            <select
+              aria-label="按系统权限筛选"
+              className="select compact-select"
+              onChange={(event) =>
+                setRoleFilter(event.target.value as "all" | SystemRole)
+              }
+              value={roleFilter}
+            >
+              <option value="all">全部权限</option>
+              <option value="super_admin">最高管理员</option>
+              <option value="admin">管理员</option>
+              <option value="member">成员</option>
+            </select>
+            <select
+              aria-label="按状态筛选"
+              className="select compact-select"
+              onChange={(event) =>
+                setStatusFilter(
+                  event.target.value as "all" | UserSummary["status"],
+                )
+              }
+              value={statusFilter}
+            >
+              <option value="all">全部状态</option>
+              <option value="active">正常</option>
+              <option value="disabled">已停用</option>
+            </select>
+          </div>
+          {selectedUserIds.size > 0 ? (
+            <div className="admin-user-batch-bar">
+              <span>已选择 {selectedUserIds.size} 位成员</span>
+              <button
+                className="button secondary"
+                disabled={batchUpdating}
+                onClick={() => void batchSetStatus("active")}
+                type="button"
+              >
+                批量启用
+              </button>
+              <button
+                className="button danger"
+                disabled={batchUpdating}
+                onClick={() => void batchSetStatus("disabled")}
+                type="button"
+              >
+                批量停用
+              </button>
+              <button
+                className="button secondary"
+                onClick={() => setSelectedUserIds(new Set())}
+                type="button"
+              >
+                取消选择
+              </button>
+            </div>
+          ) : null}
           <div className="table-wrap">
             <table className="table responsive-table">
               <thead>
                 <tr>
+                  <th aria-label="选择成员" />
                   <th>显示名</th>
                   <th>登录账号</th>
                   <th>系统权限</th>
                   <th>状态</th>
-                  <th>AI 调用</th>
+                  <th>今日 AI 调用</th>
                   <th>操作</th>
                 </tr>
               </thead>
               <tbody>
-                {users.map((user) => (
+                {filteredUsers.map((user) => (
                   <tr key={user.id}>
+                    <td data-label="选择">
+                      <input
+                        aria-label={`选择 ${user.displayName}`}
+                        checked={selectedUserIds.has(user.id)}
+                        disabled={user.id === actor?.id}
+                        onChange={() => toggleSelectedUser(user.id)}
+                        type="checkbox"
+                      />
+                    </td>
                     <td data-label="显示名">
                       <UserProfileLink
                         className="user-profile-link"
@@ -395,8 +535,8 @@ export function UserManagementClient() {
                     </td>
                     <td data-label="系统权限">{roleLabel(user.systemRole)}</td>
                     <td data-label="状态">{userStatusLabel(user.status)}</td>
-                    <td data-label="AI 调用">
-                      {user.aiCallCount} 次
+                    <td data-label="今日 AI 调用">
+                      今日 {user.aiCallCount} 次
                       <span className="muted">
                         {" "}
                         /{" "}
@@ -720,7 +860,7 @@ export function UserManagementClient() {
                 />
               </label>
               <label className="label">
-                AI 调用限额
+                每日 AI 调用限额
                 <input
                   className="input"
                   min={0}
@@ -735,7 +875,8 @@ export function UserManagementClient() {
                   }
                 />
                 <small className="field-hint">
-                  已使用 {editingUser.aiCallCount} 次；留空则跟随默认限额。
+                  今日已使用 {editingUser.aiCallCount}{" "}
+                  次；留空则跟随每日默认限额。
                 </small>
               </label>
             </div>

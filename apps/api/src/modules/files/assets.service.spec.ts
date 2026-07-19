@@ -103,6 +103,14 @@ describe("AssetsService consistency", () => {
     );
     Object.assign(service as unknown as { minio: unknown }, { minio });
     prisma.workspace.findFirst.mockResolvedValue({ id: "workspace-1" });
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      username: "learner",
+      displayName: "学习者",
+      avatarUpdatedAt: null,
+      systemRole: "member",
+      status: "active",
+    });
     prisma.teachingDeckItem.findMany.mockResolvedValue([]);
     prisma.fileAsset.delete.mockResolvedValue({ id: "asset-1" });
     minio.bucketExists.mockResolvedValue(true);
@@ -110,11 +118,28 @@ describe("AssetsService consistency", () => {
 
   it("ignores references from archived files", async () => {
     prisma.fileAsset.findMany.mockResolvedValue([
-      { id: "asset-1", uploadedBy: "user-1" },
+      {
+        id: "asset-1",
+        uploadedBy: "user-1",
+        uploader: {
+          id: "user-1",
+          username: "learner",
+          displayName: "学习者",
+          avatarUpdatedAt: null,
+          systemRole: "member",
+          status: "active",
+        },
+      },
     ]);
     prisma.contentBlock.findMany.mockResolvedValue([]);
 
     await service.listLibraryAssets("user-1");
+
+    expect(prisma.fileAsset.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { uploadedBy: "user-1", forumPostId: null },
+      }),
+    );
 
     expect(prisma.contentBlock.findMany).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -88,8 +88,10 @@ model User {
   storageQuotaBytes Int        @default(536870912)
   aiCallCount       Int        @default(0)
   aiCallLimit       Int?
+  aiCallDateKey     String?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
+  activityReadAt    DateTime?
 
   createdFolders             Folder[]                @relation("FolderCreatedBy")
   createdFiles               File[]                  @relation("FileCreatedBy")
@@ -101,10 +103,12 @@ model User {
   aiConversations            AiConversation[]
   forumThreads               ForumThread[]           @relation("ForumThreadAuthor")
   forumPosts                 ForumPost[]             @relation("ForumPostAuthor")
+  forumThreadStates          ForumThreadState[]
   teachingDecks              TeachingDeck[]          @relation("TeachingDeckCreatedBy")
   visibleTeachingDecks       TeachingDeckViewer[]
   visibleExerciseSets        ExerciseSetViewer[]
   createdExerciseSets        ExerciseSet[]           @relation("ExerciseSetCreatedBy")
+  uploadedAssets             FileAsset[]             @relation("FileAssetUploader")
 }
 
 model Workspace {
@@ -145,24 +149,41 @@ model ForumCategory {
 }
 
 model ForumThread {
-  id             String            @id @default(cuid())
-  workspaceId    String
-  categoryId     String
-  authorId       String
-  title          String
-  isAnonymous    Boolean           @default(false)
-  status         ForumThreadStatus @default(open)
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  lastActivityAt DateTime          @default(now())
+  id               String            @id @default(cuid())
+  workspaceId      String
+  categoryId       String
+  authorId         String
+  title            String
+  isAnonymous      Boolean           @default(false)
+  status           ForumThreadStatus @default(open)
+  relatedResources Json?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  lastActivityAt   DateTime          @default(now())
 
-  workspace Workspace     @relation(fields: [workspaceId], references: [id])
-  category  ForumCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  author    User          @relation("ForumThreadAuthor", fields: [authorId], references: [id])
-  posts     ForumPost[]
+  workspace  Workspace          @relation(fields: [workspaceId], references: [id])
+  category   ForumCategory      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  author     User               @relation("ForumThreadAuthor", fields: [authorId], references: [id])
+  posts      ForumPost[]
+  userStates ForumThreadState[]
 
   @@index([workspaceId, lastActivityAt])
   @@index([categoryId, lastActivityAt])
+}
+
+model ForumThreadState {
+  threadId   String
+  userId     String
+  followed   Boolean   @default(false)
+  lastReadAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  thread ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([threadId, userId])
+  @@index([userId, followed, updatedAt])
 }
 
 model ForumPost {
@@ -213,20 +234,21 @@ model Folder {
 }
 
 model File {
-  id          String     @id @default(cuid())
-  workspaceId String
-  folderId    String
-  type        FileType
-  title       String
-  status      FileStatus @default(draft)
-  version     Int        @default(1)
-  pinnedOrder Int?
-  createdById String
-  updatedById String
-  publishedAt DateTime?
-  archivedAt  DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id             String     @id @default(cuid())
+  workspaceId    String
+  folderId       String
+  type           FileType
+  title          String
+  status         FileStatus @default(draft)
+  version        Int        @default(1)
+  pinnedOrder    Int?
+  importWarnings Json?
+  createdById    String
+  updatedById    String
+  publishedAt    DateTime?
+  archivedAt     DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
   workspace         Workspace          @relation(fields: [workspaceId], references: [id])
   folder            Folder             @relation(fields: [folderId], references: [id], onDelete: Cascade)
@@ -410,6 +432,7 @@ model Question {
   optionsJson   Json?
   answerJson    Json?
   score         Int
+  required      Boolean      @default(true)
   sortOrder     Int          @default(0)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
@@ -475,21 +498,23 @@ model FileAsset {
   file              File?              @relation(fields: [fileId], references: [id])
   forumPost         ForumPost?         @relation("ForumPostImages", fields: [forumPostId], references: [id], onDelete: Cascade)
   teachingDeckItems TeachingDeckItem[]
+  uploader          User               @relation("FileAssetUploader", fields: [uploadedBy], references: [id])
 
   @@index([forumPostId, sortOrder])
+  @@index([uploadedBy, createdAt])
 }
 
 model AiSettings {
-  id              String   @id @default(cuid())
-  workspaceId     String   @unique
-  enabled         Boolean  @default(false)
-  activeConfigId  String?  @unique
-  maxContextFiles Int      @default(6)
-  maxContextChars Int      @default(12000)
-  defaultCallLimit Int     @default(100)
-  updatedById     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(cuid())
+  workspaceId      String   @unique
+  enabled          Boolean  @default(false)
+  activeConfigId   String?  @unique
+  maxContextFiles  Int      @default(6)
+  maxContextChars  Int      @default(12000)
+  defaultCallLimit Int      @default(100)
+  updatedById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   workspace    Workspace         @relation(fields: [workspaceId], references: [id])
   activeConfig AiProviderConfig? @relation("ActiveAiConfig", fields: [activeConfigId], references: [id], onDelete: SetNull)
@@ -514,12 +539,13 @@ model AiProviderConfig {
 }
 
 model AiConversation {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   userId      String
   title       String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  pinnedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   workspace Workspace   @relation(fields: [workspaceId], references: [id])
   user      User        @relation(fields: [userId], references: [id])

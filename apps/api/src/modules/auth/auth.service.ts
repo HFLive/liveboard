@@ -7,7 +7,11 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { UserProfile, UserSummary } from "@liveboard/shared";
+import type {
+  UserProfile,
+  UserPublicActivity,
+  UserSummary,
+} from "@liveboard/shared";
 import argon2 from "argon2";
 import { Client } from "minio";
 import { randomUUID } from "node:crypto";
@@ -130,6 +134,60 @@ export class AuthService {
     }
 
     return this.toProfile(target);
+  }
+
+  async getUserPublicActivity(
+    userId: string | null,
+    targetUserId: string,
+  ): Promise<UserPublicActivity> {
+    const actor = await this.requireActiveUser(userId);
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, status: true },
+    });
+
+    if (!target || target.status !== "active") {
+      throw new NotFoundException("User not found");
+    }
+
+    const [teachingDecks, forumThreads] = await Promise.all([
+      this.prisma.teachingDeck.findMany({
+        where: {
+          createdById: targetUserId,
+          ...(actor.systemRole === "super_admin" || actor.id === targetUserId
+            ? {}
+            : { viewers: { some: { userId: actor.id } } }),
+        },
+        include: { _count: { select: { items: true } } },
+        orderBy: { updatedAt: "desc" },
+        take: 8,
+      }),
+      this.prisma.forumThread.findMany({
+        where: { authorId: targetUserId, isAnonymous: false },
+        include: {
+          category: { select: { name: true } },
+          _count: { select: { posts: true } },
+        },
+        orderBy: { lastActivityAt: "desc" },
+        take: 8,
+      }),
+    ]);
+
+    return {
+      teachingDecks: teachingDecks.map((deck) => ({
+        id: deck.id,
+        title: deck.title,
+        itemCount: deck._count.items,
+        updatedAt: deck.updatedAt.toISOString(),
+      })),
+      forumThreads: forumThreads.map((thread) => ({
+        id: thread.id,
+        title: thread.title,
+        categoryName: thread.category.name,
+        postCount: thread._count.posts,
+        lastActivityAt: thread.lastActivityAt.toISOString(),
+      })),
+    };
   }
 
   async updateProfile(

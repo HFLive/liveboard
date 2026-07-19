@@ -622,6 +622,7 @@ export class FilesService {
           folderId: folder.id,
           title: markdownTitleFromFilename(input.originalname),
           type: "doc",
+          importWarnings: parsed.warnings,
           createdById: userId,
           updatedById: userId,
         },

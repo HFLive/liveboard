@@ -1,5 +1,6 @@
 import { NewExerciseClient } from "./NewExerciseClient";
 import type { Metadata } from "next";
+import "./quiz-builder.css";
 
 export const metadata: Metadata = { title: "新建练习" };
 

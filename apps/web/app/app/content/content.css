@@ -24,6 +24,10 @@
   border-bottom: 0;
 }
 
+.content-mobile-tabs {
+  display: none;
+}
+
 /* 路径头部与两栏之间、左栏树顶部不留多余空隙。 */
 .content-path-head + .files-layout {
   margin-top: -12px;
@@ -325,6 +329,32 @@
 }
 
 @media (max-width: 640px) {
+  .content-mobile-tabs {
+    display: flex;
+    width: fit-content;
+    margin-top: -4px;
+  }
+
+  .content-path-head + .content-mobile-tabs {
+    margin-top: -8px;
+  }
+
+  .content-mobile-tabs + .files-layout {
+    margin-top: 0;
+  }
+
+  .files-layout.mobile-pane-tree > .workbench-main,
+  .files-layout.mobile-pane-contents > .folder-panel {
+    display: none;
+  }
+
+  .files-layout > .folder-panel,
+  .files-layout > .workbench-main,
+  .files-layout .table-wrap {
+    width: 100%;
+    min-width: 0;
+  }
+
   .content-folder-link,
   .content-file-link {
     min-height: 28px;

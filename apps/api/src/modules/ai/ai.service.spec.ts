@@ -2,6 +2,7 @@ import type { PermissionsService } from "../permissions/permissions.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import { AiService } from "./ai.service";
 import type { AiSecretService } from "./ai-secret.service";
+import { formatDateKey } from "../../common/date-key";
 
 describe("AiService", () => {
   const config = {
@@ -62,7 +63,10 @@ describe("AiService", () => {
       status: "active",
     });
     prisma.user.updateMany.mockResolvedValue({ count: 1 });
-    prisma.workspace.findFirst.mockResolvedValue({ id: "workspace-1" });
+    prisma.workspace.findFirst.mockResolvedValue({
+      id: "workspace-1",
+      timeZone: "Asia/Shanghai",
+    });
     prisma.aiSettings.upsert.mockResolvedValue(settings);
     prisma.aiSettings.update.mockResolvedValue(settings);
     prisma.aiProviderConfig.findFirst.mockResolvedValue(config);
@@ -87,6 +91,35 @@ describe("AiService", () => {
         baseUrl: config.baseUrl,
         model: config.model,
         temperature: 0.2,
+      }),
+    );
+  });
+
+  it("uses the workspace timezone for the daily quota date", () => {
+    expect(
+      formatDateKey(new Date("2026-07-18T16:30:00.000Z"), "Asia/Shanghai"),
+    ).toBe("2026-07-19");
+  });
+
+  it("resets stale usage before consuming the daily quota", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      aiCallCount: 99,
+      aiCallLimit: null,
+      aiCallDateKey: "2026-07-18",
+    });
+
+    await service.consumeCallQuota("user-1");
+
+    expect(prisma.user.updateMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({ aiCallCount: 0 }),
+      }),
+    );
+    expect(prisma.user.updateMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: { aiCallCount: { increment: 1 } },
       }),
     );
   });

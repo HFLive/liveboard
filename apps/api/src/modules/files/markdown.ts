@@ -180,15 +180,8 @@ export function parseMarkdown(markdown: string): MarkdownParseResult {
           dataJson: { text: alt, url, widthPercent: 100 },
         });
       } else {
-        blocks.push({
-          type: "paragraph",
-          dataJson: {
-            text: `图片：${alt || "未命名图片"}（${url}）`,
-            inlineFormat: "markdown",
-          },
-        });
         warnings.add(
-          "相对路径或非 HTTP 图片无法随单个 Markdown 文件上传，已转为文字说明",
+          `图片“${alt || url || "未命名图片"}”使用相对路径或非 HTTP 地址，未导入正文`,
         );
       }
       index += 1;
@@ -218,10 +211,8 @@ export function parseMarkdown(markdown: string): MarkdownParseResult {
         const depth = Math.floor(
           (match[1]?.replace(/\t/g, "  ").length ?? 0) / 2,
         );
-        if (depth > 0) warnings.add("嵌套列表已扁平化并使用层级标记显示");
-        items.push(
-          `${depth > 0 ? `${"↳ ".repeat(depth)}` : ""}${normalizeInlineMarkdown(match[2] ?? "")}`,
-        );
+        if (depth > 0) warnings.add("嵌套列表已扁平化为同级列表");
+        items.push(normalizeInlineMarkdown(match[2] ?? ""));
         index += 1;
       }
       blocks.push({
@@ -239,10 +230,8 @@ export function parseMarkdown(markdown: string): MarkdownParseResult {
         const depth = Math.floor(
           (match[1]?.replace(/\t/g, "  ").length ?? 0) / 2,
         );
-        if (depth > 0) warnings.add("嵌套列表已扁平化并使用层级标记显示");
-        items.push(
-          `${depth > 0 ? `${"↳ ".repeat(depth)}` : ""}${normalizeInlineMarkdown(match[2] ?? "")}`,
-        );
+        if (depth > 0) warnings.add("嵌套列表已扁平化为同级列表");
+        items.push(normalizeInlineMarkdown(match[2] ?? ""));
         index += 1;
       }
       blocks.push({

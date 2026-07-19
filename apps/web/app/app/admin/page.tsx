@@ -1,31 +1,87 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { useEffect, useState } from "react";
 import type { SystemRole } from "@liveboard/shared";
 import {
+  AlertTriangle,
   Bot,
-  Database,
+  CheckCircle2,
   MessageSquare,
-  Settings,
-  ShieldCheck,
-  SlidersHorizontal,
   Users,
 } from "lucide-react";
 import { AdminSubnav } from "@/components/admin/AdminSubnav";
 import { APP_ROUTES } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
-import { getMe } from "@/lib/api";
+import { getAiSettings, getMe, listUsers, listUserStorage } from "@/lib/api";
+
+type AdminTask = {
+  href: string;
+  title: string;
+  detail: string;
+  level: "warning" | "info";
+};
 
 export default function AdminPage() {
   const [role, setRole] = useState<SystemRole | null>(null);
+  const [tasks, setTasks] = useState<AdminTask[] | null>(null);
 
   useDocumentTitle("管理中心");
 
   useEffect(() => {
     getMe()
-      .then((result) => setRole(result.user.systemRole))
-      .catch(() => setRole(null));
+      .then(async (result) => {
+        setRole(result.user.systemRole);
+        const [usersResult, storageResult, aiResult] = await Promise.all([
+          listUsers(),
+          listUserStorage(),
+          result.user.systemRole === "super_admin"
+            ? getAiSettings().catch(() => null)
+            : Promise.resolve(null),
+        ]);
+        const nextTasks: AdminTask[] = [];
+        const disabledCount = usersResult.users.filter(
+          (user) => user.status === "disabled",
+        ).length;
+        const highStorageCount = storageResult.users.filter(
+          (item) =>
+            item.storageQuotaBytes === 0 ||
+            item.storageUsedBytes / item.storageQuotaBytes >= 0.9,
+        ).length;
+        if (disabledCount) {
+          nextTasks.push({
+            href: APP_ROUTES.adminUsers,
+            title: `${disabledCount} 个账号处于停用状态`,
+            detail: "复核是否需要重新启用或调整成员资料。",
+            level: "info",
+          });
+        }
+        if (highStorageCount) {
+          nextTasks.push({
+            href: APP_ROUTES.adminStorage,
+            title: `${highStorageCount} 位成员容量接近上限`,
+            detail: "检查占用情况并按需调整个人容量。",
+            level: "warning",
+          });
+        }
+        if (
+          aiResult &&
+          (!aiResult.settings.enabled || !aiResult.settings.activeConfigId)
+        ) {
+          nextTasks.push({
+            href: APP_ROUTES.adminAi,
+            title: "AI 助手尚未完整启用",
+            detail: "检查全局开关与当前模型配置。",
+            level: "info",
+          });
+        }
+        setTasks(nextTasks);
+      })
+      .catch(() => {
+        setRole(null);
+        setTasks([]);
+      });
   }, []);
 
   return (
@@ -40,63 +96,60 @@ export default function AdminPage() {
 
       <AdminSubnav />
 
-      <section className="admin-hub-grid">
-        <Link className="admin-hub-card" href={APP_ROUTES.adminUsers}>
-          <Users aria-hidden="true" />
-          <span>
-            <strong>成员管理</strong>
-            <small>创建账号、导入成员和调整权限</small>
-          </span>
-        </Link>
-        <Link className="admin-hub-card" href={APP_ROUTES.adminStorage}>
-          <Database aria-hidden="true" />
-          <span>
-            <strong>容量管理</strong>
-            <small>查看使用量并调整成员上限</small>
-          </span>
-        </Link>
-        <Link className="admin-hub-card" href={APP_ROUTES.adminGroups}>
-          <ShieldCheck aria-hidden="true" />
-          <span>
-            <strong>权限组</strong>
-            <small>维护成员分组和资料授权</small>
-          </span>
-        </Link>
-        <Link
-          className="admin-hub-card"
-          href={APP_ROUTES.adminContentPermissions}
-        >
-          <SlidersHorizontal aria-hidden="true" />
-          <span>
-            <strong>文档默认权限</strong>
-            <small>设置顶层文件夹继承的基础权限</small>
-          </span>
-        </Link>
-        <Link className="admin-hub-card" href={APP_ROUTES.adminForum}>
-          <MessageSquare aria-hidden="true" />
-          <span>
-            <strong>论坛设置</strong>
-            <small>维护论坛版块和显示顺序</small>
-          </span>
-        </Link>
-        {role === "super_admin" ? (
-          <>
-            <Link className="admin-hub-card" href={APP_ROUTES.adminAi}>
+      <section className="admin-task-panel">
+        <div className="panel-head">
+          <div>
+            <h2>待处理事项</h2>
+            <p className="muted">根据当前账号和系统状态自动汇总。</p>
+          </div>
+        </div>
+        <div className="admin-task-list">
+          {tasks?.map((task) => (
+            <Link
+              className={`admin-task-row ${task.level}`}
+              href={task.href as Route}
+              key={task.title}
+            >
+              {task.level === "warning" ? (
+                <AlertTriangle aria-hidden="true" />
+              ) : (
+                <Users aria-hidden="true" />
+              )}
+              <span>
+                <strong>{task.title}</strong>
+                <small>{task.detail}</small>
+              </span>
+            </Link>
+          ))}
+          {tasks === null ? (
+            <div className="skeleton admin-task-skeleton" />
+          ) : null}
+          {tasks?.length === 0 ? (
+            <div className="admin-task-empty">
+              <CheckCircle2 aria-hidden="true" />
+              <span>
+                <strong>当前没有待处理事项</strong>
+                <small>成员、容量和全局服务状态正常。</small>
+              </span>
+            </div>
+          ) : null}
+        </div>
+        <div className="admin-task-shortcuts">
+          <Link href={APP_ROUTES.adminUsers}>
+            <Users aria-hidden="true" />
+            成员
+          </Link>
+          <Link href={APP_ROUTES.adminForum}>
+            <MessageSquare aria-hidden="true" />
+            论坛设置
+          </Link>
+          {role === "super_admin" ? (
+            <Link href={APP_ROUTES.adminAi}>
               <Bot aria-hidden="true" />
-              <span>
-                <strong>AI 设置</strong>
-                <small>配置模型服务和回答范围</small>
-              </span>
+              AI 设置
             </Link>
-            <Link className="admin-hub-card" href={APP_ROUTES.adminSettings}>
-              <Settings aria-hidden="true" />
-              <span>
-                <strong>系统设置</strong>
-                <small>设置时区和全站显示</small>
-              </span>
-            </Link>
-          </>
-        ) : null}
+          ) : null}
+        </div>
       </section>
     </div>
   );

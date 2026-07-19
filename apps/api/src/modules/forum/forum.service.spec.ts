@@ -1,5 +1,6 @@
 import type { PrismaService } from "../prisma/prisma.service";
 import type { AssetsService } from "../files/assets.service";
+import type { PermissionsService } from "../permissions/permissions.service";
 import { ForumService } from "./forum.service";
 
 describe("ForumService", () => {
@@ -16,7 +17,9 @@ describe("ForumService", () => {
       findUnique: jest.fn(),
       delete: jest.fn(),
     },
+    forumThreadState: { upsert: jest.fn() },
     forumPost: {
+      findMany: jest.fn(),
       findUnique: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
@@ -24,13 +27,17 @@ describe("ForumService", () => {
   };
   let service: ForumService;
   const assets = { removeForumPostImages: jest.fn() };
+  const permissions = { getEffectiveLevelForFile: jest.fn() };
 
   beforeEach(() => {
     jest.resetAllMocks();
     service = new ForumService(
       prisma as unknown as PrismaService,
       assets as unknown as AssetsService,
+      permissions as unknown as PermissionsService,
     );
+    prisma.forumPost.findMany.mockResolvedValue([]);
+    prisma.forumThreadState.upsert.mockResolvedValue({ followed: false });
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
       username: "learner",
@@ -81,6 +88,22 @@ describe("ForumService", () => {
       where: { workspaceId: "workspace-1", name: "课程讨论" },
       data: expect.objectContaining({ name: "课程交流" }),
     });
+  });
+
+  it("keeps a thread followed when the current user has posted in it", async () => {
+    prisma.forumThread.findUnique.mockResolvedValue({
+      id: "thread-1",
+      authorId: "author-1",
+      posts: [{ id: "post-1" }],
+    });
+    prisma.forumThreadState.upsert.mockResolvedValue({ followed: true });
+
+    const result = await service.setThreadFollow("user-1", "thread-1", false);
+
+    expect(result).toEqual({ followed: true, followRequired: true });
+    expect(prisma.forumThreadState.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ update: { followed: true } }),
+    );
   });
 
   it.each(["member", "admin"] as const)(
