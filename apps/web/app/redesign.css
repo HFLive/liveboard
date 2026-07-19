@@ -131,7 +131,7 @@ textarea {
   gap: 11px;
   width: fit-content;
   border-radius: var(--radius-lg);
-  padding: 2px 4px 4px;
+  padding: 10px 4px 12px;
 }
 
 .rail-brand:hover {
@@ -1907,7 +1907,7 @@ button:disabled {
     display: grid;
     grid-template-columns: 1fr;
     justify-items: center;
-    padding: 4px 0 16px;
+    padding: 10px 0 18px;
   }
 
   .rail-nav {
