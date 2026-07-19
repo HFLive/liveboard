@@ -39,9 +39,13 @@ describe("FileViewer", () => {
   it("renders a read-only document with a separate edit link", async () => {
     render(<FileViewer fileId="file-1" />);
 
-    expect(
-      await screen.findByRole("heading", { level: 1, name: "展示文档" }),
-    ).toBeInTheDocument();
+    const heading = await screen.findByRole("heading", {
+      level: 1,
+      name: "展示文档",
+    });
+    expect(heading).toBeInTheDocument();
+    expect(heading.previousElementSibling).toHaveClass("content-viewer-status");
+    expect(heading.previousElementSibling).toHaveTextContent("已发布");
     expect(screen.getByText("默认只展示正文")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "编辑" })).toHaveAttribute(

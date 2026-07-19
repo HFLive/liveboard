@@ -129,3 +129,13 @@
     white-space: normal;
   }
 }
+.content-permission-row > label {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.content-permission-save-state {
+  color: var(--muted);
+  font-size: 10px;
+}

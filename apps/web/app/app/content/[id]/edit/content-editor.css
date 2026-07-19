@@ -49,7 +49,77 @@
   white-space: nowrap;
 }
 
+.doc-block:not(:focus-within) .inline-format-toolbar {
+  display: none;
+}
+
+.editor-outline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 7px 0 10px;
+}
+
+.editor-outline > strong {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.editor-outline > div {
+  display: flex;
+  gap: 3px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.editor-outline button {
+  flex: 0 0 auto;
+  max-width: 180px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 5px 8px 5px calc(8px + (var(--heading-level) - 1) * 5px);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.editor-outline button:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
 @media (max-width: 760px) {
+  .editor-title-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .editor-title-bar > .button-row {
+    justify-content: flex-start;
+  }
+
+  .editor-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inline-format-toolbar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    padding-inline: 0;
+  }
+
+  .editor-preview-pane {
+    order: 2;
+  }
+
   .media-block-fields,
   .media-block-fields.attachment-fields {
     grid-template-columns: minmax(0, 1fr);

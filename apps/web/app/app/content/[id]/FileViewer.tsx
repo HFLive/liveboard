@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { Edit3 } from "lucide-react";
 import type { ContentBlock, FileDetail } from "@/lib/api";
 import { getFile, listBlocks } from "@/lib/api";
@@ -24,6 +24,13 @@ export function FileViewer({ fileId }: { fileId: string }) {
   const [blocks, setBlocks] = useState<ContentBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const headings = blocks
+    .filter((block) => block.type.startsWith("heading_"))
+    .map((block) => ({
+      id: `heading-${block.id}`,
+      level: Number(block.type.slice("heading_".length)),
+      text: getBlockText(block) || "未命名标题",
+    }));
 
   useEffect(() => {
     let active = true;
@@ -57,9 +64,14 @@ export function FileViewer({ fileId }: { fileId: string }) {
         <>
           <header className="content-viewer-header">
             <div>
-              <h1>{file.title}</h1>
-              <div className="content-viewer-meta" aria-label="文件信息">
-                <span>{fileStatusLabel(file.status)}</span>
+              <div className="content-viewer-title">
+                <span
+                  className="content-viewer-status"
+                  data-status={file.status}
+                >
+                  {fileStatusLabel(file.status)}
+                </span>
+                <h1>{file.title}</h1>
               </div>
             </div>
             {canEditContent(file.permission) ? (
@@ -72,19 +84,73 @@ export function FileViewer({ fileId }: { fileId: string }) {
             ) : null}
           </header>
 
-          <article className="content-viewer-document">
-            {blocks.length > 0 ? (
-              blocks.map((block) => (
-                <div className="content-viewer-block" key={block.id}>
-                  <RenderBlockContent block={block} />
-                </div>
-              ))
-            ) : (
-              <div className="empty-state">这个文件还没有内容。</div>
-            )}
-          </article>
+          {file.importWarnings && file.importWarnings.length > 0 ? (
+            <details className="content-import-report">
+              <summary>
+                Markdown 导入报告 · {file.importWarnings.length} 项需要注意
+              </summary>
+              <ul>
+                {file.importWarnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+
+          <div
+            className={
+              headings.length > 1
+                ? "content-viewer-body has-toc"
+                : "content-viewer-body"
+            }
+          >
+            {headings.length > 1 ? (
+              <aside className="content-viewer-toc" aria-label="文档目录">
+                <strong>目录</strong>
+                <nav>
+                  {headings.map((heading) => (
+                    <a
+                      href={`#${heading.id}`}
+                      key={heading.id}
+                      style={
+                        { "--heading-level": heading.level } as CSSProperties
+                      }
+                      title={heading.text}
+                    >
+                      {heading.text}
+                    </a>
+                  ))}
+                </nav>
+              </aside>
+            ) : null}
+            <article className="content-viewer-document">
+              {blocks.length > 0 ? (
+                blocks.map((block) => (
+                  <div
+                    className="content-viewer-block"
+                    id={
+                      block.type.startsWith("heading_")
+                        ? `heading-${block.id}`
+                        : undefined
+                    }
+                    key={block.id}
+                  >
+                    <RenderBlockContent block={block} />
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state">这个文件还没有内容。</div>
+              )}
+            </article>
+          </div>
         </>
       ) : null}
     </div>
   );
+}
+
+function getBlockText(block: ContentBlock) {
+  if (!block.dataJson || typeof block.dataJson !== "object") return "";
+  const text = (block.dataJson as { text?: unknown }).text;
+  return typeof text === "string" ? text.replace(/[*_`~[\]]/g, "").trim() : "";
 }

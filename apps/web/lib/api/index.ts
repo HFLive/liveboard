@@ -1,5 +1,6 @@
 import type {
   AdminUserSummary,
+  ActivityItem,
   AiProviderConfigSummary,
   AiSettingsSummary,
   AiUsageSummary,
@@ -21,6 +22,7 @@ import type {
   TeachingDeckSummary,
   TeachingDeckItemType,
   UserProfile,
+  UserPublicActivity,
   UserSummary,
 } from "@liveboard/shared";
 import {
@@ -55,6 +57,20 @@ export function getMe() {
 
 export function getUserProfile(userId: string) {
   return request<{ user: UserProfile }>(`/auth/profile/${userId}`);
+}
+
+export function getUserPublicActivity(userId: string) {
+  return request<UserPublicActivity>(`/auth/profile/${userId}/activity`);
+}
+
+export function listActivity() {
+  return request<{ items: ActivityItem[]; unreadCount: number }>("/activity");
+}
+
+export function markActivityRead() {
+  return request<{ activityReadAt: string }>("/activity/read", {
+    method: "POST",
+  });
 }
 
 export function updateProfile(input: { displayName: string; bio?: string }) {
@@ -373,6 +389,7 @@ export interface AiMessageSummary {
 export interface AiConversationSummary {
   id: string;
   title: string;
+  pinned?: boolean;
   createdAt: string;
   updatedAt: string;
   lastMessagePreview?: string;
@@ -414,6 +431,19 @@ export function deleteAiConversation(conversationId: string) {
   return request<{ ok: boolean }>(`/ai/conversations/${conversationId}`, {
     method: "DELETE",
   });
+}
+
+export function updateAiConversation(
+  conversationId: string,
+  input: { title?: string; pinned?: boolean },
+) {
+  return request<{ conversation: AiConversationSummary }>(
+    `/ai/conversations/${conversationId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function askAi(input: { message: string; conversationId?: string }) {
@@ -473,6 +503,10 @@ export function createForumThread(input: {
   title: string;
   body: string;
   isAnonymous?: boolean;
+  relatedResources?: Array<{
+    type: "document" | "teaching" | "exercise";
+    id: string;
+  }>;
 }) {
   return request<{ thread: ForumThreadDetail }>("/forum/threads", {
     method: "POST",
@@ -492,6 +526,16 @@ export function updateForumThread(
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+export function updateForumThreadFollow(threadId: string, followed: boolean) {
+  return request<{ followed: boolean; followRequired?: boolean }>(
+    `/forum/threads/${threadId}/follow`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ followed }),
+    },
+  );
 }
 
 export function deleteForumThread(threadId: string) {
@@ -789,6 +833,7 @@ export function listFiles(folderId?: string) {
 export interface FileDetail extends FileSummary {
   permission: PermissionLevel;
   version: number;
+  importWarnings?: string[] | null;
 }
 
 export interface ContentBlock {
@@ -831,6 +876,7 @@ export interface FileAssetSummary {
   url: string;
   referenceCount?: number;
   createdAt?: string;
+  uploader?: UserSummary;
 }
 
 export type AssetReferenceSummary =
@@ -892,6 +938,12 @@ export async function uploadAsset(input: {
 
 export function listLibraryAssets() {
   return request<{ assets: FileAssetSummary[] }>("/assets/library");
+}
+
+export function listAssetReferences(assetId: string) {
+  return request<{ references: AssetReferenceSummary[] }>(
+    `/assets/${assetId}/references`,
+  );
 }
 
 export async function deleteLibraryAsset(assetId: string) {
@@ -1050,6 +1102,7 @@ export interface TeachingDeckItemInput {
   type: TeachingDeckItemType;
   sourceBlockId?: string;
   exerciseSetId?: string;
+  imageFit?: "fit" | "fill" | "original";
 }
 
 export interface TeachingDeckItem {
@@ -1145,6 +1198,7 @@ export interface CreateExerciseQuestionInput {
   optionsJson?: { options: string[] };
   answerJson?: unknown;
   score: number;
+  required?: boolean;
 }
 
 export function createExerciseSet(input: {
@@ -1178,6 +1232,7 @@ export interface ExerciseQuestion {
   optionsJson?: { options?: string[] } | unknown;
   answerJson?: unknown;
   score: number;
+  required?: boolean;
   sortOrder: number;
 }
 

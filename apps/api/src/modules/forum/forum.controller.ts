@@ -26,6 +26,12 @@ import {
   UpdateForumThreadDto,
 } from "./forum.dto";
 import { ForumService } from "./forum.service";
+import { IsBoolean } from "class-validator";
+
+class UpdateForumFollowDto {
+  @IsBoolean()
+  followed!: boolean;
+}
 
 @Controller("forum")
 export class ForumController {
@@ -104,6 +110,15 @@ export class ForumController {
     return {
       thread: await this.forumService.updateThread(userId, id, body),
     };
+  }
+
+  @Patch("threads/:id/follow")
+  async followThread(
+    @CurrentUserId() userId: string | null,
+    @Param("id") id: string,
+    @Body() body: UpdateForumFollowDto,
+  ) {
+    return this.forumService.setThreadFollow(userId, id, body.followed);
   }
 
   @Delete("threads/:id")

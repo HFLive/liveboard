@@ -5,10 +5,13 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  Bell,
+  BellOff,
   Lock,
   MessageSquareReply,
   Pencil,
   Save,
+  Search,
   Send,
   Trash2,
   Unlock,
@@ -28,9 +31,15 @@ import {
   uploadForumPostImages,
   updateForumPost,
   updateForumThread,
+  updateForumThreadFollow,
 } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/labels";
-import { APP_ROUTES } from "@/lib/routes";
+import {
+  APP_ROUTES,
+  contentDetail,
+  exerciseDetail,
+  teachingPresent,
+} from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import { ForumUserAvatar } from "../ForumUserAvatar";
@@ -71,6 +80,16 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
   const [submitting, setSubmitting] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [postSearch, setPostSearch] = useState("");
+  const draftKey = `liveboard:forum-reply-draft:${threadId}`;
+  const searchResults = useMemo(() => {
+    const value = postSearch.trim().toLowerCase();
+    return value
+      ? (thread?.posts ?? []).filter((post) =>
+          post.body.toLowerCase().includes(value),
+        )
+      : [];
+  }, [postSearch, thread?.posts]);
 
   useEffect(() => {
     let mounted = true;
@@ -97,6 +116,58 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       mounted = false;
     };
   }, [threadId]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(draftKey);
+      if (saved) {
+        const draft = JSON.parse(saved) as {
+          reply?: string;
+          replyDrafts?: Record<string, string>;
+        };
+        setReply(draft.reply ?? "");
+        setReplyDrafts(draft.replyDrafts ?? {});
+      }
+    } catch {
+      window.localStorage.removeItem(draftKey);
+    }
+  }, [draftKey]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (!reply && Object.values(replyDrafts).every((value) => !value)) {
+        window.localStorage.removeItem(draftKey);
+      } else {
+        window.localStorage.setItem(
+          draftKey,
+          JSON.stringify({ reply, replyDrafts }),
+        );
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [draftKey, reply, replyDrafts]);
+
+  async function toggleFollow() {
+    if (!thread || actionLoading) return;
+    setActionLoading(true);
+    setError(null);
+    try {
+      const result = await updateForumThreadFollow(thread.id, !thread.followed);
+      setThread((current) =>
+        current
+          ? {
+              ...current,
+              followed: result.followed,
+              followRequired: result.followRequired ?? current.followRequired,
+            }
+          : current,
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "更新关注失败");
+    } finally {
+      setActionLoading(false);
+    }
+  }
 
   async function handleReply(
     event: FormEvent<HTMLFormElement>,
@@ -444,7 +515,11 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
         style={depth > 3 ? { borderLeft: 0, paddingLeft: 0 } : undefined}
       >
         {nestedReplies.map((replyPost) => (
-          <article className="forum-reply-row" key={replyPost.id}>
+          <article
+            className="forum-reply-row"
+            id={`forum-post-${replyPost.id}`}
+            key={replyPost.id}
+          >
             <ForumUserAvatar
               className="forum-comment-avatar small"
               isAnonymous={replyPost.isAnonymous}
@@ -615,6 +690,23 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
               </form>
             ) : null}
             <div className="forum-thread-actions">
+              <button
+                className="button secondary"
+                disabled={actionLoading || thread.followRequired}
+                onClick={() => void toggleFollow()}
+                type="button"
+              >
+                {thread.followed ? (
+                  <BellOff aria-hidden="true" className="button-icon" />
+                ) : (
+                  <Bell aria-hidden="true" className="button-icon" />
+                )}
+                {thread.followRequired
+                  ? "已自动关注"
+                  : thread.followed
+                    ? "取消关注"
+                    : "关注主题"}
+              </button>
               {thread.canEdit && !editingThread ? (
                 <button
                   className="button secondary"
@@ -663,9 +755,45 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
             </div>
           </header>
 
+          <div className="forum-thread-search">
+            <label className="search-field">
+              <Search aria-hidden="true" />
+              <input
+                aria-label="在帖子内搜索"
+                onChange={(event) => setPostSearch(event.target.value)}
+                placeholder="在帖子内搜索"
+                value={postSearch}
+              />
+            </label>
+            {postSearch.trim() ? (
+              <div className="forum-thread-search-results">
+                <span>{searchResults.length} 条匹配</span>
+                {searchResults.slice(0, 8).map((post, index) => (
+                  <button
+                    key={post.id}
+                    onClick={() =>
+                      document
+                        .getElementById(`forum-post-${post.id}`)
+                        ?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "center",
+                        })
+                    }
+                    type="button"
+                  >
+                    {index + 1}. {post.body.slice(0, 36)}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
           <div className="forum-post-list">
             {postStructure.mainPost ? (
-              <article className="forum-post-row forum-main-post">
+              <article
+                className="forum-post-row forum-main-post"
+                id={`forum-post-${postStructure.mainPost.id}`}
+              >
                 <aside className="forum-post-author">
                   <ForumUserAvatar
                     className="forum-comment-avatar forum-main-author-avatar"
@@ -708,23 +836,6 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                         : ""}
                     </time>
                     <span>
-                      {postStructure.mainPost.canEdit &&
-                      editingPostId !== postStructure.mainPost.id ? (
-                        <button
-                          className="icon-button subtle"
-                          disabled={actionLoading}
-                          onClick={() =>
-                            startEditPost(
-                              postStructure.mainPost!.id,
-                              postStructure.mainPost!.body,
-                            )
-                          }
-                          title="编辑"
-                          type="button"
-                        >
-                          <Pencil aria-hidden="true" />
-                        </button>
-                      ) : null}
                       {postStructure.mainPost.canDelete ? (
                         <button
                           className="icon-button subtle"
@@ -784,6 +895,39 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
               </article>
             ) : null}
 
+            {thread.relatedResources && thread.relatedResources.length > 0 ? (
+              <section
+                className="forum-related-resources"
+                aria-label="相关内容"
+              >
+                <strong>相关内容</strong>
+                <div>
+                  {thread.relatedResources.map((resource) => (
+                    <Link
+                      href={
+                        resource.type === "document"
+                          ? contentDetail(resource.id)
+                          : resource.type === "teaching"
+                            ? teachingPresent(resource.id)
+                            : exerciseDetail(resource.id)
+                      }
+                      key={`${resource.type}:${resource.id}`}
+                      target="_blank"
+                    >
+                      <small>
+                        {resource.type === "document"
+                          ? "文档"
+                          : resource.type === "teaching"
+                            ? "课件"
+                            : "练习"}
+                      </small>
+                      {resource.title}
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
             <section className="forum-comment-section" aria-label="回复">
               <div className="forum-comment-head">
                 <strong>回复</strong>
@@ -794,7 +938,11 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 const draft = replyDrafts[post.id] ?? "";
 
                 return (
-                  <article className="forum-comment-row" key={post.id}>
+                  <article
+                    className="forum-comment-row"
+                    id={`forum-post-${post.id}`}
+                    key={post.id}
+                  >
                     <div className="forum-comment-main">
                       <ForumUserAvatar
                         className="forum-comment-avatar"
@@ -844,6 +992,12 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                             className="forum-nested-reply-form"
                             onSubmit={(event) => handleReply(event, post.id)}
                           >
+                            <div className="forum-replying-to">
+                              正在回复{" "}
+                              {post.isAnonymous
+                                ? "匿名用户"
+                                : post.author.displayName}
+                            </div>
                             <AutoTextarea
                               autoFocus
                               className="textarea"
@@ -911,6 +1065,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                   value={reply}
                   onChange={(event) => setReply(event.target.value)}
                 />
+                <small className="muted">草稿会自动保存在当前浏览器。</small>
               </label>
               {renderImagePicker("root")}
               <div className="button-row forum-reply-actions">

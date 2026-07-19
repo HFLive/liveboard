@@ -17,6 +17,9 @@ export function StorageManagementClient() {
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sort, setSort] = useState<"usage-desc" | "usage-asc" | "name">(
+    "usage-desc",
+  );
 
   const totalUsedBytes = useMemo(
     () => items.reduce((sum, item) => sum + item.storageUsedBytes, 0),
@@ -25,6 +28,24 @@ export function StorageManagementClient() {
   const totalQuotaBytes = useMemo(
     () => items.reduce((sum, item) => sum + item.storageQuotaBytes, 0),
     [items],
+  );
+  const sortedItems = useMemo(
+    () =>
+      [...items].sort((left, right) => {
+        if (sort === "name") {
+          return left.user.displayName.localeCompare(right.user.displayName);
+        }
+        const leftUsage = left.storageQuotaBytes
+          ? left.storageUsedBytes / left.storageQuotaBytes
+          : 1;
+        const rightUsage = right.storageQuotaBytes
+          ? right.storageUsedBytes / right.storageQuotaBytes
+          : 1;
+        return sort === "usage-asc"
+          ? leftUsage - rightUsage
+          : rightUsage - leftUsage;
+      }),
+    [items, sort],
   );
 
   async function load(preserveDrafts = false) {
@@ -124,6 +145,16 @@ export function StorageManagementClient() {
               用户容量
             </h2>
           </div>
+          <select
+            aria-label="容量列表排序"
+            className="select compact-select"
+            onChange={(event) => setSort(event.target.value as typeof sort)}
+            value={sort}
+          >
+            <option value="usage-desc">使用率从高到低</option>
+            <option value="usage-asc">使用率从低到高</option>
+            <option value="name">按成员名称</option>
+          </select>
         </div>
         <div className="table-wrap">
           <table className="table responsive-table">
@@ -139,7 +170,7 @@ export function StorageManagementClient() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => {
+              {sortedItems.map((item) => {
                 const rawPercent =
                   item.storageQuotaBytes === 0
                     ? 100
@@ -183,6 +214,9 @@ export function StorageManagementClient() {
                           <span style={{ width: `${meterPercent}%` }} />
                         </div>
                         <small className="muted">{rawPercent}%</small>
+                        {rawPercent >= 90 ? (
+                          <strong className="storage-warning">接近上限</strong>
+                        ) : null}
                       </div>
                     </td>
                     <td data-label="调整上限">

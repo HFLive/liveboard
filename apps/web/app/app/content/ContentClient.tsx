@@ -90,6 +90,7 @@ type DeleteFolderTarget = {
   fileCount: number;
 };
 type ContentSortMode = "name" | "updated";
+type MobileContentPane = "tree" | "contents";
 
 const SORT_OPTIONS = [
   { value: "updated", label: "最近更新" },
@@ -214,6 +215,7 @@ export function ContentClient() {
   const [isDeletingFolder, setIsDeletingFolder] = useState(false);
   const [contentSortMode, setContentSortMode] =
     useState<ContentSortMode>("updated");
+  const [mobilePane, setMobilePane] = useState<MobileContentPane>("contents");
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -556,6 +558,7 @@ export function ContentClient() {
     setFiles(fileResult.files);
     setGrants(grantResult.grants);
     setInheritedGrants(grantResult.inheritedGrants);
+    setMobilePane("contents");
   }
 
   function selectRoot() {
@@ -569,6 +572,7 @@ export function ContentClient() {
     setShowCreateMenu(false);
     setOpenContentRowMenu(null);
     setError(null);
+    setMobilePane("contents");
   }
 
   function goToParentFolder() {
@@ -1571,7 +1575,30 @@ export function ContentClient() {
         </div>
       </div>
 
-      <section className="workbench files-layout">
+      <div
+        aria-label="文档移动视图"
+        className="segmented-control content-mobile-tabs"
+        role="group"
+      >
+        <button
+          aria-pressed={mobilePane === "tree"}
+          className={mobilePane === "tree" ? "active" : ""}
+          onClick={() => setMobilePane("tree")}
+          type="button"
+        >
+          位置
+        </button>
+        <button
+          aria-pressed={mobilePane === "contents"}
+          className={mobilePane === "contents" ? "active" : ""}
+          onClick={() => setMobilePane("contents")}
+          type="button"
+        >
+          当前目录
+        </button>
+      </div>
+
+      <section className={`workbench files-layout mobile-pane-${mobilePane}`}>
         <aside className="folder-panel">
           <div className="file-tree">
             {visibleTreeFolders.map(renderContentTreeRow)}

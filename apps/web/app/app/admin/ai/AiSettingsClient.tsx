@@ -226,7 +226,7 @@ export function AiSettingsClient() {
     const defaultCallLimit = Number(globalForm.defaultCallLimit);
 
     if (!Number.isInteger(defaultCallLimit) || defaultCallLimit < 0) {
-      setError("默认调用限额需为不小于 0 的整数");
+      setError("每日默认调用限额需为不小于 0 的整数");
       return;
     }
 
@@ -234,10 +234,10 @@ export function AiSettingsClient() {
     try {
       const result = await updateAiSettings({ defaultCallLimit });
       applySettings(result.settings, configForm.id);
-      setMessage("默认调用限额已保存");
+      setMessage("每日默认调用限额已保存");
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "保存默认调用限额失败",
+        caught instanceof Error ? caught.message : "保存每日默认调用限额失败",
       );
     } finally {
       setSavingGlobal(false);
@@ -411,12 +411,13 @@ export function AiSettingsClient() {
       {message ? <p className="success-text">{message}</p> : null}
 
       <section className="ai-settings-layout">
-        <section className="ai-panel">
+        <section className="ai-panel ai-risk-global">
           <div className="panel-head">
             <div>
               <h2>
                 <Bot aria-hidden="true" className="heading-icon" />
                 AI 助手
+                <span className="ai-risk-label high">全局生效</span>
                 <span
                   className={
                     settings?.enabled
@@ -455,7 +456,7 @@ export function AiSettingsClient() {
           </p>
           <form className="ai-call-limit-row" onSubmit={onSaveCallLimit}>
             <label className="label" htmlFor="ai-call-limit-input">
-              默认调用限额
+              每日默认调用限额
             </label>
             <input
               className="input"
@@ -470,7 +471,7 @@ export function AiSettingsClient() {
               type="number"
               value={globalForm.defaultCallLimit}
             />
-            <span className="muted">次/人</span>
+            <span className="muted">次/人/天</span>
             <button
               className="button secondary"
               disabled={savingGlobal}
@@ -480,14 +481,18 @@ export function AiSettingsClient() {
             </button>
           </form>
           <p className="field-hint ai-call-limit-hint">
-            每位成员的 AI 调用次数上限；在成员管理中编辑成员可设置例外。
+            每位成员每天的 AI
+            调用次数上限，按系统时区每日归零；可在成员管理中设置例外。
           </p>
         </section>
 
-        <section className="ai-panel">
+        <section className="ai-panel ai-risk-provider">
           <div className="panel-head">
             <div>
-              <h2>模型配置</h2>
+              <h2>
+                模型配置
+                <span className="ai-risk-label medium">含密钥</span>
+              </h2>
             </div>
             <button className="button" onClick={startNewConfig} type="button">
               <Plus aria-hidden="true" className="button-icon" />
@@ -575,6 +580,7 @@ export function AiSettingsClient() {
             <div className="modal-head">
               <div>
                 <h2 id="ai-context-title">回答范围</h2>
+                <span className="ai-risk-label low">影响成本与引用范围</span>
                 <p>控制每次问答最多读取的资料数量和文本长度。</p>
               </div>
               <button

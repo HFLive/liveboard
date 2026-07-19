@@ -14,7 +14,11 @@ import {
   Copy,
   MoreHorizontal,
   PanelLeft,
+  Pencil,
+  Pin,
+  PinOff,
   Plus,
+  RefreshCcw,
   Search,
   Send,
   Square,
@@ -27,6 +31,7 @@ import {
   getAiConversation,
   getAiStatus,
   listAiConversations,
+  updateAiConversation,
   type AiConversationSummary,
   type AiMessageSummary,
   type AiSourceSummary,
@@ -391,6 +396,69 @@ export function AiAssistantClient() {
     }
   }
 
+  async function onRenameConversation(conversation: AiConversationSummary) {
+    if (asking) return;
+
+    const title = window.prompt("重命名对话", conversation.title)?.trim();
+    setOpenHistoryMenu(null);
+    if (!title || title === conversation.title) return;
+
+    try {
+      const result = await updateAiConversation(conversation.id, { title });
+      setConversations((current) =>
+        sortConversations(
+          current.map((item) =>
+            item.id === conversation.id
+              ? { ...item, ...result.conversation }
+              : item,
+          ),
+        ),
+      );
+    } catch (caught) {
+      setAiError(caught instanceof Error ? caught.message : "重命名失败");
+    }
+  }
+
+  async function onTogglePin(conversation: AiConversationSummary) {
+    if (asking) return;
+
+    setOpenHistoryMenu(null);
+    try {
+      const result = await updateAiConversation(conversation.id, {
+        pinned: !conversation.pinned,
+      });
+      setConversations((current) =>
+        sortConversations(
+          current.map((item) =>
+            item.id === conversation.id
+              ? { ...item, ...result.conversation }
+              : item,
+          ),
+        ),
+      );
+    } catch (caught) {
+      setAiError(caught instanceof Error ? caught.message : "更新置顶失败");
+    }
+  }
+
+  function onQuickAsk(prompt: string) {
+    if (asking || !aiStatus?.available) return;
+
+    setQuestion(prompt);
+    window.requestAnimationFrame(() => {
+      questionInputRef.current?.form?.requestSubmit();
+    });
+  }
+
+  function onRegenerateAnswer() {
+    const previousQuestion = [...messages]
+      .reverse()
+      .find((message) => message.role === "user")?.content;
+    if (previousQuestion) {
+      onQuickAsk(`请重新回答这个问题，并改进准确性与结构：${previousQuestion}`);
+    }
+  }
+
   return (
     <div className="workspace ai-workspace">
       {error ? <p className="error-text">{error}</p> : null}
@@ -462,7 +530,12 @@ export function AiAssistantClient() {
                       type="button"
                     >
                       <span className="history-title-row">
-                        <strong>{conversation.title}</strong>
+                        <strong>
+                          {conversation.pinned ? (
+                            <Pin aria-label="已置顶" className="history-pin" />
+                          ) : null}
+                          {conversation.title}
+                        </strong>
                         <time>
                           {formatRelativeTime(conversation.updatedAt)}
                         </time>
@@ -494,6 +567,26 @@ export function AiAssistantClient() {
                           top: openHistoryMenu.y,
                         }}
                       >
+                        <button
+                          onClick={() =>
+                            void onRenameConversation(conversation)
+                          }
+                          type="button"
+                        >
+                          <Pencil aria-hidden="true" />
+                          重命名
+                        </button>
+                        <button
+                          onClick={() => void onTogglePin(conversation)}
+                          type="button"
+                        >
+                          {conversation.pinned ? (
+                            <PinOff aria-hidden="true" />
+                          ) : (
+                            <Pin aria-hidden="true" />
+                          )}
+                          {conversation.pinned ? "取消置顶" : "置顶"}
+                        </button>
                         <button
                           className="danger"
                           onClick={() =>
@@ -560,7 +653,7 @@ export function AiAssistantClient() {
                 </div>
               </div>
             ) : (
-              messages.map((message) => (
+              messages.map((message, index) => (
                 <article
                   className={
                     message.role === "user"
@@ -603,6 +696,33 @@ export function AiAssistantClient() {
                           {copiedMessageId === message.id ? "已复制" : "复制"}
                         </span>
                       </button>
+                    ) : null}
+                    {message.role === "assistant" &&
+                    index === messages.length - 1 &&
+                    message.content.trim() &&
+                    !asking ? (
+                      <>
+                        <button
+                          aria-label="重新生成回答"
+                          className="chat-copy-button"
+                          onClick={onRegenerateAnswer}
+                          title="重新生成"
+                          type="button"
+                        >
+                          <RefreshCcw aria-hidden="true" />
+                          <span>重新生成</span>
+                        </button>
+                        <button
+                          aria-label="继续回答"
+                          className="chat-copy-button"
+                          onClick={() => onQuickAsk("请继续上一条回答。")}
+                          title="继续回答"
+                          type="button"
+                        >
+                          <Plus aria-hidden="true" />
+                          <span>继续回答</span>
+                        </button>
+                      </>
                     ) : null}
                   </div>
                 </article>
@@ -667,20 +787,39 @@ export function AiAssistantClient() {
 }
 
 function SourceList({ sources }: { sources: AiSourceSummary[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleSources = sources.slice(0, 4);
+  const moreSources = sources.slice(4);
+
   return (
     <div className="chat-sources">
-      {sources.map((source) => (
-        <Fragment key={source.id}>
-          {source.unavailable ? (
-            <span className="chat-source-link unavailable">文件不存在</span>
-          ) : (
-            <Link className="chat-source-link" href={contentDetail(source.id)}>
-              {source.title}
-            </Link>
-          )}
-        </Fragment>
-      ))}
+      {visibleSources.map((source) => renderSource(source))}
+      {moreSources.length > 0 ? (
+        <button
+          aria-expanded={expanded}
+          className="chat-source-more-button"
+          onClick={() => setExpanded((current) => !current)}
+          type="button"
+        >
+          {expanded ? "收起其他来源" : `另有 ${moreSources.length} 个来源`}
+        </button>
+      ) : null}
+      {expanded ? moreSources.map((source) => renderSource(source)) : null}
     </div>
+  );
+}
+
+function renderSource(source: AiSourceSummary) {
+  return (
+    <Fragment key={source.id}>
+      {source.unavailable ? (
+        <span className="chat-source-link unavailable">文件不存在</span>
+      ) : (
+        <Link className="chat-source-link" href={contentDetail(source.id)}>
+          {source.title}
+        </Link>
+      )}
+    </Fragment>
   );
 }
 
@@ -705,18 +844,27 @@ function upsertConversation(
   conversations: AiConversationSummary[],
   nextConversation: AiConversationSummary,
 ) {
-  return [
+  return sortConversations([
     nextConversation,
     ...conversations.filter(
       (conversation) => conversation.id !== nextConversation.id,
     ),
-  ];
+  ]);
+}
+
+function sortConversations(conversations: AiConversationSummary[]) {
+  return [...conversations].sort((left, right) => {
+    if (left.pinned !== right.pinned) {
+      return left.pinned ? -1 : 1;
+    }
+    return Date.parse(right.updatedAt) - Date.parse(left.updatedAt);
+  });
 }
 
 function getHistoryMenuPosition(button: HTMLButtonElement) {
   const rect = button.getBoundingClientRect();
-  const menuWidth = 132;
-  const menuHeight = 36;
+  const menuWidth = 148;
+  const menuHeight = 108;
   const x = Math.max(
     8,
     Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8),

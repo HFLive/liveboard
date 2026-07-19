@@ -107,6 +107,18 @@ class AskAiDto {
   conversationId?: string;
 }
 
+class UpdateAiConversationDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  title?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  pinned?: boolean;
+}
+
 @Controller()
 export class AiController {
   constructor(
@@ -195,6 +207,21 @@ export class AiController {
     };
   }
 
+  @Patch("ai/conversations/:id")
+  async updateConversation(
+    @CurrentUserId() userId: string | null,
+    @Param("id") conversationId: string,
+    @Body() body: UpdateAiConversationDto,
+  ) {
+    return {
+      conversation: await this.aiService.updateConversation(
+        userId,
+        conversationId,
+        body,
+      ),
+    };
+  }
+
   @Delete("ai/conversations/:id")
   async deleteConversation(
     @CurrentUserId() userId: string | null,
@@ -253,6 +280,7 @@ export class AiController {
         conversation: {
           id: turn.conversation.id,
           title: turn.conversation.title,
+          pinned: false,
           createdAt: turn.conversation.createdAt.toISOString(),
           updatedAt: new Date().toISOString(),
         },

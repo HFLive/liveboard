@@ -47,7 +47,7 @@ const value = 1;
       },
       {
         type: "bulleted_list",
-        dataJson: { text: "第一项\n↳ 子项", inlineFormat: "markdown" },
+        dataJson: { text: "第一项\n子项", inlineFormat: "markdown" },
       },
       {
         type: "numbered_list",
@@ -74,18 +74,11 @@ const value = 1;
           widthPercent: 100,
         },
       },
-      {
-        type: "paragraph",
-        dataJson: {
-          text: "图片：本地（./image.png）",
-          inlineFormat: "markdown",
-        },
-      },
     ]);
     expect(result.warnings).toEqual(
       expect.arrayContaining([
-        "嵌套列表已扁平化并使用层级标记显示",
-        "相对路径或非 HTTP 图片无法随单个 Markdown 文件上传，已转为文字说明",
+        "嵌套列表已扁平化为同级列表",
+        "图片“本地”使用相对路径或非 HTTP 地址，未导入正文",
       ]),
     );
   });

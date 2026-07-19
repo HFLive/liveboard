@@ -347,3 +347,25 @@
 .ai-settings-page .ai-call-limit-hint {
   margin: 6px 0 0;
 }
+.ai-risk-label {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 7px;
+  border-radius: 6px;
+  background: var(--fill-subtle);
+  color: var(--muted);
+  padding: 2px 5px;
+  font-size: 9px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.ai-risk-label.high {
+  background: #f8e7e5;
+  color: #913c34;
+}
+
+.ai-risk-label.medium {
+  background: #f7efe0;
+  color: #875b1f;
+}

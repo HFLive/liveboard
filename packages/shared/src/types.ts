@@ -62,6 +62,34 @@ export interface UserProfile extends UserSummary {
   bannerUrl: string | null;
 }
 
+export interface UserPublicActivity {
+  teachingDecks: Array<{
+    id: string;
+    title: string;
+    itemCount: number;
+    updatedAt: string;
+  }>;
+  forumThreads: Array<{
+    id: string;
+    title: string;
+    categoryName: string;
+    postCount: number;
+    lastActivityAt: string;
+  }>;
+}
+
+export type ActivityKind = "exercise" | "grading" | "document" | "forum";
+
+export interface ActivityItem {
+  id: string;
+  kind: ActivityKind;
+  title: string;
+  detail: string;
+  href: string;
+  occurredAt: string;
+  unread: boolean;
+}
+
 // 管理端用户列表专用：在 UserSummary 基础上附带 AI 调用配额信息
 export interface AdminUserSummary extends UserSummary {
   aiCallCount: number;
@@ -172,6 +200,17 @@ export interface ForumThreadSummary {
   createdAt: string;
   updatedAt: string;
   lastActivityAt: string;
+  followed?: boolean;
+  followRequired?: boolean;
+  unread?: boolean;
+  mentioned?: boolean;
+  relatedResources?: ForumRelatedResource[];
+}
+
+export interface ForumRelatedResource {
+  type: "document" | "teaching" | "exercise";
+  id: string;
+  title: string;
 }
 
 export interface ForumPostSummary {

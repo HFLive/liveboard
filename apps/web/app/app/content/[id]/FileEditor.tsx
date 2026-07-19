@@ -1,6 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   ContentBlockType,
   PermissionLevel,
@@ -354,6 +361,10 @@ export function FileEditor({ fileId }: { fileId: string }) {
   const [uploadingAsset, setUploadingAsset] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<
+    "saved" | "dirty" | "saving" | "error"
+  >("saved");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const groupGrants = useMemo(
     () => grants.filter((grant) => grant.group),
     [grants],
@@ -394,6 +405,17 @@ export function FileEditor({ fileId }: { fileId: string }) {
       ),
     [assetQuery, libraryAssets],
   );
+  const outlineBlocks = useMemo(
+    () =>
+      blocks
+        .filter((block) => /^heading_[1-6]$/.test(block.type))
+        .map((block) => ({
+          id: block.id,
+          level: Number(block.type.slice(-1)),
+          text: getBlockText(block) || "未命名标题",
+        })),
+    [blocks],
+  );
 
   async function load() {
     const [fileResult, blockResult, grantResult, libraryResult] =
@@ -410,6 +432,8 @@ export function FileEditor({ fileId }: { fileId: string }) {
     setGrants(grantResult.grants);
     setInheritedGrants(grantResult.inheritedGrants);
     setTitleInput(fileResult.file.title);
+    setSaveState("saved");
+    setLastSavedAt(new Date());
     await loadAssignableGroups();
   }
 
@@ -461,6 +485,17 @@ export function FileEditor({ fileId }: { fileId: string }) {
 
     setGrantGroupId(availableGrantGroups[0]?.id ?? "");
   }, [availableGrantGroups, grantGroupId]);
+
+  useEffect(() => {
+    function warnBeforeLeaving(event: BeforeUnloadEvent) {
+      if (saveState === "dirty" || saveState === "saving") {
+        event.preventDefault();
+      }
+    }
+
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [saveState]);
 
   async function onAddBlock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -643,6 +678,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
   }
 
   function patchBlockData(block: ContentBlock, patch: Record<string, unknown>) {
+    setSaveState("dirty");
     setBlocks((current) =>
       current.map((item) =>
         item.id === block.id
@@ -684,6 +720,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
       ),
     );
 
+    setSaveState("saving");
     try {
       await updateBlock({
         blockId: block.id,
@@ -691,9 +728,12 @@ export function FileEditor({ fileId }: { fileId: string }) {
         dataJson: nextData,
       });
       setMessage("内容块类型已更新");
+      setSaveState("saved");
+      setLastSavedAt(new Date());
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "更新内容块类型失败");
+      setSaveState("error");
       await load();
     }
   }
@@ -702,6 +742,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
     setError(null);
     setMessage(null);
 
+    setSaveState("saving");
     try {
       await updateBlock({
         blockId: block.id,
@@ -709,9 +750,12 @@ export function FileEditor({ fileId }: { fileId: string }) {
         dataJson: block.dataJson,
       });
       setMessage("内容块已保存");
+      setSaveState("saved");
+      setLastSavedAt(new Date());
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存内容块失败");
+      setSaveState("error");
     }
   }
 
@@ -786,15 +830,19 @@ export function FileEditor({ fileId }: { fileId: string }) {
       return;
     }
 
+    setSaveState("saving");
     try {
       await updateFile({
         fileId,
         title: titleInput,
       });
       setMessage("文件已重命名");
+      setSaveState("saved");
+      setLastSavedAt(new Date());
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "重命名文件失败");
+      setSaveState("error");
     }
   }
 
@@ -1069,7 +1117,10 @@ export function FileEditor({ fileId }: { fileId: string }) {
             className="title-input"
             value={titleInput}
             onBlur={() => void onRenameFile()}
-            onChange={(event) => setTitleInput(event.target.value)}
+            onChange={(event) => {
+              setTitleInput(event.target.value);
+              setSaveState("dirty");
+            }}
             aria-label="文件名"
           />
           <div className="editor-meta-strip" aria-label="文件信息">
@@ -1079,7 +1130,18 @@ export function FileEditor({ fileId }: { fileId: string }) {
             </span>
             <span>
               <strong>保存</strong>
-              自动保存
+              {saveState === "saving"
+                ? "保存中…"
+                : saveState === "dirty"
+                  ? "有未保存修改"
+                  : saveState === "error"
+                    ? "保存失败"
+                    : lastSavedAt
+                      ? `已保存 ${lastSavedAt.toLocaleTimeString("zh-CN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}`
+                      : "已保存"}
             </span>
           </div>
         </div>
@@ -1158,6 +1220,33 @@ export function FileEditor({ fileId }: { fileId: string }) {
               <strong>格式编辑</strong>
               <span>选择区块类型并编辑内容</span>
             </header>
+            {outlineBlocks.length > 0 ? (
+              <nav className="editor-outline" aria-label="文档大纲">
+                <strong>大纲</strong>
+                <div>
+                  {outlineBlocks.map((heading) => (
+                    <button
+                      key={heading.id}
+                      onClick={() => {
+                        document
+                          .getElementById(`block-${heading.id}`)
+                          ?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "center",
+                          });
+                      }}
+                      style={
+                        { "--heading-level": heading.level } as CSSProperties
+                      }
+                      title={heading.text}
+                      type="button"
+                    >
+                      {heading.text}
+                    </button>
+                  ))}
+                </div>
+              </nav>
+            ) : null}
             <div className="editor-document-shell">
               <div className="document-editor">
                 {blocks.map((block) => (
@@ -1168,6 +1257,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
                         ? "drop-target"
                         : ""
                     }`}
+                    id={`block-${block.id}`}
                     key={block.id}
                     onDragOver={(event) => event.preventDefault()}
                     onDragEnter={() => {

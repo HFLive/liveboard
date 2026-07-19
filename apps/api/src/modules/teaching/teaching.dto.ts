@@ -23,6 +23,10 @@ export class TeachingDeckItemDto {
   @ValidateIf((item: TeachingDeckItemDto) => item.type === "exercise")
   @IsString()
   exerciseSetId?: string;
+
+  @IsOptional()
+  @IsIn(["fit", "fill", "original"])
+  imageFit?: "fit" | "fill" | "original";
 }
 
 export class CreateTeachingDeckDto {

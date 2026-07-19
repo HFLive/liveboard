@@ -11,6 +11,7 @@ import {
   AssetInUseError,
   deleteLibraryAsset,
   listLibraryAssets,
+  listAssetReferences,
 } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
@@ -24,6 +25,7 @@ vi.mock("@/lib/api", () => ({
   },
   deleteLibraryAsset: vi.fn(),
   listLibraryAssets: vi.fn(),
+  listAssetReferences: vi.fn(),
   uploadAsset: vi.fn(),
 }));
 
@@ -47,6 +49,7 @@ describe("LibraryClient selection", () => {
       value: vi.fn().mockReturnValue({ matches: false }),
     });
     vi.mocked(listLibraryAssets).mockResolvedValue({ assets: [asset] });
+    vi.mocked(listAssetReferences).mockResolvedValue({ references: [] });
   });
 
   it("starts unselected and clears selection from workspace background", async () => {
@@ -54,7 +57,7 @@ describe("LibraryClient selection", () => {
 
     const card = await screen.findByRole("button", { name: /example.png/ });
     expect(card).not.toHaveClass("active");
-    expect(screen.getByText("未选择文件")).toBeInTheDocument();
+    expect(container.querySelector(".asset-detail-panel")).toBeNull();
 
     fireEvent.click(card);
     expect(card).toHaveClass("active");
@@ -64,7 +67,7 @@ describe("LibraryClient selection", () => {
     fireEvent.click(assetGrid as HTMLElement);
 
     await waitFor(() => expect(card).not.toHaveClass("active"));
-    expect(screen.getByText("未选择文件")).toBeInTheDocument();
+    expect(container.querySelector(".asset-detail-panel")).toBeNull();
   });
 
   it("clears selection when the mobile detail backdrop is clicked", async () => {
@@ -79,7 +82,7 @@ describe("LibraryClient selection", () => {
     fireEvent.click(backdrop as HTMLElement);
 
     await waitFor(() => expect(card).not.toHaveClass("active"));
-    expect(screen.getByText("未选择文件")).toBeInTheDocument();
+    expect(container.querySelector(".asset-detail-panel")).toBeNull();
   });
 
   it("replaces the delete confirmation with a reference details dialog", async () => {
@@ -102,12 +105,13 @@ describe("LibraryClient selection", () => {
     );
     const { container } = render(<LibraryClient />);
 
-    await screen.findByRole("button", { name: /example.png/ });
-    const cardDeleteButton = container.querySelector(
-      ".asset-card .inline-icon-button",
+    const card = await screen.findByRole("button", { name: /example.png/ });
+    fireEvent.click(card);
+    const detailPanel = container.querySelector(".asset-detail-panel");
+    expect(detailPanel).not.toBeNull();
+    fireEvent.click(
+      within(detailPanel as HTMLElement).getByRole("button", { name: "删除" }),
     );
-    expect(cardDeleteButton).not.toBeNull();
-    fireEvent.click(cardDeleteButton as HTMLElement);
 
     const confirmation = screen
       .getByRole("heading", { name: "删除文件" })

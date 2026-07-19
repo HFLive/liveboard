@@ -118,6 +118,14 @@ export class AuthController {
     };
   }
 
+  @Get("profile/:id/activity")
+  async getProfileActivity(
+    @CurrentUserId() userId: string | null,
+    @Param("id") targetUserId: string,
+  ) {
+    return this.authService.getUserPublicActivity(userId, targetUserId);
+  }
+
   @Get("avatar/:id")
   async getAvatar(
     @CurrentUserId() userId: string | null,

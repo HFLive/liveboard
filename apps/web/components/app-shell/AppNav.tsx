@@ -1,19 +1,33 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   Bot,
+  Bell,
   ClipboardList,
   Database,
   Files,
   MessageSquare,
   Presentation,
   Users,
+  X,
 } from "lucide-react";
-import type { AiUsageSummary, UserSummary } from "@liveboard/shared";
-import { apiResourceUrl, getAiUsage, getMe } from "@/lib/api";
+import type {
+  ActivityItem,
+  AiUsageSummary,
+  UserSummary,
+} from "@liveboard/shared";
+import {
+  apiResourceUrl,
+  getAiUsage,
+  getMe,
+  listActivity,
+  markActivityRead,
+} from "@/lib/api";
+import { formatRelativeTime } from "@/lib/labels";
 import { APP_ROUTES, userProfile } from "@/lib/routes";
 import { LogoutButton } from "./LogoutButton";
 
@@ -46,11 +60,15 @@ export function AppNav() {
   const [usage, setUsage] = useState<AiUsageSummary | null>(null);
   const [usageFailed, setUsageFailed] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
+  const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
+  const [activityUnreadCount, setActivityUnreadCount] = useState(0);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [usagePosition, setUsagePosition] = useState<{
     left: number;
     bottom: number;
   } | null>(null);
   const accountLinkRef = useRef<HTMLAnchorElement | null>(null);
+  const activeNavLinkRef = useRef<HTMLAnchorElement | null>(null);
   const usageHoverTimerRef = useRef<number | null>(null);
   const usageLoadingRef = useRef(false);
   const displayName = userLoaded ? (user?.displayName ?? "未登录") : "账户信息";
@@ -94,9 +112,25 @@ export function AppNav() {
   }, []);
 
   useEffect(() => {
+    activeNavLinkRef.current?.scrollIntoView({
+      behavior: "auto",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [pathname, user?.id]);
+
+  useEffect(() => {
     if (user) {
       loadUsage();
+      void loadActivity();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const timer = window.setInterval(() => void loadActivity(), 60_000);
+    return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -125,6 +159,38 @@ export function AppNav() {
       .finally(() => {
         usageLoadingRef.current = false;
       });
+  }
+
+  async function loadActivity() {
+    try {
+      const result = await listActivity();
+      setActivityItems(result.items);
+      setActivityUnreadCount(result.unreadCount);
+      return result;
+    } catch {
+      // 导航通知是辅助能力，加载失败不影响主导航。
+      return null;
+    }
+  }
+
+  async function toggleActivity() {
+    const nextOpen = !activityOpen;
+    setActivityOpen(nextOpen);
+    setUsageOpen(false);
+    if (nextOpen) {
+      const result = await loadActivity();
+      if ((result?.unreadCount ?? activityUnreadCount) > 0) {
+        try {
+          await markActivityRead();
+          setActivityUnreadCount(0);
+          setActivityItems((current) =>
+            current.map((item) => ({ ...item, unread: false })),
+          );
+        } catch {
+          // 保留未读状态，下次打开时重试。
+        }
+      }
+    }
   }
 
   function onAccountMouseEnter() {
@@ -197,6 +263,7 @@ export function AppNav() {
               className={active ? "rail-link active" : "rail-link"}
               href={item.href}
               key={item.href}
+              ref={active ? activeNavLinkRef : undefined}
               title={item.label}
             >
               <Icon aria-hidden="true" className="rail-icon" />
@@ -209,12 +276,12 @@ export function AppNav() {
       <div className="rail-footer">
         {user && usage ? (
           <div
-            aria-label={`AI 额度已用 ${usage.used} / ${usage.limit} 次`}
+            aria-label={`今日 AI 额度已用 ${usage.used} / ${usage.limit} 次`}
             className="rail-usage-strip"
             role="status"
           >
             <div className="rail-usage-strip-head">
-              <span>AI 额度</span>
+              <span>今日 AI</span>
               <span>{usagePercent}%</span>
             </div>
             <span className="rail-usage-strip-bar" aria-hidden="true">
@@ -229,6 +296,28 @@ export function AppNav() {
             </span>
           </div>
         ) : null}
+        <button
+          aria-expanded={activityOpen}
+          aria-label={
+            activityUnreadCount > 0
+              ? `消息，${activityUnreadCount} 条未读`
+              : "消息"
+          }
+          className={
+            activityOpen
+              ? "rail-activity-button active"
+              : "rail-activity-button"
+          }
+          onClick={() => void toggleActivity()}
+          title="消息"
+          type="button"
+        >
+          <Bell aria-hidden="true" />
+          <span>消息</span>
+          {activityUnreadCount > 0 ? (
+            <em>{activityUnreadCount > 99 ? "99+" : activityUnreadCount}</em>
+          ) : null}
+        </button>
         <div className="rail-account-row">
           <Link
             aria-current={
@@ -279,6 +368,53 @@ export function AppNav() {
           </div>
         </div>
       ) : null}
+
+      {activityOpen ? (
+        <div className="rail-activity-popover" role="dialog" aria-label="消息">
+          <div className="rail-activity-head">
+            <strong>消息</strong>
+            <button
+              aria-label="关闭消息"
+              onClick={() => setActivityOpen(false)}
+              title="关闭"
+              type="button"
+            >
+              <X aria-hidden="true" />
+            </button>
+          </div>
+          <div className="rail-activity-list">
+            {activityItems.map((item) => (
+              <Link
+                href={item.href as Route}
+                key={item.id}
+                onClick={() => setActivityOpen(false)}
+              >
+                <span className={`activity-kind ${item.kind}`}>
+                  {activityKindLabel(item.kind)}
+                </span>
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>
+                    {item.detail} · {formatRelativeTime(item.occurredAt)}
+                  </small>
+                </span>
+              </Link>
+            ))}
+            {activityItems.length === 0 ? (
+              <div className="rail-activity-empty">
+                <strong>暂无消息</strong>
+                <span>练习、批改、文档和论坛消息会显示在这里。</span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
+}
+
+function activityKindLabel(kind: ActivityItem["kind"]) {
+  return { exercise: "练习", grading: "批改", document: "文档", forum: "论坛" }[
+    kind
+  ];
 }

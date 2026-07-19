@@ -166,9 +166,20 @@
 }
 
 .ai-workspace .history-item strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
   color: var(--text);
   font-size: 13px;
   font-weight: 590;
+}
+
+.ai-workspace .history-pin {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  color: var(--accent-dark);
 }
 
 .ai-workspace .history-item small {
@@ -268,7 +279,7 @@
   display: grid;
   gap: 4px;
   width: 100%;
-  max-width: 900px;
+  max-width: 780px;
   min-width: 0;
   border: 0;
   border-radius: 0;
@@ -357,6 +368,26 @@
   gap: 7px;
   border: 0;
   padding-top: 3px;
+}
+
+.ai-workspace .chat-source-more-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 29px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill-subtle);
+  padding: 5px 10px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ai-workspace .chat-source-more-button:hover {
+  background: var(--fill-hover);
+  color: var(--text-soft);
 }
 
 .ai-workspace .chat-source-link {
@@ -451,7 +482,7 @@
 }
 
 .ai-workspace .home-ai-composer {
-  width: min(940px, calc(100% - 40px));
+  width: min(820px, calc(100% - 40px));
   margin: 0 auto 8px;
   gap: 8px;
   border: 1px solid #d5d1ca;
@@ -471,13 +502,13 @@
 }
 
 .ai-workspace .home-ai-composer textarea {
-  min-height: 42px;
+  min-height: 34px;
   max-height: 180px;
   resize: none;
   border: 0;
   border-radius: 0;
   background: transparent;
-  padding: 8px 4px 4px 0;
+  padding: 4px 4px 2px 0;
   font-size: 15px;
   line-height: 1.55;
   box-shadow: none;
@@ -489,7 +520,7 @@
 }
 
 .ai-workspace .composer-foot {
-  min-height: 40px;
+  min-height: 34px;
   justify-content: flex-end;
 }
 

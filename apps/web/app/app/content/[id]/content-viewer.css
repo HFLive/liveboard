@@ -1,6 +1,9 @@
-.content-viewer {
-  width: min(1080px, 100%);
-  margin: 0 auto;
+/* 文档查看页：整页全宽左对齐，状态以标签形式放在标题前同一行。 */
+
+.workspace.content-viewer {
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .content-viewer-header {
@@ -16,33 +19,119 @@
   min-width: 0;
 }
 
+.content-viewer-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.content-viewer-status {
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: var(--fill-hover);
+  color: var(--text-soft);
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.content-viewer-status[data-status="draft"] {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
 .content-viewer-header h1 {
   margin: 0;
+  min-width: 0;
   overflow-wrap: anywhere;
   font-size: clamp(24px, 3vw, 30px);
   line-height: 1.25;
   letter-spacing: -0.02em;
 }
 
-.content-viewer-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  margin-top: 6px;
-  color: var(--muted);
+.content-import-report {
+  width: min(860px, 100%);
+  margin-top: 14px;
+  border-radius: 8px;
+  background: var(--fill-subtle);
+  padding: 9px 11px;
+  color: var(--text-soft);
   font-size: 12px;
+}
+
+.content-import-report summary {
+  cursor: pointer;
   font-weight: 700;
 }
 
+.content-import-report ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.content-viewer-body {
+  display: grid;
+  grid-template-columns: minmax(0, 860px);
+  align-items: start;
+  gap: 28px;
+}
+
+.content-viewer-body.has-toc {
+  grid-template-columns: minmax(150px, 190px) minmax(0, 860px);
+}
+
+.content-viewer-toc {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 8px;
+  max-height: calc(100vh - 40px);
+  padding: 28px 0;
+  overflow-y: auto;
+}
+
+.content-viewer-toc > strong {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.content-viewer-toc nav {
+  display: grid;
+  gap: 2px;
+}
+
+.content-viewer-toc a {
+  overflow: hidden;
+  border-radius: 7px;
+  padding: 5px 7px 5px calc(7px + (var(--heading-level) - 1) * 7px);
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content-viewer-toc a:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+/* 正文左对齐并保留可读行宽，不再整体居中。 */
 .content-viewer-document {
-  width: min(820px, 100%);
-  margin: 0 auto;
+  width: 100%;
+  max-width: 860px;
+  margin: 0;
   padding: 28px 0 64px;
 }
 
 .content-viewer-block {
   min-width: 0;
   margin-bottom: 18px;
+  scroll-margin-top: 18px;
 }
 
 .content-viewer-block:last-child {
@@ -72,5 +161,31 @@
 
   .content-viewer-document {
     padding-top: 30px;
+  }
+
+  .content-viewer-body,
+  .content-viewer-body.has-toc {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .content-viewer-toc {
+    position: static;
+    max-height: none;
+    border-bottom: 1px solid var(--line);
+    padding: 14px 0;
+  }
+
+  .content-viewer-toc nav {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+  }
+
+  .content-viewer-toc a {
+    flex: 0 0 auto;
+    max-width: 210px;
+    background: var(--fill-subtle);
+    padding: 6px 9px;
   }
 }

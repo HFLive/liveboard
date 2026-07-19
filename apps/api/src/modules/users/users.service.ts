@@ -17,6 +17,7 @@ import type { PermissionGroupSummary } from "@liveboard/shared";
 import type { PermissionTargetType } from "@liveboard/shared";
 import argon2 from "argon2";
 import { Prisma } from "@prisma/client";
+import { formatDateKey } from "../../common/date-key";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -71,13 +72,21 @@ export class UsersService {
   async listUsers(actorUserId: string | null): Promise<AdminUserSummary[]> {
     await this.requireAdmin(actorUserId);
 
-    const users = await this.prisma.user.findMany({
-      orderBy: [{ createdAt: "asc" }],
-    });
+    const [users, workspace] = await Promise.all([
+      this.prisma.user.findMany({ orderBy: [{ createdAt: "asc" }] }),
+      this.prisma.workspace.findFirst({
+        orderBy: { createdAt: "asc" },
+        select: { timeZone: true },
+      }),
+    ]);
+    const dateKey = formatDateKey(
+      new Date(),
+      workspace?.timeZone ?? "Asia/Shanghai",
+    );
 
     return users.map((user) => ({
       ...this.toSummary(user),
-      aiCallCount: user.aiCallCount,
+      aiCallCount: user.aiCallDateKey === dateKey ? user.aiCallCount : 0,
       aiCallLimit: user.aiCallLimit,
     }));
   }
@@ -572,7 +581,7 @@ export class UsersService {
         !Number.isInteger(input.aiCallLimit) ||
         input.aiCallLimit < 0
       ) {
-        throw new BadRequestException("AI 调用限额必须是非负整数");
+        throw new BadRequestException("每日 AI 调用限额必须是非负整数");
       } else {
         data.aiCallLimit = input.aiCallLimit;
       }

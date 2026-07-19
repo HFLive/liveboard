@@ -117,6 +117,12 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
       isAnswered(question, answers[question.id]),
     ).length ?? 0;
   const unansweredCount = (exerciseSet?.questions.length ?? 0) - answeredCount;
+  const unansweredRequired =
+    exerciseSet?.questions.filter(
+      (question) =>
+        question.required !== false &&
+        !isAnswered(question, answers[question.id]),
+    ) ?? [];
   const progress = exerciseSet?.questions.length
     ? Math.round((answeredCount / exerciseSet.questions.length) * 100)
     : 0;
@@ -182,6 +188,15 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
       return;
     }
 
+    if (unansweredRequired.length > 0) {
+      setError(`还有 ${unansweredRequired.length} 道必答题未完成`);
+      document
+        .getElementById(`question-${unansweredRequired[0]?.id}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    setError(null);
     setShowSubmitConfirmation(true);
   }
 
@@ -250,10 +265,10 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
         <div className="workbench-main">
           <div className="panel-head">
             <div>
-              <h2>题目</h2>
+              <h2>{exerciseSet?.title ?? "练习"}</h2>
             </div>
             <span className="runner-head-meta">
-              已答 {answeredCount}/{exerciseSet?.questions.length ?? 0}
+              题目 · 已答 {answeredCount}/{exerciseSet?.questions.length ?? 0}
             </span>
           </div>
           <div className="mobile-submit-bar">
@@ -285,6 +300,7 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
                     <h3>{getPromptText(question)}</h3>
                     <p>
                       {questionTypeLabel(question.type)} · {question.score} 分
+                      {question.required === false ? " · 选答" : " · 必答"}
                     </p>
                   </div>
                 </div>
@@ -372,7 +388,7 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
           </section>
 
           <section className="action-panel runner-history-panel">
-            <h2>我的提交</h2>
+            <h2>最近一次结果</h2>
             {latestSubmission ? (
               <div className="runner-latest-result">
                 <strong>
@@ -388,45 +404,50 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
             ) : (
               <p className="muted">还没有提交记录。</p>
             )}
-            {submissions.length > 0 ? (
-              <div className="runner-submission-list">
-                {submissions.map((submission, index) => (
-                  <details className="runner-submission" key={submission.id}>
-                    <summary>
-                      <span>第 {submissions.length - index} 次提交</span>
-                      <b>
-                        {submission.score === null
-                          ? submissionStatusLabel(submission.status)
-                          : `${submission.score}/${submission.maxScore}`}
-                      </b>
-                    </summary>
-                    <div className="runner-answer-list">
-                      {submission.answers.map((answer, answerIndex) => (
-                        <div className="runner-answer" key={answer.id}>
-                          <strong>
-                            {answerIndex + 1}.{" "}
-                            {getQuestionText(answer.question?.promptJson)}
-                          </strong>
-                          <p>作答：{formatAnswer(answer.answerJson)}</p>
-                          {answer.question?.answerJson !== undefined ? (
-                            <p className="correct-answer">
-                              参考答案：
-                              {formatAnswer(answer.question.answerJson)}
-                            </p>
-                          ) : null}
-                          <small>
-                            得分：
-                            {answer.score === null
-                              ? "待批改"
-                              : `${answer.score}/${answer.question?.score ?? "-"}`}
-                          </small>
-                          {answer.feedback ? <em>{answer.feedback}</em> : null}
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                ))}
-              </div>
+            {submissions.length > 1 ? (
+              <>
+                <h3 className="runner-history-title">历史提交</h3>
+                <div className="runner-submission-list">
+                  {submissions.slice(1).map((submission, index) => (
+                    <details className="runner-submission" key={submission.id}>
+                      <summary>
+                        <span>第 {submissions.length - index - 1} 次提交</span>
+                        <b>
+                          {submission.score === null
+                            ? submissionStatusLabel(submission.status)
+                            : `${submission.score}/${submission.maxScore}`}
+                        </b>
+                      </summary>
+                      <div className="runner-answer-list">
+                        {submission.answers.map((answer, answerIndex) => (
+                          <div className="runner-answer" key={answer.id}>
+                            <strong>
+                              {answerIndex + 1}.{" "}
+                              {getQuestionText(answer.question?.promptJson)}
+                            </strong>
+                            <p>作答：{formatAnswer(answer.answerJson)}</p>
+                            {answer.question?.answerJson !== undefined ? (
+                              <p className="correct-answer">
+                                参考答案：
+                                {formatAnswer(answer.question.answerJson)}
+                              </p>
+                            ) : null}
+                            <small>
+                              得分：
+                              {answer.score === null
+                                ? "待批改"
+                                : `${answer.score}/${answer.question?.score ?? "-"}`}
+                            </small>
+                            {answer.feedback ? (
+                              <em>{answer.feedback}</em>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </>
             ) : null}
           </section>
         </aside>
@@ -455,7 +476,7 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
               <p>确定提交本次作答吗？提交后会正式记录这次结果。</p>
               {unansweredCount > 0 ? (
                 <p className="muted">
-                  仍有 {unansweredCount} 道题未作答，确认后将留空提交。
+                  仍有 {unansweredCount} 道选答题未作答，确认后将留空提交。
                 </p>
               ) : null}
             </div>

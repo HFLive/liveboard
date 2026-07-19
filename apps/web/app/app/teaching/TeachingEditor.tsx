@@ -7,9 +7,9 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
-  ChevronDown,
   ClipboardList,
   FileText,
+  GripVertical,
   Plus,
   Save,
   Trash2,
@@ -43,6 +43,8 @@ type DraftItem =
       sourceBlockId: string;
       label: string;
       source: string;
+      blockType: ContentBlock["type"];
+      imageFit: "fit" | "fill" | "original";
     }
   | {
       key: string;
@@ -76,6 +78,10 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
   >(new Set());
   const [canManageVisibility, setCanManageVisibility] = useState(!deckId);
   const [loading, setLoading] = useState(false);
+  const [sourceTab, setSourceTab] = useState<"document" | "exercise">(
+    "document",
+  );
+  const [draggingItemKey, setDraggingItemKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const selectedFile = useMemo(
@@ -127,6 +133,8 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
                         getBlockLabel(item.block.type)
                       : "文档段落",
                     source: item.sourceFileTitle ?? "文档",
+                    blockType: item.block?.type ?? "paragraph",
+                    imageFit: getTeachingImageFit(item.block),
                   });
                 }
                 if (item.type === "exercise" && item.exerciseSetId) {
@@ -176,6 +184,8 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
         sourceBlockId: block.id,
         label: getBlockText(block) || getBlockLabel(block.type),
         source: selectedFile?.title ?? "文档",
+        blockType: block.type,
+        imageFit: "fit" as const,
       }));
     setItems((current) => [...current, ...next]);
     setSelectedBlockIds(new Set());
@@ -210,6 +220,20 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
     });
   }
 
+  function moveTo(itemKey: string, targetKey: string) {
+    if (itemKey === targetKey) return;
+    setItems((current) => {
+      const sourceIndex = current.findIndex((item) => item.key === itemKey);
+      const targetIndex = current.findIndex((item) => item.key === targetKey);
+      if (sourceIndex < 0 || targetIndex < 0) return current;
+      const next = [...current];
+      const [moved] = next.splice(sourceIndex, 1);
+      if (!moved) return current;
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  }
+
   function openVisibilityModal() {
     setVisibilityDraftUserIds(new Set(selectedVisibleUserIds));
     setVisibilityQuery("");
@@ -236,7 +260,13 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
       title: title.trim(),
       items: items.map((item) =>
         item.type === "content_block"
-          ? { type: item.type, sourceBlockId: item.sourceBlockId }
+          ? {
+              type: item.type,
+              sourceBlockId: item.sourceBlockId,
+              ...(item.blockType === "image"
+                ? { imageFit: item.imageFit }
+                : {}),
+            }
           : { type: item.type, exerciseSetId: item.exerciseSetId },
       ),
       ...(canManageVisibility
@@ -271,113 +301,32 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
         </div>
       </header>
       {error ? <p className="error-text">{error}</p> : null}
-      <section className="teaching-editor-grid">
-        <div className="teaching-source-panel">
-          <label className="form-field teaching-form-field">
-            <span>文档</span>
-            <div className="teaching-control teaching-select-control">
-              <FileText aria-hidden="true" className="teaching-control-icon" />
-              <select
-                className="select"
-                value={selectedFileId}
-                onChange={(event) => setSelectedFileId(event.target.value)}
-              >
-                {files.length ? null : <option value="">暂无文档</option>}
-                {files.map((file) => (
-                  <option key={file.id} value={file.id}>
-                    {file.title}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                aria-hidden="true"
-                className="teaching-select-arrow"
-              />
+      <div className="workbench teaching-editor-layout">
+        <div className="workbench-main teaching-editor-main">
+          <div className="panel-head">
+            <div>
+              <h2>课件内容</h2>
             </div>
-          </label>
-          <div className="teaching-block-picker">
-            {blocks.map((block) => {
-              const checked = selectedBlockIds.has(block.id);
-              return (
-                <label className={checked ? "selected" : ""} key={block.id}>
-                  <input
-                    checked={checked}
-                    onChange={() =>
-                      setSelectedBlockIds((current) => {
-                        const next = new Set(current);
-                        if (next.has(block.id)) next.delete(block.id);
-                        else next.add(block.id);
-                        return next;
-                      })
-                    }
-                    type="checkbox"
-                  />
-                  <span>
-                    <small>{getBlockLabel(block.type)}</small>
-                    {getBlockText(block) || "无文字内容"}
-                  </span>
-                </label>
-              );
-            })}
-            {!blocks.length ? (
-              <div className="compact-empty">这个文件暂无可选段落。</div>
-            ) : null}
-          </div>
-          <button
-            className="button secondary full-width"
-            disabled={!selectedBlockIds.size}
-            onClick={addBlocks}
-            type="button"
-          >
-            <Plus aria-hidden="true" className="button-icon" /> 添加所选段落
-          </button>
-          <div className="teaching-exercise-picker">
-            <label className="form-field teaching-form-field">
-              <span>嵌套练习</span>
-              <div className="teaching-control teaching-select-control">
-                <ClipboardList
-                  aria-hidden="true"
-                  className="teaching-control-icon"
-                />
-                <select
-                  className="select"
-                  value={selectedExerciseId}
-                  onChange={(event) =>
-                    setSelectedExerciseId(event.target.value)
-                  }
+            <div className="teaching-editor-head-actions">
+              <span className="teaching-editor-head-meta">
+                按顺序排列，展示时自动分页
+              </span>
+              {canManageVisibility && creatorUserId ? (
+                <button
+                  className="button secondary teaching-visibility-button"
+                  onClick={openVisibilityModal}
+                  type="button"
                 >
-                  {exercises.length ? null : (
-                    <option value="">暂无可用练习</option>
-                  )}
-                  {exercises.map((exercise) => (
-                    <option key={exercise.id} value={exercise.id}>
-                      {exercise.title}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  aria-hidden="true"
-                  className="teaching-select-arrow"
-                />
-              </div>
-            </label>
-            <button
-              className="button secondary full-width"
-              disabled={!selectedExerciseId}
-              onClick={addExercise}
-              type="button"
-            >
-              <ClipboardList aria-hidden="true" className="button-icon" />{" "}
-              添加练习
-            </button>
+                  <Users aria-hidden="true" className="button-icon" />
+                  可见范围（{selectedVisibleUserIds.size} 人）
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
 
-        <div className="teaching-compose-panel">
-          <label className="form-field teaching-form-field teaching-title-field">
-            <span>课件名称</span>
-            <div className="teaching-control">
-              <FileText aria-hidden="true" className="teaching-control-icon" />
+          <div className="teaching-editor-settings">
+            <label className="label teaching-title-field">
+              课件名称
               <input
                 className="input"
                 maxLength={120}
@@ -385,73 +334,114 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
                 placeholder="例如：第一章课堂讲解"
                 value={title}
               />
-            </div>
-          </label>
-          {canManageVisibility && creatorUserId ? (
-            <button
-              className="button secondary teaching-visibility-button"
-              onClick={openVisibilityModal}
-              type="button"
-            >
-              <Users aria-hidden="true" className="button-icon" />
-              可见范围（{selectedVisibleUserIds.size} 人）
-            </button>
-          ) : null}
-          <div className="panel-head">
-            <h2>课件内容</h2>
-            <span className="muted">按顺序排列，展示时自动分页</span>
+            </label>
           </div>
+
           <div className="teaching-item-list">
+            {items.length === 0 ? (
+              <p className="teaching-item-empty">
+                课件还是空的，从文档段落或练习中添加内容。
+              </p>
+            ) : null}
             {items.map((item, index) => (
-              <article className="teaching-item-row" key={item.key}>
-                <span className="teaching-item-index">{index + 1}</span>
+              <article
+                className={`teaching-item-row ${draggingItemKey === item.key ? "dragging" : ""}`}
+                key={item.key}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => {
+                  if (draggingItemKey) moveTo(draggingItemKey, item.key);
+                  setDraggingItemKey(null);
+                }}
+              >
+                <button
+                  aria-label={`拖动第 ${index + 1} 项排序`}
+                  className="teaching-item-drag"
+                  draggable
+                  onDragEnd={() => setDraggingItemKey(null)}
+                  onDragStart={() => setDraggingItemKey(item.key)}
+                  title="拖动排序"
+                  type="button"
+                >
+                  <GripVertical aria-hidden="true" />
+                </button>
+                <span aria-hidden="true" className="teaching-item-index">
+                  {index + 1}
+                </span>
                 {item.type === "content_block" ? (
                   <FileText aria-hidden="true" />
                 ) : (
                   <ClipboardList aria-hidden="true" />
                 )}
-                <div>
+                <div className="teaching-item-main">
                   <strong>{item.label}</strong>
                   <small>{item.source}</small>
+                  {item.type === "content_block" &&
+                  item.blockType === "image" ? (
+                    <label className="teaching-image-fit">
+                      图片展示
+                      <select
+                        onChange={(event) =>
+                          setItems((current) =>
+                            current.map((currentItem) =>
+                              currentItem.key === item.key &&
+                              currentItem.type === "content_block"
+                                ? {
+                                    ...currentItem,
+                                    imageFit: event.target.value as
+                                      "fit" | "fill" | "original",
+                                  }
+                                : currentItem,
+                            ),
+                          )
+                        }
+                        value={item.imageFit}
+                      >
+                        <option value="fit">适应画布</option>
+                        <option value="fill">填满区域</option>
+                        <option value="original">原始比例</option>
+                      </select>
+                    </label>
+                  ) : null}
                 </div>
                 <div className="teaching-item-actions">
                   <button
-                    aria-label="上移"
+                    aria-label={`上移第 ${index + 1} 项`}
+                    className="inline-icon-button"
                     disabled={index === 0}
                     onClick={() => move(index, -1)}
+                    title="上移"
                     type="button"
                   >
-                    <ArrowUp />
+                    <ArrowUp aria-hidden="true" />
                   </button>
                   <button
-                    aria-label="下移"
+                    aria-label={`下移第 ${index + 1} 项`}
+                    className="inline-icon-button"
                     disabled={index === items.length - 1}
                     onClick={() => move(index, 1)}
+                    title="下移"
                     type="button"
                   >
-                    <ArrowDown />
+                    <ArrowDown aria-hidden="true" />
                   </button>
                   <button
-                    aria-label="移除"
+                    aria-label={`移除第 ${index + 1} 项`}
+                    className="inline-icon-button danger"
                     onClick={() =>
                       setItems((current) =>
                         current.filter((_, itemIndex) => itemIndex !== index),
                       )
                     }
+                    title="移除"
                     type="button"
                   >
-                    <Trash2 />
+                    <Trash2 aria-hidden="true" />
                   </button>
                 </div>
               </article>
             ))}
-            {!items.length ? (
-              <div className="empty-panel teaching-compose-empty">
-                <strong>课件还是空的</strong>
-                <span>从左侧选择段落或练习加入课件。</span>
-              </div>
-            ) : null}
           </div>
+
           <div className="teaching-save-bar">
             {deckId ? (
               <Link className="button secondary" href={teachingPresent(deckId)}>
@@ -469,7 +459,126 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
             </button>
           </div>
         </div>
-      </section>
+
+        <aside className="workbench-side">
+          <div
+            className="segmented-control teaching-source-tabs"
+            aria-label="内容来源"
+          >
+            <button
+              className={sourceTab === "document" ? "active" : ""}
+              onClick={() => setSourceTab("document")}
+              type="button"
+            >
+              文档段落
+            </button>
+            <button
+              className={sourceTab === "exercise" ? "active" : ""}
+              onClick={() => setSourceTab("exercise")}
+              type="button"
+            >
+              嵌套练习
+            </button>
+          </div>
+          {sourceTab === "document" ? (
+            <section className="action-panel teaching-source-panel">
+              <h2>文档段落</h2>
+              <label className="label">
+                文档
+                <select
+                  className="select"
+                  value={selectedFileId}
+                  onChange={(event) => setSelectedFileId(event.target.value)}
+                >
+                  {files.length ? null : <option value="">暂无文档</option>}
+                  {files.map((file) => (
+                    <option key={file.id} value={file.id}>
+                      {file.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="teaching-block-picker">
+                {blocks.length === 0 ? (
+                  <p className="teaching-block-empty">这个文档暂无可选段落。</p>
+                ) : null}
+                {blocks.map((block) => {
+                  const checked = selectedBlockIds.has(block.id);
+                  return (
+                    <label
+                      className={
+                        checked
+                          ? "teaching-block-row selected"
+                          : "teaching-block-row"
+                      }
+                      key={block.id}
+                    >
+                      <input
+                        checked={checked}
+                        onChange={() =>
+                          setSelectedBlockIds((current) => {
+                            const next = new Set(current);
+                            if (next.has(block.id)) next.delete(block.id);
+                            else next.add(block.id);
+                            return next;
+                          })
+                        }
+                        type="checkbox"
+                      />
+                      <span>
+                        <small>{getBlockLabel(block.type)}</small>
+                        {getBlockText(block) || "无文字内容"}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <button
+                className="button secondary"
+                disabled={!selectedBlockIds.size}
+                onClick={addBlocks}
+                type="button"
+              >
+                <Plus aria-hidden="true" className="button-icon" /> 添加所选段落
+              </button>
+            </section>
+          ) : null}
+
+          {sourceTab === "exercise" ? (
+            <section className="action-panel teaching-exercise-panel">
+              <h2>嵌套练习</h2>
+              <label className="label">
+                练习
+                <select
+                  className="select"
+                  value={selectedExerciseId}
+                  onChange={(event) =>
+                    setSelectedExerciseId(event.target.value)
+                  }
+                >
+                  {exercises.length ? null : (
+                    <option value="">暂无可用练习</option>
+                  )}
+                  {exercises.map((exercise) => (
+                    <option key={exercise.id} value={exercise.id}>
+                      {exercise.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className="button secondary"
+                disabled={!selectedExerciseId}
+                onClick={addExercise}
+                type="button"
+              >
+                <ClipboardList aria-hidden="true" className="button-icon" />{" "}
+                添加练习
+              </button>
+            </section>
+          ) : null}
+        </aside>
+      </div>
       {showVisibilityModal && creatorUserId ? (
         <div className="modal-backdrop" role="presentation">
           <div
@@ -522,4 +631,13 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
       ) : null}
     </div>
   );
+}
+
+function getTeachingImageFit(block: ContentBlock | null) {
+  if (!block || !block.dataJson || typeof block.dataJson !== "object") {
+    return "fit" as const;
+  }
+  const value = (block.dataJson as { teachingImageFit?: unknown })
+    .teachingImageFit;
+  return value === "fill" || value === "original" ? value : "fit";
 }

@@ -9,11 +9,13 @@ import {
 import type {
   ForumCategorySummary,
   ForumPostSummary,
+  ForumRelatedResource,
   ForumThreadDetail,
   ForumThreadSummary,
   UserSummary,
 } from "@liveboard/shared";
-import { isSuperAdmin, isSystemAdmin } from "@liveboard/shared";
+import { canView, isSuperAdmin, isSystemAdmin } from "@liveboard/shared";
+import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { AssetsService } from "../files/assets.service";
 import type {
@@ -25,6 +27,7 @@ import type {
   UpdateForumThreadDto,
 } from "./forum.dto";
 import { DEFAULT_FORUM_CATEGORIES } from "./forum-defaults";
+import { PermissionsService } from "../permissions/permissions.service";
 
 type ForumUserRecord = {
   id: string;
@@ -54,6 +57,7 @@ type ForumThreadRecord = {
   createdAt: Date;
   updatedAt: Date;
   lastActivityAt: Date;
+  relatedResources?: unknown;
   _count?: { posts: number };
   posts?: ForumPostRecord[];
 };
@@ -105,6 +109,7 @@ export class ForumService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly assets: AssetsService,
+    private readonly permissions: PermissionsService,
   ) {}
 
   async listOverview(userId: string | null) {
@@ -138,23 +143,47 @@ export class ForumService {
             take: 1,
             select: { body: true },
           },
+          userStates: {
+            where: { userId: user.id },
+            take: 1,
+          },
         },
       }),
     ]);
+
+    const mentionedPosts = await this.prisma.forumPost.findMany({
+      where: {
+        threadId: { in: threads.map((thread) => thread.id) },
+        body: { contains: `@${user.username}`, mode: "insensitive" },
+      },
+      distinct: ["threadId"],
+      select: { threadId: true },
+    });
+    const mentionedThreadIds = new Set(
+      mentionedPosts.map((post) => post.threadId),
+    );
 
     return {
       categories: categories.map((category) =>
         this.toCategorySummary(category),
       ),
-      threads: threads.map(({ posts, ...thread }) =>
-        this.toThreadSummary(
-          {
-            ...thread,
-            excerpt: posts[0]?.body ?? "",
-          },
-          isSuperAdmin(user.systemRole),
-        ),
-      ),
+      threads: threads.map(({ posts, userStates, ...thread }) => {
+        const state = userStates?.[0];
+        return {
+          ...this.toThreadSummary(
+            {
+              ...thread,
+              excerpt: posts[0]?.body ?? "",
+            },
+            isSuperAdmin(user.systemRole),
+          ),
+          followed: state?.followed ?? false,
+          unread: Boolean(
+            state?.lastReadAt && state.lastReadAt < thread.lastActivityAt,
+          ),
+          mentioned: mentionedThreadIds.has(thread.id),
+        };
+      }),
     };
   }
 
@@ -193,7 +222,66 @@ export class ForumService {
       throw new NotFoundException("Forum thread not found");
     }
 
-    return this.toThreadDetail(thread, user);
+    const followRequired =
+      thread.authorId === user.id ||
+      thread.posts.some((post) => post.authorId === user.id);
+    const state = await this.prisma.forumThreadState.upsert({
+      where: { threadId_userId: { threadId, userId: user.id } },
+      create: {
+        threadId,
+        userId: user.id,
+        followed: followRequired,
+        lastReadAt: new Date(),
+      },
+      update: {
+        lastReadAt: new Date(),
+        ...(followRequired ? { followed: true } : {}),
+      },
+    });
+
+    return this.toThreadDetail(thread, user, {
+      followed: followRequired || state.followed,
+      followRequired,
+      unread: false,
+      mentioned: thread.posts.some((post) =>
+        post.body.toLowerCase().includes(`@${user.username.toLowerCase()}`),
+      ),
+    });
+  }
+
+  async setThreadFollow(
+    userId: string | null,
+    threadId: string,
+    followed: boolean,
+  ) {
+    const user = await this.requireActiveUser(userId);
+    const thread = await this.prisma.forumThread.findUnique({
+      where: { id: threadId },
+      select: {
+        id: true,
+        authorId: true,
+        posts: {
+          where: { authorId: user.id },
+          take: 1,
+          select: { id: true },
+        },
+      },
+    });
+    if (!thread) throw new NotFoundException("Forum thread not found");
+    const followRequired =
+      thread.authorId === user.id || thread.posts.length > 0;
+
+    const state = await this.prisma.forumThreadState.upsert({
+      where: { threadId_userId: { threadId, userId: user.id } },
+      create: {
+        threadId,
+        userId: user.id,
+        followed: followRequired || followed,
+        lastReadAt: new Date(),
+      },
+      update: { followed: followRequired || followed },
+    });
+    return { followed: state.followed, followRequired };
   }
 
   async createThread(
@@ -205,6 +293,10 @@ export class ForumService {
     await this.ensureDefaultCategories(workspace.id);
     const title = this.normalizeTitle(input.title);
     const body = this.normalizeBody(input.body);
+    const relatedResources = await this.prepareRelatedResources(
+      user,
+      input.relatedResources ?? [],
+    );
 
     const category = await this.prisma.forumCategory.findFirst({
       where: {
@@ -225,6 +317,7 @@ export class ForumService {
         authorId: user.id,
         title,
         isAnonymous: input.isAnonymous ?? false,
+        relatedResources,
         lastActivityAt: now,
         posts: {
           create: {
@@ -257,7 +350,103 @@ export class ForumService {
       },
     });
 
-    return this.toThreadDetail(thread, user);
+    await this.prisma.forumThreadState.upsert({
+      where: { threadId_userId: { threadId: thread.id, userId: user.id } },
+      create: {
+        threadId: thread.id,
+        userId: user.id,
+        followed: true,
+        lastReadAt: now,
+      },
+      update: { followed: true, lastReadAt: now },
+    });
+
+    return this.toThreadDetail(thread, user, {
+      followed: true,
+      followRequired: true,
+      unread: false,
+      mentioned: false,
+    });
+  }
+
+  private async prepareRelatedResources(
+    user: ForumUserRecord,
+    resources: Array<{
+      type: "document" | "teaching" | "exercise";
+      id: string;
+    }>,
+  ): Promise<Prisma.InputJsonValue> {
+    const unique = [
+      ...new Map(
+        resources.map((resource) => [
+          `${resource.type}:${resource.id}`,
+          resource,
+        ]),
+      ).values(),
+    ];
+
+    const resolved = await Promise.all(
+      unique.map(async (resource): Promise<ForumRelatedResource> => {
+        if (resource.type === "document") {
+          const file = await this.prisma.file.findUnique({
+            where: { id: resource.id },
+            select: { id: true, title: true, status: true },
+          });
+          const level = file
+            ? await this.permissions.getEffectiveLevelForFile(user.id, file.id)
+            : null;
+          if (
+            !file ||
+            file.status === "archived" ||
+            !canView(level) ||
+            (file.status === "draft" && level === "viewer")
+          ) {
+            throw new ForbiddenException("无权关联所选文档");
+          }
+          return { type: resource.type, id: file.id, title: file.title };
+        }
+
+        if (resource.type === "teaching") {
+          const deck = await this.prisma.teachingDeck.findUnique({
+            where: { id: resource.id },
+            include: {
+              viewers: { where: { userId: user.id }, select: { userId: true } },
+            },
+          });
+          if (
+            !deck ||
+            (!isSuperAdmin(user.systemRole) &&
+              deck.createdById !== user.id &&
+              deck.viewers.length === 0)
+          ) {
+            throw new ForbiddenException("无权关联所选课件");
+          }
+          return { type: resource.type, id: deck.id, title: deck.title };
+        }
+
+        const exercise = await this.prisma.exerciseSet.findUnique({
+          where: { id: resource.id },
+          include: {
+            viewers: { where: { userId: user.id }, select: { userId: true } },
+          },
+        });
+        if (
+          !exercise ||
+          (!isSuperAdmin(user.systemRole) &&
+            exercise.createdById !== user.id &&
+            exercise.viewers.length === 0)
+        ) {
+          throw new ForbiddenException("无权关联所选练习");
+        }
+        return {
+          type: resource.type,
+          id: exercise.id,
+          title: exercise.title,
+        };
+      }),
+    );
+
+    return resolved as unknown as Prisma.InputJsonValue;
   }
 
   async createPost(
@@ -322,6 +511,19 @@ export class ForumService {
           lastActivityAt: created.createdAt,
           updatedAt: created.createdAt,
         },
+      });
+
+      await tx.forumThreadState.upsert({
+        where: {
+          threadId_userId: { threadId: thread.id, userId: user.id },
+        },
+        create: {
+          threadId: thread.id,
+          userId: user.id,
+          followed: true,
+          lastReadAt: created.createdAt,
+        },
+        update: { followed: true, lastReadAt: created.createdAt },
       });
 
       return created;
@@ -809,6 +1011,7 @@ export class ForumService {
       createdAt: thread.createdAt.toISOString(),
       updatedAt: thread.updatedAt.toISOString(),
       lastActivityAt: thread.lastActivityAt.toISOString(),
+      relatedResources: this.parseRelatedResources(thread.relatedResources),
     };
   }
 
@@ -819,12 +1022,31 @@ export class ForumService {
       : normalized;
   }
 
+  private parseRelatedResources(value: unknown): ForumRelatedResource[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is ForumRelatedResource => {
+      if (!item || typeof item !== "object") return false;
+      const candidate = item as Record<string, unknown>;
+      return (
+        (candidate.type === "document" ||
+          candidate.type === "teaching" ||
+          candidate.type === "exercise") &&
+        typeof candidate.id === "string" &&
+        typeof candidate.title === "string"
+      );
+    });
+  }
+
   private toThreadDetail(
     thread: ForumThreadRecord & {
       category: ForumCategoryRecord;
       posts: ForumPostRecord[];
     },
     user: ForumUserRecord,
+    state?: Pick<
+      ForumThreadSummary,
+      "followed" | "followRequired" | "unread" | "mentioned"
+    >,
   ): ForumThreadDetail {
     const isAdmin = isSystemAdmin(user.systemRole);
     const canEdit = isSuperAdmin(user.systemRole);
@@ -846,6 +1068,7 @@ export class ForumService {
       canDelete,
       canModerate: isAdmin,
       canReply: thread.status === "open",
+      ...state,
       posts: thread.posts.map((post) => this.toPostSummary(post, permissions)),
     };
   }

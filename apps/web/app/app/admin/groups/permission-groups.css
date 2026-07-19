@@ -167,7 +167,7 @@
 
 .permission-member-row {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto 30px;
+  grid-template-columns: 18px 34px minmax(0, 1fr) auto 30px;
   gap: 10px;
   min-height: 58px;
   border: 0;
@@ -176,14 +176,14 @@
   padding: 9px 10px;
 }
 
-.permission-member-row > span:nth-child(2) {
+.permission-member-row > span:nth-child(3) {
   display: grid;
   gap: 2px;
   min-width: 0;
 }
 
-.permission-member-row > span:nth-child(2) strong,
-.permission-member-row > span:nth-child(2) small {
+.permission-member-row > span:nth-child(3) strong,
+.permission-member-row > span:nth-child(3) small {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -232,9 +232,9 @@
   margin-top: 6px;
 }
 
-.permission-member-candidates button {
+.permission-member-candidates label {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 18px;
+  grid-template-columns: 18px 32px minmax(0, 1fr);
   align-items: center;
   gap: 9px;
   width: 100%;
@@ -243,10 +243,25 @@
   background: transparent;
   text-align: left;
   padding: 7px;
+  cursor: pointer;
 }
 
-.permission-member-candidates button > span:nth-child(2) {
+.permission-member-candidates label:hover {
+  background: var(--fill-hover);
+}
+
+.permission-member-candidates label > span:nth-child(3) {
   display: grid;
+}
+
+.permission-member-batch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  padding: 6px 0;
+  font-size: 12px;
 }
 
 .permission-member-candidates small {

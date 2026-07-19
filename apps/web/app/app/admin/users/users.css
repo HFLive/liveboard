@@ -56,7 +56,40 @@
   text-align: right;
 }
 
+.admin-user-filters,
+.admin-user-batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 0;
+  padding: 8px var(--page-gutter);
+}
+
+.admin-users-page .panel-head {
+  padding-bottom: 6px;
+}
+
+.admin-users-page .table-wrap {
+  padding-top: 4px;
+}
+
+.admin-user-filters .search-field {
+  width: min(360px, 100%);
+  margin-right: auto;
+}
+
+.admin-user-batch-bar > span {
+  margin-right: auto;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
 @media (max-width: 720px) {
+  .admin-user-filters,
+  .admin-user-batch-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
   /* 窄屏堆叠行保持透明连续行，不回落为白色卡片。 */
   .admin-users-page .responsive-table tr {
     border-bottom-color: var(--line);

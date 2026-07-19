@@ -1,6 +1,13 @@
 /* 练习批改页：提交队列与批改详情的路由专属样式。
    扁平工作区：无外框，结构由分隔线与分栏竖线提供。 */
 
+/* 整页全宽：不沿用全局 .workspace 的 1440px 居中限制。 */
+.workspace.review-page {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
 /* 提交队列：行之间用间距分隔，hover 用全局统一圆角灰底。 */
 .review-page .submission-list {
   display: grid;
@@ -11,11 +18,18 @@
 
 .review-page .submission-row {
   border: 0;
+  border-radius: 10px;
   background: transparent;
   padding: 10px 12px;
+  cursor: pointer;
 }
 
-.review-page .submission-row.active {
+.review-page .submission-row:hover {
+  background: var(--fill-hover);
+}
+
+.review-page .submission-row.active,
+.review-page .submission-row.active:hover {
   background: var(--accent-soft);
   box-shadow: none;
 }
@@ -31,7 +45,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line);
   padding: 13px 16px;
 }
 
@@ -39,6 +53,49 @@
   display: grid;
   gap: 2px;
   min-width: 0;
+}
+
+.review-page .review-detail-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.review-page .review-switcher {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.review-page .review-switcher button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--fill-subtle);
+  color: var(--text-soft);
+}
+
+.review-page .review-switcher button:disabled {
+  opacity: 0.35;
+}
+
+.review-page .review-switcher svg {
+  width: 15px;
+}
+
+.review-page .review-switcher span,
+.review-page .review-unscored {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.review-page .review-unscored {
+  color: var(--danger);
 }
 
 .review-page .review-detail-head p {
@@ -112,6 +169,12 @@
   .review-page .review-detail-head {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .review-page .review-detail-actions {
+    align-items: stretch;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   .review-page .answer-grade-grid {

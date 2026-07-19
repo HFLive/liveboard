@@ -2,8 +2,19 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CheckCircle2, Search } from "lucide-react";
-import { gradeSubmission, listSubmissions, SubmissionSummary } from "@/lib/api";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+} from "lucide-react";
+import {
+  getExerciseSet,
+  gradeSubmission,
+  listSubmissions,
+  SubmissionSummary,
+} from "@/lib/api";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import {
   formatRelativeTime,
@@ -27,6 +38,7 @@ export function SubmissionsClient({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"pending" | "graded">("pending");
   const [saving, setSaving] = useState(false);
+  const [exerciseTitle, setExerciseTitle] = useState("练习");
 
   const filteredSubmissions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -52,9 +64,22 @@ export function SubmissionsClient({
   const pendingCount = submissions.filter(
     (submission) => submission.status !== "graded",
   ).length;
+  const selectedIndex = selectedSubmission
+    ? filteredSubmissions.findIndex(
+        (submission) => submission.id === selectedSubmission.id,
+      )
+    : -1;
+  const unscoredCount =
+    selectedSubmission?.answers.filter(
+      (answer) => scores[answer.id] === undefined && answer.score === null,
+    ).length ?? 0;
 
   async function load() {
-    const result = await listSubmissions(exerciseSetId);
+    const [result, exerciseResult] = await Promise.all([
+      listSubmissions(exerciseSetId),
+      getExerciseSet(exerciseSetId),
+    ]);
+    setExerciseTitle(exerciseResult.exerciseSet.title);
     setSubmissions(result.submissions);
     setSelectedId((current) => {
       if (
@@ -75,6 +100,20 @@ export function SubmissionsClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exerciseSetId]);
 
+  useEffect(() => {
+    function switchSubmission(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, button, a")) return;
+      if (event.key !== "j" && event.key !== "k") return;
+      event.preventDefault();
+      const delta = event.key === "j" ? 1 : -1;
+      const next = filteredSubmissions[selectedIndex + delta];
+      if (next) setSelectedId(next.id);
+    }
+    window.addEventListener("keydown", switchSubmission);
+    return () => window.removeEventListener("keydown", switchSubmission);
+  }, [filteredSubmissions, selectedIndex]);
+
   async function onGrade(
     event: FormEvent<HTMLFormElement>,
     submission: SubmissionSummary,
@@ -82,6 +121,10 @@ export function SubmissionsClient({
     event.preventDefault();
     setError(null);
     setMessage(null);
+    if (unscoredCount > 0) {
+      setError(`还有 ${unscoredCount} 道题未评分`);
+      return;
+    }
     setSaving(true);
 
     try {
@@ -111,7 +154,7 @@ export function SubmissionsClient({
       <section className="page-head">
         <div>
           <p className="page-eyebrow">练习管理</p>
-          <h1>提交批改</h1>
+          <h1>{exerciseTitle} · 提交批改</h1>
           <p className="muted">
             {submissions.length > 0
               ? `共 ${submissions.length} 份提交，选择成员后逐题评分并填写反馈。`
@@ -227,10 +270,46 @@ export function SubmissionsClient({
                       : `${selectedSubmission.score}/${selectedSubmission.maxScore}`}
                   </p>
                 </div>
-                <button className="button" disabled={saving} type="submit">
-                  <CheckCircle2 aria-hidden="true" className="button-icon" />
-                  {saving ? "保存中" : "保存批改"}
-                </button>
+                <div className="review-detail-actions">
+                  <div className="review-switcher" aria-label="切换提交">
+                    <button
+                      aria-label="上一份提交"
+                      disabled={selectedIndex <= 0}
+                      onClick={() => {
+                        const previous = filteredSubmissions[selectedIndex - 1];
+                        if (previous) setSelectedId(previous.id);
+                      }}
+                      title="上一份（K）"
+                      type="button"
+                    >
+                      <ChevronLeft aria-hidden="true" />
+                    </button>
+                    <span>
+                      {selectedIndex + 1}/{filteredSubmissions.length}
+                    </span>
+                    <button
+                      aria-label="下一份提交"
+                      disabled={selectedIndex >= filteredSubmissions.length - 1}
+                      onClick={() => {
+                        const next = filteredSubmissions[selectedIndex + 1];
+                        if (next) setSelectedId(next.id);
+                      }}
+                      title="下一份（J）"
+                      type="button"
+                    >
+                      <ChevronRight aria-hidden="true" />
+                    </button>
+                  </div>
+                  {unscoredCount > 0 ? (
+                    <span className="review-unscored">
+                      {unscoredCount} 题未评分
+                    </span>
+                  ) : null}
+                  <button className="button" disabled={saving} type="submit">
+                    <CheckCircle2 aria-hidden="true" className="button-icon" />
+                    {saving ? "保存中" : "保存批改"}
+                  </button>
+                </div>
               </div>
 
               <div className="review-form-body">

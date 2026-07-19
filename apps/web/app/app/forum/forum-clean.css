@@ -1,6 +1,10 @@
-.workspace.forum-workspace.forum-home {
+.workspace.forum-workspace {
   width: 100%;
   max-width: none;
+  margin: 0;
+}
+
+.workspace.forum-workspace.forum-home {
   gap: 12px;
 }
 
@@ -73,7 +77,7 @@
 
 .forum-home .forum-feed-toolbar {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto auto auto;
+  grid-template-columns: minmax(240px, 1fr) auto auto auto auto;
   align-items: center;
   gap: 12px;
   min-height: 54px;
@@ -210,13 +214,25 @@
 }
 
 .forum-lock-tag,
-.forum-category-tag {
+.forum-category-tag,
+.forum-unread-tag,
+.forum-mention-tag {
   flex: 0 0 auto;
   border-radius: 5px;
   padding: 2px 5px;
   font-size: 10px;
   font-weight: 700;
   line-height: 1.2;
+}
+
+.forum-unread-tag {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.forum-mention-tag {
+  background: var(--fill-subtle);
+  color: var(--text-soft);
 }
 
 .forum-lock-tag {
@@ -300,7 +316,7 @@
   justify-content: space-between;
   gap: 12px;
   min-height: 40px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
   background: transparent;
   padding: 10px 14px 12px;
 }
@@ -328,6 +344,155 @@
   justify-content: flex-end;
 }
 
+.forum-thread-search {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  border-bottom: 0;
+  padding: 7px 14px;
+}
+
+.forum-thread-search .search-field {
+  width: min(300px, 100%);
+}
+
+.forum-thread-search-results {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% - 3px);
+  right: 14px;
+  display: grid;
+  width: min(360px, calc(100% - 28px));
+  max-height: 280px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  padding: 7px;
+  overflow-y: auto;
+  box-shadow: var(--shadow-popover);
+}
+
+.forum-thread-search-results > span {
+  padding: 5px 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.forum-thread-search-results button {
+  overflow: hidden;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 7px;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.forum-thread-search-results button:hover {
+  background: var(--fill-hover);
+}
+
+.forum-replying-to {
+  border-left: 2px solid var(--accent);
+  padding-left: 8px;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.forum-related-resources {
+  display: grid;
+  gap: 8px;
+  border-bottom: 0;
+  padding: 12px 14px;
+}
+
+.forum-related-resources > strong {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.forum-related-resources > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.forum-related-resources a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+  background: var(--fill-subtle);
+  padding: 6px 9px;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.forum-related-resources a:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.forum-related-resources small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.forum-related-picker {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 0;
+}
+
+.forum-related-picker summary {
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.forum-related-picker > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 8px;
+  max-height: 230px;
+  margin-top: 8px;
+  overflow-y: auto;
+}
+
+.forum-related-picker label {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  border-radius: 8px;
+  padding: 7px;
+}
+
+.forum-related-picker label:hover {
+  background: var(--fill-hover);
+}
+
+.forum-related-picker label > span {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.forum-related-picker label small {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .forum-thread-detail .forum-thread-actions .button {
   min-height: 30px;
   border: 0;
@@ -353,7 +518,7 @@
 .forum-thread-detail .forum-main-post {
   min-height: 0;
   border: 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
   border-radius: 0 !important;
   background: transparent;
   overflow: visible !important;
@@ -367,7 +532,7 @@
   overflow-wrap: anywhere;
   margin: 0;
   padding: 3px 0 0;
-  font-size: 20px;
+  font-size: 22px;
   line-height: 1.35;
 }
 
@@ -429,9 +594,13 @@
 }
 
 .forum-thread-detail .forum-comment-row {
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
   background: transparent;
   padding: 14px 0;
+}
+
+.forum-thread-detail .forum-comment-row + .forum-comment-row {
+  margin-top: 4px;
 }
 
 .forum-thread-detail .forum-comment-main,
@@ -507,7 +676,7 @@
 .forum-thread-detail .forum-reply-form {
   margin-top: 0;
   border: 0;
-  border-top: 1px solid var(--line);
+  border-top: 0;
   border-radius: 0;
   background: transparent;
   padding: 14px 16px 16px;
@@ -519,14 +688,17 @@
   background: #fff;
 }
 
-.forum-compose-workspace {
-  width: min(960px, 100%);
+/* 发帖页：整页全宽左对齐，不再使用居中窄栏。 */
+.workspace.forum-compose-workspace {
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .forum-compose-layout {
   display: block;
-  width: min(760px, 100%);
-  margin-inline: auto;
+  width: 100%;
+  margin-inline: 0;
 }
 
 .forum-compose-layout .forum-new-shell {
@@ -540,7 +712,7 @@
 .forum-compose-layout .forum-new-form {
   min-width: 0;
   overflow: visible;
-  padding: 18px 20px 20px;
+  padding: 0;
 }
 
 .forum-compose-layout .forum-new-form .label {
@@ -619,6 +791,11 @@
 .forum-new-actions,
 .forum-reply-actions {
   align-items: center;
+}
+
+/* 发帖页操作行：匿名选项靠左，取消与发布靠右。 */
+.forum-new-actions .forum-anonymous-option {
+  margin-right: auto;
 }
 
 .forum-reply-actions .forum-anonymous-option.compact {
@@ -834,7 +1011,7 @@
 
 @media (max-width: 980px) {
   .forum-home .forum-feed-toolbar {
-    grid-template-columns: minmax(220px, 1fr) auto auto;
+    grid-template-columns: minmax(220px, 1fr) auto auto auto;
   }
 
   .forum-home .forum-sort-control {
@@ -847,6 +1024,9 @@
 }
 
 @media (max-width: 760px) {
+  .forum-related-picker > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .forum-page-header {
     align-items: flex-start;
   }
@@ -861,6 +1041,11 @@
 
   .forum-home .forum-search {
     grid-column: 1 / -1;
+  }
+
+  .forum-home .forum-feed-filter {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 
   .forum-home .forum-search {

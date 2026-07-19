@@ -15,7 +15,7 @@ import styles from "./ImageCropDialog.module.css";
 type ImageCropDialogProps = {
   title: string;
   sourceUrl: string;
-  /** 输出宽高比（宽 / 高），头像为 1，Banner 为 4。 */
+  /** 输出宽高比（宽 / 高），头像为 1，Banner 由个人主页配置提供。 */
   aspect: number;
   outputWidth: number;
   outputHeight: number;

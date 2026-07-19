@@ -315,9 +315,18 @@ export class AssetsService {
       throw new UnauthorizedException("Missing session");
     }
 
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.status !== "active") {
+      throw new UnauthorizedException("Missing session");
+    }
+
     const assets = await this.prisma.fileAsset.findMany({
-      where: { uploadedBy: userId, forumPostId: null },
+      where: {
+        uploadedBy: userId,
+        forumPostId: null,
+      },
       orderBy: { createdAt: "desc" },
+      include: { uploader: true },
     });
 
     const references = await this.getAssetReferences(
@@ -336,7 +345,31 @@ export class AssetsService {
       ...asset,
       url: this.getAssetUrl(asset.id),
       referenceCount: referenceCounts.get(asset.id) ?? 0,
+      uploader: {
+        id: asset.uploader.id,
+        username: asset.uploader.username,
+        displayName: asset.uploader.displayName,
+        avatarUrl: asset.uploader.avatarUpdatedAt
+          ? `/auth/avatar/${asset.uploader.id}?v=${asset.uploader.avatarUpdatedAt.getTime()}`
+          : null,
+        systemRole: asset.uploader.systemRole,
+        status: asset.uploader.status,
+      },
     }));
+  }
+
+  async listAssetReferences(userId: string | null, assetId: string) {
+    if (!userId) throw new UnauthorizedException("Missing session");
+    const [user, asset] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId } }),
+      this.prisma.fileAsset.findUnique({ where: { id: assetId } }),
+    ]);
+    if (!user || !asset) throw new NotFoundException("Asset not found");
+    if (asset.uploadedBy !== user.id && !isSystemAdmin(user.systemRole)) {
+      throw new ForbiddenException("No permission to view asset references");
+    }
+    const references = await this.getAssetReferences([assetId]);
+    return references.map(({ assetId: _assetId, ...reference }) => reference);
   }
 
   async deleteLibraryAsset(userId: string | null, assetId: string) {
@@ -344,15 +377,19 @@ export class AssetsService {
       throw new UnauthorizedException("Missing session");
     }
 
-    const asset = await this.prisma.fileAsset.findUnique({
-      where: { id: assetId },
-    });
+    const [asset, user] = await Promise.all([
+      this.prisma.fileAsset.findUnique({ where: { id: assetId } }),
+      this.prisma.user.findUnique({ where: { id: userId } }),
+    ]);
 
     if (!asset) {
       throw new NotFoundException("Asset not found");
     }
 
-    if (asset.uploadedBy !== userId) {
+    if (
+      asset.uploadedBy !== userId &&
+      (!user || !isSystemAdmin(user.systemRole))
+    ) {
       throw new ForbiddenException("No permission to delete asset");
     }
 
