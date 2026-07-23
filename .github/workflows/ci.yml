@@ -83,9 +83,21 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Start infrastructure
+        shell: bash
         run: |
+          set -euo pipefail
           cp .env.example .env
           docker compose up -d postgres redis minio
+          for attempt in {1..30}; do
+            if docker compose exec -T postgres sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker compose logs --tail=100 postgres
+              exit 1
+            fi
+            sleep 2
+          done
 
       - name: Migrate and build API
         run: |
