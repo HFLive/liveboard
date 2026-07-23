@@ -548,7 +548,7 @@ export function AiAssistantClient() {
                     </button>
                     <button
                       aria-expanded={openHistoryMenu?.id === conversation.id}
-                      className="history-more-button"
+                      className="history-more-button row-more-button"
                       disabled={asking}
                       onClick={(event) =>
                         toggleHistoryMenu(conversation.id, event.currentTarget)

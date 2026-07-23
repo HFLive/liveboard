@@ -129,7 +129,7 @@ export function ExercisesClient() {
                   key={exercise.id}
                   onClick={(event) => {
                     if (
-                      event.target instanceof HTMLElement &&
+                      event.target instanceof Element &&
                       event.target.closest("a, button")
                     ) {
                       return;

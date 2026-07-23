@@ -978,7 +978,7 @@ export function ContentClient() {
     const target = event.target;
 
     if (
-      target instanceof HTMLElement &&
+      target instanceof Element &&
       target.closest("a, button, [data-menu-root='true']")
     ) {
       return;
@@ -1252,13 +1252,14 @@ export function ContentClient() {
               <button
                 aria-label={`“${label}”${isFolder ? "文件夹" : "文档"}操作`}
                 className="content-row-menu-button"
-                onClick={(event) =>
+                onClick={(event) => {
+                  event.stopPropagation();
                   toggleContentRowMenu(
                     isFolder ? "folder" : "file",
                     id,
                     event.currentTarget,
-                  )
-                }
+                  );
+                }}
                 title={isFolder ? "文件夹操作" : "文档操作"}
                 type="button"
               >
@@ -1650,13 +1651,14 @@ export function ContentClient() {
                         <button
                           aria-label={`“${folder.name}”文件夹操作`}
                           className="icon-button subtle content-row-menu-button"
-                          onClick={(event) =>
+                          onClick={(event) => {
+                            event.stopPropagation();
                             toggleContentRowMenu(
                               "folder",
                               folder.id,
                               event.currentTarget,
-                            )
-                          }
+                            );
+                          }}
                           title="文件夹操作"
                           type="button"
                         >
@@ -1706,13 +1708,14 @@ export function ContentClient() {
                           <button
                             aria-label={`“${file.title}”文档操作`}
                             className="icon-button subtle content-row-menu-button"
-                            onClick={(event) =>
+                            onClick={(event) => {
+                              event.stopPropagation();
                               toggleContentRowMenu(
                                 "file",
                                 file.id,
                                 event.currentTarget,
-                              )
-                            }
+                              );
+                            }}
                             title="文档操作"
                             type="button"
                           >

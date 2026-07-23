@@ -2,7 +2,9 @@
    Mobile keeps the desktop visual language, but reduces simultaneous controls
    and removes workflows that cannot be completed safely on a small screen. */
 .rail-mobile-menu-toggle,
+.rail-mobile-footer-row,
 .rail-mobile-account-actions,
+.rail-mobile-usage,
 .mobile-route-unsupported {
   display: none;
 }
@@ -141,14 +143,60 @@
     display: none;
   }
 
-  .rail-mobile-account-actions {
+  .rail-mobile-footer-row {
     display: grid;
     grid-column: 1 / -1;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 4px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
     margin-top: 4px;
     border-top: 1px solid var(--line);
-    padding-top: 8px;
+    padding: 8px 4px 0 11px;
+  }
+
+  .rail-mobile-account-actions {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+  }
+
+  .rail-mobile-usage {
+    display: grid;
+    min-width: 0;
+    gap: 7px;
+    color: var(--text-soft);
+    font-size: 11px;
+    font-weight: 650;
+  }
+
+  .rail-mobile-usage-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .rail-mobile-usage-head span:last-child {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  .rail-mobile-usage-bar {
+    display: block;
+    height: 4px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--fill-active);
+  }
+
+  .rail-mobile-usage-bar .rail-usage-bar-fill {
+    display: block;
+  }
+
+  .rail-mobile-usage:is(.is-unavailable, .is-loading) {
+    color: var(--muted);
+    font-weight: 600;
   }
 
   .rail-mobile-account-actions > a,
@@ -157,15 +205,24 @@
     align-items: center;
     justify-content: flex-start;
     gap: 9px;
-    width: 100%;
+    width: auto;
     min-height: 40px;
     border: 0;
     border-radius: 8px;
     background: transparent;
     color: var(--text-soft);
-    padding: 0 11px;
+    padding: 0 7px;
     font-size: 12px;
     text-decoration: none;
+  }
+
+  .rail-mobile-account-actions > a {
+    white-space: nowrap;
+  }
+
+  .rail-mobile-account-actions > .rail-logout-button {
+    width: 36px;
+    padding: 0;
   }
 
   .rail-mobile-account-actions svg {
@@ -214,6 +271,7 @@
 
   .app-main {
     min-width: 0;
+    min-height: calc(100dvh - 58px);
     padding: 14px;
   }
 
@@ -548,7 +606,7 @@
 
   .content-workspace .content-items-table tbody tr {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 30px;
+    grid-template-columns: minmax(0, 1fr) 44px;
     align-items: center;
     gap: 4px 8px;
     border: 0;
@@ -629,6 +687,25 @@
 
   .app-main .workspace.content-workspace .content-pinned-actions {
     gap: 0;
+  }
+
+  .workspace
+    :is(
+      .icon-button,
+      .icon-button.subtle,
+      .inline-icon-button,
+      .content-row-menu-button,
+      .history-more-button,
+      .row-more-button
+    ) {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
+
+  .ai-workspace .history-item {
+    grid-template-columns: minmax(0, 1fr) 44px;
   }
 
   .app-main
