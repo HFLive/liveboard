@@ -79,7 +79,7 @@ export function TeachingClient() {
               key={deck.id}
               onClick={(event) => {
                 if (
-                  event.target instanceof HTMLElement &&
+                  event.target instanceof Element &&
                   event.target.closest("a, button, summary")
                 ) {
                   return;
@@ -107,7 +107,7 @@ export function TeachingClient() {
                 {deck.canEdit ? (
                   <details className="editor-more-menu">
                     <summary
-                      className="icon-button subtle"
+                      className="icon-button subtle row-more-button"
                       title="更多课件操作"
                     >
                       <MoreHorizontal aria-hidden="true" />

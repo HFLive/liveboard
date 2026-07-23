@@ -354,15 +354,47 @@ export function AppNav() {
             </Link>
           );
         })}
-        <div className="rail-mobile-account-actions">
-          <Link
-            href={user ? userProfile(user.id) : APP_ROUTES.profile}
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            <UserCircle aria-hidden="true" />
-            <span>个人主页</span>
-          </Link>
-          <LogoutButton />
+        <div className="rail-mobile-footer-row">
+          {user && usage ? (
+            <div
+              aria-label={`今日 AI 额度已用 ${usage.used} / ${usage.limit} 次`}
+              className="rail-mobile-usage"
+              role="status"
+            >
+              <div className="rail-mobile-usage-head">
+                <span>今日 AI 额度</span>
+                <span>
+                  {usage.used} / {usage.limit} 次
+                </span>
+              </div>
+              <span className="rail-mobile-usage-bar" aria-hidden="true">
+                <span
+                  className={
+                    usageExceeded
+                      ? "rail-usage-bar-fill is-over"
+                      : "rail-usage-bar-fill"
+                  }
+                  style={{ width: `${usagePercent}%` }}
+                />
+              </span>
+            </div>
+          ) : usageFailed ? (
+            <div className="rail-mobile-usage is-unavailable" role="status">
+              AI 额度暂不可用
+            </div>
+          ) : (
+            <div className="rail-mobile-usage is-loading">正在读取 AI 额度</div>
+          )}
+          <div className="rail-mobile-account-actions">
+            <Link
+              href={user ? userProfile(user.id) : APP_ROUTES.profile}
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <UserCircle aria-hidden="true" />
+              <span>个人主页</span>
+            </Link>
+            <LogoutButton />
+          </div>
         </div>
       </nav>
 

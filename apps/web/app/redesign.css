@@ -3959,6 +3959,19 @@ body .success-text::before {
   height: 26px;
 }
 
+.workspace
+  :is(.content-row-menu-button, .history-more-button, .row-more-button) {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+}
+
+.workspace :is(.content-row-menu-button, .row-more-button).icon-button.subtle {
+  width: 36px;
+  height: 36px;
+}
+
 .workspace :is(.input, .select, .textarea, .table-input) {
   min-height: 31px;
   border-radius: 10px;
@@ -4869,6 +4882,7 @@ body .success-text::before {
 }
 
 .asset-detail-menu > .context-menu {
+  top: auto;
   right: 0;
   bottom: calc(100% + 6px);
   left: 0;

@@ -271,6 +271,28 @@ describe("ContentClient folder deletion", () => {
     ).toHaveClass("content-row-menu-button");
   });
 
+  it("opens a row menu from its SVG icon without opening the document", async () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    vi.mocked(listFiles).mockResolvedValueOnce({
+      files: folderTree[0]!.files,
+    });
+
+    render(<ContentClient />);
+
+    await enterFolderFromTree("课程资料");
+    const menuButton = within(screen.getByRole("table")).getByRole("button", {
+      name: "“课程导读”文档操作",
+    });
+    const menuIcon = menuButton.querySelector("svg");
+    expect(menuIcon).not.toBeNull();
+
+    fireEvent.click(menuIcon as SVGElement);
+
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(document.querySelector(".content-row-context-menu")).not.toBeNull();
+    openSpy.mockRestore();
+  });
+
   it("offers folder and document creation from the new menu", async () => {
     render(<ContentClient />);
 

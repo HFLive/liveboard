@@ -1161,7 +1161,10 @@ export function FileEditor({ fileId }: { fileId: string }) {
             </button>
           )}
           <details className="editor-more-menu">
-            <summary className="icon-button subtle" title="更多文件操作">
+            <summary
+              className="icon-button subtle row-more-button"
+              title="更多文件操作"
+            >
               <MoreHorizontal aria-hidden="true" />
             </summary>
             <div className="context-menu">
@@ -1289,7 +1292,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
                         <GripVertical aria-hidden="true" />
                       </span>
                       <button
-                        className="icon-button subtle"
+                        className="icon-button subtle row-more-button"
                         onClick={(event) =>
                           toggleBlockMenu(block.id, event.currentTarget)
                         }

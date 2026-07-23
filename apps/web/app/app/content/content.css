@@ -127,9 +127,9 @@
 }
 
 .content-row-menu-button {
-  width: 28px;
-  height: 28px;
-  min-height: 28px;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
   padding: 0;
 }
 
@@ -324,8 +324,8 @@
 }
 
 .content-pinned-actions > .content-row-menu-button {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
 }
 
 @media (max-width: 640px) {
