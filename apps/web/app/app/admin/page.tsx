@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Database,
   MessageSquare,
+  MonitorCog,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -63,6 +64,13 @@ const adminEntries = [
     title: "AI",
     detail: "配置模型、回答范围与每日限额",
     icon: Bot,
+    superAdminOnly: true,
+  },
+  {
+    href: APP_ROUTES.adminServerStatus,
+    title: "服务器状态",
+    detail: "查看 CPU、内存与硬盘占用趋势",
+    icon: MonitorCog,
     superAdminOnly: true,
   },
   {

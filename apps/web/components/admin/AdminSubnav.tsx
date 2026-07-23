@@ -9,6 +9,7 @@ import {
   Database,
   LayoutDashboard,
   MessageSquare,
+  MonitorCog,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -52,6 +53,12 @@ const adminNavItems = [
     href: APP_ROUTES.adminAi,
     label: "AI",
     icon: Bot,
+    superAdminOnly: true,
+  },
+  {
+    href: APP_ROUTES.adminServerStatus,
+    label: "服务器",
+    icon: MonitorCog,
     superAdminOnly: true,
   },
   {

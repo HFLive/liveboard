@@ -89,6 +89,38 @@ describe("LibraryClient selection", () => {
     expect(container.querySelector(".asset-detail-panel")).toBeNull();
   });
 
+  it("uses only the header close button in the reference dialog", async () => {
+    vi.mocked(listAssetReferences).mockResolvedValue({
+      references: [
+        {
+          targetType: "file",
+          fileId: "file-1",
+          fileTitle: "课程概述",
+          blockId: "block-1",
+          blockType: "image",
+        },
+      ],
+    });
+    const { container } = render(<LibraryClient />);
+
+    const card = await screen.findByRole("button", { name: /example.png/ });
+    fireEvent.click(card);
+    const detailPanel = container.querySelector(".asset-detail-panel");
+    expect(detailPanel).not.toBeNull();
+    fireEvent.click(
+      within(detailPanel as HTMLElement).getByRole("button", {
+        name: "查看引用来源",
+      }),
+    );
+
+    const referenceDialog = await screen.findByRole("dialog", {
+      name: "引用来源",
+    });
+    expect(
+      within(referenceDialog).getAllByRole("button", { name: "关闭" }),
+    ).toHaveLength(1);
+  });
+
   it("replaces the delete confirmation with a reference details dialog", async () => {
     vi.mocked(deleteLibraryAsset).mockRejectedValue(
       new AssetInUseError("文件已被引用，不能删除", [

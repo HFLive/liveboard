@@ -88,6 +88,12 @@
   color: var(--text-soft);
 }
 
+@media (min-width: 761px) {
+  .workspace.library-workspace .asset-detail-body {
+    padding-inline: 0;
+  }
+}
+
 @media (max-width: 760px) {
   .workspace.library-workspace .library-layout,
   .workspace.library-workspace .library-layout.has-detail {

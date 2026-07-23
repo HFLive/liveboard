@@ -5,6 +5,7 @@ const redesignCss = readFileSync("app/redesign.css", "utf8");
 const mobileCss = readFileSync("app/mobile.css", "utf8");
 const contentCss = readFileSync("app/app/content/content.css", "utf8");
 const aiCss = readFileSync("app/app/ai/ai-workspace.css", "utf8");
+const libraryCss = readFileSync("app/app/library/library.css", "utf8");
 const teachingCss = readFileSync("app/app/teaching/teaching.css", "utf8");
 const editorCss = readFileSync(
   "app/app/content/[id]/edit/content-editor.css",
@@ -61,6 +62,15 @@ describe("responsive workspace contracts", () => {
   it("lets the file detail action menu expand upward at every viewport", () => {
     expect(redesignCss).toMatch(
       /\.asset-detail-menu > \.context-menu\s*{[\s\S]*?top: auto;[\s\S]*?bottom: calc\(100% \+ 6px\)/,
+    );
+  });
+
+  it("aligns desktop file details with the preview without widening the panel", () => {
+    expect(libraryCss).toMatch(
+      /\.workspace\.library-workspace \.asset-detail-panel\s*{[\s\S]*?width: min\(360px, calc\(100vw - 40px\)\)/,
+    );
+    expect(libraryCss).toMatch(
+      /@media \(min-width: 761px\)[\s\S]*?\.workspace\.library-workspace \.asset-detail-body\s*{[\s\S]*?padding-inline: 0/,
     );
   });
 

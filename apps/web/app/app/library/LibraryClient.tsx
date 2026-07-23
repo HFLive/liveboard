@@ -770,15 +770,6 @@ export function LibraryClient() {
                 </div>
               )}
             </div>
-            <div className="modal-foot">
-              <button
-                className="button secondary"
-                onClick={() => setReferenceDetail(null)}
-                type="button"
-              >
-                关闭
-              </button>
-            </div>
           </div>
         </div>
       ) : null}

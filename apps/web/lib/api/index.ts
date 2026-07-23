@@ -18,6 +18,7 @@ import type {
   PermissionLevel,
   PermissionTargetType,
   QuestionType,
+  ServerStatusSummary,
   SystemRole,
   TeachingDeckSummary,
   TeachingDeckItemType,
@@ -305,6 +306,12 @@ export function updateSystemSettings(input: Partial<{ timeZone: string }>) {
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+export function getServerStatus(hours = 24) {
+  return request<ServerStatusSummary>(
+    `/admin/server-status?hours=${encodeURIComponent(hours)}`,
+  );
 }
 
 export type AiProviderConfig = AiProviderConfigSummary;

@@ -124,6 +124,31 @@ export interface AiUsageSummary {
   limit: number;
 }
 
+export interface ServerMetricPoint {
+  sampledAt: string;
+  cpuUsagePercent: number;
+  memoryUsagePercent: number;
+  diskUsagePercent: number;
+}
+
+export interface ServerResourceUsage {
+  usagePercent: number;
+  usedBytes: number;
+  totalBytes: number;
+}
+
+export interface ServerStatusSummary {
+  current: {
+    sampledAt: string;
+    cpuUsagePercent: number;
+    memory: ServerResourceUsage;
+    disk: ServerResourceUsage;
+  };
+  history: ServerMetricPoint[];
+  sampleIntervalSeconds: number;
+  retentionHours: number;
+}
+
 export interface PermissionGroupMemberSummary {
   id: string;
   user: UserSummary;
