@@ -122,6 +122,16 @@ model ActivityDismissal {
   @@index([userId, dismissedAt])
 }
 
+model ServerMetricSample {
+  id                 String   @id @default(cuid())
+  cpuUsagePercent    Float
+  memoryUsagePercent Float
+  diskUsagePercent   Float
+  sampledAt          DateTime @default(now())
+
+  @@index([sampledAt])
+}
+
 model Workspace {
   id        String   @id @default(cuid())
   name      String

@@ -22,6 +22,7 @@ export const APP_ROUTES = {
   adminContentPermissions: staticRoute("/app/admin/content-permissions"),
   adminForum: staticRoute("/app/admin/forum"),
   adminAi: staticRoute("/app/admin/ai"),
+  adminServerStatus: staticRoute("/app/admin/server-status"),
   adminSettings: staticRoute("/app/admin/settings"),
   profile: staticRoute("/app/profile"),
 } as const;

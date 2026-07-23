@@ -12,6 +12,7 @@ import { HealthModule } from "./modules/health/health.module";
 import { PermissionsModule } from "./modules/permissions/permissions.module";
 import { PrismaModule } from "./modules/prisma/prisma.module";
 import { SettingsModule } from "./modules/settings/settings.module";
+import { ServerStatusModule } from "./modules/server-status/server-status.module";
 import { UsersModule } from "./modules/users/users.module";
 import { TeachingModule } from "./modules/teaching/teaching.module";
 
@@ -27,6 +28,7 @@ import { TeachingModule } from "./modules/teaching/teaching.module";
     ExercisesModule,
     ForumModule,
     SettingsModule,
+    ServerStatusModule,
     AiModule,
     ActivityModule,
     TeachingModule,
