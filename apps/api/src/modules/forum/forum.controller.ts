@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   UploadedFiles,
   UseInterceptors,
 } from "@nestjs/common";
@@ -23,6 +24,7 @@ import {
   CreateForumThreadDto,
   UpdateForumCategoryDto,
   UpdateForumPostDto,
+  UpdateForumPostVoteDto,
   UpdateForumThreadDto,
 } from "./forum.dto";
 import { ForumService } from "./forum.service";
@@ -149,6 +151,15 @@ export class ForumController {
     return {
       post: await this.forumService.updatePost(userId, id, body),
     };
+  }
+
+  @Put("posts/:id/vote")
+  async votePost(
+    @CurrentUserId() userId: string | null,
+    @Param("id") id: string,
+    @Body() body: UpdateForumPostVoteDto,
+  ) {
+    return this.forumService.votePost(userId, id, body.vote);
   }
 
   @Post("posts/:id/images")

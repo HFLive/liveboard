@@ -13,7 +13,11 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@liveboard/shared/bilibili": ["../../packages/shared/src/bilibili.ts"],
+      "@liveboard/shared/resource-name": [
+        "../../packages/shared/src/resource-name.ts"
+      ]
     }
   },
   "include": [

@@ -41,6 +41,7 @@ describe("AiService", () => {
       delete: jest.fn(),
     },
     aiConversation: { findUnique: jest.fn() },
+    aiMessage: { findMany: jest.fn() },
     file: { findMany: jest.fn() },
   };
   const permissions = { getEffectiveLevelsForFiles: jest.fn() };
@@ -72,6 +73,7 @@ describe("AiService", () => {
     prisma.aiProviderConfig.findFirst.mockResolvedValue(config);
     prisma.aiProviderConfig.findMany.mockResolvedValue([config]);
     permissions.getEffectiveLevelsForFiles.mockResolvedValue(new Map());
+    prisma.aiMessage.findMany.mockResolvedValue([]);
   });
 
   it("uses the system temperature for the active configuration", async () => {
@@ -163,6 +165,87 @@ describe("AiService", () => {
       "user-1",
       ["file-1"],
     );
+    expect(prisma.file.findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.not.objectContaining({ take: expect.anything() }),
+    );
+  });
+
+  it("uses the most relevant blocks instead of clipping from the document start", async () => {
+    prisma.file.findMany.mockResolvedValue([
+      {
+        id: "file-1",
+        title: "直播团队手册",
+        type: "doc",
+        status: "published",
+        updatedAt: new Date("2026-01-01T00:00:00Z"),
+        blocks: [
+          {
+            id: "block-1",
+            type: "paragraph",
+            sortOrder: 10,
+            dataJson: { text: "这是一段很长的前言。" },
+          },
+          {
+            id: "block-2",
+            type: "paragraph",
+            sortOrder: 20,
+            dataJson: { text: "线路组负责设备搭建、走线和系统操作。" },
+          },
+        ],
+      },
+    ]);
+    permissions.getEffectiveLevelsForFiles.mockResolvedValue(
+      new Map([["file-1", "viewer"]]),
+    );
+
+    const prepared = await service.prepareQuestion(
+      "user-1",
+      "线路组负责什么？",
+    );
+
+    expect(prepared.contextText).toContain("线路组负责设备搭建");
+    expect(prepared.sources[0]?.blocks[0]?.id).toBe("block-2");
+  });
+
+  it("uses recent conversation questions to resolve follow-up retrieval", async () => {
+    prisma.aiConversation.findUnique.mockResolvedValue({
+      id: "conversation-1",
+      userId: "user-1",
+    });
+    prisma.aiMessage.findMany.mockResolvedValue([
+      { role: "assistant", content: "线路组是直播团队的操作组。" },
+      { role: "user", content: "什么是线路组？" },
+    ]);
+    prisma.file.findMany.mockResolvedValue([
+      {
+        id: "file-1",
+        title: "线路组手册",
+        type: "doc",
+        status: "published",
+        updatedAt: new Date("2026-01-01T00:00:00Z"),
+        blocks: [
+          {
+            id: "block-1",
+            type: "paragraph",
+            sortOrder: 10,
+            dataJson: { text: "线路组组长负责培训成员。" },
+          },
+        ],
+      },
+    ]);
+    permissions.getEffectiveLevelsForFiles.mockResolvedValue(
+      new Map([["file-1", "viewer"]]),
+    );
+
+    const prepared = await service.prepareQuestion(
+      "user-1",
+      "那组长呢？",
+      "conversation-1",
+    );
+
+    expect(prepared.contextText).toContain("线路组组长");
+    expect(prepared.conversationHistory).toHaveLength(2);
   });
 
   it("excludes published documents with no relevant keyword match", async () => {
@@ -207,10 +290,10 @@ describe("AiService", () => {
     ];
 
     expect(
-      service.finalizeGeneratedAnswer("第一项结论。[资料2]", sources),
+      service.finalizeGeneratedAnswer("两项结论。【资料1、资料2】", sources),
     ).toEqual({
-      answer: "第一项结论。",
-      sources: [sources[1]],
+      answer: "两项结论。",
+      sources,
     });
   });
 

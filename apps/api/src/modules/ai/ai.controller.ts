@@ -260,6 +260,7 @@ export class AiController {
       const prepared = await this.aiService.prepareQuestion(
         userId,
         body.message,
+        body.conversationId,
       );
       const turn = await this.aiService.createConversationTurn(
         userId,

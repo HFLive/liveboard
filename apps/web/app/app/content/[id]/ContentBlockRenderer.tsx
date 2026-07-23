@@ -1,4 +1,5 @@
 import type { ContentBlockType } from "@liveboard/shared";
+import { normalizeBilibiliEmbedUrl } from "@liveboard/shared/bilibili";
 import type { ContentBlock } from "@/lib/api";
 import { MathFormula, RichText } from "./RichText";
 
@@ -24,6 +25,7 @@ export const blockTypeOptions: Array<{
   { value: "question", label: "题目块" },
   { value: "image", label: "插图" },
   { value: "attachment", label: "附件" },
+  { value: "bilibili", label: "B站视频" },
 ];
 
 export function getBlockText(block: ContentBlock): string {
@@ -90,6 +92,10 @@ export function buildBlockData(type: ContentBlockType, text: string) {
 
   if (type === "math") {
     return { text: text || "E = mc^2", display: true };
+  }
+
+  if (type === "bilibili") {
+    return { embedCode: text };
   }
 
   return { text, inlineFormat: "markdown" };
@@ -275,6 +281,28 @@ export function RenderBlockContent({ block }: { block: ContentBlock }) {
       </a>
     ) : (
       <div className="render-placeholder">附件：{text || "等待上传"}</div>
+    );
+  }
+
+  if (block.type === "bilibili") {
+    const embedUrl = normalizeBilibiliEmbedUrl(
+      getBlockDataString(block, "embedCode"),
+    );
+
+    return embedUrl ? (
+      <div className="render-bilibili">
+        <iframe
+          allow="fullscreen; picture-in-picture"
+          allowFullScreen
+          loading="lazy"
+          referrerPolicy="strict-origin-when-cross-origin"
+          sandbox="allow-scripts allow-same-origin allow-presentation"
+          src={embedUrl}
+          title="B站视频"
+        />
+      </div>
+    ) : (
+      <div className="render-placeholder">B站视频：等待有效嵌入代码</div>
     );
   }
 

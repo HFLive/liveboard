@@ -5,6 +5,7 @@ import { ForumService } from "./forum.service";
 
 describe("ForumService", () => {
   const prisma = {
+    $transaction: jest.fn(),
     user: { findUnique: jest.fn() },
     workspace: { findFirst: jest.fn() },
     forumCategory: {
@@ -24,6 +25,12 @@ describe("ForumService", () => {
       findFirst: jest.fn(),
       update: jest.fn(),
     },
+    forumPostVote: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
   };
   let service: ForumService;
   const assets = { removeForumPostImages: jest.fn() };
@@ -37,6 +44,9 @@ describe("ForumService", () => {
       permissions as unknown as PermissionsService,
     );
     prisma.forumPost.findMany.mockResolvedValue([]);
+    prisma.$transaction.mockImplementation(
+      async (callback: (tx: typeof prisma) => unknown) => callback(prisma),
+    );
     prisma.forumThreadState.upsert.mockResolvedValue({ followed: false });
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
@@ -186,6 +196,9 @@ describe("ForumService", () => {
           replyToId: null,
           body: "匿名正文",
           isAnonymous: true,
+          upvoteCount: 2,
+          downvoteCount: 1,
+          votes: [{ value: 1 }],
           author: {
             id: "author-secret",
             username: "secret-user",
@@ -211,6 +224,45 @@ describe("ForumService", () => {
     expect(result.posts[0]?.author.id).toBe("author-secret");
     expect(result.isAnonymous).toBe(true);
     expect(result.posts[0]?.isAnonymous).toBe(true);
+    expect(result.posts[0]).toEqual(
+      expect.objectContaining({
+        upvoteCount: 2,
+        downvoteCount: 1,
+        viewerVote: "up",
+      }),
+    );
+  });
+
+  it("toggles the current user's forum vote and updates cached counts", async () => {
+    prisma.forumPost.findUnique.mockResolvedValue({ id: "post-1" });
+    prisma.forumPostVote.findUnique.mockResolvedValue({
+      postId: "post-1",
+      userId: "user-1",
+      value: 1,
+    });
+    prisma.forumPost.update.mockResolvedValue({
+      id: "post-1",
+      upvoteCount: 3,
+      downvoteCount: 1,
+    });
+
+    await expect(service.votePost("user-1", "post-1", "up")).resolves.toEqual({
+      postId: "post-1",
+      upvoteCount: 3,
+      downvoteCount: 1,
+      viewerVote: null,
+    });
+    expect(prisma.forumPostVote.delete).toHaveBeenCalledWith({
+      where: { postId_userId: { postId: "post-1", userId: "user-1" } },
+    });
+    expect(prisma.forumPost.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          upvoteCount: { increment: -1 },
+          downvoteCount: { increment: 0 },
+        },
+      }),
+    );
   });
 
   it("rejects editing comments even for super admins", async () => {

@@ -16,6 +16,7 @@ import type {
 } from "@liveboard/shared";
 import { canView, isSuperAdmin, isSystemAdmin } from "@liveboard/shared";
 import type { Prisma } from "@prisma/client";
+import { requireResourceName } from "../../common/resource-name";
 import { PrismaService } from "../prisma/prisma.service";
 import { AssetsService } from "../files/assets.service";
 import type {
@@ -69,6 +70,9 @@ type ForumPostRecord = {
   replyToId: string | null;
   body: string;
   isAnonymous: boolean;
+  upvoteCount: number;
+  downvoteCount: number;
+  votes?: Array<{ value: number }>;
   images: Array<{
     id: string;
     width: number | null;
@@ -212,6 +216,11 @@ export class ForumService {
             author: true,
             replyTo: { include: { author: true } },
             images: { orderBy: { sortOrder: "asc" } },
+            votes: {
+              where: { userId: user.id },
+              select: { value: true },
+              take: 1,
+            },
           },
         },
         _count: { select: { posts: true } },
@@ -344,6 +353,11 @@ export class ForumService {
             author: true,
             replyTo: { include: { author: true } },
             images: { orderBy: { sortOrder: "asc" } },
+            votes: {
+              where: { userId: user.id },
+              select: { value: true },
+              take: 1,
+            },
           },
         },
         _count: { select: { posts: true } },
@@ -616,6 +630,11 @@ export class ForumService {
             author: true,
             replyTo: { include: { author: true } },
             images: { orderBy: { sortOrder: "asc" } },
+            votes: {
+              where: { userId: user.id },
+              select: { value: true },
+              take: 1,
+            },
           },
         },
         _count: { select: { posts: true } },
@@ -689,6 +708,11 @@ export class ForumService {
         author: true,
         replyTo: { include: { author: true } },
         images: { orderBy: { sortOrder: "asc" } },
+        votes: {
+          where: { userId: user.id },
+          select: { value: true },
+          take: 1,
+        },
       },
     });
 
@@ -700,6 +724,65 @@ export class ForumService {
       threadStatus: post.thread.status,
       canRevealAnonymous: isSuperAdmin(user.systemRole),
       mainPostId: mainPost.id,
+    });
+  }
+
+  async votePost(userId: string | null, postId: string, vote: "up" | "down") {
+    const user = await this.requireActiveUser(userId);
+    const value = vote === "up" ? 1 : -1;
+
+    return this.prisma.$transaction(async (tx) => {
+      const post = await tx.forumPost.findUnique({
+        where: { id: postId },
+        select: { id: true },
+      });
+      if (!post) {
+        throw new NotFoundException("Forum post not found");
+      }
+
+      const existing = await tx.forumPostVote.findUnique({
+        where: { postId_userId: { postId, userId: user.id } },
+      });
+
+      let viewerVote: "up" | "down" | null = vote;
+      let upvoteChange = value === 1 ? 1 : 0;
+      let downvoteChange = value === -1 ? 1 : 0;
+
+      if (existing?.value === value) {
+        await tx.forumPostVote.delete({
+          where: { postId_userId: { postId, userId: user.id } },
+        });
+        viewerVote = null;
+        upvoteChange = value === 1 ? -1 : 0;
+        downvoteChange = value === -1 ? -1 : 0;
+      } else if (existing) {
+        await tx.forumPostVote.update({
+          where: { postId_userId: { postId, userId: user.id } },
+          data: { value },
+        });
+        upvoteChange = value === 1 ? 1 : -1;
+        downvoteChange = value === -1 ? 1 : -1;
+      } else {
+        await tx.forumPostVote.create({
+          data: { postId, userId: user.id, value },
+        });
+      }
+
+      const updated = await tx.forumPost.update({
+        where: { id: postId },
+        data: {
+          upvoteCount: { increment: upvoteChange },
+          downvoteCount: { increment: downvoteChange },
+        },
+        select: { id: true, upvoteCount: true, downvoteCount: true },
+      });
+
+      return {
+        postId: updated.id,
+        upvoteCount: updated.upvoteCount,
+        downvoteCount: updated.downvoteCount,
+        viewerVote,
+      };
     });
   }
 
@@ -860,17 +943,7 @@ export class ForumService {
   }
 
   private normalizeTitle(value: string) {
-    const title = value.trim().replace(/\s+/g, " ");
-
-    if (!title) {
-      throw new BadRequestException("帖子标题不能为空");
-    }
-
-    if (title.length > 120) {
-      throw new BadRequestException("帖子标题不能超过 120 个字");
-    }
-
-    return title;
+    return requireResourceName(value, "帖子标题");
   }
 
   private normalizeBody(value: string) {
@@ -888,11 +961,7 @@ export class ForumService {
   }
 
   private normalizeCategoryName(value: string) {
-    const name = value.trim().replace(/\s+/g, " ");
-
-    if (!name) {
-      throw new BadRequestException("版块名称不能为空");
-    }
+    const name = requireResourceName(value, "版块名称");
 
     if (name.length > 40) {
       throw new BadRequestException("版块名称不能超过 40 个字");
@@ -1107,6 +1176,14 @@ export class ForumService {
         permissions?.canRevealAnonymous ?? false,
       ),
       body: post.body,
+      upvoteCount: post.upvoteCount,
+      downvoteCount: post.downvoteCount,
+      viewerVote:
+        post.votes?.[0]?.value === 1
+          ? "up"
+          : post.votes?.[0]?.value === -1
+            ? "down"
+            : null,
       images: post.images.map((image) => ({
         id: image.id,
         url: `/assets/${image.id}`,

@@ -85,6 +85,11 @@ export class UpdateForumPostDto {
   body!: string;
 }
 
+export class UpdateForumPostVoteDto {
+  @IsIn(["up", "down"])
+  vote!: "up" | "down";
+}
+
 export class CreateForumCategoryDto {
   @IsString()
   @MinLength(1)

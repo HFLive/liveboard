@@ -5,7 +5,6 @@ import type {
   PermissionGroupSummary,
   PermissionLevel,
 } from "@liveboard/shared";
-import { AdminSubnav } from "@/components/admin/AdminSubnav";
 import {
   deletePermissionGrant,
   getDefaultPermissionWorkspace,
@@ -14,6 +13,7 @@ import {
   PermissionGrantSummary,
   upsertPermissionGrant,
 } from "@/lib/api";
+import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 type WorkspaceSummary = { id: string; name: string };
 type WorkspacePermission = PermissionLevel | "";
@@ -36,6 +36,7 @@ export function ContentPermissionsClient() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedGroupAt, setSavedGroupAt] = useState<Record<string, Date>>({});
+  const [loadingPermissions, setLoadingPermissions] = useState(true);
   const grantByGroupId = useMemo(
     () =>
       new Map(
@@ -47,9 +48,10 @@ export function ContentPermissionsClient() {
   );
 
   async function load() {
+    const groupPromise = listPermissionGroups();
     const workspaceResult = await getDefaultPermissionWorkspace();
     const [groupResult, grantResult] = await Promise.all([
-      listPermissionGroups(),
+      groupPromise,
       listPermissionGrants("workspace", workspaceResult.workspace.id),
     ]);
 
@@ -59,11 +61,13 @@ export function ContentPermissionsClient() {
   }
 
   useEffect(() => {
-    load().catch((caught) => {
-      setError(
-        caught instanceof Error ? caught.message : "加载文档默认权限失败",
-      );
-    });
+    load()
+      .catch((caught) => {
+        setError(
+          caught instanceof Error ? caught.message : "加载文档默认权限失败",
+        );
+      })
+      .finally(() => setLoadingPermissions(false));
   }, []);
 
   async function updateWorkspacePermission(
@@ -116,30 +120,31 @@ export function ContentPermissionsClient() {
         </div>
       </header>
 
-      <AdminSubnav />
-
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
 
       <section className="content-permission-overview">
-        <h2>{workspace?.name ?? "文档默认权限"}</h2>
+        <h2>权限如何生效</h2>
         <p>
-          这里设置 workspace
-          的基础权限。顶层文件夹、子文件夹和文件会逐级继承；某一级单独设置的例外权限优先生效。
+          这里设置“{workspace?.name ?? "当前工作区"}
+          ”的文档基础权限，顶层文件夹、子文件夹和文档会逐级继承。
         </p>
-        <p>系统管理员始终可以管理全部文档，不受下方设置影响。</p>
+        <p>具体文件夹或文档的单独授权优先；系统管理员始终可以管理全部文档。</p>
       </section>
 
       <section className="content-permission-panel">
         <div className="panel-head content-permission-head">
           <div>
-            <h2>权限组默认权限</h2>
+            <h2>全局默认权限</h2>
             <p>没有默认权限的组，只能通过具体文件夹或文件获得访问权限。</p>
           </div>
-          <span>{groups.length} 个权限组</span>
+          <span>
+            {loadingPermissions ? "正在加载" : `${groups.length} 个权限组`}
+          </span>
         </div>
 
         <div className="content-permission-list">
+          {loadingPermissions ? <SkeletonRows compact count={4} /> : null}
           {groups.map((group) => {
             const grant = grantByGroupId.get(group.id);
             const value = grant?.level ?? "";
@@ -191,7 +196,7 @@ export function ContentPermissionsClient() {
             );
           })}
 
-          {groups.length === 0 ? (
+          {!loadingPermissions && groups.length === 0 ? (
             <div className="empty-panel compact">
               <strong>还没有权限组</strong>
               <span>请先在“权限组”中创建分组并添加成员。</span>

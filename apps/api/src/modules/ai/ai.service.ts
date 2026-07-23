@@ -10,8 +10,10 @@ import {
 import { canView, isSuperAdmin } from "@liveboard/shared";
 import type { Prisma } from "@prisma/client";
 import { formatDateKey } from "../../common/date-key";
+import { requireResourceName } from "../../common/resource-name";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { rankRetrievalFiles } from "./ai-retrieval";
 import { AiSecretService } from "./ai-secret.service";
 
 interface UpdateAiSettingsInput {
@@ -63,6 +65,12 @@ interface ContextBlock {
   id: string;
   type: string;
   text: string;
+  sortOrder: number;
+}
+
+interface AiConversationHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
 }
 
 interface PreparedAiQuestion {
@@ -70,6 +78,7 @@ interface PreparedAiQuestion {
   question: string;
   contextText: string;
   sources: AiSourceSummary[];
+  conversationHistory: AiConversationHistoryMessage[];
 }
 
 interface AiCompletionSettings {
@@ -463,11 +472,14 @@ export class AiService {
       throw new ForbiddenException("No permission to update AI conversation");
     }
 
-    const title = input.title?.trim();
+    const title =
+      input.title === undefined
+        ? undefined
+        : requireResourceName(input.title, "对话名称");
     const updated = await this.prisma.aiConversation.update({
       where: { id: conversationId },
       data: {
-        ...(title ? { title } : {}),
+        ...(title !== undefined ? { title } : {}),
         ...(input.pinned !== undefined
           ? { pinnedAt: input.pinned ? new Date() : null }
           : {}),
@@ -484,7 +496,11 @@ export class AiService {
   }
 
   async ask(userId: string | null, input: AskAiInput) {
-    const prepared = await this.prepareQuestion(userId, input.message);
+    const prepared = await this.prepareQuestion(
+      userId,
+      input.message,
+      input.conversationId,
+    );
     const turn = await this.createConversationTurn(
       userId,
       prepared.question,
@@ -495,6 +511,7 @@ export class AiService {
       prepared.settings,
       prepared.question,
       prepared.contextText,
+      prepared.conversationHistory,
     );
     const { answer, sources } = this.finalizeGeneratedAnswer(
       generatedAnswer,
@@ -525,6 +542,7 @@ export class AiService {
   async prepareQuestion(
     userId: string | null,
     message: string,
+    conversationId?: string,
   ): Promise<PreparedAiQuestion> {
     if (!userId) {
       throw new UnauthorizedException("Missing session");
@@ -552,9 +570,13 @@ export class AiService {
 
     await this.consumeCallQuota(userId);
 
+    const conversationHistory = conversationId
+      ? await this.getRecentConversationHistory(userId, conversationId)
+      : [];
+    const retrievalQuery = buildRetrievalQuery(question, conversationHistory);
     const contextFiles = isConversationalPrompt(question)
       ? []
-      : await this.buildContext(userId, question, {
+      : await this.buildContext(userId, retrievalQuery, {
           maxFiles: settings.maxContextFiles,
           maxChars: settings.maxContextChars,
         });
@@ -577,6 +599,7 @@ export class AiService {
       },
       question,
       contextText,
+      conversationHistory,
       sources: contextFiles.map((file) => ({
         id: file.id,
         title: file.title,
@@ -600,6 +623,7 @@ export class AiService {
       prepared.settings,
       prepared.question,
       prepared.contextText,
+      prepared.conversationHistory,
       onDelta,
       signal,
     );
@@ -607,16 +631,20 @@ export class AiService {
 
   finalizeGeneratedAnswer(answer: string, sources: AiSourceSummary[]) {
     const citedIndexes = new Set<number>();
-    for (const match of answer.matchAll(/[\[【]资料\s*(\d+)[\]】]/g)) {
-      const index = Number(match[1]) - 1;
-      if (Number.isInteger(index) && index >= 0 && index < sources.length) {
-        citedIndexes.add(index);
+    const citationPattern =
+      /[\[【]\s*资料\s*(\d+(?:\s*[,，、;；]\s*(?:资料\s*)?\d+)*)\s*[\]】]/gu;
+    for (const match of answer.matchAll(citationPattern)) {
+      for (const number of match[1]?.match(/\d+/gu) ?? []) {
+        const index = Number(number) - 1;
+        if (Number.isInteger(index) && index >= 0 && index < sources.length) {
+          citedIndexes.add(index);
+        }
       }
     }
 
     return {
       answer: answer
-        .replace(/[\[【]资料\s*\d+[\]】]/g, "")
+        .replace(citationPattern, "")
         .replace(/[ \t]+\n/g, "\n")
         .trim(),
       sources: sources.filter((_, index) => citedIndexes.has(index)),
@@ -703,12 +731,8 @@ export class AiService {
     const candidates = await this.prisma.file.findMany({
       where: { status: { not: "archived" } },
       select: { id: true, status: true },
-      orderBy: [{ updatedAt: "desc" }],
-      take: 80,
     });
 
-    const keywords = tokenize(question);
-    const visible: ContextFile[] = [];
     const permissionLevels = await this.permissions.getEffectiveLevelsForFiles(
       userId,
       candidates.map((file) => file.id),
@@ -726,68 +750,70 @@ export class AiService {
 
     const files = await this.prisma.file.findMany({
       where: { id: { in: visibleIds } },
-      include: {
-        blocks: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        status: true,
+        updatedAt: true,
+        blocks: {
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          select: {
+            id: true,
+            type: true,
+            dataJson: true,
+            sortOrder: true,
+          },
+        },
       },
     });
 
-    for (const file of files) {
-      const blocks = file.blocks
-        .map((block) => ({
-          id: block.id,
-          type: block.type,
-          text: blockToText(block.type, block.dataJson),
-        }))
-        .filter((block) => Boolean(block.text));
-      const text = blocks
-        .map((block) => block.text)
-        .filter(Boolean)
-        .join("\n");
-
-      if (!text.trim()) {
-        continue;
-      }
-
-      const searchable = `${file.title}\n${text}`.toLowerCase();
-      const relevanceScore = keywords.reduce(
-        (total, keyword) =>
-          total + countOccurrences(searchable, keyword) * keyword.length,
-        0,
-      );
-      if (relevanceScore <= 0) {
-        continue;
-      }
-      const score = relevanceScore + (file.status === "published" ? 0.25 : 0);
-
-      visible.push({
-        id: file.id,
-        title: file.title,
-        type: file.type,
-        updatedAt: file.updatedAt,
-        text,
-        score,
-        blocks: rankBlocks(blocks, keywords),
-      });
-    }
-
-    const sorted = visible.sort((a, b) => {
-      if (b.score !== a.score) {
-        return b.score - a.score;
-      }
-
-      return b.updatedAt.getTime() - a.updatedAt.getTime();
-    });
+    const searchableFiles = files
+      .map((file) => ({
+        ...file,
+        blocks: file.blocks
+          .map((block) => ({
+            id: block.id,
+            type: block.type,
+            text: blockToText(block.type, block.dataJson),
+            sortOrder: block.sortOrder,
+          }))
+          .filter((block) => Boolean(block.text)),
+      }))
+      .filter((file) => file.blocks.length > 0);
+    const ranked = rankRetrievalFiles(searchableFiles, question);
 
     const selected: ContextFile[] = [];
     let charBudget = options.maxChars;
+    const perFileBudget = Math.max(
+      800,
+      Math.floor((options.maxChars / Math.max(options.maxFiles, 1)) * 1.5),
+    );
 
-    for (const file of sorted) {
+    for (const result of ranked) {
       if (selected.length >= options.maxFiles || charBudget <= 0) {
         break;
       }
 
-      const clippedText = file.text.slice(0, charBudget);
-      selected.push({ ...file, text: clippedText });
+      const blocks = [...result.blocks].sort(
+        (left, right) => left.sortOrder - right.sortOrder,
+      );
+      const clippedText = formatRetrievedBlocks(
+        blocks,
+        Math.min(charBudget, perFileBudget),
+      );
+      if (!clippedText) {
+        continue;
+      }
+      selected.push({
+        id: result.file.id,
+        title: result.file.title,
+        type: result.file.type,
+        updatedAt: result.file.updatedAt,
+        text: clippedText,
+        score: result.score,
+        blocks,
+      });
       charBudget -= clippedText.length;
     }
 
@@ -798,6 +824,7 @@ export class AiService {
     settings: AiCompletionSettings,
     question: string,
     contextText: string,
+    conversationHistory: AiConversationHistoryMessage[],
   ) {
     const endpoint = buildChatCompletionEndpoint(settings.baseUrl);
     const response = await this.fetchChatCompletion(
@@ -805,6 +832,7 @@ export class AiService {
       settings,
       question,
       contextText,
+      conversationHistory,
       false,
     );
 
@@ -917,6 +945,7 @@ export class AiService {
     settings: AiCompletionSettings,
     question: string,
     contextText: string,
+    conversationHistory: AiConversationHistoryMessage[],
     onDelta: (delta: string) => void,
     signal?: AbortSignal,
   ) {
@@ -926,6 +955,7 @@ export class AiService {
       settings,
       question,
       contextText,
+      conversationHistory,
       true,
       signal,
     );
@@ -985,6 +1015,7 @@ export class AiService {
     settings: AiCompletionSettings,
     question: string,
     contextText: string,
+    conversationHistory: AiConversationHistoryMessage[],
     stream: boolean,
     signal?: AbortSignal,
   ) {
@@ -1019,6 +1050,7 @@ export class AiService {
           stream,
           messages: [
             { role: "system", content: systemPrompt },
+            ...conversationHistory,
             { role: "user", content: userPrompt },
           ],
           ...getProviderSpecificBody(settings.baseUrl, settings.model),
@@ -1220,6 +1252,30 @@ export class AiService {
     return conversation;
   }
 
+  private async getRecentConversationHistory(
+    userId: string,
+    conversationId: string,
+  ): Promise<AiConversationHistoryMessage[]> {
+    await this.getOwnedConversation(userId, conversationId);
+    const messages = await this.prisma.aiMessage.findMany({
+      where: {
+        conversationId,
+        role: { in: ["user", "assistant"] },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      select: { role: true, content: true },
+    });
+
+    return messages
+      .reverse()
+      .map((message): AiConversationHistoryMessage => ({
+        role: message.role === "assistant" ? "assistant" : "user",
+        content: message.content.slice(0, 4000),
+      }))
+      .filter((message) => Boolean(message.content.trim()));
+  }
+
   private toConversationSummary(conversation: {
     id: string;
     title: string;
@@ -1254,11 +1310,7 @@ export class AiService {
 }
 
 function normalizeConfigName(value: string) {
-  const name = value.trim();
-  if (!name) {
-    throw new BadRequestException("请输入配置名称");
-  }
-  return name;
+  return requireResourceName(value, "配置名称");
 }
 
 function normalizeProviderName(value: string) {
@@ -1362,26 +1414,6 @@ function maskApiKey(value: string) {
   return `${value.slice(0, 4)}...${value.slice(-4)}`;
 }
 
-function tokenize(value: string) {
-  const segments = value
-    .toLowerCase()
-    .split(/[\s,，。.!！?？;；:：()[\]{}"'“”‘’<>《》、/\\|-]+/)
-    .map((item) => item.trim())
-    .filter((item) => item.length >= 2);
-  const tokens: string[] = [];
-
-  for (const segment of segments) {
-    tokens.push(segment);
-    if (/[\u3400-\u9fff]/.test(segment) && segment.length > 2) {
-      for (let index = 0; index < segment.length - 1; index += 1) {
-        tokens.push(segment.slice(index, index + 2));
-      }
-    }
-  }
-
-  return [...new Set(tokens)].slice(0, 24);
-}
-
 function isConversationalPrompt(value: string) {
   const normalized = value
     .trim()
@@ -1393,41 +1425,46 @@ function isConversationalPrompt(value: string) {
   );
 }
 
-function countOccurrences(value: string, keyword: string) {
-  if (!keyword) {
-    return 0;
-  }
+function buildRetrievalQuery(
+  question: string,
+  history: AiConversationHistoryMessage[],
+) {
+  const recentUserMessages = history
+    .filter((message) => message.role === "user")
+    .slice(-2)
+    .map((message) => message.content.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
 
-  let count = 0;
-  let index = value.indexOf(keyword);
-
-  while (index !== -1) {
-    count += 1;
-    index = value.indexOf(keyword, index + keyword.length);
-  }
-
-  return count;
+  return [...recentUserMessages, question].join("\n").slice(-1600);
 }
 
-function rankBlocks(blocks: ContextBlock[], keywords: string[]) {
-  return [...blocks].sort((a, b) => {
-    const scoreA = keywords.reduce(
-      (total, keyword) =>
-        total + countOccurrences(a.text.toLowerCase(), keyword),
-      0,
-    );
-    const scoreB = keywords.reduce(
-      (total, keyword) =>
-        total + countOccurrences(b.text.toLowerCase(), keyword),
-      0,
-    );
+function formatRetrievedBlocks(blocks: ContextBlock[], maxChars: number) {
+  const parts: string[] = [];
+  let remaining = maxChars;
 
-    if (scoreB !== scoreA) {
-      return scoreB - scoreA;
+  for (const [index, block] of blocks.entries()) {
+    if (remaining <= 0) {
+      break;
     }
+    const label = `[相关片段 ${index + 1} · ${contextBlockLabel(block.type)}]\n`;
+    if (remaining <= label.length) {
+      break;
+    }
+    const text = block.text.slice(0, remaining - label.length);
+    parts.push(`${label}${text}`);
+    remaining -= label.length + text.length + 2;
+  }
 
-    return 0;
-  });
+  return parts.join("\n\n").trim();
+}
+
+function contextBlockLabel(type: string) {
+  if (/^heading_[1-6]$/u.test(type)) return "标题";
+  if (type === "code") return "代码";
+  if (type === "question") return "题目";
+  if (type === "table") return "表格";
+  if (type === "quote") return "引用";
+  return "正文";
 }
 
 function buildFallbackConversationTitle(question: string) {
@@ -1545,7 +1582,7 @@ function blockToText(type: string, dataJson: unknown) {
     return "";
   }
 
-  if (type === "heading") {
+  if (/^heading_[1-6]$/u.test(type)) {
     return `# ${text}`;
   }
 

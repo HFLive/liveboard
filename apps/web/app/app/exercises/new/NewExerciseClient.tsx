@@ -22,6 +22,10 @@ import {
 } from "lucide-react";
 import type { QuestionType, UserSummary } from "@liveboard/shared";
 import {
+  getResourceNameError,
+  normalizeResourceName,
+} from "@liveboard/shared/resource-name";
+import {
   createExerciseSet,
   CreateExerciseQuestionInput,
   ExerciseSetSummary,
@@ -526,8 +530,9 @@ export function NewExerciseClient() {
       return;
     }
 
-    if (!title.trim()) {
-      setError("请填写练习名称");
+    const nameError = getResourceNameError(title, "练习名称");
+    if (nameError) {
+      setError(nameError);
       return;
     }
 
@@ -544,7 +549,7 @@ export function NewExerciseClient() {
     setLoading(true);
     try {
       await createExerciseSet({
-        title: title.trim(),
+        title: normalizeResourceName(title),
         ...(openAt ? { openAt: toIsoString(openAt) } : {}),
         ...(dueAt ? { dueAt: toIsoString(dueAt) } : {}),
         allowMultipleSubmissions,

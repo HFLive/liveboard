@@ -144,6 +144,18 @@
   color: var(--muted);
 }
 
+.content-viewer-progressive-loading {
+  display: grid;
+  gap: 18px;
+  width: min(860px, 100%);
+  padding-top: 14px;
+}
+
+.content-viewer-title-skeleton {
+  width: min(360px, 58%);
+  height: 32px;
+}
+
 @media (max-width: 720px) {
   .content-viewer-header {
     display: grid;

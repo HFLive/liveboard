@@ -110,6 +110,7 @@ model User {
   createdExerciseSets        ExerciseSet[]           @relation("ExerciseSetCreatedBy")
   uploadedAssets             FileAsset[]             @relation("FileAssetUploader")
   activityDismissals         ActivityDismissal[]
+  forumPostVotes             ForumPostVote[]
 }
 
 model ActivityDismissal {
@@ -133,12 +134,15 @@ model ServerMetricSample {
 }
 
 model Workspace {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  timeZone  String   @default("Asia/Shanghai")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String    @id @default(cuid())
+  name              String
+  slug              String    @unique
+  timeZone          String    @default("Asia/Shanghai")
+  faviconStorageKey String?
+  faviconMimeType   String?
+  faviconUpdatedAt  DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   folders           Folder[]
   files             File[]
@@ -208,28 +212,45 @@ model ForumThreadState {
 }
 
 model ForumPost {
-  id          String   @id @default(cuid())
-  threadId    String
-  parentId    String?
-  replyToId   String?
-  authorId    String
-  body        String
-  isAnonymous Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  threadId      String
+  parentId      String?
+  replyToId     String?
+  authorId      String
+  body          String
+  isAnonymous   Boolean  @default(false)
+  upvoteCount   Int      @default(0)
+  downvoteCount Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  thread          ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  parent          ForumPost?  @relation("ForumPostReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies         ForumPost[] @relation("ForumPostReplies")
-  replyTo         ForumPost?  @relation("ForumPostReplyTargets", fields: [replyToId], references: [id], onDelete: SetNull)
-  targetedReplies ForumPost[] @relation("ForumPostReplyTargets")
-  author          User        @relation("ForumPostAuthor", fields: [authorId], references: [id])
-  images          FileAsset[] @relation("ForumPostImages")
+  thread          ForumThread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  parent          ForumPost?      @relation("ForumPostReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies         ForumPost[]     @relation("ForumPostReplies")
+  replyTo         ForumPost?      @relation("ForumPostReplyTargets", fields: [replyToId], references: [id], onDelete: SetNull)
+  targetedReplies ForumPost[]     @relation("ForumPostReplyTargets")
+  author          User            @relation("ForumPostAuthor", fields: [authorId], references: [id])
+  images          FileAsset[]     @relation("ForumPostImages")
+  votes           ForumPostVote[]
 
   @@index([threadId, createdAt])
   @@index([parentId, createdAt])
   @@index([replyToId, createdAt])
   @@index([authorId, createdAt])
+}
+
+model ForumPostVote {
+  postId    String
+  userId    String
+  value     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post ForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId, updatedAt])
 }
 
 model Folder {

@@ -139,10 +139,27 @@ export function AppNav() {
   }, [pathname]);
 
   useEffect(() => {
-    if (user) {
-      loadUsage();
-      void loadActivity();
-    }
+    if (!user) return;
+
+    loadUsage();
+    const loadSecondaryNavigationData = () => void loadActivity();
+    const usesIdleCallback = typeof window.requestIdleCallback === "function";
+    const idleCallback: number = usesIdleCallback
+      ? window.requestIdleCallback(loadSecondaryNavigationData, {
+          timeout: 800,
+        })
+      : (globalThis.setTimeout(
+          loadSecondaryNavigationData,
+          250,
+        ) as unknown as number);
+
+    return () => {
+      if (usesIdleCallback) {
+        window.cancelIdleCallback(idleCallback);
+      } else {
+        globalThis.clearTimeout(idleCallback);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 

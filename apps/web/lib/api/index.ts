@@ -39,7 +39,18 @@ export function apiResourceUrl(path: string) {
   return path.startsWith("http") ? path : `${API_URL}${path}`;
 }
 
+let currentUserRequest: Promise<{ user: UserProfile }> | null = null;
+let currentUserCache:
+  { value: { user: UserProfile }; expiresAt: number } | undefined;
+const CURRENT_USER_CACHE_MS = 5_000;
+
+function clearCurrentUserCache() {
+  currentUserRequest = null;
+  currentUserCache = undefined;
+}
+
 export function login(username: string, password: string) {
+  clearCurrentUserCache();
   return request<{ user: UserSummary }>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
@@ -47,13 +58,32 @@ export function login(username: string, password: string) {
 }
 
 export function logout() {
+  clearCurrentUserCache();
   return request<{ ok: boolean }>("/auth/logout", {
     method: "POST",
   });
 }
 
 export function getMe() {
-  return request<{ user: UserProfile }>("/auth/me");
+  if (currentUserCache && currentUserCache.expiresAt > Date.now()) {
+    return Promise.resolve(currentUserCache.value);
+  }
+
+  if (!currentUserRequest) {
+    currentUserRequest = request<{ user: UserProfile }>("/auth/me")
+      .then((result) => {
+        currentUserCache = {
+          value: result,
+          expiresAt: Date.now() + CURRENT_USER_CACHE_MS,
+        };
+        return result;
+      })
+      .finally(() => {
+        currentUserRequest = null;
+      });
+  }
+
+  return currentUserRequest;
 }
 
 export function getUserProfile(userId: string) {
@@ -82,13 +112,21 @@ export function dismissActivity(activityId: string) {
 }
 
 export function updateProfile(input: { displayName: string; bio?: string }) {
+  clearCurrentUserCache();
   return request<{ user: UserProfile }>("/auth/me", {
     method: "PATCH",
     body: JSON.stringify(input),
+  }).then((result) => {
+    currentUserCache = {
+      value: result,
+      expiresAt: Date.now() + CURRENT_USER_CACHE_MS,
+    };
+    return result;
   });
 }
 
 export async function uploadAvatar(file: File) {
+  clearCurrentUserCache();
   const formData = new FormData();
   formData.set("file", file);
 
@@ -113,6 +151,7 @@ export async function uploadAvatar(file: File) {
 }
 
 export async function uploadProfileBanner(file: File) {
+  clearCurrentUserCache();
   const formData = new FormData();
   formData.set("file", file);
 
@@ -140,6 +179,7 @@ export function changePassword(input: {
   currentPassword: string;
   newPassword: string;
 }) {
+  clearCurrentUserCache();
   return request<{ ok: boolean }>("/auth/password", {
     method: "PATCH",
     body: JSON.stringify(input),
@@ -290,6 +330,7 @@ export interface SystemSettings {
   workspaceName: string;
   workspaceSlug: string;
   timeZone: string;
+  faviconUrl: string | null;
   updatedAt: string;
 }
 
@@ -305,6 +346,36 @@ export function updateSystemSettings(input: Partial<{ timeZone: string }>) {
   return request<{ settings: SystemSettings }>("/admin/settings", {
     method: "PATCH",
     body: JSON.stringify(input),
+  });
+}
+
+export async function uploadSystemFavicon(file: File) {
+  const formData = new FormData();
+  formData.set("file", file);
+  const path = "/admin/settings/favicon";
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    redirectToLoginOnUnauthorized(response.status, path);
+    const body = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    const message = Array.isArray(body?.message)
+      ? body.message.join("；")
+      : body?.message;
+    throw new ApiError(message ?? "网站图标上传失败", response.status);
+  }
+
+  return (await response.json()) as { settings: SystemSettings };
+}
+
+export function resetSystemFavicon() {
+  return request<{ settings: SystemSettings }>("/admin/settings/favicon", {
+    method: "DELETE",
   });
 }
 
@@ -603,6 +674,18 @@ export function updateForumPost(postId: string, input: { body: string }) {
   return request<{ post: ForumPostSummary }>(`/forum/posts/${postId}`, {
     method: "PATCH",
     body: JSON.stringify(input),
+  });
+}
+
+export function voteForumPost(postId: string, vote: "up" | "down") {
+  return request<{
+    postId: string;
+    upvoteCount: number;
+    downvoteCount: number;
+    viewerVote: "up" | "down" | null;
+  }>(`/forum/posts/${postId}/vote`, {
+    method: "PUT",
+    body: JSON.stringify({ vote }),
   });
 }
 

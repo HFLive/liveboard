@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ChunkLoadRecovery } from "@/components/system/ChunkLoadRecovery";
+import { AppSettingsProvider } from "@/components/app-shell/AppSettingsProvider";
 import "./globals.css";
 import "./redesign.css";
 import "katex/dist/katex.min.css";
@@ -22,7 +23,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body>
         <ChunkLoadRecovery />
-        {children}
+        <AppSettingsProvider>{children}</AppSettingsProvider>
       </body>
     </html>
   );

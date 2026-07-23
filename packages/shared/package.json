@@ -9,6 +9,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./bilibili": {
+      "types": "./dist/bilibili.d.ts",
+      "default": "./dist/bilibili.js"
+    },
+    "./resource-name": {
+      "types": "./dist/resource-name.d.ts",
+      "default": "./dist/resource-name.js"
     }
   },
   "scripts": {

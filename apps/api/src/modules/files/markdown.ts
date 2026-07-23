@@ -1,4 +1,5 @@
 import type { ContentBlockType } from "@liveboard/shared";
+import { normalizeBilibiliEmbedUrl } from "@liveboard/shared";
 
 export const MAX_MARKDOWN_SIZE_BYTES = 2 * 1024 * 1024;
 export const MAX_MARKDOWN_BLOCKS = 2000;
@@ -358,6 +359,10 @@ function exportBlock(block: ExportableBlock) {
     return url
       ? `[${escapeMarkdownLabel(filename)}](${url})`
       : `附件：${escapeMarkdownText(filename)}`;
+  }
+  if (block.type === "bilibili") {
+    const url = normalizeBilibiliEmbedUrl(stringField(data, "embedCode"));
+    return url ? `[B站视频](${url})` : "B站视频：无效的嵌入代码";
   }
   if (block.type === "question") return `### 题目\n\n${inline}`;
 

@@ -1,24 +1,15 @@
 import { describe, expect, it } from "vitest";
-import {
-  contentDetail,
-  contentEdit,
-  exerciseDetail,
-  exerciseSubmissions,
-  forumThread,
-  teachingEdit,
-  teachingPresent,
-} from "./routes";
+import { appRouteTitle } from "./routes";
 
-describe("dynamic application routes", () => {
-  it.each([
-    [contentDetail, "/app/content/a%2Fb%20c"],
-    [contentEdit, "/app/content/a%2Fb%20c/edit"],
-    [exerciseDetail, "/app/exercises/a%2Fb%20c"],
-    [exerciseSubmissions, "/app/exercises/a%2Fb%20c/submissions"],
-    [forumThread, "/app/forum/a%2Fb%20c"],
-    [teachingEdit, "/app/teaching/a%2Fb%20c/edit"],
-    [teachingPresent, "/app/teaching/a%2Fb%20c/present"],
-  ])("encodes route identifiers", (routeBuilder, expected) => {
-    expect(routeBuilder("a/b c")).toBe(expected);
+describe("appRouteTitle", () => {
+  it("returns immediate titles for main and administration routes", () => {
+    expect(appRouteTitle("/app/forum")).toBe("论坛");
+    expect(appRouteTitle("/app/admin/settings")).toBe("系统设置");
+  });
+
+  it("returns generic titles while dynamic page data loads", () => {
+    expect(appRouteTitle("/app/content/file-1/edit")).toBe("编辑文档");
+    expect(appRouteTitle("/app/forum/thread-1")).toBe("帖子");
+    expect(appRouteTitle("/app/teaching/deck-1/present")).toBe("课件展示");
   });
 });
