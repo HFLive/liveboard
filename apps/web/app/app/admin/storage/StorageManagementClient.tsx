@@ -9,7 +9,7 @@ import {
 } from "@/lib/api";
 import { roleLabel } from "@/lib/labels";
 import { UserProfileLink } from "@/components/UserProfileLink";
-import { AdminSubnav } from "@/components/admin/AdminSubnav";
+import { TableSkeletonRows } from "@/components/system/ProgressiveLoading";
 
 export function StorageManagementClient() {
   const [items, setItems] = useState<UserStorageSummary[]>([]);
@@ -20,6 +20,7 @@ export function StorageManagementClient() {
   const [sort, setSort] = useState<"usage-desc" | "usage-asc" | "name">(
     "usage-desc",
   );
+  const [loadingStorage, setLoadingStorage] = useState(true);
 
   const totalUsedBytes = useMemo(
     () => items.reduce((sum, item) => sum + item.storageUsedBytes, 0),
@@ -65,9 +66,11 @@ export function StorageManagementClient() {
   }
 
   useEffect(() => {
-    load().catch((caught) => {
-      setError(caught instanceof Error ? caught.message : "加载容量信息失败");
-    });
+    load()
+      .catch((caught) => {
+        setError(caught instanceof Error ? caught.message : "加载容量信息失败");
+      })
+      .finally(() => setLoadingStorage(false));
   }, []);
 
   async function onSaveQuota(
@@ -112,12 +115,10 @@ export function StorageManagementClient() {
       <header className="page-head">
         <div>
           <p className="page-eyebrow">管理中心</p>
-          <h1>容量管理</h1>
+          <h1>存储容量</h1>
           <p className="muted">查看成员存储使用情况，并调整个人容量上限。</p>
         </div>
       </header>
-
-      <AdminSubnav />
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
@@ -125,15 +126,27 @@ export function StorageManagementClient() {
       <section className="metric-strip" aria-label="容量概览">
         <article className="metric">
           <span>总占用</span>
-          <strong>{formatStorageSize(totalUsedBytes)}</strong>
+          {loadingStorage ? (
+            <span className="skeleton-block admin-metric-value-skeleton" />
+          ) : (
+            <strong>{formatStorageSize(totalUsedBytes)}</strong>
+          )}
         </article>
         <article className="metric">
           <span>总上限</span>
-          <strong>{formatStorageSize(totalQuotaBytes)}</strong>
+          {loadingStorage ? (
+            <span className="skeleton-block admin-metric-value-skeleton" />
+          ) : (
+            <strong>{formatStorageSize(totalQuotaBytes)}</strong>
+          )}
         </article>
         <article className="metric">
           <span>成员数</span>
-          <strong>{items.length}</strong>
+          {loadingStorage ? (
+            <span className="skeleton-block admin-metric-value-skeleton" />
+          ) : (
+            <strong>{items.length}</strong>
+          )}
         </article>
       </section>
 
@@ -170,6 +183,9 @@ export function StorageManagementClient() {
               </tr>
             </thead>
             <tbody>
+              {loadingStorage ? (
+                <TableSkeletonRows colSpan={7} count={6} />
+              ) : null}
               {sortedItems.map((item) => {
                 const rawPercent =
                   item.storageQuotaBytes === 0
@@ -250,7 +266,7 @@ export function StorageManagementClient() {
                   </tr>
                 );
               })}
-              {items.length === 0 ? (
+              {!loadingStorage && items.length === 0 ? (
                 <tr>
                   <td className="empty-cell" colSpan={7}>
                     暂无成员。

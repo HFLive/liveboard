@@ -115,9 +115,9 @@
 
 .permission-group-detail-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 32px;
+  gap: 28px;
   padding-top: 18px;
 }
 
@@ -276,8 +276,8 @@
 
 .permission-group-settings {
   align-self: start;
-  border-left: 1px solid var(--line);
-  padding-left: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
 }
 
 .permission-group-settings .input,
@@ -287,7 +287,8 @@
 
 .permission-group-form-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(180px, 0.45fr) minmax(260px, 1fr);
+  align-items: start;
   gap: 14px;
 }
 
@@ -340,9 +341,11 @@
 
   .permission-group-settings {
     border-top: 1px solid var(--line);
-    border-left: 0;
     padding-top: 20px;
-    padding-left: 0;
+  }
+
+  .permission-group-form-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

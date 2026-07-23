@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { canView, isSuperAdmin, isSystemAdmin } from "@liveboard/shared";
 import type { Prisma } from "@prisma/client";
+import { requireResourceName } from "../../common/resource-name";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type {
@@ -292,11 +293,7 @@ export class TeachingService {
   }
 
   private validateTitle(value: string) {
-    const title = value.trim();
-    if (!title) {
-      throw new BadRequestException("课件名称不能为空");
-    }
-    return title;
+    return requireResourceName(value, "课件名称");
   }
 
   private async normalizeVisibleUserIds(

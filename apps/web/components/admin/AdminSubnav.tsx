@@ -18,54 +18,74 @@ import {
 import { APP_ROUTES } from "@/lib/routes";
 import { getMe } from "@/lib/api";
 
-const adminNavItems = [
+const adminNavGroups = [
   {
-    href: APP_ROUTES.admin,
-    label: "总览",
-    icon: LayoutDashboard,
+    label: "概览",
+    items: [
+      {
+        href: APP_ROUTES.admin,
+        label: "管理总览",
+        icon: LayoutDashboard,
+      },
+    ],
   },
   {
-    href: APP_ROUTES.adminUsers,
-    label: "成员",
-    icon: Users,
+    label: "人员与权限",
+    items: [
+      {
+        href: APP_ROUTES.adminUsers,
+        label: "成员",
+        icon: Users,
+      },
+      {
+        href: APP_ROUTES.adminGroups,
+        label: "权限组",
+        icon: ShieldCheck,
+      },
+      {
+        href: APP_ROUTES.adminContentPermissions,
+        label: "文档权限",
+        icon: SlidersHorizontal,
+      },
+    ],
   },
   {
-    href: APP_ROUTES.adminStorage,
-    label: "容量",
-    icon: Database,
+    label: "内容与资源",
+    items: [
+      {
+        href: APP_ROUTES.adminStorage,
+        label: "存储容量",
+        icon: Database,
+      },
+      {
+        href: APP_ROUTES.adminForum,
+        label: "论坛版块",
+        icon: MessageSquare,
+      },
+    ],
   },
   {
-    href: APP_ROUTES.adminGroups,
-    label: "权限组",
-    icon: ShieldCheck,
-  },
-  {
-    href: APP_ROUTES.adminContentPermissions,
-    label: "文档权限",
-    icon: SlidersHorizontal,
-  },
-  {
-    href: APP_ROUTES.adminForum,
-    label: "论坛",
-    icon: MessageSquare,
-  },
-  {
-    href: APP_ROUTES.adminAi,
-    label: "AI",
-    icon: Bot,
-    superAdminOnly: true,
-  },
-  {
-    href: APP_ROUTES.adminServerStatus,
-    label: "服务器",
-    icon: MonitorCog,
-    superAdminOnly: true,
-  },
-  {
-    href: APP_ROUTES.adminSettings,
-    label: "系统",
-    icon: Settings,
-    superAdminOnly: true,
+    label: "系统与服务",
+    items: [
+      {
+        href: APP_ROUTES.adminAi,
+        label: "AI 服务",
+        icon: Bot,
+        superAdminOnly: true,
+      },
+      {
+        href: APP_ROUTES.adminServerStatus,
+        label: "服务器状态",
+        icon: MonitorCog,
+        superAdminOnly: true,
+      },
+      {
+        href: APP_ROUTES.adminSettings,
+        label: "系统设置",
+        icon: Settings,
+        superAdminOnly: true,
+      },
+    ],
   },
 ] as const;
 
@@ -79,26 +99,40 @@ export function AdminSubnav() {
       .catch(() => setRole(null));
   }, []);
 
-  const visibleItems = adminNavItems.filter(
-    (item) => !("superAdminOnly" in item) || role === "super_admin",
-  );
-
   return (
-    <nav aria-label="管理中心导航" className="admin-subnav">
-      {visibleItems.map((item) => {
-        const Icon = item.icon;
-        const active = pathname === item.href;
+    <nav aria-label="管理中心导航" className="admin-context-nav">
+      <div className="admin-context-head">
+        <strong>管理中心</strong>
+        <span>工作区配置与运行状态</span>
+      </div>
+      {adminNavGroups.map((group) => {
+        const visibleItems = group.items.filter(
+          (item) => !("superAdminOnly" in item) || role === "super_admin",
+        );
+        if (visibleItems.length === 0) return null;
 
         return (
-          <Link
-            aria-current={active ? "page" : undefined}
-            className={active ? "active" : undefined}
-            href={item.href}
-            key={item.href}
-          >
-            <Icon aria-hidden="true" />
-            <span>{item.label}</span>
-          </Link>
+          <section className="admin-nav-group" key={group.label}>
+            <h2>{group.label}</h2>
+            <div>
+              {visibleItems.map((item) => {
+                const Icon = item.icon;
+                const active = pathname === item.href;
+
+                return (
+                  <Link
+                    aria-current={active ? "page" : undefined}
+                    className={active ? "active" : undefined}
+                    href={item.href}
+                    key={item.href}
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
         );
       })}
     </nav>

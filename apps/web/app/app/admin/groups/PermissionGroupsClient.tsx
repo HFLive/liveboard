@@ -30,8 +30,8 @@ import {
 } from "@/lib/api";
 import { userStatusLabel } from "@/lib/labels";
 import { UserProfileLink } from "@/components/UserProfileLink";
-import { AdminSubnav } from "@/components/admin/AdminSubnav";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 export function PermissionGroupsClient() {
   const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
@@ -54,6 +54,7 @@ export function PermissionGroupsClient() {
   );
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadingGroups, setLoadingGroups] = useState(true);
   const selectedGroup =
     groups.find((group) => group.id === selectedGroupId) ?? groups[0] ?? null;
   const selectedMembers = selectedGroup?.members ?? [];
@@ -116,9 +117,11 @@ export function PermissionGroupsClient() {
   }
 
   useEffect(() => {
-    load().catch((caught) => {
-      setError(caught instanceof Error ? caught.message : "加载权限组失败");
-    });
+    load()
+      .catch((caught) => {
+        setError(caught instanceof Error ? caught.message : "加载权限组失败");
+      })
+      .finally(() => setLoadingGroups(false));
   }, []);
 
   useEffect(() => {
@@ -271,8 +274,6 @@ export function PermissionGroupsClient() {
         </div>
       </header>
 
-      <AdminSubnav />
-
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
 
@@ -299,6 +300,7 @@ export function PermissionGroupsClient() {
               />
             </div>
             <div className="group-list" aria-label="权限组列表">
+              {loadingGroups ? <SkeletonRows compact count={4} /> : null}
               {filteredGroups.map((group) => (
                 <button
                   className={`group-list-item ${
@@ -315,7 +317,7 @@ export function PermissionGroupsClient() {
                   <em>{group.memberCount}</em>
                 </button>
               ))}
-              {groups.length === 0 ? (
+              {!loadingGroups && groups.length === 0 ? (
                 <div className="empty-panel compact">
                   <strong>还没有权限组</strong>
                   <span>先创建一个组，再把成员加入进去。</span>
@@ -332,7 +334,9 @@ export function PermissionGroupsClient() {
         </aside>
 
         <section className="workbench-main">
-          {selectedGroup ? (
+          {loadingGroups ? (
+            <SkeletonRows count={6} />
+          ) : selectedGroup ? (
             <section className="permission-group-detail">
               <header className="panel-head">
                 <div>

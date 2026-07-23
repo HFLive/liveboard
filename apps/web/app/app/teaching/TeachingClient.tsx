@@ -9,12 +9,14 @@ import { deleteTeachingDeck, listTeachingDecks } from "@/lib/api";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import { formatRelativeTime } from "@/lib/labels";
 import { APP_ROUTES, teachingEdit, teachingPresent } from "@/lib/routes";
+import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 export function TeachingClient() {
   const router = useRouter();
   const [decks, setDecks] = useState<TeachingDeckSummary[]>([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loadingDecks, setLoadingDecks] = useState(true);
 
   const filtered = useMemo(() => {
     const value = query.trim().toLowerCase();
@@ -32,7 +34,8 @@ export function TeachingClient() {
       .then((result) => setDecks(result.decks))
       .catch((caught) =>
         setError(caught instanceof Error ? caught.message : "加载课件失败"),
-      );
+      )
+      .finally(() => setLoadingDecks(false));
   }, []);
 
   async function onDelete(deck: TeachingDeckSummary) {
@@ -73,6 +76,7 @@ export function TeachingClient() {
           </Link>
         </div>
         <div className="teaching-deck-list">
+          {loadingDecks ? <SkeletonRows count={5} /> : null}
           {filtered.map((deck) => (
             <article
               className="teaching-deck-row teaching-deck-row-link"
@@ -124,7 +128,7 @@ export function TeachingClient() {
               </div>
             </article>
           ))}
-          {filtered.length === 0 ? (
+          {!loadingDecks && filtered.length === 0 ? (
             <div className="empty-panel teaching-empty">
               <strong>{decks.length ? "没有匹配的课件" : "暂无课件"}</strong>
               <span>

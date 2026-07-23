@@ -18,6 +18,10 @@ import {
 } from "lucide-react";
 import type { FileSummary, UserSummary } from "@liveboard/shared";
 import {
+  getResourceNameError,
+  normalizeResourceName,
+} from "@liveboard/shared/resource-name";
+import {
   ContentBlock,
   createTeachingDeck,
   ExerciseSetSummary,
@@ -246,8 +250,9 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
   }
 
   async function save() {
-    if (!title.trim()) {
-      setError("请输入课件名称");
+    const nameError = getResourceNameError(title, "课件名称");
+    if (nameError) {
+      setError(nameError);
       return;
     }
     if (!items.length) {
@@ -257,7 +262,7 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
     setLoading(true);
     setError(null);
     const payload = {
-      title: title.trim(),
+      title: normalizeResourceName(title),
       items: items.map((item) =>
         item.type === "content_block"
           ? {

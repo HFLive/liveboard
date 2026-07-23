@@ -37,6 +37,10 @@ import type {
   PermissionGroupSummary,
 } from "@liveboard/shared";
 import {
+  getResourceNameError,
+  normalizeResourceName,
+} from "@liveboard/shared/resource-name";
+import {
   createFile,
   createFolder,
   deleteFile,
@@ -59,6 +63,10 @@ import { contentDetail } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { SortIconSelect } from "@/components/SortIconSelect";
 import { MarkdownImportButton } from "./MarkdownImportButton";
+import {
+  SkeletonRows,
+  TableSkeletonRows,
+} from "@/components/system/ProgressiveLoading";
 
 type FlatFolderNode = FolderNode & { depth: number };
 type PinnedContentItem =
@@ -221,6 +229,8 @@ export function ContentClient() {
   );
   const [canManagePins, setCanManagePins] = useState(false);
   const [isUpdatingPins, setIsUpdatingPins] = useState(false);
+  const [loadingTree, setLoadingTree] = useState(true);
+  const [loadingItems, setLoadingItems] = useState(true);
 
   const flatFolders = useMemo(() => flattenFolders(folders), [folders]);
   const visibleTreeFolders = useMemo(
@@ -354,15 +364,15 @@ export function ContentClient() {
     setCanManagePins(folderResult.canManagePins);
     setActiveFolderId(selectedFolderId);
     persistActiveFolder(selectedFolderId);
+    setLoadingTree(false);
 
     if (selectedFolderId) {
-      const fileResult = await listFiles(selectedFolderId);
-      setFiles(fileResult.files);
-
-      const [grantResult] = await Promise.all([
+      const [fileResult, grantResult] = await Promise.all([
+        listFiles(selectedFolderId),
         listPermissionGrants("folder", selectedFolderId),
         loadAssignableGroups(selectedFolderId),
       ]);
+      setFiles(fileResult.files);
       setGrants(grantResult.grants);
       setInheritedGrants(grantResult.inheritedGrants);
     } else {
@@ -373,6 +383,7 @@ export function ContentClient() {
       setGrantGroupId("");
       setCanManageGrants(false);
     }
+    setLoadingItems(false);
   }
 
   async function refreshTree() {
@@ -423,9 +434,14 @@ export function ContentClient() {
   }
 
   useEffect(() => {
-    load().catch((caught) => {
-      setError(caught instanceof Error ? caught.message : "加载失败");
-    });
+    load()
+      .catch((caught) => {
+        setError(caught instanceof Error ? caught.message : "加载失败");
+      })
+      .finally(() => {
+        setLoadingTree(false);
+        setLoadingItems(false);
+      });
     // The initial load should only run once; actions call load explicitly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -588,9 +604,15 @@ export function ContentClient() {
     setError(null);
     setMessage(null);
 
+    const nameError = getResourceNameError(folderName, "文件夹名称");
+    if (nameError) {
+      setError(nameError);
+      return;
+    }
+
     try {
       await createFolder({
-        name: folderName,
+        name: normalizeResourceName(folderName),
         parentId: folderParentId || undefined,
       });
       setFolderName("");
@@ -613,10 +635,16 @@ export function ContentClient() {
       return;
     }
 
+    const nameError = getResourceNameError(fileTitle, "文档名称");
+    if (nameError) {
+      setError(nameError);
+      return;
+    }
+
     try {
       await createFile({
         folderId: activeFolderId,
-        title: fileTitle,
+        title: normalizeResourceName(fileTitle),
       });
       setFileTitle("");
       setShowCreateFile(false);
@@ -860,12 +888,12 @@ export function ContentClient() {
     setError(null);
     setMessage(null);
 
-    const title = fileRename.trim();
-
-    if (!title) {
-      setError("文档名称不能为空");
+    const nameError = getResourceNameError(fileRename, "文档名称");
+    if (nameError) {
+      setError(nameError);
       return;
     }
+    const title = normalizeResourceName(fileRename);
 
     if (title === file.title) {
       setRenamingFileId(null);
@@ -899,10 +927,16 @@ export function ContentClient() {
       return;
     }
 
+    const nameError = getResourceNameError(folderRename, "文件夹名称");
+    if (nameError) {
+      setError(nameError);
+      return;
+    }
+
     try {
       await updateFolder({
         folderId: editingFolderId ?? activeFolderId,
-        name: folderRename,
+        name: normalizeResourceName(folderRename),
       });
       setEditingFolderId(null);
       setMessage("文件夹已重命名");
@@ -1118,6 +1152,7 @@ export function ContentClient() {
                 <input
                   autoFocus
                   className="input"
+                  maxLength={120}
                   value={fileRename}
                   onChange={(event) => setFileRename(event.target.value)}
                 />
@@ -1602,8 +1637,9 @@ export function ContentClient() {
       <section className={`workbench files-layout mobile-pane-${mobilePane}`}>
         <aside className="folder-panel">
           <div className="file-tree">
+            {loadingTree ? <SkeletonRows compact count={6} /> : null}
             {visibleTreeFolders.map(renderContentTreeRow)}
-            {flatFolders.length === 0 && !showCreateFolder ? (
+            {!loadingTree && flatFolders.length === 0 && !showCreateFolder ? (
               <div className="empty-panel">
                 <strong>还没有文件夹</strong>
                 <span>先创建一个位置来存放文件。</span>
@@ -1624,6 +1660,9 @@ export function ContentClient() {
           <div className="table-wrap">
             <table className="table responsive-table content-items-table">
               <tbody>
+                {loadingItems ? (
+                  <TableSkeletonRows colSpan={3} count={6} />
+                ) : null}
                 {pinnedItems.map(renderPinnedTableRow)}
                 {unpinnedChildFolders.map((folder) => (
                   <tr
@@ -1728,7 +1767,8 @@ export function ContentClient() {
                     {renderFileInlineRows(file)}
                   </Fragment>
                 ))}
-                {pinnedItems.length === 0 &&
+                {!loadingItems &&
+                pinnedItems.length === 0 &&
                 unpinnedChildFolders.length === 0 &&
                 unpinnedFiles.length === 0 ? (
                   <tr className="content-empty-row">
@@ -2078,6 +2118,7 @@ export function ContentClient() {
                 <input
                   autoFocus
                   className="input"
+                  maxLength={120}
                   placeholder="例如：基础培训"
                   value={folderName}
                   onChange={(event) => setFolderName(event.target.value)}

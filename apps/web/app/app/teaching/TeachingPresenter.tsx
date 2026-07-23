@@ -499,15 +499,21 @@ function EmbeddedExercise({ exerciseSetId }: { exerciseSetId: string }) {
   return (
     <div className="embedded-exercise">
       <div className="embedded-exercise-head">
-        <h2>{exercise?.title ?? "加载练习…"}</h2>
-        <span>{exercise?.questions.length ?? 0} 道题</span>
+        <div>
+          <span className="embedded-exercise-kicker">课堂练习</span>
+          <h2>{exercise?.title ?? "加载练习…"}</h2>
+        </div>
+        <span className="embedded-exercise-count">
+          {exercise?.questions.length ?? 0} 道题
+        </span>
       </div>
       <div className="embedded-question-list">
         {exercise?.questions.map((question, index) => (
           <div className="embedded-question" key={question.id}>
-            <strong>
-              {index + 1}. {promptText(question)}
-            </strong>
+            <div className="embedded-question-head">
+              <span className="embedded-question-index">{index + 1}</span>
+              <strong>{promptText(question)}</strong>
+            </div>
             <QuestionField
               question={question}
               value={answers[question.id]}
@@ -518,16 +524,20 @@ function EmbeddedExercise({ exerciseSetId }: { exerciseSetId: string }) {
           </div>
         ))}
       </div>
-      {error ? <p className="error-text">{error}</p> : null}
-      {message ? <p className="success-text">{message}</p> : null}
-      <button
-        className="button"
-        disabled={!exercise || submitting || Boolean(message)}
-        onClick={() => void submit()}
-        type="button"
-      >
-        {submitting ? "提交中" : message ? "已提交" : "提交练习"}
-      </button>
+      <div className="embedded-exercise-footer">
+        <div aria-live="polite">
+          {error ? <p className="error-text">{error}</p> : null}
+          {message ? <p className="success-text">{message}</p> : null}
+        </div>
+        <button
+          className="button"
+          disabled={!exercise || submitting || Boolean(message)}
+          onClick={() => void submit()}
+          type="button"
+        >
+          {submitting ? "提交中" : message ? "已提交" : "提交练习"}
+        </button>
+      </div>
     </div>
   );
 }

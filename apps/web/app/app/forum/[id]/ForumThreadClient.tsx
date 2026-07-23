@@ -14,6 +14,8 @@ import {
   Search,
   Send,
   Trash2,
+  ThumbsDown,
+  ThumbsUp,
   Unlock,
   X,
 } from "lucide-react";
@@ -32,6 +34,7 @@ import {
   updateForumPost,
   updateForumThread,
   updateForumThreadFollow,
+  voteForumPost,
 } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/labels";
 import {
@@ -79,6 +82,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [votingPostIds, setVotingPostIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [postSearch, setPostSearch] = useState("");
   const draftKey = `liveboard:forum-reply-draft:${threadId}`;
@@ -472,6 +476,72 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     }
   }
 
+  async function votePost(postId: string, vote: "up" | "down") {
+    if (votingPostIds.has(postId)) return;
+    setVotingPostIds((current) => new Set(current).add(postId));
+    setError(null);
+    try {
+      const result = await voteForumPost(postId, vote);
+      setThread((current) =>
+        current
+          ? {
+              ...current,
+              posts: current.posts.map((post) =>
+                post.id === postId
+                  ? {
+                      ...post,
+                      upvoteCount: result.upvoteCount,
+                      downvoteCount: result.downvoteCount,
+                      viewerVote: result.viewerVote,
+                    }
+                  : post,
+              ),
+            }
+          : current,
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "更新评价失败");
+    } finally {
+      setVotingPostIds((current) => {
+        const next = new Set(current);
+        next.delete(postId);
+        return next;
+      });
+    }
+  }
+
+  function renderPostVotes(post: ForumPostSummary) {
+    const disabled = votingPostIds.has(post.id);
+    return (
+      <div className="forum-post-votes" aria-label="评价">
+        <button
+          aria-label={`点赞，当前 ${post.upvoteCount}`}
+          aria-pressed={post.viewerVote === "up"}
+          className={post.viewerVote === "up" ? "active" : undefined}
+          disabled={disabled}
+          onClick={() => void votePost(post.id, "up")}
+          title="点赞"
+          type="button"
+        >
+          <ThumbsUp aria-hidden="true" />
+          <span>{post.upvoteCount}</span>
+        </button>
+        <button
+          aria-label={`点踩，当前 ${post.downvoteCount}`}
+          aria-pressed={post.viewerVote === "down"}
+          className={post.viewerVote === "down" ? "active" : undefined}
+          disabled={disabled}
+          onClick={() => void votePost(post.id, "down")}
+          title="点踩"
+          type="button"
+        >
+          <ThumbsDown aria-hidden="true" />
+          <span>{post.downvoteCount}</span>
+        </button>
+      </div>
+    );
+  }
+
   const postStructure = useMemo(() => {
     const posts = thread?.posts ?? [];
     const mainPost = posts[0] ?? null;
@@ -564,20 +634,23 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
               </div>
               <ForumPostImages compact images={replyPost.images} />
 
-              {thread.canReply ? (
-                <button
-                  className="forum-text-button"
-                  onClick={() =>
-                    setActiveReplyPostId((current) =>
-                      current === replyPost.id ? null : replyPost.id,
-                    )
-                  }
-                  type="button"
-                >
-                  <MessageSquareReply aria-hidden="true" />
-                  回复
-                </button>
-              ) : null}
+              <div className="forum-post-actions">
+                {renderPostVotes(replyPost)}
+                {thread.canReply ? (
+                  <button
+                    className="forum-text-button"
+                    onClick={() =>
+                      setActiveReplyPostId((current) =>
+                        current === replyPost.id ? null : replyPost.id,
+                      )
+                    }
+                    type="button"
+                  >
+                    <MessageSquareReply aria-hidden="true" />
+                    回复
+                  </button>
+                ) : null}
+              </div>
 
               {activeReplyPostId === replyPost.id ? (
                 <form
@@ -890,6 +963,9 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                     </div>
                   )}
                   <ForumPostImages images={postStructure.mainPost.images} />
+                  <div className="forum-post-actions">
+                    {renderPostVotes(postStructure.mainPost)}
+                  </div>
                 </div>
               </article>
             ) : null}
@@ -971,20 +1047,23 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                         </div>
                         <ForumPostImages compact images={post.images} />
 
-                        {thread.canReply ? (
-                          <button
-                            className="forum-text-button"
-                            onClick={() =>
-                              setActiveReplyPostId((current) =>
-                                current === post.id ? null : post.id,
-                              )
-                            }
-                            type="button"
-                          >
-                            <MessageSquareReply aria-hidden="true" />
-                            回复
-                          </button>
-                        ) : null}
+                        <div className="forum-post-actions">
+                          {renderPostVotes(post)}
+                          {thread.canReply ? (
+                            <button
+                              className="forum-text-button"
+                              onClick={() =>
+                                setActiveReplyPostId((current) =>
+                                  current === post.id ? null : post.id,
+                                )
+                              }
+                              type="button"
+                            >
+                              <MessageSquareReply aria-hidden="true" />
+                              回复
+                            </button>
+                          ) : null}
+                        </div>
 
                         {activeReplyPostId === post.id ? (
                           <form

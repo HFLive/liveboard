@@ -9,6 +9,7 @@ import {
 import { gradeQuestion, isSuperAdmin, isSystemAdmin } from "@liveboard/shared";
 import type { QuestionType } from "@liveboard/shared";
 import { Prisma } from "@prisma/client";
+import { requireResourceName } from "../../common/resource-name";
 import { PrismaService } from "../prisma/prisma.service";
 import type {
   CreateExerciseSetDto,
@@ -103,10 +104,7 @@ export class ExercisesService {
   async createExerciseSet(userId: string | null, input: CreateExerciseSetDto) {
     const user = await this.requireUser(userId);
 
-    const title = input.title.trim();
-    if (!title) {
-      throw new BadRequestException("测验名称不能为空");
-    }
+    const title = requireResourceName(input.title, "练习名称");
 
     const openAt = input.openAt ? new Date(input.openAt) : null;
     const dueAt = input.dueAt ? new Date(input.dueAt) : null;

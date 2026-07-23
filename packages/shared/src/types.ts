@@ -25,6 +25,7 @@ export type ContentBlockType =
   | "quote"
   | "image"
   | "attachment"
+  | "bilibili"
   | "divider"
   | "question"
   | "table"
@@ -254,6 +255,9 @@ export interface ForumPostSummary {
   images: ForumImageSummary[];
   createdAt: string;
   updatedAt: string;
+  upvoteCount: number;
+  downvoteCount: number;
+  viewerVote: "up" | "down" | null;
   canEdit?: boolean;
   canDelete?: boolean;
 }

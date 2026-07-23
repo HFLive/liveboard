@@ -29,6 +29,7 @@ import {
 } from "@/lib/labels";
 import { contentDetail, teachingPresent } from "@/lib/routes";
 import { SortIconSelect } from "@/components/SortIconSelect";
+import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 type AssetKindFilter = "all" | "image" | "file";
 type AssetSort = "newest" | "oldest" | "name" | "references";
@@ -61,6 +62,7 @@ export function LibraryClient() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [loadingAssets, setLoadingAssets] = useState(true);
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(
     new Set(),
   );
@@ -117,9 +119,11 @@ export function LibraryClient() {
   }
 
   useEffect(() => {
-    load().catch((caught) => {
-      setError(caught instanceof Error ? caught.message : "加载网盘失败");
-    });
+    load()
+      .catch((caught) => {
+        setError(caught instanceof Error ? caught.message : "加载网盘失败");
+      })
+      .finally(() => setLoadingAssets(false));
   }, []);
 
   useEffect(() => {
@@ -364,6 +368,7 @@ export function LibraryClient() {
 
           {view === "grid" ? (
             <div className="asset-grid">
+              {loadingAssets ? <SkeletonRows count={6} /> : null}
               {filteredAssets.map((asset) => {
                 const isImage = asset.mimeType.startsWith("image/");
                 const Icon = isImage ? Image : File;
@@ -422,12 +427,13 @@ export function LibraryClient() {
                 );
               })}
 
-              {filteredAssets.length === 0 ? (
+              {!loadingAssets && filteredAssets.length === 0 ? (
                 <LibraryEmpty assetsCount={assets.length} />
               ) : null}
             </div>
           ) : (
             <div className="asset-list">
+              {loadingAssets ? <SkeletonRows count={6} /> : null}
               {filteredAssets.map((asset) => {
                 const isImage = asset.mimeType.startsWith("image/");
                 const Icon = isImage ? Image : File;
@@ -482,7 +488,7 @@ export function LibraryClient() {
                   </article>
                 );
               })}
-              {filteredAssets.length === 0 ? (
+              {!loadingAssets && filteredAssets.length === 0 ? (
                 <LibraryEmpty assetsCount={assets.length} />
               ) : null}
             </div>

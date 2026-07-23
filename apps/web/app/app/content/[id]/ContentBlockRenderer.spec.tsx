@@ -58,4 +58,28 @@ describe("ContentBlockRenderer", () => {
       display: true,
     });
   });
+
+  it("renders only normalized Bilibili player embeds", () => {
+    const { rerender } = render(
+      <RenderBlockContent
+        block={block("bilibili", {
+          embedCode:
+            '<iframe src="//player.bilibili.com/player.html?bvid=BV1xx411c7mD"></iframe>',
+        })}
+      />,
+    );
+    expect(screen.getByTitle("B站视频")).toHaveAttribute(
+      "src",
+      "https://player.bilibili.com/player.html?bvid=BV1xx411c7mD&autoplay=0",
+    );
+
+    rerender(
+      <RenderBlockContent
+        block={block("bilibili", {
+          embedCode: '<iframe src="https://example.com"></iframe>',
+        })}
+      />,
+    );
+    expect(screen.queryByTitle("B站视频")).not.toBeInTheDocument();
+  });
 });

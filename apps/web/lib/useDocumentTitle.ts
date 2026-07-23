@@ -10,10 +10,13 @@ export function useDocumentTitle(title: string | null | undefined) {
     }
 
     const previous = document.title;
-    document.title = `${title} · LiveBoard`;
+    const assigned = `${title} · LiveBoard`;
+    document.title = assigned;
 
     return () => {
-      document.title = previous;
+      if (document.title === assigned) {
+        document.title = previous;
+      }
     };
   }, [title]);
 }

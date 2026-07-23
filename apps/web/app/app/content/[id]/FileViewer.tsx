@@ -9,6 +9,7 @@ import { fileStatusLabel, permissionLabel } from "@/lib/labels";
 import { contentEdit } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { RenderBlockContent } from "./ContentBlockRenderer";
+import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 function canEditContent(permission: FileDetail["permission"]) {
   return (
@@ -59,7 +60,10 @@ export function FileViewer({ fileId }: { fileId: string }) {
       {error ? <p className="error-text">{error}</p> : null}
 
       {loading ? (
-        <div className="content-viewer-loading">正在加载文档…</div>
+        <div className="content-viewer-progressive-loading" role="status">
+          <span className="skeleton-block content-viewer-title-skeleton" />
+          <SkeletonRows count={6} />
+        </div>
       ) : file ? (
         <>
           <header className="content-viewer-header">

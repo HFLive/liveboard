@@ -3080,6 +3080,138 @@ body,
   }
 }
 
+/* 渐进式加载：页面框架立即出现，各数据区使用稳定占位避免空白和布局跳动。 */
+.skeleton-block,
+.skeleton {
+  display: block;
+  border-radius: 7px;
+  background: linear-gradient(
+    90deg,
+    var(--fill-subtle) 18%,
+    var(--fill-hover) 38%,
+    var(--fill-subtle) 58%
+  );
+  background-size: 220% 100%;
+  animation: progressive-skeleton 1.15s ease-in-out infinite;
+}
+
+@keyframes progressive-skeleton {
+  to {
+    background-position: -220% 0;
+  }
+}
+
+.route-content-skeleton {
+  align-content: start;
+  min-height: min(620px, calc(100dvh - (var(--page-gutter) * 2)));
+}
+
+.route-skeleton-heading {
+  display: grid;
+  gap: 7px;
+  width: min(460px, 72%);
+}
+
+.skeleton-title {
+  width: 132px;
+  height: 24px;
+}
+
+.skeleton-subtitle {
+  width: min(360px, 100%);
+  height: 10px;
+}
+
+.route-skeleton-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.skeleton-search {
+  width: min(320px, 58%);
+  height: 34px;
+}
+
+.skeleton-button {
+  width: 86px;
+  height: 34px;
+}
+
+.progressive-list-skeleton {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 10px;
+}
+
+.progressive-list-skeleton-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 62px;
+  align-items: center;
+  gap: 12px;
+  min-height: 62px;
+  border-top: 1px solid var(--line);
+  padding: 10px 4px;
+}
+
+.progressive-list-skeleton.compact .progressive-list-skeleton-row {
+  min-height: 48px;
+}
+
+.progressive-list-skeleton-copy {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.skeleton-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+}
+
+.skeleton-line {
+  height: 9px;
+}
+
+.skeleton-line.primary {
+  width: min(260px, 58%);
+}
+
+.skeleton-line.secondary {
+  width: min(420px, 82%);
+  height: 8px;
+}
+
+.skeleton-action {
+  width: 52px;
+  height: 24px;
+  justify-self: end;
+}
+
+.progressive-table-skeleton-row td {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(100px, 0.7fr) 52px;
+  align-items: center;
+  gap: 28px;
+  height: 52px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.progressive-table-skeleton-row:hover {
+  background: transparent !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-block,
+  .skeleton {
+    animation: none;
+  }
+}
+
 .forum-compose-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;

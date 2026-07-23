@@ -13,6 +13,10 @@ import type {
   PermissionLevel,
   PermissionGroupSummary,
 } from "@liveboard/shared";
+import {
+  getResourceNameError,
+  normalizeResourceName,
+} from "@liveboard/shared/resource-name";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -80,6 +84,7 @@ const blockShortcuts: Array<{ command: string; type: ContentBlockType }> = [
   { command: "/ol", type: "numbered_list" },
   { command: "/table", type: "table" },
   { command: "/math", type: "math" },
+  { command: "/bilibili", type: "bilibili" },
 ];
 
 function getImageWidth(block: ContentBlock) {
@@ -703,7 +708,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
     setMessage(null);
 
     const currentData = asBlockData(block.dataJson);
-    const nextData = ["divider", "table", "math"].includes(type)
+    const nextData = ["divider", "table", "math", "bilibili"].includes(type)
       ? buildBlockData(type, getBlockText(block))
       : {
           ...currentData,
@@ -826,7 +831,16 @@ export function FileEditor({ fileId }: { fileId: string }) {
     setError(null);
     setMessage(null);
 
-    if (!titleInput.trim() || titleInput === file?.title) {
+    const nameError = getResourceNameError(titleInput, "文档名称");
+    if (nameError) {
+      setError(nameError);
+      setSaveState("error");
+      return;
+    }
+    const normalizedTitle = normalizeResourceName(titleInput);
+
+    if (normalizedTitle === file?.title) {
+      setTitleInput(normalizedTitle);
       return;
     }
 
@@ -834,7 +848,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
     try {
       await updateFile({
         fileId,
-        title: titleInput,
+        title: normalizedTitle,
       });
       setMessage("文件已重命名");
       setSaveState("saved");
@@ -1058,6 +1072,26 @@ export function FileEditor({ fileId }: { fileId: string }) {
       );
     }
 
+    if (block.type === "bilibili") {
+      return (
+        <div className="bilibili-block-editor">
+          <AutoTextarea
+            className="doc-block-input"
+            onBlur={() => void onSaveBlock(block)}
+            onChange={(event) =>
+              patchBlockData(block, { embedCode: event.target.value })
+            }
+            placeholder='粘贴 B站视频链接，或以 <iframe src="//player.bilibili.com/player.html?..."> 开头的嵌入代码'
+            rows={4}
+            value={getBlockDataString(block, "embedCode")}
+          />
+          <small>
+            仅提取并加载 Bilibili 官方播放器地址，其他 HTML 属性和脚本不会执行。
+          </small>
+        </div>
+      );
+    }
+
     if (block.type === "table") {
       return (
         <TableBlockEditor
@@ -1115,6 +1149,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
         <div>
           <input
             className="title-input"
+            maxLength={120}
             value={titleInput}
             onBlur={() => void onRenameFile()}
             onChange={(event) => {
@@ -1357,7 +1392,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
                           event.currentTarget.form?.requestSubmit();
                         }
                       }}
-                      placeholder="输入新内容，试试 /h1…/h6 /table /math /code /quote /todo /hr"
+                      placeholder="输入新内容，试试 /h1…/h6 /table /math /bilibili /code /quote /todo /hr"
                       rows={3}
                       value={newText}
                     />

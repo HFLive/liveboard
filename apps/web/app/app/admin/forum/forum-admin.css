@@ -60,6 +60,41 @@
   background: var(--fill-subtle);
 }
 
+.forum-admin-page .field-hint {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 450;
+}
+
+.forum-admin-page .forum-category-save-row {
+  padding-top: 2px;
+}
+
+.forum-admin-page .forum-category-danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.forum-admin-page .forum-category-danger-zone > div {
+  display: grid;
+  gap: 3px;
+}
+
+.forum-admin-page .forum-category-danger-zone strong {
+  font-size: 12px;
+}
+
+.forum-admin-page .forum-category-danger-zone span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 @media (min-width: 1121px) {
   /* 论坛设置内容本身不高，不使用贯穿剩余视口的结构竖线。 */
   .workspace.forum-admin-page .forum-admin-layout {

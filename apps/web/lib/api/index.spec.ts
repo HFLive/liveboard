@@ -4,8 +4,43 @@ import {
   AI_USAGE_CONSUMED_EVENT,
   askAiStream,
   downloadMarkdown,
+  getMe,
   importMarkdown,
 } from "./index";
+
+describe("Current user API", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("deduplicates concurrent current-user requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          user: {
+            id: "user-1",
+            username: "admin",
+            displayName: "Admin",
+            systemRole: "super_admin",
+            status: "active",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const [first, second, third] = await Promise.all([
+      getMe(),
+      getMe(),
+      getMe(),
+    ]);
+
+    expect(first).toEqual(second);
+    expect(second).toEqual(third);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});
 
 describe("Markdown API", () => {
   afterEach(() => {

@@ -9,8 +9,8 @@ import {
   listForumCategories,
   updateForumCategory,
 } from "@/lib/api";
-import { AdminSubnav } from "@/components/admin/AdminSubnav";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 type CategoryDraft = {
   name: string;
@@ -32,6 +32,7 @@ export function ForumSettingsClient() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadingCategories, setLoadingCategories] = useState(true);
   const selectedCategory = useMemo(
     () => categories.find((category) => category.id === selectedId) ?? null,
     [categories, selectedId],
@@ -48,9 +49,11 @@ export function ForumSettingsClient() {
   }
 
   useEffect(() => {
-    loadCategories().catch((caught) => {
-      setError(caught instanceof Error ? caught.message : "加载论坛版块失败");
-    });
+    loadCategories()
+      .catch((caught) => {
+        setError(caught instanceof Error ? caught.message : "加载论坛版块失败");
+      })
+      .finally(() => setLoadingCategories(false));
   }, []);
 
   useEffect(() => {
@@ -134,12 +137,10 @@ export function ForumSettingsClient() {
       <header className="page-head">
         <div>
           <p className="page-eyebrow">管理中心</p>
-          <h1>论坛设置</h1>
-          <p className="muted">维护论坛版块、展示顺序和内容入口。</p>
+          <h1>论坛版块</h1>
+          <p className="muted">维护版块名称、说明和论坛中的展示顺序。</p>
         </div>
       </header>
-
-      <AdminSubnav />
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
@@ -152,7 +153,9 @@ export function ForumSettingsClient() {
               版块
             </h2>
             <div className="button-row">
-              <span className="muted">{categories.length} 个</span>
+              <span className="muted">
+                {loadingCategories ? "正在加载" : `${categories.length} 个`}
+              </span>
               <button
                 className="button secondary"
                 onClick={() => setShowCreateModal(true)}
@@ -165,6 +168,7 @@ export function ForumSettingsClient() {
           </div>
 
           <div className="forum-admin-category-list">
+            {loadingCategories ? <SkeletonRows compact count={4} /> : null}
             {categories.map((category) => (
               <button
                 className={
@@ -183,6 +187,12 @@ export function ForumSettingsClient() {
                 <em>{category.threadCount}</em>
               </button>
             ))}
+            {!loadingCategories && categories.length === 0 ? (
+              <div className="empty-panel compact">
+                <strong>还没有论坛版块</strong>
+                <span>创建第一个版块后，成员才能按主题发布帖子。</span>
+              </div>
+            ) : null}
           </div>
         </aside>
 
@@ -193,7 +203,9 @@ export function ForumSettingsClient() {
             </div>
           </div>
 
-          {selectedCategory ? (
+          {loadingCategories ? (
+            <SkeletonRows count={4} />
+          ) : selectedCategory ? (
             <form className="profile-form" onSubmit={onSaveCategory}>
               <label className="label">
                 名称
@@ -237,25 +249,39 @@ export function ForumSettingsClient() {
                     }))
                   }
                 />
+                <small className="field-hint">
+                  数值越小，在论坛发布页和版块列表中越靠前。
+                </small>
               </label>
-              <div className="button-row left">
+              <div className="button-row left forum-category-save-row">
                 <button
                   className="button"
                   disabled={!editDraft.name.trim()}
                   type="submit"
                 >
                   <Save aria-hidden="true" className="button-icon" />
-                  保存
+                  保存版块信息
                 </button>
-                <button
-                  className="button danger"
-                  disabled={selectedCategory.threadCount > 0}
-                  onClick={onDeleteCategory}
-                  type="button"
-                >
-                  <Trash2 aria-hidden="true" className="button-icon" />
-                  删除空版块
-                </button>
+              </div>
+              <div className="forum-category-danger-zone">
+                <div>
+                  <strong>删除版块</strong>
+                  <span>
+                    {selectedCategory.threadCount > 0
+                      ? `该版块已有 ${selectedCategory.threadCount} 个帖子，无法删除。`
+                      : "仅空版块可以删除，删除后无法恢复。"}
+                  </span>
+                </div>
+                {selectedCategory.threadCount === 0 ? (
+                  <button
+                    className="button danger"
+                    onClick={onDeleteCategory}
+                    type="button"
+                  >
+                    <Trash2 aria-hidden="true" className="button-icon" />
+                    删除版块
+                  </button>
+                ) : null}
               </div>
             </form>
           ) : (
@@ -327,6 +353,7 @@ export function ForumSettingsClient() {
                     }))
                   }
                 />
+                <small className="field-hint">数值越小，展示位置越靠前。</small>
               </label>
             </div>
             <div className="modal-foot">

@@ -186,3 +186,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.library-workspace .asset-grid > .progressive-list-skeleton {
+  grid-column: 1 / -1;
+}

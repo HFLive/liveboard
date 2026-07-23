@@ -95,6 +95,22 @@ const value = 1;
     expect(exportMarkdown(parsed.blocks)).toBe("#### 深层标题\n");
   });
 
+  it("exports Bilibili embeds as safe links", () => {
+    expect(
+      exportMarkdown([
+        {
+          type: "bilibili",
+          dataJson: {
+            embedCode:
+              '<iframe src="//player.bilibili.com/player.html?bvid=BV1xx411c7mD"></iframe>',
+          },
+        },
+      ]),
+    ).toContain(
+      "[B站视频](https://player.bilibili.com/player.html?bvid=BV1xx411c7mD&autoplay=0)",
+    );
+  });
+
   it("round-trips GFM tables, display math, inline math, and safe links", () => {
     const parsed = parseMarkdown(`| 名称 | 公式 |
 | --- | --- |

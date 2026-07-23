@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ServerMetricPoint, ServerStatusSummary } from "@liveboard/shared";
 import { Cpu, Database, MemoryStick, RefreshCw } from "lucide-react";
-import { AdminSubnav } from "@/components/admin/AdminSubnav";
 import { getServerStatus } from "@/lib/api";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 
@@ -73,8 +72,6 @@ export function ServerStatusClient() {
           <p className="muted">查看当前资源占用与最近一段时间的变化。</p>
         </div>
       </header>
-
-      <AdminSubnav />
 
       {error ? <p className="error-text">{error}</p> : null}
 

@@ -40,6 +40,7 @@ import {
 import { formatRelativeTime } from "@/lib/labels";
 import { contentDetail } from "@/lib/routes";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 type ChatMessage = {
   id: string;
@@ -86,6 +87,7 @@ export function AiAssistantClient() {
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [asking, setAsking] = useState(false);
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -93,13 +95,21 @@ export function AiAssistantClient() {
   useEffect(() => {
     let active = true;
 
-    Promise.all([getAiStatus(), listAiConversations()])
-      .then(async ([aiResult, conversationsResult]) => {
-        if (!active) {
-          return;
+    getAiStatus()
+      .then((aiResult) => {
+        if (active) setAiStatus(aiResult.status);
+      })
+      .catch((caught) => {
+        if (active) {
+          setError(
+            caught instanceof Error ? caught.message : "加载 AI 状态失败",
+          );
         }
+      });
 
-        setAiStatus(aiResult.status);
+    listAiConversations()
+      .then(async (conversationsResult) => {
+        if (!active) return;
         setConversations(conversationsResult.conversations);
 
         const latest = conversationsResult.conversations[0];
@@ -113,8 +123,13 @@ export function AiAssistantClient() {
       })
       .catch((caught) => {
         if (active) {
-          setError(caught instanceof Error ? caught.message : "加载失败");
+          setError(
+            caught instanceof Error ? caught.message : "加载历史对话失败",
+          );
         }
+      })
+      .finally(() => {
+        if (active) setLoadingHistory(false);
       });
 
     return () => {
@@ -505,9 +520,14 @@ export function AiAssistantClient() {
 
           <div className="ai-sidebar-head">
             <h2>最近对话</h2>
-            <span>{filteredConversations.length} 条</span>
+            <span>
+              {loadingHistory
+                ? "正在加载"
+                : `${filteredConversations.length} 条`}
+            </span>
           </div>
           <div className="history-list">
+            {loadingHistory ? <SkeletonRows compact count={5} /> : null}
             {historyGroups.map((group) => (
               <section className="history-group" key={group.label}>
                 <h3>{group.label}</h3>
@@ -603,7 +623,7 @@ export function AiAssistantClient() {
                 ))}
               </section>
             ))}
-            {filteredConversations.length === 0 ? (
+            {!loadingHistory && filteredConversations.length === 0 ? (
               <span className="history-empty">
                 {historyQuery ? "没有匹配的历史" : "暂无历史"}
               </span>

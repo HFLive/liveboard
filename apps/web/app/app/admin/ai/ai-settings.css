@@ -5,36 +5,41 @@
 .ai-settings-page .ai-settings-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  width: min(820px, 100%);
+  gap: 28px;
+  width: min(900px, 100%);
   min-width: 0;
 }
 
 .ai-settings-page .ai-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   background: transparent;
 }
 
-.ai-settings-page .ai-panel > .panel-head h2 {
-  display: flex;
-  align-items: center;
+.ai-settings-page .ai-panel + .ai-panel {
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
+
+.ai-settings-page .ai-panel > .panel-head {
+  padding: 0 0 10px;
+}
+
+.ai-settings-page .ai-panel > .panel-head p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .ai-settings-page .ai-status-badge {
-  margin-left: 8px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 650;
 }
 
 .ai-settings-page .ai-status-badge.is-on {
   color: var(--accent-dark);
-}
-
-.ai-settings-page .ai-summary-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 0 0 auto;
 }
 
 .ai-settings-page .ai-compact-switch {
@@ -54,12 +59,64 @@
   accent-color: var(--accent);
 }
 
-.ai-settings-page .ai-assistant-current {
-  margin: 0;
-  padding: 12px 16px;
+.ai-settings-page .ai-setting-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ai-settings-page .ai-setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+}
+
+.ai-settings-page .ai-setting-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ai-settings-page .ai-setting-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+}
+
+.ai-settings-page .ai-setting-title > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+}
+
+.ai-settings-page .ai-setting-title :is(strong, label) {
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.ai-settings-page .ai-setting-copy p {
+  margin: 0 0 0 24px;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.ai-settings-page .ai-call-limit-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ai-settings-page .ai-call-limit-control .input {
+  width: 82px;
+  background: var(--fill-subtle);
 }
 
 .ai-settings-page .ai-config-list {
@@ -74,7 +131,8 @@
   justify-content: space-between;
   gap: 20px;
   min-width: 0;
-  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  padding: 13px 0;
 }
 
 .ai-settings-page .ai-config-row-main {
@@ -284,17 +342,17 @@
 }
 
 @media (max-width: 680px) {
-  .ai-settings-page .ai-panel > .panel-head {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .ai-settings-page .ai-summary-actions {
-    justify-content: space-between;
-  }
-
   .ai-settings-page .ai-provider-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-settings-page .ai-setting-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .ai-settings-page .ai-setting-row > :last-child {
+    justify-self: start;
   }
 }
 
@@ -330,44 +388,14 @@
   }
 }
 
-.ai-settings-page .ai-call-limit-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.ai-settings-page .ai-call-limit-row .label {
-  flex: 0 0 auto;
-  margin: 0;
-}
-
-.ai-settings-page .ai-call-limit-row .input {
-  width: 110px;
-  background: var(--fill-subtle);
-}
-
-.ai-settings-page .ai-call-limit-hint {
-  margin: 6px 0 0;
-}
-
 @media (max-width: 520px) {
-  .ai-settings-page .ai-call-limit-row {
+  .ai-settings-page .ai-call-limit-control {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 82px auto;
   }
 
-  .ai-settings-page .ai-call-limit-row .label {
+  .ai-settings-page .ai-call-limit-control .button {
     grid-column: 1 / -1;
-  }
-
-  .ai-settings-page .ai-call-limit-row .input {
-    width: 100%;
-  }
-
-  .ai-settings-page .ai-call-limit-row .button {
-    grid-column: 1 / -1;
-    width: fit-content;
   }
 
   .ai-settings-page .ai-config-empty {

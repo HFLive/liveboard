@@ -16,9 +16,9 @@ import {
   updateUser,
 } from "@/lib/api";
 import { roleLabel, userStatusLabel } from "@/lib/labels";
-import { AdminSubnav } from "@/components/admin/AdminSubnav";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { TableSkeletonRows } from "@/components/system/ProgressiveLoading";
 
 type UserEditDraft = {
   displayName: string;
@@ -191,6 +191,7 @@ export function UserManagementClient() {
     new Set(),
   );
   const [batchUpdating, setBatchUpdating] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(true);
   const parsedImport = useMemo(() => parseUserImportCsv(csvText), [csvText]);
   const editingUser = users.find((user) => user.id === editingUserId) ?? null;
   const actorIsSuperAdmin = actor?.systemRole === "super_admin";
@@ -212,9 +213,11 @@ export function UserManagementClient() {
   }
 
   useEffect(() => {
-    loadUsers().catch((caught) => {
-      setError(caught instanceof Error ? caught.message : "加载用户失败");
-    });
+    loadUsers()
+      .catch((caught) => {
+        setError(caught instanceof Error ? caught.message : "加载成员失败");
+      })
+      .finally(() => setLoadingUsers(false));
     getMe()
       .then((result) => setActor(result.user))
       .catch(() => setActor(null));
@@ -238,10 +241,10 @@ export function UserManagementClient() {
       setSystemRole("member");
       setImportResult(null);
       setShowCreateUserModal(false);
-      setMessage("用户已创建");
+      setMessage("成员已创建");
       await loadUsers();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "创建用户失败");
+      setError(caught instanceof Error ? caught.message : "创建成员失败");
     }
   }
 
@@ -345,7 +348,7 @@ export function UserManagementClient() {
       cancelEdit();
       await loadUsers();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "更新用户失败");
+      setError(caught instanceof Error ? caught.message : "更新成员失败");
     }
   }
 
@@ -404,8 +407,6 @@ export function UserManagementClient() {
         </div>
       </header>
 
-      <AdminSubnav />
-
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
 
@@ -417,7 +418,9 @@ export function UserManagementClient() {
                 成员列表
                 <span className="admin-list-count">
                   {filteredUsers.length === users.length
-                    ? `${users.length} 人`
+                    ? loadingUsers
+                      ? "正在加载"
+                      : `${users.length} 人`
                     : `${filteredUsers.length} / ${users.length} 人`}
                 </span>
               </h2>
@@ -437,7 +440,7 @@ export function UserManagementClient() {
                 type="button"
               >
                 <Plus aria-hidden="true" className="button-icon" />
-                创建用户
+                创建成员
               </button>
             </div>
           </div>
@@ -520,6 +523,9 @@ export function UserManagementClient() {
                 </tr>
               </thead>
               <tbody>
+                {loadingUsers ? (
+                  <TableSkeletonRows colSpan={7} count={6} />
+                ) : null}
                 {filteredUsers.map((user) => (
                   <tr key={user.id}>
                     <td data-label="选择">
@@ -566,6 +572,15 @@ export function UserManagementClient() {
                     </td>
                   </tr>
                 ))}
+                {!loadingUsers && filteredUsers.length === 0 ? (
+                  <tr>
+                    <td className="empty-cell" colSpan={7}>
+                      {users.length
+                        ? "没有符合当前筛选条件的成员。"
+                        : "暂无成员。"}
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>
@@ -576,7 +591,7 @@ export function UserManagementClient() {
         <div className="modal-backdrop" role="presentation">
           <form className="modal-panel" onSubmit={onCreateUser}>
             <div className="modal-head">
-              <h2>创建用户</h2>
+              <h2>创建成员</h2>
               <button
                 className="icon-button subtle"
                 onClick={() => setShowCreateUserModal(false)}
@@ -644,7 +659,7 @@ export function UserManagementClient() {
                   取消
                 </button>
                 <button className="button" type="submit">
-                  创建用户
+                  创建成员
                 </button>
               </div>
             </div>

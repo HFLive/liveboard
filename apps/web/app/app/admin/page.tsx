@@ -16,7 +16,6 @@ import {
   SlidersHorizontal,
   Users,
 } from "lucide-react";
-import { AdminSubnav } from "@/components/admin/AdminSubnav";
 import { APP_ROUTES } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { getAiSettings, getMe, listUsers, listUserStorage } from "@/lib/api";
@@ -28,6 +27,14 @@ type AdminTask = {
   level: "warning" | "info";
 };
 
+type AdminSummary = {
+  memberCount: number | null;
+  disabledCount: number | null;
+  storageUsedBytes: number | null;
+  storageQuotaBytes: number | null;
+  aiReady: boolean | null;
+};
+
 const adminEntries = [
   {
     href: APP_ROUTES.adminUsers,
@@ -37,7 +44,7 @@ const adminEntries = [
   },
   {
     href: APP_ROUTES.adminStorage,
-    title: "容量",
+    title: "存储容量",
     detail: "查看文件占用并调整个人上限",
     icon: Database,
   },
@@ -55,13 +62,13 @@ const adminEntries = [
   },
   {
     href: APP_ROUTES.adminForum,
-    title: "论坛",
+    title: "论坛版块",
     detail: "维护版块名称、说明与顺序",
     icon: MessageSquare,
   },
   {
     href: APP_ROUTES.adminAi,
-    title: "AI",
+    title: "AI 服务",
     detail: "配置模型、回答范围与每日限额",
     icon: Bot,
     superAdminOnly: true,
@@ -76,7 +83,7 @@ const adminEntries = [
   {
     href: APP_ROUTES.adminSettings,
     title: "系统",
-    detail: "维护全站时区与时间显示",
+    detail: "维护网站时区和标签页图标",
     icon: Settings,
     superAdminOnly: true,
   },
@@ -84,63 +91,137 @@ const adminEntries = [
 
 export default function AdminPage() {
   const [role, setRole] = useState<SystemRole | null>(null);
-  const [tasks, setTasks] = useState<AdminTask[] | null>(null);
+  const [memberTask, setMemberTask] = useState<AdminTask | null>(null);
+  const [storageTask, setStorageTask] = useState<AdminTask | null>(null);
+  const [aiTask, setAiTask] = useState<AdminTask | null>(null);
+  const [loadingMembers, setLoadingMembers] = useState(true);
+  const [loadingStorage, setLoadingStorage] = useState(true);
+  const [loadingAi, setLoadingAi] = useState(true);
+  const [summary, setSummary] = useState<AdminSummary>({
+    memberCount: null,
+    disabledCount: null,
+    storageUsedBytes: null,
+    storageQuotaBytes: null,
+    aiReady: null,
+  });
+  const tasks = [memberTask, storageTask, aiTask].filter(
+    (task): task is AdminTask => task !== null,
+  );
+  const tasksLoading =
+    loadingMembers ||
+    loadingStorage ||
+    role === null ||
+    (role === "super_admin" && loadingAi);
 
   useDocumentTitle("管理中心");
 
   useEffect(() => {
-    getMe()
-      .then(async (result) => {
-        setRole(result.user.systemRole);
-        const [usersResult, storageResult, aiResult] = await Promise.all([
-          listUsers(),
-          listUserStorage(),
-          result.user.systemRole === "super_admin"
-            ? getAiSettings().catch(() => null)
-            : Promise.resolve(null),
-        ]);
-        const nextTasks: AdminTask[] = [];
+    let active = true;
+
+    listUsers()
+      .then((usersResult) => {
+        if (!active) return;
         const disabledCount = usersResult.users.filter(
           (user) => user.status === "disabled",
         ).length;
+        setSummary((current) => ({
+          ...current,
+          memberCount: usersResult.users.length,
+          disabledCount,
+        }));
+        setMemberTask(
+          disabledCount
+            ? {
+                href: APP_ROUTES.adminUsers,
+                title: `${disabledCount} 个账号处于停用状态`,
+                detail: "复核是否需要重新启用或调整成员资料。",
+                level: "info",
+              }
+            : null,
+        );
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setLoadingMembers(false);
+      });
+
+    listUserStorage()
+      .then((storageResult) => {
+        if (!active) return;
         const highStorageCount = storageResult.users.filter(
           (item) =>
             item.storageQuotaBytes === 0 ||
             item.storageUsedBytes / item.storageQuotaBytes >= 0.9,
         ).length;
-        if (disabledCount) {
-          nextTasks.push({
-            href: APP_ROUTES.adminUsers,
-            title: `${disabledCount} 个账号处于停用状态`,
-            detail: "复核是否需要重新启用或调整成员资料。",
-            level: "info",
-          });
+        setSummary((current) => ({
+          ...current,
+          storageUsedBytes: storageResult.users.reduce(
+            (total, item) => total + item.storageUsedBytes,
+            0,
+          ),
+          storageQuotaBytes: storageResult.users.reduce(
+            (total, item) => total + item.storageQuotaBytes,
+            0,
+          ),
+        }));
+        setStorageTask(
+          highStorageCount
+            ? {
+                href: APP_ROUTES.adminStorage,
+                title: `${highStorageCount} 位成员容量接近上限`,
+                detail: "检查占用情况并按需调整个人容量。",
+                level: "warning",
+              }
+            : null,
+        );
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setLoadingStorage(false);
+      });
+
+    getMe()
+      .then((result) => {
+        if (!active) return;
+        setRole(result.user.systemRole);
+        if (result.user.systemRole !== "super_admin") {
+          setLoadingAi(false);
+          return;
         }
-        if (highStorageCount) {
-          nextTasks.push({
-            href: APP_ROUTES.adminStorage,
-            title: `${highStorageCount} 位成员容量接近上限`,
-            detail: "检查占用情况并按需调整个人容量。",
-            level: "warning",
+
+        getAiSettings()
+          .then((aiResult) => {
+            if (!active) return;
+            const aiReady = Boolean(
+              aiResult.settings.enabled && aiResult.settings.activeConfigId,
+            );
+            setSummary((current) => ({ ...current, aiReady }));
+            setAiTask(
+              aiReady
+                ? null
+                : {
+                    href: APP_ROUTES.adminAi,
+                    title: "AI 助手尚未完整启用",
+                    detail: "检查全局开关与当前模型配置。",
+                    level: "info",
+                  },
+            );
+          })
+          .catch(() => undefined)
+          .finally(() => {
+            if (active) setLoadingAi(false);
           });
-        }
-        if (
-          aiResult &&
-          (!aiResult.settings.enabled || !aiResult.settings.activeConfigId)
-        ) {
-          nextTasks.push({
-            href: APP_ROUTES.adminAi,
-            title: "AI 助手尚未完整启用",
-            detail: "检查全局开关与当前模型配置。",
-            level: "info",
-          });
-        }
-        setTasks(nextTasks);
       })
       .catch(() => {
-        setRole(null);
-        setTasks([]);
+        if (active) {
+          setRole("member");
+          setLoadingAi(false);
+        }
       });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   return (
@@ -148,12 +229,62 @@ export default function AdminPage() {
       <header className="page-head">
         <div>
           <p className="page-eyebrow">系统管理</p>
-          <h1>管理中心</h1>
+          <h1>管理总览</h1>
           <p className="muted">集中配置成员、权限、存储与平台服务。</p>
         </div>
       </header>
 
-      <AdminSubnav />
+      <section className="admin-summary-strip" aria-label="管理概览">
+        <article>
+          <span>成员</span>
+          {summary.memberCount === null ? (
+            <span className="skeleton-block admin-summary-value-skeleton" />
+          ) : (
+            <strong>{summary.memberCount}</strong>
+          )}
+          <small>
+            {summary.disabledCount === null
+              ? "正在读取成员状态"
+              : summary.disabledCount
+                ? `${summary.disabledCount} 个账号已停用`
+                : "所有账号状态正常"}
+          </small>
+        </article>
+        <article>
+          <span>存储占用</span>
+          {summary.storageUsedBytes === null ? (
+            <span className="skeleton-block admin-summary-value-skeleton" />
+          ) : (
+            <strong>{formatStorageSize(summary.storageUsedBytes)}</strong>
+          )}
+          <small>
+            {summary.storageQuotaBytes !== null
+              ? `总上限 ${formatStorageSize(summary.storageQuotaBytes)}`
+              : "正在读取容量信息"}
+          </small>
+        </article>
+        <article>
+          <span>AI 服务</span>
+          {loadingAi ? (
+            <span className="skeleton-block admin-summary-value-skeleton" />
+          ) : (
+            <strong>
+              {summary.aiReady === null
+                ? "不可配置"
+                : summary.aiReady
+                  ? "可用"
+                  : "待配置"}
+            </strong>
+          )}
+          <small>
+            {summary.aiReady === null
+              ? "仅最高管理员可配置"
+              : summary.aiReady
+                ? "当前模型配置有效"
+                : "检查开关与模型配置"}
+          </small>
+        </article>
+      </section>
 
       <div className="admin-overview-grid">
         <section className="admin-task-panel">
@@ -164,7 +295,7 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="admin-task-list">
-            {tasks?.map((task) => (
+            {tasks.map((task) => (
               <Link
                 className={`admin-task-row ${task.level}`}
                 href={task.href as Route}
@@ -181,10 +312,10 @@ export default function AdminPage() {
                 </span>
               </Link>
             ))}
-            {tasks === null ? (
+            {tasksLoading ? (
               <div className="skeleton admin-task-skeleton" />
             ) : null}
-            {tasks?.length === 0 ? (
+            {!tasksLoading && tasks.length === 0 ? (
               <div className="admin-task-empty">
                 <CheckCircle2 aria-hidden="true" />
                 <span>
@@ -198,8 +329,8 @@ export default function AdminPage() {
         <section className="admin-entry-panel">
           <div className="panel-head">
             <div>
-              <h2>管理入口</h2>
-              <p className="muted">按当前账号权限显示可用设置。</p>
+              <h2>常用管理</h2>
+              <p className="muted">快速进入常用的管理任务。</p>
             </div>
           </div>
           <div className="admin-entry-grid">
@@ -229,4 +360,11 @@ export default function AdminPage() {
       </div>
     </div>
   );
+}
+
+function formatStorageSize(value: number) {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MB`;
+  return `${(value / 1024 ** 3).toFixed(1)} GB`;
 }

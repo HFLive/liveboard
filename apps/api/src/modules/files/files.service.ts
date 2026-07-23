@@ -5,7 +5,12 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { canEdit, canView, isSystemAdmin } from "@liveboard/shared";
+import {
+  canEdit,
+  canView,
+  isSystemAdmin,
+  normalizeBilibiliEmbedUrl,
+} from "@liveboard/shared";
 import type {
   ContentPinTarget,
   FileSummary,
@@ -14,6 +19,7 @@ import type {
 import type { FileStatus, FileType } from "@liveboard/shared";
 import type { ContentBlockType } from "@liveboard/shared";
 import type { Prisma } from "@prisma/client";
+import { requireResourceName } from "../../common/resource-name";
 import { PrismaService } from "../prisma/prisma.service";
 import { PermissionsService } from "../permissions/permissions.service";
 import {
@@ -314,6 +320,7 @@ export class FilesService {
       throw new UnauthorizedException("Missing session");
     }
 
+    const name = requireResourceName(input.name, "文件夹名称");
     let workspace = await this.getDefaultWorkspace();
     let parentPermission = null;
 
@@ -345,7 +352,7 @@ export class FilesService {
         data: {
           workspaceId: workspace.id,
           parentId: input.parentId ?? null,
-          name: input.name,
+          name,
           createdById: userId,
         },
       });
@@ -376,7 +383,7 @@ export class FilesService {
       throw new UnauthorizedException("Missing session");
     }
 
-    if (!input.name && input.parentId === undefined) {
+    if (input.name === undefined && input.parentId === undefined) {
       throw new BadRequestException("Nothing to update");
     }
 
@@ -400,11 +407,7 @@ export class FilesService {
     const data: { name?: string; parentId?: string | null } = {};
 
     if (input.name !== undefined) {
-      const name = input.name.trim();
-      if (!name) {
-        throw new BadRequestException("文件夹名称不能为空");
-      }
-      data.name = name;
+      data.name = requireResourceName(input.name, "文件夹名称");
     }
 
     if (input.parentId !== undefined) {
@@ -533,6 +536,7 @@ export class FilesService {
       throw new UnauthorizedException("Missing session");
     }
 
+    const title = requireResourceName(input.title, "文档名称");
     const permission = await this.permissions.getEffectiveLevelForFolder(
       userId,
       input.folderId,
@@ -554,7 +558,7 @@ export class FilesService {
       data: {
         workspaceId: folder.workspaceId,
         folderId: folder.id,
-        title: input.title,
+        title,
         type: input.type ?? "doc",
         createdById: userId,
         updatedById: userId,
@@ -620,7 +624,10 @@ export class FilesService {
         data: {
           workspaceId: folder.workspaceId,
           folderId: folder.id,
-          title: markdownTitleFromFilename(input.originalname),
+          title: requireResourceName(
+            markdownTitleFromFilename(input.originalname),
+            "文档名称",
+          ),
           type: "doc",
           importWarnings: parsed.warnings,
           createdById: userId,
@@ -672,7 +679,7 @@ export class FilesService {
       throw new UnauthorizedException("Missing session");
     }
 
-    if (!input.title && !input.folderId) {
+    if (input.title === undefined && !input.folderId) {
       throw new BadRequestException("Nothing to update");
     }
 
@@ -714,10 +721,15 @@ export class FilesService {
       }
     }
 
+    const title =
+      input.title === undefined
+        ? undefined
+        : requireResourceName(input.title, "文档名称");
+
     return this.prisma.file.update({
       where: { id: fileId },
       data: {
-        ...(input.title ? { title: input.title } : {}),
+        ...(title !== undefined ? { title } : {}),
         ...(input.folderId ? { folderId: input.folderId } : {}),
         updatedById: userId,
         version: { increment: 1 },
@@ -1145,6 +1157,17 @@ export class FilesService {
     }
 
     const data = dataJson as Record<string, unknown>;
+    if (type === "bilibili") {
+      if (
+        typeof data.embedCode !== "string" ||
+        data.embedCode.length > 5_000 ||
+        !normalizeBilibiliEmbedUrl(data.embedCode)
+      ) {
+        throw new BadRequestException("请输入有效的 B站视频链接或嵌入代码");
+      }
+      return;
+    }
+
     if (type === "math") {
       if (typeof data.text !== "string" || data.text.length > 50_000) {
         throw new BadRequestException("数学公式必须是 50000 字符以内的文本");

@@ -12,6 +12,7 @@ import {
 } from "@/lib/labels";
 import { APP_ROUTES, exerciseDetail, exerciseSubmissions } from "@/lib/routes";
 import { UserProfileLink } from "@/components/UserProfileLink";
+import { TableSkeletonRows } from "@/components/system/ProgressiveLoading";
 
 type ExerciseFilter = "all" | "not_started" | "submitted" | "graded";
 
@@ -21,6 +22,7 @@ export function ExercisesClient() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ExerciseFilter>("all");
   const [error, setError] = useState<string | null>(null);
+  const [loadingExercises, setLoadingExercises] = useState(true);
 
   const filteredExerciseSets = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -48,7 +50,8 @@ export function ExercisesClient() {
       .then((result) => setExerciseSets(result.exerciseSets))
       .catch((caught) => {
         setError(caught instanceof Error ? caught.message : "加载练习失败");
-      });
+      })
+      .finally(() => setLoadingExercises(false));
   }, []);
 
   return (
@@ -123,6 +126,9 @@ export function ExercisesClient() {
               </tr>
             </thead>
             <tbody>
+              {loadingExercises ? (
+                <TableSkeletonRows colSpan={6} count={6} />
+              ) : null}
               {filteredExerciseSets.map((exercise) => (
                 <tr
                   className="exercise-row-link"
@@ -206,7 +212,7 @@ export function ExercisesClient() {
                   </td>
                 </tr>
               ))}
-              {filteredExerciseSets.length === 0 ? (
+              {!loadingExercises && filteredExerciseSets.length === 0 ? (
                 <tr className="exercise-empty-row">
                   <td className="empty-cell" colSpan={6}>
                     <div className="empty-panel">

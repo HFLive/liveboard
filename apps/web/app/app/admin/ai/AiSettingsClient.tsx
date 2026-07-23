@@ -23,7 +23,7 @@ import {
   type AiSettings,
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/labels";
-import { AdminSubnav } from "@/components/admin/AdminSubnav";
+import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 const providerOptions = [
   {
@@ -138,6 +138,7 @@ export function AiSettingsClient() {
   const [savingGlobal, setSavingGlobal] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [activating, setActivating] = useState(false);
+  const [loadingSettings, setLoadingSettings] = useState(true);
   const selectedProvider = useMemo(
     () =>
       providerOptions.find((provider) => provider.id === configForm.providerId),
@@ -170,9 +171,11 @@ export function AiSettingsClient() {
   }
 
   useEffect(() => {
-    refreshSettings().catch((caught) => {
-      setError(caught instanceof Error ? caught.message : "加载 AI 设置失败");
-    });
+    refreshSettings()
+      .catch((caught) => {
+        setError(caught instanceof Error ? caught.message : "加载 AI 设置失败");
+      })
+      .finally(() => setLoadingSettings(false));
   }, []);
 
   function openConfigEditor(config: AiProviderConfig) {
@@ -400,99 +403,134 @@ export function AiSettingsClient() {
       <header className="page-head">
         <div>
           <p className="page-eyebrow">管理中心</p>
-          <h1>AI 设置</h1>
-          <p className="muted">管理模型配置与回答上下文范围。</p>
+          <h1>AI 服务</h1>
+          <p className="muted">管理模型配置、回答范围和成员默认调用限额。</p>
         </div>
       </header>
-
-      <AdminSubnav />
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
 
       <section className="ai-settings-layout">
-        <section className="ai-panel ai-risk-global">
+        <section
+          aria-labelledby="ai-service-settings-title"
+          className="ai-panel ai-service-settings"
+        >
           <div className="panel-head">
             <div>
-              <h2>
-                <Bot aria-hidden="true" className="heading-icon" />
-                AI 助手
-                <span className="ai-risk-label high">全局生效</span>
-                <span
-                  className={
-                    settings?.enabled
-                      ? "ai-status-badge is-on"
-                      : "ai-status-badge"
-                  }
-                >
-                  {settings?.enabled ? "已启用" : "未启用"}
-                </span>
-              </h2>
-            </div>
-            <div className="ai-summary-actions">
-              <button
-                className="button secondary"
-                onClick={() => setContextModalOpen(true)}
-                type="button"
-              >
-                <Settings2 aria-hidden="true" className="button-icon" />
-                回答范围
-              </button>
-              <label className="ai-compact-switch">
-                <input
-                  checked={globalForm.enabled}
-                  disabled={savingGlobal}
-                  onChange={(event) => onToggleAssistant(event.target.checked)}
-                  type="checkbox"
-                />
-                <span>启用</span>
-              </label>
+              <h2 id="ai-service-settings-title">服务设置</h2>
+              <p>控制 AI 是否可用、回答资料范围和成员默认用量。</p>
             </div>
           </div>
-          <p className="ai-assistant-current">
-            {settings?.activeConfig
-              ? `当前使用 ${settings.activeConfig.name} · ${settings.activeConfig.model || "未配置模型"}`
-              : "选择一个模型配置后即可启用。"}
-          </p>
-          <form className="ai-call-limit-row" onSubmit={onSaveCallLimit}>
-            <label className="label" htmlFor="ai-call-limit-input">
-              每日默认调用限额
-            </label>
-            <input
-              className="input"
-              id="ai-call-limit-input"
-              min={0}
-              onChange={(event) =>
-                setGlobalForm((current) => ({
-                  ...current,
-                  defaultCallLimit: event.target.value,
-                }))
-              }
-              type="number"
-              value={globalForm.defaultCallLimit}
-            />
-            <span className="muted">次/人/天</span>
-            <button
-              className="button secondary"
-              disabled={savingGlobal}
-              type="submit"
-            >
-              保存限额
-            </button>
-          </form>
-          <p className="field-hint ai-call-limit-hint">
-            每位成员每天的 AI
-            调用次数上限，按系统时区每日归零；可在成员管理中设置例外。
-          </p>
+
+          {loadingSettings ? (
+            <SkeletonRows compact count={3} />
+          ) : (
+            <div className="ai-setting-list">
+              <div className="ai-setting-row">
+                <div className="ai-setting-copy">
+                  <div className="ai-setting-title">
+                    <Bot aria-hidden="true" />
+                    <strong>AI 助手</strong>
+                    <span
+                      className={
+                        settings?.enabled
+                          ? "ai-status-badge is-on"
+                          : "ai-status-badge"
+                      }
+                    >
+                      {settings?.enabled ? "已启用" : "未启用"}
+                    </span>
+                  </div>
+                  <p>
+                    {settings?.activeConfig
+                      ? `当前模型：${settings.activeConfig.name} · ${settings.activeConfig.model || "未配置模型"}`
+                      : "尚未选择模型配置，添加并设为当前后才能启用。"}
+                  </p>
+                </div>
+                <label className="ai-compact-switch">
+                  <input
+                    checked={globalForm.enabled}
+                    disabled={savingGlobal}
+                    onChange={(event) =>
+                      onToggleAssistant(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                  <span>{globalForm.enabled ? "已启用" : "启用服务"}</span>
+                </label>
+              </div>
+
+              <div className="ai-setting-row">
+                <div className="ai-setting-copy">
+                  <div className="ai-setting-title">
+                    <Settings2 aria-hidden="true" />
+                    <strong>回答范围</strong>
+                  </div>
+                  <p>
+                    每次最多参考 {globalForm.maxContextFiles} 个文件、读取{" "}
+                    {Number(globalForm.maxContextChars).toLocaleString("zh-CN")}{" "}
+                    个字符。
+                  </p>
+                </div>
+                <button
+                  className="button secondary"
+                  onClick={() => setContextModalOpen(true)}
+                  type="button"
+                >
+                  修改范围
+                </button>
+              </div>
+
+              <form className="ai-setting-row" onSubmit={onSaveCallLimit}>
+                <div className="ai-setting-copy">
+                  <div className="ai-setting-title">
+                    <ShieldCheck aria-hidden="true" />
+                    <label htmlFor="ai-call-limit-input">
+                      每日默认调用限额
+                    </label>
+                  </div>
+                  <p>
+                    每位成员每天的调用上限，按系统时区归零；成员管理中可设置例外。
+                  </p>
+                </div>
+                <div className="ai-call-limit-control">
+                  <input
+                    className="input"
+                    disabled={savingGlobal}
+                    id="ai-call-limit-input"
+                    min={0}
+                    onChange={(event) =>
+                      setGlobalForm((current) => ({
+                        ...current,
+                        defaultCallLimit: event.target.value,
+                      }))
+                    }
+                    type="number"
+                    value={globalForm.defaultCallLimit}
+                  />
+                  <span>次/人/天</span>
+                  <button
+                    className="button secondary"
+                    disabled={savingGlobal}
+                    type="submit"
+                  >
+                    保存限额
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
         </section>
 
-        <section className="ai-panel ai-risk-provider">
+        <section
+          aria-labelledby="ai-provider-settings-title"
+          className="ai-panel ai-provider-settings"
+        >
           <div className="panel-head">
             <div>
-              <h2>
-                模型配置
-                <span className="ai-risk-label medium">含密钥</span>
-              </h2>
+              <h2 id="ai-provider-settings-title">模型配置</h2>
+              <p>管理模型服务连接；API Key 加密保存且不会再次完整显示。</p>
             </div>
             <button className="button" onClick={startNewConfig} type="button">
               <Plus aria-hidden="true" className="button-icon" />
@@ -500,63 +538,68 @@ export function AiSettingsClient() {
             </button>
           </div>
 
-          <div className="ai-config-list">
-            {settings?.configs.length ? (
-              settings.configs.map((config) => {
-                const active = config.id === settings.activeConfigId;
-                return (
-                  <article className="ai-config-row" key={config.id}>
-                    <div className="ai-config-row-main">
-                      <span
-                        aria-hidden="true"
-                        className={`ai-config-dot ${active ? "active" : ""}`}
-                      />
-                      <div>
-                        <div className="ai-config-name">
-                          <strong>{config.name}</strong>
-                          {active ? <span>当前</span> : null}
+          {loadingSettings ? (
+            <SkeletonRows compact count={2} />
+          ) : (
+            <div className="ai-config-list">
+              {settings?.configs.length ? (
+                settings.configs.map((config) => {
+                  const active = config.id === settings.activeConfigId;
+                  return (
+                    <article className="ai-config-row" key={config.id}>
+                      <div className="ai-config-row-main">
+                        <span
+                          aria-hidden="true"
+                          className={`ai-config-dot ${active ? "active" : ""}`}
+                        />
+                        <div>
+                          <div className="ai-config-name">
+                            <strong>{config.name}</strong>
+                            {active ? <span>当前</span> : null}
+                          </div>
+                          <p>
+                            {config.providerName} ·{" "}
+                            {config.model || "未配置模型"}
+                          </p>
                         </div>
-                        <p>
-                          {config.providerName} · {config.model || "未配置模型"}
-                        </p>
                       </div>
-                    </div>
-                    <div className="ai-config-row-actions">
-                      {!active ? (
+                      <div className="ai-config-row-actions">
+                        {!active ? (
+                          <button
+                            className="button secondary"
+                            disabled={activating}
+                            onClick={() => onActivateConfig(config)}
+                            type="button"
+                          >
+                            {activating ? "切换中" : "设为当前"}
+                          </button>
+                        ) : null}
                         <button
-                          className="button secondary"
-                          disabled={activating}
-                          onClick={() => onActivateConfig(config)}
+                          aria-label={`编辑 ${config.name}`}
+                          className="icon-button"
+                          onClick={() => openConfigEditor(config)}
                           type="button"
                         >
-                          {activating ? "切换中" : "设为当前"}
+                          <Pencil aria-hidden="true" />
                         </button>
-                      ) : null}
-                      <button
-                        aria-label={`编辑 ${config.name}`}
-                        className="icon-button"
-                        onClick={() => openConfigEditor(config)}
-                        type="button"
-                      >
-                        <Pencil aria-hidden="true" />
-                      </button>
-                    </div>
-                  </article>
-                );
-              })
-            ) : (
-              <div className="ai-config-empty">
-                <p>还没有模型配置，添加后即可连接 AI 服务。</p>
-                <button
-                  className="button secondary"
-                  onClick={startNewConfig}
-                  type="button"
-                >
-                  添加第一个配置
-                </button>
-              </div>
-            )}
-          </div>
+                      </div>
+                    </article>
+                  );
+                })
+              ) : (
+                <div className="ai-config-empty">
+                  <p>还没有模型配置，添加后即可连接 AI 服务。</p>
+                  <button
+                    className="button secondary"
+                    onClick={startNewConfig}
+                    type="button"
+                  >
+                    添加第一个配置
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         <div className="ai-policy-note">
