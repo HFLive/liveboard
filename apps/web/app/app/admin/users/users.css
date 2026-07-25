@@ -84,11 +84,88 @@
   font-size: 12px;
 }
 
+.user-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.user-tag {
+  border-radius: 6px;
+  background: var(--fill-subtle);
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.tag-choice-field {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 4px 0 0;
+  padding: 14px 0 0;
+}
+
+.tag-choice-field legend {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+  padding-right: 8px;
+}
+
+.tag-choice-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.tag-choice-grid label {
+  align-items: center;
+  background: var(--fill-subtle);
+  border-radius: 7px;
+  display: inline-flex;
+  gap: 6px;
+  padding: 6px 9px;
+}
+
+.tag-create-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.tag-manager-list {
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+}
+
+.tag-manager-list > div {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  min-height: 44px;
+}
+
+.tag-manager-list > div > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.tag-manager-list small {
+  color: var(--muted);
+}
+
 @media (max-width: 720px) {
   .admin-user-filters,
   .admin-user-batch-bar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .tag-create-row {
+    grid-template-columns: minmax(0, 1fr);
   }
   /* 窄屏堆叠行保持透明连续行，不回落为白色卡片。 */
   .admin-users-page .responsive-table tr {

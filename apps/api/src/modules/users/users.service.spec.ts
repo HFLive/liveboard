@@ -1,4 +1,3 @@
-import type { PermissionsService } from "../permissions/permissions.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import { UsersService } from "./users.service";
 
@@ -23,10 +22,7 @@ describe("UsersService", () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-    service = new UsersService(
-      prisma as unknown as PrismaService,
-      {} as PermissionsService,
-    );
+    service = new UsersService(prisma as unknown as PrismaService);
     prisma.user.findUnique
       .mockResolvedValueOnce(actor)
       .mockResolvedValueOnce(target);

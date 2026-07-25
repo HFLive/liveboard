@@ -23,7 +23,7 @@ import {
   TeachingDeckDetail,
   TeachingDeckItem,
 } from "@/lib/api";
-import { APP_ROUTES, teachingEdit } from "@/lib/routes";
+import { classroomDetail, teachingEdit } from "@/lib/routes";
 import { RenderBlockContent } from "../content/[id]/ContentBlockRenderer";
 import { buildTeachingSlides } from "./teachingSlides";
 import { AutoTextarea } from "@/components/AutoTextarea";
@@ -203,7 +203,7 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
           <Link
             aria-label="返回课件"
             className="button secondary"
-            href={APP_ROUTES.teaching}
+            href={classroomDetail(deck?.classroomId ?? "")}
             title="返回课件"
           >
             <ArrowLeft aria-hidden="true" className="button-icon" />
@@ -398,7 +398,11 @@ function TeachingManuscript({
   return (
     <div className="teaching-manuscript">
       <header className="teaching-manuscript-topbar">
-        <Link aria-label="返回课件" href={APP_ROUTES.teaching} title="返回课件">
+        <Link
+          aria-label="返回课堂"
+          href={classroomDetail(deck?.classroomId ?? "")}
+          title="返回课堂"
+        >
           <ArrowLeft aria-hidden="true" />
         </Link>
         <h1>{deck?.title ?? "课件"}</h1>

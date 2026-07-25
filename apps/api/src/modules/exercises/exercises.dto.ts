@@ -50,6 +50,9 @@ export class CreateQuestionDto {
 
 export class CreateExerciseSetDto {
   @IsString()
+  classroomId!: string;
+
+  @IsString()
   @MaxLength(120)
   title!: string;
 
@@ -74,19 +77,34 @@ export class CreateExerciseSetDto {
   @ValidateNested({ each: true })
   @Type(() => CreateQuestionDto)
   questions!: CreateQuestionDto[];
-
-  @IsOptional()
-  @IsArray()
-  @ArrayUnique()
-  @IsString({ each: true })
-  visibleUserIds?: string[];
 }
 
-export class UpdateExerciseVisibilityDto {
+export class UpdateExerciseSetDto {
+  @IsString()
+  @MaxLength(120)
+  title!: string;
+
+  @IsOptional()
+  @IsDateString()
+  openAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dueAt?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  allowMultipleSubmissions?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showAnswerAfterSubmit?: boolean;
+
   @IsArray()
-  @ArrayUnique()
-  @IsString({ each: true })
-  visibleUserIds!: string[];
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateQuestionDto)
+  questions!: CreateQuestionDto[];
 }
 
 export class SubmitAnswerDto {

@@ -34,7 +34,7 @@ export function LoginForm() {
 
     try {
       await login(username, password);
-      router.replace(APP_ROUTES.ai);
+      router.replace(APP_ROUTES.classrooms);
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "登录失败");

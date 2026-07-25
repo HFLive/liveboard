@@ -37,6 +37,14 @@ type ForumUserRecord = {
   avatarUpdatedAt?: Date | null;
   systemRole: UserSummary["systemRole"];
   status: UserSummary["status"];
+  badgeAssignments?: Array<{
+    badge: {
+      id: string;
+      name: string;
+      description: string | null;
+      color: string;
+    };
+  }>;
 };
 
 type ForumCategoryRecord = {
@@ -140,7 +148,7 @@ export class ForumService {
         orderBy: [{ lastActivityAt: "desc" }],
         take: 40,
         include: {
-          author: true,
+          author: { include: userBadgeInclude },
           _count: { select: { posts: true } },
           posts: {
             orderBy: [{ createdAt: "asc" }],
@@ -200,7 +208,7 @@ export class ForumService {
     const thread = await this.prisma.forumThread.findUnique({
       where: { id: threadId },
       include: {
-        author: true,
+        author: { include: userBadgeInclude },
         category: {
           include: {
             _count: {
@@ -213,8 +221,10 @@ export class ForumService {
         posts: {
           orderBy: [{ createdAt: "asc" }],
           include: {
-            author: true,
-            replyTo: { include: { author: true } },
+            author: { include: userBadgeInclude },
+            replyTo: {
+              include: { author: { include: userBadgeInclude } },
+            },
             images: { orderBy: { sortOrder: "asc" } },
             votes: {
               where: { userId: user.id },
@@ -337,7 +347,7 @@ export class ForumService {
         },
       },
       include: {
-        author: true,
+        author: { include: userBadgeInclude },
         category: {
           include: {
             _count: {
@@ -350,8 +360,10 @@ export class ForumService {
         posts: {
           orderBy: [{ createdAt: "asc" }],
           include: {
-            author: true,
-            replyTo: { include: { author: true } },
+            author: { include: userBadgeInclude },
+            replyTo: {
+              include: { author: { include: userBadgeInclude } },
+            },
             images: { orderBy: { sortOrder: "asc" } },
             votes: {
               where: { userId: user.id },
@@ -424,14 +436,21 @@ export class ForumService {
           const deck = await this.prisma.teachingDeck.findUnique({
             where: { id: resource.id },
             include: {
-              viewers: { where: { userId: user.id }, select: { userId: true } },
+              classroom: {
+                include: {
+                  members: {
+                    where: { userId: user.id },
+                    select: { userId: true },
+                  },
+                },
+              },
             },
           });
           if (
             !deck ||
             (!isSuperAdmin(user.systemRole) &&
               deck.createdById !== user.id &&
-              deck.viewers.length === 0)
+              deck.classroom.members.length === 0)
           ) {
             throw new ForbiddenException("无权关联所选课件");
           }
@@ -441,14 +460,21 @@ export class ForumService {
         const exercise = await this.prisma.exerciseSet.findUnique({
           where: { id: resource.id },
           include: {
-            viewers: { where: { userId: user.id }, select: { userId: true } },
+            classroom: {
+              include: {
+                members: {
+                  where: { userId: user.id },
+                  select: { userId: true },
+                },
+              },
+            },
           },
         });
         if (
           !exercise ||
           (!isSuperAdmin(user.systemRole) &&
             exercise.createdById !== user.id &&
-            exercise.viewers.length === 0)
+            exercise.classroom.members.length === 0)
         ) {
           throw new ForbiddenException("无权关联所选练习");
         }
@@ -513,8 +539,10 @@ export class ForumService {
           isAnonymous: input.isAnonymous ?? false,
         },
         include: {
-          author: true,
-          replyTo: { include: { author: true } },
+          author: { include: userBadgeInclude },
+          replyTo: {
+            include: { author: { include: userBadgeInclude } },
+          },
           images: { orderBy: { sortOrder: "asc" } },
         },
       });
@@ -614,7 +642,7 @@ export class ForumService {
       where: { id: threadId },
       data,
       include: {
-        author: true,
+        author: { include: userBadgeInclude },
         category: {
           include: {
             _count: {
@@ -627,8 +655,10 @@ export class ForumService {
         posts: {
           orderBy: [{ createdAt: "asc" }],
           include: {
-            author: true,
-            replyTo: { include: { author: true } },
+            author: { include: userBadgeInclude },
+            replyTo: {
+              include: { author: { include: userBadgeInclude } },
+            },
             images: { orderBy: { sortOrder: "asc" } },
             votes: {
               where: { userId: user.id },
@@ -705,8 +735,10 @@ export class ForumService {
       where: { id: postId },
       data: { body },
       include: {
-        author: true,
-        replyTo: { include: { author: true } },
+        author: { include: userBadgeInclude },
+        replyTo: {
+          include: { author: { include: userBadgeInclude } },
+        },
         images: { orderBy: { sortOrder: "asc" } },
         votes: {
           where: { userId: user.id },
@@ -1208,6 +1240,12 @@ export class ForumService {
         : null,
       systemRole: user.systemRole,
       status: user.status,
+      badges: user.badgeAssignments?.map(({ badge }) => ({
+        id: badge.id,
+        name: badge.name,
+        description: badge.description,
+        color: normalizeBadgeColor(badge.color),
+      })),
     };
   }
 
@@ -1220,4 +1258,19 @@ export class ForumService {
       ? ANONYMOUS_FORUM_USER
       : this.toUserSummary(user);
   }
+}
+
+const userBadgeInclude = {
+  badgeAssignments: {
+    where: { equippedOrder: { not: null } },
+    include: { badge: true },
+    orderBy: { equippedOrder: "asc" },
+    take: 3,
+  },
+} as const;
+
+function normalizeBadgeColor(value: string) {
+  return ["gold", "blue", "green", "purple", "red", "gray"].includes(value)
+    ? (value as "gold" | "blue" | "green" | "purple" | "red" | "gray")
+    : ("gray" as const);
 }

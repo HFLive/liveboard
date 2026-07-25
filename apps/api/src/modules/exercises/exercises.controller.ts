@@ -1,10 +1,18 @@
-import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import {
   CreateExerciseSetDto,
   GradeSubmissionDto,
   SubmitExerciseDto,
-  UpdateExerciseVisibilityDto,
+  UpdateExerciseSetDto,
 } from "./exercises.dto";
 import { ExercisesService } from "./exercises.service";
 
@@ -23,9 +31,15 @@ export class ExercisesController {
   }
 
   @Get("exercise-sets")
-  async list(@CurrentUserId() userId: string | null) {
+  async list(
+    @CurrentUserId() userId: string | null,
+    @Query("classroomId") classroomId?: string,
+  ) {
     return {
-      exerciseSets: await this.exercisesService.listExerciseSets(userId),
+      exerciseSets: await this.exercisesService.listExerciseSets(
+        userId,
+        classroomId,
+      ),
     };
   }
 
@@ -36,17 +50,17 @@ export class ExercisesController {
     };
   }
 
-  @Patch("exercise-sets/:id/visibility")
-  async updateVisibility(
+  @Patch("exercise-sets/:id")
+  async update(
     @CurrentUserId() userId: string | null,
     @Param("id") id: string,
-    @Body() body: UpdateExerciseVisibilityDto,
+    @Body() body: UpdateExerciseSetDto,
   ) {
     return {
-      exerciseSet: await this.exercisesService.updateVisibility(
+      exerciseSet: await this.exercisesService.updateExerciseSet(
         userId,
         id,
-        body.visibleUserIds,
+        body,
       ),
     };
   }

@@ -74,6 +74,7 @@ describe("AssetsService consistency", () => {
     user: { findUnique: jest.fn() },
     workspace: { findFirst: jest.fn() },
     forumPost: { findUnique: jest.fn(), findFirst: jest.fn() },
+    file: { findUnique: jest.fn() },
     fileAsset: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
@@ -99,10 +100,18 @@ describe("AssetsService consistency", () => {
     service = new AssetsService(
       { get: (_key: string, fallback?: unknown) => fallback } as ConfigService,
       prisma as unknown as PrismaService,
-      {} as PermissionsService,
+      {
+        getEffectiveLevelForFile: jest.fn().mockResolvedValue("editor"),
+      } as unknown as PermissionsService,
     );
     Object.assign(service as unknown as { minio: unknown }, { minio });
     prisma.workspace.findFirst.mockResolvedValue({ id: "workspace-1" });
+    prisma.file.findUnique.mockResolvedValue({
+      id: "file-1",
+      workspaceId: "workspace-1",
+      folderId: "folder-1",
+      status: "draft",
+    });
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
       username: "learner",
@@ -178,7 +187,11 @@ describe("AssetsService consistency", () => {
       expect.objectContaining({
         where: expect.objectContaining({
           assetId: "asset-1",
-          deck: expect.objectContaining({ OR: expect.any(Array) }),
+          deck: expect.objectContaining({
+            classroom: {
+              members: { some: { userId: "learner-1" } },
+            },
+          }),
         }),
       }),
     );
@@ -217,6 +230,9 @@ describe("AssetsService consistency", () => {
         aggregate: jest.fn().mockResolvedValue({ _sum: { sizeBytes: 0 } }),
         create: jest.fn().mockResolvedValue({ id: "asset-1" }),
       },
+      classroomFile: {
+        aggregate: jest.fn().mockResolvedValue({ _sum: { sizeBytes: 0 } }),
+      },
     };
     prisma.$transaction.mockImplementation((callback) => callback(tx));
     minio.putObject.mockRejectedValue(new Error("MinIO offline"));
@@ -224,7 +240,7 @@ describe("AssetsService consistency", () => {
     await expect(
       service.uploadAsset(
         "user-1",
-        {},
+        { fileId: "file-1" },
         {
           originalname: "notes.txt",
           mimetype: "text/plain",

@@ -1,205 +1,209 @@
 "use client";
 
+import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type {
-  PermissionGroupSummary,
   PermissionLevel,
+  UserSummary,
+  UserTagSummary,
 } from "@liveboard/shared";
 import {
   deletePermissionGrant,
   getDefaultPermissionWorkspace,
-  listPermissionGroups,
+  listAssignablePermissionUsers,
   listPermissionGrants,
-  PermissionGrantSummary,
+  type PermissionGrantSummary,
   upsertPermissionGrant,
 } from "@/lib/api";
-import { SkeletonRows } from "@/components/system/ProgressiveLoading";
-
-type WorkspaceSummary = { id: string; name: string };
-type WorkspacePermission = PermissionLevel | "";
+import { permissionLabel } from "@/lib/labels";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 
 const permissionOptions: Array<{
-  value: Exclude<PermissionLevel, "no_access">;
+  value: PermissionLevel;
   label: string;
 }> = [
   { value: "viewer", label: "可查看" },
   { value: "lecturer", label: "可制作课件" },
   { value: "editor", label: "可编辑" },
   { value: "owner", label: "可管理" },
+  { value: "no_access", label: "禁止访问" },
 ];
 
 export function ContentPermissionsClient() {
-  const [workspace, setWorkspace] = useState<WorkspaceSummary | null>(null);
-  const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
+  useDocumentTitle("文档权限");
+  const [workspace, setWorkspace] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [tags, setTags] = useState<UserTagSummary[]>([]);
   const [grants, setGrants] = useState<PermissionGrantSummary[]>([]);
-  const [savingGroupId, setSavingGroupId] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [tagId, setTagId] = useState("all");
+  const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [savedGroupAt, setSavedGroupAt] = useState<Record<string, Date>>({});
-  const [loadingPermissions, setLoadingPermissions] = useState(true);
-  const grantByGroupId = useMemo(
-    () =>
-      new Map(
-        grants
-          .filter((grant) => grant.groupId)
-          .map((grant) => [grant.groupId, grant] as const),
-      ),
+  const [message, setMessage] = useState<string | null>(null);
+  const grantByUserId = useMemo(
+    () => new Map(grants.map((grant) => [grant.userId, grant])),
     [grants],
   );
+  const filteredUsers = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    return users.filter(
+      (user) =>
+        (tagId === "all" || user.tags?.some((tag) => tag.id === tagId)) &&
+        (!normalizedQuery ||
+          `${user.displayName} ${user.username}`
+            .toLocaleLowerCase()
+            .includes(normalizedQuery)),
+    );
+  }, [query, tagId, users]);
 
   async function load() {
-    const groupPromise = listPermissionGroups();
     const workspaceResult = await getDefaultPermissionWorkspace();
-    const [groupResult, grantResult] = await Promise.all([
-      groupPromise,
+    const [grantResult, userResult] = await Promise.all([
       listPermissionGrants("workspace", workspaceResult.workspace.id),
+      listAssignablePermissionUsers({
+        targetType: "workspace",
+        targetId: workspaceResult.workspace.id,
+      }),
     ]);
-
     setWorkspace(workspaceResult.workspace);
-    setGroups(groupResult.groups);
     setGrants(grantResult.grants);
+    setUsers(userResult.users);
+    setTags(userResult.tags);
   }
 
   useEffect(() => {
-    load()
-      .catch((caught) => {
-        setError(
-          caught instanceof Error ? caught.message : "加载文档默认权限失败",
-        );
-      })
-      .finally(() => setLoadingPermissions(false));
+    load().catch((caught) => {
+      setError(caught instanceof Error ? caught.message : "加载文档权限失败");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function updateWorkspacePermission(
-    group: PermissionGroupSummary,
-    level: WorkspacePermission,
+  async function updatePermission(
+    user: UserSummary,
+    level: PermissionLevel | "",
   ) {
     if (!workspace) return;
-
-    setSavingGroupId(group.id);
+    setSavingUserId(user.id);
     setError(null);
     setMessage(null);
-
     try {
-      const currentGrant = grantByGroupId.get(group.id);
-
+      const current = grantByUserId.get(user.id);
       if (!level) {
-        if (currentGrant) {
-          await deletePermissionGrant(currentGrant.id);
-        }
+        if (current) await deletePermissionGrant(current.id);
       } else {
         await upsertPermissionGrant({
           targetType: "workspace",
           targetId: workspace.id,
-          groupId: group.id,
+          userId: user.id,
           level,
         });
       }
-
-      const grantResult = await listPermissionGrants("workspace", workspace.id);
-      setGrants(grantResult.grants);
-      setMessage(
-        level
-          ? `「${group.name}」的文档默认权限已更新`
-          : `「${group.name}」不再获得默认文档权限`,
-      );
-      setSavedGroupAt((current) => ({ ...current, [group.id]: new Date() }));
+      const result = await listPermissionGrants("workspace", workspace.id);
+      setGrants(result.grants);
+      setMessage(`已更新 ${user.displayName} 的文档权限`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "保存默认权限失败");
+      setError(caught instanceof Error ? caught.message : "保存权限失败");
     } finally {
-      setSavingGroupId(null);
+      setSavingUserId(null);
     }
   }
 
   return (
-    <div className="workspace admin-workspace content-permissions-workspace">
-      <header className="page-head">
+    <div className="workspace content-permissions-workspace">
+      <header className="admin-page-head">
         <div>
           <h1>文档权限</h1>
-          <p className="muted">设置所有顶层文件夹默认继承的权限。</p>
+          <p>管理员默认可编辑，普通成员默认可查看；此处设置成员例外。</p>
         </div>
       </header>
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
 
-      <section className="content-permission-overview">
-        <h2>权限如何生效</h2>
-        <p>
-          这里设置“{workspace?.name ?? "当前工作区"}
-          ”的文档基础权限，顶层文件夹、子文件夹和文档会逐级继承。
-        </p>
-        <p>具体文件夹或文档的单独授权优先；系统管理员始终可以管理全部文档。</p>
-      </section>
-
       <section className="content-permission-panel">
         <div className="panel-head content-permission-head">
           <div>
-            <h2>全局默认权限</h2>
-            <p>没有默认权限的组，只能通过具体文件夹或文件获得访问权限。</p>
+            <h2>{workspace?.name ?? "文档默认权限"}</h2>
+            <p>文件夹与文档会继承这里的成员例外，仍可在资源菜单中继续覆盖。</p>
           </div>
-          <span>
-            {loadingPermissions ? "正在加载" : `${groups.length} 个权限组`}
-          </span>
+          <span>{grants.length} 项例外</span>
         </div>
-
+        <div className="content-permission-filters">
+          <label>
+            <Search aria-hidden="true" />
+            <input
+              className="input"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜索姓名或用户名"
+              value={query}
+            />
+          </label>
+          <select
+            aria-label="按成员标签筛选"
+            className="select"
+            onChange={(event) => setTagId(event.target.value)}
+            value={tagId}
+          >
+            <option value="all">全部标签</option>
+            {tags.map((tag) => (
+              <option key={tag.id} value={tag.id}>
+                {tag.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="content-permission-list">
-          {loadingPermissions ? <SkeletonRows compact count={4} /> : null}
-          {groups.map((group) => {
-            const grant = grantByGroupId.get(group.id);
-            const value = grant?.level ?? "";
-
+          {filteredUsers.map((user) => {
+            const grant = grantByUserId.get(user.id);
             return (
-              <div className="content-permission-row" key={group.id}>
+              <div className="content-permission-row" key={user.id}>
                 <div>
-                  <strong>{group.name}</strong>
+                  <strong>{user.displayName}</strong>
                   <span>
-                    {group.memberCount} 人
-                    {group.description ? ` · ${group.description}` : ""}
+                    @{user.username}
+                    {user.tags?.length
+                      ? ` · ${user.tags.map((tag) => tag.name).join(" · ")}`
+                      : ""}
                   </span>
                 </div>
                 <label>
                   <select
-                    aria-label={`${group.name}的默认权限`}
+                    aria-label={`${user.displayName}的文档权限`}
                     className="select"
-                    disabled={!workspace || savingGroupId === group.id}
-                    value={value}
+                    disabled={savingUserId === user.id}
                     onChange={(event) =>
-                      void updateWorkspacePermission(
-                        group,
-                        event.target.value as WorkspacePermission,
+                      void updatePermission(
+                        user,
+                        event.target.value as PermissionLevel | "",
                       )
                     }
+                    value={grant?.level ?? ""}
                   >
-                    <option value="">无默认权限</option>
+                    <option value="">使用默认（可查看）</option>
                     {permissionOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
                     ))}
-                    {value === "no_access" ? (
-                      <option value="no_access">禁止访问（旧设置）</option>
-                    ) : null}
                   </select>
-                  <small
-                    className="content-permission-save-state"
-                    aria-live="polite"
-                  >
-                    {savingGroupId === group.id
-                      ? "保存中"
-                      : savedGroupAt[group.id]
-                        ? `已保存 ${savedGroupAt[group.id]?.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`
-                        : "更改后自动保存"}
+                  <small>
+                    {savingUserId === user.id
+                      ? "保存中…"
+                      : grant
+                        ? `例外：${permissionLabel(grant.level)}`
+                        : "跟随成员默认权限"}
                   </small>
                 </label>
               </div>
             );
           })}
-
-          {!loadingPermissions && groups.length === 0 ? (
+          {filteredUsers.length === 0 ? (
             <div className="empty-panel compact">
-              <strong>还没有权限组</strong>
-              <span>请先在“权限组”中创建分组并添加成员。</span>
+              <strong>没有匹配的成员</strong>
+              <span>可更换标签或搜索关键词。</span>
             </div>
           ) : null}
         </div>

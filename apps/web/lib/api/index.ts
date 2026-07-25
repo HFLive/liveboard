@@ -1,11 +1,16 @@
 import type {
   AdminUserSummary,
+  AdminBadgeSummary,
   ActivityItem,
   AiProviderConfigSummary,
   AiSettingsSummary,
   AiUsageSummary,
   ContentBlockType,
   ContentPinTarget,
+  ClassroomAnnouncementSummary,
+  ClassroomMemberRole,
+  ClassroomMemberSummary,
+  ClassroomSummary,
   FileSummary,
   FolderNode,
   ForumCategorySummary,
@@ -14,7 +19,6 @@ import type {
   ForumThreadDetail,
   ForumThreadSummary,
   ForumThreadStatus,
-  PermissionGroupSummary,
   PermissionLevel,
   PermissionTargetType,
   QuestionType,
@@ -24,6 +28,9 @@ import type {
   TeachingDeckItemType,
   UserProfile,
   UserPublicActivity,
+  UserBadgeSummary,
+  BadgeColor,
+  UserTagSummary,
   UserSummary,
 } from "@liveboard/shared";
 import {
@@ -191,72 +198,163 @@ export function listUsers() {
 }
 
 export function listVisibilityUsers() {
-  return request<{ users: UserSummary[] }>("/users/visibility-options");
-}
-
-export function listPermissionGroups() {
-  return request<{ groups: PermissionGroupSummary[] }>(
-    "/admin/permission-groups",
+  return request<{ users: UserSummary[]; tags: UserTagSummary[] }>(
+    "/users/visibility-options",
   );
 }
 
-export function createPermissionGroup(input: {
-  name: string;
-  description?: string;
-}) {
-  return request<{ group: PermissionGroupSummary }>(
-    "/admin/permission-groups",
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    },
-  );
+export function listUserTags() {
+  return request<{ tags: UserTagSummary[] }>("/admin/user-tags");
 }
 
-export function updatePermissionGroup(
-  groupId: string,
-  input: { name?: string; description?: string },
-) {
-  return request<{ group: PermissionGroupSummary }>(
-    `/admin/permission-groups/${groupId}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(input),
-    },
-  );
+export function createUserTag(name: string) {
+  return request<{ tag: UserTagSummary }>("/admin/user-tags", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
 }
 
-export function deletePermissionGroup(groupId: string) {
-  return request<{ ok: boolean }>(`/admin/permission-groups/${groupId}`, {
+export function updateUserTag(tagId: string, name: string) {
+  return request<{ tag: UserTagSummary }>(`/admin/user-tags/${tagId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function deleteUserTag(tagId: string) {
+  return request<{ ok: boolean }>(`/admin/user-tags/${tagId}`, {
     method: "DELETE",
   });
 }
 
-export function addPermissionGroupMember(groupId: string, userId: string) {
-  return request<{ group: PermissionGroupSummary }>(
-    `/admin/permission-groups/${groupId}/members`,
-    {
-      method: "POST",
-      body: JSON.stringify({ userId }),
-    },
+export function setUserTags(userId: string, tagIds: string[]) {
+  return request<{ user: UserSummary }>(`/admin/users/${userId}/tags`, {
+    method: "PUT",
+    body: JSON.stringify({ tagIds }),
+  });
+}
+
+export function listMyBadges() {
+  return request<{ badges: UserBadgeSummary[] }>("/badges/me");
+}
+
+export function setEquippedBadges(badgeIds: string[]) {
+  clearCurrentUserCache();
+  return request<{ badges: UserBadgeSummary[] }>("/badges/me/equipped", {
+    method: "PUT",
+    body: JSON.stringify({ badgeIds }),
+  });
+}
+
+export function listAdminBadges() {
+  return request<{ badges: AdminBadgeSummary[] }>("/admin/badges");
+}
+
+export function createBadge(input: {
+  name: string;
+  description?: string;
+  color: BadgeColor;
+}) {
+  return request<{ badge: AdminBadgeSummary }>("/admin/badges", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateBadge(
+  badgeId: string,
+  input: { name?: string; description?: string; color?: BadgeColor },
+) {
+  return request<{ badge: AdminBadgeSummary }>(
+    `/admin/badges/${encodeURIComponent(badgeId)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
   );
 }
 
-export function removePermissionGroupMember(groupId: string, userId: string) {
-  return request<{ group: PermissionGroupSummary }>(
-    `/admin/permission-groups/${groupId}/members/${userId}`,
+export function deleteBadge(badgeId: string) {
+  return request<{ ok: true }>(`/admin/badges/${encodeURIComponent(badgeId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function awardBadge(badgeId: string, userId: string) {
+  return request<{ ok: true }>(
+    `/admin/badges/${encodeURIComponent(badgeId)}/users/${encodeURIComponent(userId)}`,
+    { method: "PUT" },
+  );
+}
+
+export function revokeBadge(badgeId: string, userId: string) {
+  return request<{ ok: true }>(
+    `/admin/badges/${encodeURIComponent(badgeId)}/users/${encodeURIComponent(userId)}`,
     { method: "DELETE" },
   );
 }
 
-export function listAssignablePermissionGroups(input: {
+export interface PermissionGrantSummary {
+  id: string;
+  targetType: PermissionTargetType;
+  targetId: string;
+  userId: string;
+  level: PermissionLevel;
+  user: UserSummary;
+}
+
+export interface InheritedPermissionGrantSummary extends PermissionGrantSummary {
+  inheritedFrom: {
+    targetType: PermissionTargetType;
+    targetId: string;
+    targetName: string;
+  };
+}
+
+export interface PermissionGrantListResponse {
+  grants: PermissionGrantSummary[];
+  inheritedGrants: InheritedPermissionGrantSummary[];
+}
+
+export function getDefaultPermissionWorkspace() {
+  return request<{ workspace: { id: string; name: string } }>(
+    "/permissions/workspace-default",
+  );
+}
+
+export function listPermissionGrants(
+  targetType: PermissionTargetType,
+  targetId: string,
+) {
+  const search = new URLSearchParams({ targetType, targetId });
+  return request<PermissionGrantListResponse>(
+    `/permissions?${search.toString()}`,
+  );
+}
+
+export function listAssignablePermissionUsers(input: {
   targetType: PermissionTargetType;
   targetId: string;
 }) {
   const search = new URLSearchParams(input);
-  return request<{ groups: PermissionGroupSummary[] }>(
-    `/permission-groups/assignable?${search.toString()}`,
+  return request<{ users: UserSummary[]; tags: UserTagSummary[] }>(
+    `/permissions/assignable?${search.toString()}`,
   );
+}
+
+export function upsertPermissionGrant(input: {
+  targetType: PermissionTargetType;
+  targetId: string;
+  userId: string;
+  level: PermissionLevel;
+}) {
+  return request<{ grant: PermissionGrantSummary }>("/permissions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deletePermissionGrant(grantId: string) {
+  return request<{ ok: boolean }>(`/permissions/${grantId}`, {
+    method: "DELETE",
+  });
 }
 
 export function createUser(input: {
@@ -817,62 +915,6 @@ function handleAiStreamLine(
   }
 }
 
-export interface PermissionGrantSummary {
-  id: string;
-  targetType: PermissionTargetType;
-  targetId: string;
-  groupId?: string | null;
-  level: PermissionLevel;
-  group?: PermissionGroupSummary | null;
-}
-
-export interface InheritedPermissionGrantSummary extends PermissionGrantSummary {
-  inheritedFrom: {
-    targetType: PermissionTargetType;
-    targetId: string;
-    targetName: string;
-  };
-}
-
-export interface PermissionGrantListResponse {
-  grants: PermissionGrantSummary[];
-  inheritedGrants: InheritedPermissionGrantSummary[];
-}
-
-export function getDefaultPermissionWorkspace() {
-  return request<{ workspace: { id: string; name: string } }>(
-    "/permissions/workspace-default",
-  );
-}
-
-export function listPermissionGrants(
-  targetType: PermissionTargetType,
-  targetId: string,
-) {
-  const search = new URLSearchParams({ targetType, targetId });
-  return request<PermissionGrantListResponse>(
-    `/permissions?${search.toString()}`,
-  );
-}
-
-export function upsertPermissionGrant(input: {
-  targetType: PermissionTargetType;
-  targetId: string;
-  groupId: string;
-  level: PermissionLevel;
-}) {
-  return request<{ grant: PermissionGrantSummary }>("/permissions", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
-export function deletePermissionGrant(grantId: string) {
-  return request<{ ok: boolean }>(`/permissions/${grantId}`, {
-    method: "DELETE",
-  });
-}
-
 export function getFolderTree() {
   return request<{ folders: FolderNode[]; canManagePins: boolean }>(
     "/folders/tree",
@@ -1199,6 +1241,141 @@ export async function downloadMarkdown(fileId: string) {
   return { blob: await response.blob(), filename };
 }
 
+export interface ClassroomDetail extends ClassroomSummary {
+  canManageMembers: boolean;
+  canEditContent: boolean;
+  canEditClassroom: boolean;
+  members?: ClassroomMemberSummary[];
+  announcements: ClassroomAnnouncementSummary[];
+}
+
+export interface ClassroomFileSummary {
+  id: string;
+  classroomId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedBy: UserSummary;
+  createdAt: string;
+  url: string;
+}
+
+export function listClassrooms() {
+  return request<{ classrooms: ClassroomSummary[] }>("/classrooms");
+}
+
+export function getClassroom(classroomId: string) {
+  return request<{ classroom: ClassroomDetail }>(`/classrooms/${classroomId}`);
+}
+
+export function createClassroom(input: {
+  name: string;
+  description?: string;
+  teacherUserIds: string[];
+  studentUserIds?: string[];
+}) {
+  return request<{ classroom: ClassroomDetail }>("/classrooms", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateClassroom(
+  classroomId: string,
+  input: { name?: string; description?: string },
+) {
+  return request<{ classroom: ClassroomDetail }>(`/classrooms/${classroomId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function upsertClassroomMember(
+  classroomId: string,
+  userId: string,
+  role: ClassroomMemberRole,
+) {
+  return request<{ classroom: ClassroomDetail }>(
+    `/classrooms/${classroomId}/members/${userId}`,
+    { method: "PUT", body: JSON.stringify({ role }) },
+  );
+}
+
+export function removeClassroomMember(classroomId: string, userId: string) {
+  return request<{ classroom: ClassroomDetail }>(
+    `/classrooms/${classroomId}/members/${userId}`,
+    { method: "DELETE" },
+  );
+}
+
+export function createClassroomAnnouncement(
+  classroomId: string,
+  input: { title: string; content: string },
+) {
+  return request<{ announcement: ClassroomAnnouncementSummary }>(
+    `/classrooms/${classroomId}/announcements`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function updateClassroomAnnouncement(
+  classroomId: string,
+  announcementId: string,
+  input: { title?: string; content?: string },
+) {
+  return request<{ announcement: ClassroomAnnouncementSummary }>(
+    `/classrooms/${classroomId}/announcements/${announcementId}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+export function deleteClassroomAnnouncement(
+  classroomId: string,
+  announcementId: string,
+) {
+  return request<{ ok: boolean }>(
+    `/classrooms/${classroomId}/announcements/${announcementId}`,
+    { method: "DELETE" },
+  );
+}
+
+export function listClassroomFiles(classroomId: string) {
+  return request<{ files: ClassroomFileSummary[] }>(
+    `/classrooms/${classroomId}/files`,
+  );
+}
+
+export async function uploadClassroomFile(classroomId: string, file: File) {
+  const path = `/classrooms/${classroomId}/files`;
+  const formData = new FormData();
+  formData.set("file", file);
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  if (!response.ok) {
+    redirectToLoginOnUnauthorized(response.status, path);
+    const body = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    throw new ApiError(
+      Array.isArray(body?.message)
+        ? body.message.join("；")
+        : (body?.message ?? "上传课堂文件失败"),
+      response.status,
+    );
+  }
+  return (await response.json()) as { file: ClassroomFileSummary };
+}
+
+export function deleteClassroomFile(classroomId: string, fileId: string) {
+  return request<{ ok: boolean }>(
+    `/classrooms/${classroomId}/files/${fileId}`,
+    { method: "DELETE" },
+  );
+}
+
 export interface TeachingDeckItemInput {
   type: TeachingDeckItemType;
   sourceBlockId?: string;
@@ -1220,18 +1397,21 @@ export interface TeachingDeckItem {
 
 export interface TeachingDeckDetail {
   id: string;
+  classroomId: string;
+  classroomName: string;
   title: string;
   createdBy: UserSummary;
   canEdit: boolean;
-  canManageVisibility: boolean;
-  visibleUserIds?: string[];
   createdAt: string;
   updatedAt: string;
   items: TeachingDeckItem[];
 }
 
-export function listTeachingDecks() {
-  return request<{ decks: TeachingDeckSummary[] }>("/teaching-decks");
+export function listTeachingDecks(classroomId?: string) {
+  const query = classroomId
+    ? `?classroomId=${encodeURIComponent(classroomId)}`
+    : "";
+  return request<{ decks: TeachingDeckSummary[] }>(`/teaching-decks${query}`);
 }
 
 export function getTeachingDeck(id: string) {
@@ -1239,9 +1419,9 @@ export function getTeachingDeck(id: string) {
 }
 
 export function createTeachingDeck(input: {
+  classroomId: string;
   title: string;
   items: TeachingDeckItemInput[];
-  visibleUserIds?: string[];
 }) {
   return request<{ deck: TeachingDeckDetail }>("/teaching-decks", {
     method: "POST",
@@ -1254,7 +1434,6 @@ export function updateTeachingDeck(
   input: {
     title?: string;
     items?: TeachingDeckItemInput[];
-    visibleUserIds?: string[];
   },
 ) {
   return request<{ deck: TeachingDeckDetail }>(`/teaching-decks/${id}`, {
@@ -1271,6 +1450,8 @@ export function deleteTeachingDeck(id: string) {
 
 export interface ExerciseSetSummary {
   id: string;
+  classroomId: string;
+  classroomName: string;
   /** 历史关联的 exercise_set 文件，新建练习不再创建，可为空。 */
   fileId: string | null;
   title: string;
@@ -1289,8 +1470,13 @@ export interface ExerciseSetSummary {
   maxScore: number | null;
 }
 
-export function listExerciseSets() {
-  return request<{ exerciseSets: ExerciseSetSummary[] }>("/exercise-sets");
+export function listExerciseSets(classroomId?: string) {
+  const query = classroomId
+    ? `?classroomId=${encodeURIComponent(classroomId)}`
+    : "";
+  return request<{ exerciseSets: ExerciseSetSummary[] }>(
+    `/exercise-sets${query}`,
+  );
 }
 
 export interface CreateExerciseQuestionInput {
@@ -1303,18 +1489,38 @@ export interface CreateExerciseQuestionInput {
 }
 
 export function createExerciseSet(input: {
+  classroomId: string;
   title: string;
   openAt?: string;
   dueAt?: string;
   allowMultipleSubmissions: boolean;
   showAnswerAfterSubmit: boolean;
   questions: CreateExerciseQuestionInput[];
-  visibleUserIds?: string[];
 }) {
   return request<{ exerciseSet: { id: string; fileId: string } }>(
     "/exercise-sets",
     {
       method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateExerciseSet(
+  id: string,
+  input: {
+    title: string;
+    openAt?: string;
+    dueAt?: string;
+    allowMultipleSubmissions: boolean;
+    showAnswerAfterSubmit: boolean;
+    questions: CreateExerciseQuestionInput[];
+  },
+) {
+  return request<{ exerciseSet: { id: string; classroomId: string } }>(
+    `/exercise-sets/${id}`,
+    {
+      method: "PATCH",
       body: JSON.stringify(input),
     },
   );
@@ -1339,6 +1545,8 @@ export interface ExerciseQuestion {
 
 export interface ExerciseSetDetail {
   id: string;
+  classroomId: string;
+  classroomName: string;
   title: string;
   createdById: string;
   /** 历史关联的 exercise_set 文件，可为空。 */
@@ -1348,22 +1556,11 @@ export interface ExerciseSetDetail {
   allowMultipleSubmissions: boolean;
   showAnswerAfterSubmit: boolean;
   questions: ExerciseQuestion[];
-  canManageVisibility: boolean;
-  visibleUserIds?: string[];
+  canManage: boolean;
 }
 
 export function getExerciseSet(id: string) {
   return request<{ exerciseSet: ExerciseSetDetail }>(`/exercise-sets/${id}`);
-}
-
-export function updateExerciseVisibility(id: string, visibleUserIds: string[]) {
-  return request<{ exerciseSet: ExerciseSetDetail }>(
-    `/exercise-sets/${id}/visibility`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ visibleUserIds }),
-    },
-  );
 }
 
 export function submitExerciseSet(

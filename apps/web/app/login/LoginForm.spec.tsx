@@ -19,7 +19,7 @@ describe("LoginForm", () => {
     vi.clearAllMocks();
   });
 
-  it("logs in and opens the AI workspace", async () => {
+  it("logs in and opens the classroom workspace", async () => {
     vi.mocked(login).mockResolvedValue({ user: {} as never });
     render(<LoginForm />);
 
@@ -33,7 +33,7 @@ describe("LoginForm", () => {
 
     await waitFor(() => {
       expect(login).toHaveBeenCalledWith("teacher", "secret-password");
-      expect(replace).toHaveBeenCalledWith("/app/ai");
+      expect(replace).toHaveBeenCalledWith("/app/classrooms");
       expect(refresh).toHaveBeenCalledOnce();
     });
   });

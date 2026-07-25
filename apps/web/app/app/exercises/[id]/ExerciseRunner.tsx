@@ -16,7 +16,7 @@ import {
   questionTypeLabel,
   submissionStatusLabel,
 } from "@/lib/labels";
-import { APP_ROUTES } from "@/lib/routes";
+import { classroomDetail } from "@/lib/routes";
 import { AutoTextarea } from "@/components/AutoTextarea";
 
 type AnswerState = Record<string, string | string[] | boolean>;
@@ -242,7 +242,10 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
 
   return (
     <div className="workspace exercise-runner">
-      <Link className="page-back-link" href={APP_ROUTES.exercises}>
+      <Link
+        className="page-back-link"
+        href={classroomDetail(exerciseSet?.classroomId ?? "")}
+      >
         <ArrowLeft aria-hidden="true" />
         返回练习列表
       </Link>

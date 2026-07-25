@@ -6,21 +6,23 @@ import {
   Param,
   Patch,
   Post,
-  Query,
+  Put,
 } from "@nestjs/common";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
+  ArrayUnique,
   IsArray,
   IsIn,
   IsInt,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   MinLength,
   ValidateNested,
 } from "class-validator";
-import type { PermissionTargetType, SystemRole } from "@liveboard/shared";
+import type { SystemRole } from "@liveboard/shared";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import { UsersService } from "./users.service";
 
@@ -62,27 +64,13 @@ class UpdateUserDto {
   @Min(0)
   storageQuotaBytes?: number;
 
-  // null 表示恢复为跟随 workspace 默认限额
   @IsOptional()
   @IsInt()
   @Min(0)
   aiCallLimit?: number | null;
 }
 
-class ImportUserRowDto {
-  @IsString()
-  username!: string;
-
-  @IsString()
-  displayName!: string;
-
-  @IsString()
-  @MinLength(8)
-  password!: string;
-
-  @IsIn(["super_admin", "admin", "member"])
-  systemRole!: SystemRole;
-}
+class ImportUserRowDto extends CreateUserDto {}
 
 class ImportUsersDto {
   @IsArray()
@@ -92,28 +80,17 @@ class ImportUsersDto {
   users!: ImportUserRowDto[];
 }
 
-class CreatePermissionGroupDto {
+class UserTagDto {
   @IsString()
+  @MaxLength(32)
   name!: string;
-
-  @IsOptional()
-  @IsString()
-  description?: string;
 }
 
-class UpdatePermissionGroupDto {
-  @IsOptional()
-  @IsString()
-  name?: string;
-
-  @IsOptional()
-  @IsString()
-  description?: string;
-}
-
-class AddPermissionGroupMemberDto {
-  @IsString()
-  userId!: string;
+class SetUserTagsDto {
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  tagIds!: string[];
 }
 
 @Controller("admin/users")
@@ -145,9 +122,7 @@ export class UsersController {
 
   @Get("storage")
   async storage(@CurrentUserId() actorUserId: string | null) {
-    return {
-      users: await this.usersService.listUserStorage(actorUserId),
-    };
+    return { users: await this.usersService.listUserStorage(actorUserId) };
   }
 
   @Patch(":id")
@@ -160,6 +135,21 @@ export class UsersController {
       user: await this.usersService.updateUser(actorUserId, userId, body),
     };
   }
+
+  @Put(":id/tags")
+  async setTags(
+    @CurrentUserId() actorUserId: string | null,
+    @Param("id") userId: string,
+    @Body() body: SetUserTagsDto,
+  ) {
+    return {
+      user: await this.usersService.setUserTags(
+        actorUserId,
+        userId,
+        body.tagIds,
+      ),
+    };
+  }
 }
 
 @Controller("users")
@@ -168,103 +158,47 @@ export class VisibilityUsersController {
 
   @Get("visibility-options")
   async list(@CurrentUserId() actorUserId: string | null) {
-    return {
-      users: await this.usersService.listVisibilityUsers(actorUserId),
-    };
+    const [users, tags] = await Promise.all([
+      this.usersService.listVisibilityUsers(actorUserId),
+      this.usersService.listVisibleUserTags(actorUserId),
+    ]);
+    return { users, tags };
   }
 }
 
-@Controller("admin/permission-groups")
-export class PermissionGroupsController {
+@Controller("admin/user-tags")
+export class UserTagsController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
   async list(@CurrentUserId() actorUserId: string | null) {
-    return {
-      groups: await this.usersService.listPermissionGroups(actorUserId),
-    };
+    return { tags: await this.usersService.listUserTags(actorUserId) };
   }
 
   @Post()
   async create(
     @CurrentUserId() actorUserId: string | null,
-    @Body() body: CreatePermissionGroupDto,
+    @Body() body: UserTagDto,
   ) {
-    return {
-      group: await this.usersService.createPermissionGroup(actorUserId, body),
-    };
+    return { tag: await this.usersService.createUserTag(actorUserId, body) };
   }
 
   @Patch(":id")
   async update(
     @CurrentUserId() actorUserId: string | null,
-    @Param("id") groupId: string,
-    @Body() body: UpdatePermissionGroupDto,
+    @Param("id") tagId: string,
+    @Body() body: UserTagDto,
   ) {
     return {
-      group: await this.usersService.updatePermissionGroup(
-        actorUserId,
-        groupId,
-        body,
-      ),
+      tag: await this.usersService.updateUserTag(actorUserId, tagId, body),
     };
   }
 
   @Delete(":id")
   async remove(
     @CurrentUserId() actorUserId: string | null,
-    @Param("id") groupId: string,
+    @Param("id") tagId: string,
   ) {
-    return this.usersService.deletePermissionGroup(actorUserId, groupId);
-  }
-
-  @Post(":id/members")
-  async addMember(
-    @CurrentUserId() actorUserId: string | null,
-    @Param("id") groupId: string,
-    @Body() body: AddPermissionGroupMemberDto,
-  ) {
-    return {
-      group: await this.usersService.addPermissionGroupMember(
-        actorUserId,
-        groupId,
-        body.userId,
-      ),
-    };
-  }
-
-  @Delete(":id/members/:userId")
-  async removeMember(
-    @CurrentUserId() actorUserId: string | null,
-    @Param("id") groupId: string,
-    @Param("userId") userId: string,
-  ) {
-    return {
-      group: await this.usersService.removePermissionGroupMember(
-        actorUserId,
-        groupId,
-        userId,
-      ),
-    };
-  }
-}
-
-@Controller("permission-groups")
-export class PermissionGroupLookupController {
-  constructor(private readonly usersService: UsersService) {}
-
-  @Get("assignable")
-  async assignable(
-    @CurrentUserId() actorUserId: string | null,
-    @Query("targetType") targetType: PermissionTargetType,
-    @Query("targetId") targetId: string,
-  ) {
-    return {
-      groups: await this.usersService.listAssignablePermissionGroups(
-        actorUserId,
-        targetType,
-        targetId,
-      ),
-    };
+    return this.usersService.deleteUserTag(actorUserId, tagId);
   }
 }

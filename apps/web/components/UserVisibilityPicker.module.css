@@ -78,6 +78,17 @@
   box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
+.tagFilter {
+  border: 0;
+  border-radius: 9px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  margin: 0 10px 10px;
+  padding: 7px 10px;
+}
+
 .users {
   display: flex;
   flex-direction: column;

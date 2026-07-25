@@ -4,7 +4,7 @@ import { getMe } from "@/lib/api";
 import { AdminSubnav } from "./AdminSubnav";
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/app/admin/groups",
+  usePathname: () => "/app/admin/users",
 }));
 vi.mock("@/lib/api", () => ({
   getMe: vi.fn(),
@@ -39,10 +39,13 @@ describe("AdminSubnav", () => {
     await waitFor(() =>
       expect(screen.getByText("系统与服务")).toBeInTheDocument(),
     );
-    expect(screen.getByRole("link", { name: "权限组" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "成员" })).toHaveAttribute(
       "aria-current",
       "page",
     );
+    expect(screen.queryByText("管理总览")).not.toBeInTheDocument();
+    expect(screen.queryByText("权限组")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "文档权限" })).toBeInTheDocument();
   });
 
   it("hides super administrator services from ordinary administrators", async () => {

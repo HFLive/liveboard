@@ -1,14 +1,22 @@
 import type { PrismaService } from "../prisma/prisma.service";
 import { PermissionsService } from "./permissions.service";
 
-describe("PermissionsService batch resolution", () => {
+describe("PermissionsService user exceptions", () => {
   const prisma = {
-    user: { findUnique: jest.fn() },
+    user: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+    },
+    userTag: { findMany: jest.fn() },
     workspace: { findFirst: jest.fn(), findUnique: jest.fn() },
     file: { findMany: jest.fn(), findUnique: jest.fn() },
     folder: { findMany: jest.fn(), findUnique: jest.fn() },
-    permissionGroupMember: { findMany: jest.fn() },
-    permissionGrant: { findMany: jest.fn() },
+    permissionGrant: {
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+      delete: jest.fn(),
+    },
   };
   let service: PermissionsService;
 
@@ -16,165 +24,102 @@ describe("PermissionsService batch resolution", () => {
     jest.resetAllMocks();
     service = new PermissionsService(prisma as unknown as PrismaService);
     prisma.user.findUnique.mockResolvedValue({
-      id: "user-1",
+      id: "member-1",
       status: "active",
       systemRole: "member",
     });
-    prisma.permissionGroupMember.findMany.mockResolvedValue([
-      { groupId: "group-1" },
-    ]);
+    prisma.permissionGrant.findMany.mockResolvedValue([]);
+    prisma.permissionGrant.findUnique.mockResolvedValue(null);
   });
 
-  it("resolves a folder tree with two grant queries instead of per-node queries", async () => {
+  it("uses viewer as the default for ordinary members", async () => {
+    prisma.folder.findUnique
+      .mockResolvedValueOnce({
+        id: "folder-1",
+        workspaceId: "workspace-1",
+      })
+      .mockResolvedValueOnce({ id: "folder-1", parentId: null });
+
+    await expect(
+      service.getEffectiveLevelForFolder("member-1", "folder-1"),
+    ).resolves.toBe("viewer");
+  });
+
+  it("keeps system administrators as document managers", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "admin-1",
+      status: "active",
+      systemRole: "admin",
+    });
+
+    await expect(
+      service.getEffectiveLevelForFolder("admin-1", "folder-1"),
+    ).resolves.toBe("owner");
+  });
+
+  it("applies workspace and nearest folder exceptions in a batch", async () => {
     prisma.folder.findMany.mockResolvedValue([
       { id: "root", parentId: null, workspaceId: "workspace-1" },
       { id: "child", parentId: "root", workspaceId: "workspace-1" },
       { id: "leaf", parentId: "child", workspaceId: "workspace-1" },
     ]);
     prisma.permissionGrant.findMany.mockResolvedValue([
-      { targetType: "workspace", targetId: "workspace-1", level: "viewer" },
+      {
+        targetType: "workspace",
+        targetId: "workspace-1",
+        level: "no_access",
+      },
       { targetType: "folder", targetId: "child", level: "editor" },
     ]);
 
-    const result = await service.getEffectiveLevelsForFolders("user-1", [
+    const result = await service.getEffectiveLevelsForFolders("member-1", [
       "root",
       "child",
       "leaf",
     ]);
 
     expect([...result.entries()]).toEqual([
-      ["root", "viewer"],
-      ["child", "editor"],
-      ["leaf", "editor"],
+      ["root", "no_access"],
+      ["child", "no_access"],
+      ["leaf", "no_access"],
     ]);
-    expect(prisma.folder.findMany).toHaveBeenCalledTimes(1);
-    expect(prisma.permissionGroupMember.findMany).toHaveBeenCalledTimes(1);
-    expect(prisma.permissionGrant.findMany).toHaveBeenCalledTimes(1);
-  });
-
-  it("exposes the default workspace to system administrators", async () => {
-    prisma.user.findUnique.mockResolvedValue({
-      id: "admin-1",
-      status: "active",
-      systemRole: "admin",
-    });
-    prisma.workspace.findFirst.mockResolvedValue({
-      id: "workspace-1",
-      name: "教学空间",
-    });
-
-    await expect(
-      service.getDefaultWorkspaceForPermissions("admin-1"),
-    ).resolves.toEqual({ id: "workspace-1", name: "教学空间" });
-  });
-
-  it("keeps workspace permission management inside the admin center", async () => {
-    await expect(
-      service.getDefaultWorkspaceForPermissions("user-1"),
-    ).rejects.toThrow(
-      "Only system administrators can manage workspace permissions",
-    );
-  });
-
-  it("combines inherited and explicit file permissions in one batch", async () => {
-    prisma.file.findMany.mockResolvedValue([
-      { id: "file-1", folderId: "folder-1" },
-      { id: "file-2", folderId: "folder-1" },
-    ]);
-    prisma.folder.findMany.mockResolvedValue([
-      { id: "folder-1", parentId: null, workspaceId: "workspace-1" },
-    ]);
-    prisma.permissionGrant.findMany
-      .mockResolvedValueOnce([
-        { targetType: "workspace", targetId: "workspace-1", level: "viewer" },
-      ])
-      .mockResolvedValueOnce([
-        { targetType: "file", targetId: "file-2", level: "no_access" },
-      ]);
-
-    const result = await service.getEffectiveLevelsForFiles("user-1", [
-      "file-1",
-      "file-2",
-    ]);
-
-    expect([...result.entries()]).toEqual([
-      ["file-1", "viewer"],
-      ["file-2", "no_access"],
-    ]);
-    expect(prisma.file.findMany).toHaveBeenCalledTimes(1);
-    expect(prisma.permissionGrant.findMany).toHaveBeenCalledTimes(2);
-  });
-
-  it("shows the nearest inherited group permission and its source", async () => {
-    prisma.user.findUnique.mockResolvedValue({
-      id: "admin-1",
-      status: "active",
-      systemRole: "admin",
-    });
-    prisma.file.findUnique.mockResolvedValue({
-      workspaceId: "workspace-1",
-      folderId: "child",
-    });
-    prisma.workspace.findUnique.mockResolvedValue({
-      id: "workspace-1",
-      name: "教学空间",
-    });
-    prisma.folder.findUnique.mockImplementation(({ where: { id } }) =>
-      Promise.resolve(
-        id === "child"
-          ? { id: "child", parentId: "root" }
-          : { id: "root", parentId: null },
-      ),
-    );
-    prisma.folder.findMany.mockResolvedValue([
-      { id: "root", name: "课程资料" },
-      { id: "child", name: "第一章" },
-    ]);
-    prisma.permissionGrant.findMany
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          id: "grant-root",
-          targetType: "folder",
-          targetId: "root",
-          groupId: "group-1",
-          level: "viewer",
-          group: {
-            id: "group-1",
-            name: "学生",
-            description: null,
-            _count: { members: 32 },
-          },
-        },
-        {
-          id: "grant-child",
-          targetType: "folder",
-          targetId: "child",
-          groupId: "group-1",
-          level: "editor",
-          group: {
-            id: "group-1",
-            name: "学生",
-            description: null,
-            _count: { members: 32 },
-          },
-        },
-      ]);
-
-    const result = await service.listGrants("admin-1", "file", "file-1");
-
-    expect(result.grants).toEqual([]);
-    expect(result.inheritedGrants).toEqual([
+    expect(prisma.permissionGrant.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "grant-child",
-        level: "editor",
-        group: expect.objectContaining({ name: "学生", memberCount: 32 }),
-        inheritedFrom: {
-          targetType: "folder",
-          targetId: "child",
-          targetName: "第一章",
-        },
+        where: expect.objectContaining({ userId: "member-1" }),
       }),
+    );
+  });
+
+  it("returns active members and tags for a manageable target", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "admin-1",
+      status: "active",
+      systemRole: "admin",
+    });
+    prisma.user.findMany.mockResolvedValue([
+      {
+        id: "member-1",
+        username: "student",
+        displayName: "学生",
+        systemRole: "member",
+        status: "active",
+        tagAssignments: [{ tag: { id: "tag-1", name: "一班" } }],
+      },
     ]);
+    prisma.userTag.findMany.mockResolvedValue([
+      { id: "tag-1", name: "一班", _count: { assignments: 1 } },
+    ]);
+
+    await expect(
+      service.listAssignableUsers("admin-1", "folder", "folder-1"),
+    ).resolves.toEqual({
+      users: [
+        expect.objectContaining({
+          id: "member-1",
+          tags: [{ id: "tag-1", name: "一班" }],
+        }),
+      ],
+      tags: [{ id: "tag-1", name: "一班", memberCount: 1 }],
+    });
   });
 });

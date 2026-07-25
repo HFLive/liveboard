@@ -6,12 +6,11 @@ import { useEffect, useState } from "react";
 import type { SystemRole } from "@liveboard/shared";
 import {
   Bot,
+  BadgeCheck,
   Database,
-  LayoutDashboard,
   MessageSquare,
   MonitorCog,
   Settings,
-  ShieldCheck,
   SlidersHorizontal,
   Users,
 } from "lucide-react";
@@ -19,16 +18,6 @@ import { APP_ROUTES } from "@/lib/routes";
 import { getMe } from "@/lib/api";
 
 const adminNavGroups = [
-  {
-    label: "概览",
-    items: [
-      {
-        href: APP_ROUTES.admin,
-        label: "管理总览",
-        icon: LayoutDashboard,
-      },
-    ],
-  },
   {
     label: "人员与权限",
     items: [
@@ -38,14 +27,15 @@ const adminNavGroups = [
         icon: Users,
       },
       {
-        href: APP_ROUTES.adminGroups,
-        label: "权限组",
-        icon: ShieldCheck,
-      },
-      {
         href: APP_ROUTES.adminContentPermissions,
         label: "文档权限",
         icon: SlidersHorizontal,
+      },
+      {
+        href: APP_ROUTES.adminBadges,
+        label: "徽章认证",
+        icon: BadgeCheck,
+        superAdminOnly: true,
       },
     ],
   },

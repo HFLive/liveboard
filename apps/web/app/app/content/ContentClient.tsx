@@ -14,6 +14,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Bot,
   ChevronDown,
   ChevronRight,
   X,
@@ -21,6 +22,7 @@ import {
   Folder,
   MoreHorizontal,
   MoveRight,
+  Paperclip,
   Pencil,
   Pin,
   PinOff,
@@ -34,7 +36,8 @@ import type {
   FileSummary,
   FolderNode,
   PermissionLevel,
-  PermissionGroupSummary,
+  UserSummary,
+  UserTagSummary,
 } from "@liveboard/shared";
 import {
   getResourceNameError,
@@ -48,7 +51,7 @@ import {
   deletePermissionGrant,
   getFolderTree,
   importMarkdown,
-  listAssignablePermissionGroups,
+  listAssignablePermissionUsers,
   listFiles,
   listPermissionGrants,
   InheritedPermissionGrantSummary,
@@ -59,9 +62,10 @@ import {
   upsertPermissionGrant,
 } from "@/lib/api";
 import { formatRelativeTime, permissionLabel } from "@/lib/labels";
-import { contentDetail } from "@/lib/routes";
+import { APP_ROUTES, contentDetail } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { SortIconSelect } from "@/components/SortIconSelect";
+import { PermissionUserPicker } from "@/components/PermissionUserPicker";
 import { MarkdownImportButton } from "./MarkdownImportButton";
 import {
   SkeletonRows,
@@ -81,6 +85,7 @@ type FloatingMenuState = {
 };
 type ContentRowMenuState = FloatingMenuState & {
   targetType: "folder" | "file";
+  surface: "tree" | "table";
 };
 type TreeDepthStyle = CSSProperties & {
   "--tree-depth": number;
@@ -206,13 +211,14 @@ export function ContentClient() {
   const [folderParentId, setFolderParentId] = useState("");
   const [folderRename, setFolderRename] = useState("");
   const [fileTitle, setFileTitle] = useState("");
-  const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
+  const [permissionUsers, setPermissionUsers] = useState<UserSummary[]>([]);
+  const [permissionTags, setPermissionTags] = useState<UserTagSummary[]>([]);
   const [grants, setGrants] = useState<PermissionGrantSummary[]>([]);
   const [inheritedGrants, setInheritedGrants] = useState<
     InheritedPermissionGrantSummary[]
   >([]);
   const [canManageGrants, setCanManageGrants] = useState(false);
-  const [grantGroupId, setGrantGroupId] = useState("");
+  const [grantUserId, setGrantUserId] = useState("");
   const [grantLevel, setGrantLevel] = useState<PermissionLevel>("viewer");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -241,9 +247,8 @@ export function ContentClient() {
     (folder) => folder.id === activeFolderId,
   );
   const isRootView = activeFolderId === null;
-  // 后端允许任何登录用户创建顶层文件夹，根目录始终提供“新建文件夹”。
   const canCreateFolderHere = isRootView
-    ? true
+    ? canManagePins
     : canCreateFolder(activeFolder?.permission ?? null);
   const canCreateFileHere = isRootView
     ? false
@@ -321,29 +326,21 @@ export function ContentClient() {
     return path;
   }, [activeFolderId, flatFolders]);
   useDocumentTitle(activeFolderPath.at(-1)?.name ?? "文档");
-  const groupGrants = useMemo(
-    () => grants.filter((grant) => grant.group),
+  const directGrantUserIds = useMemo(
+    () => new Set(grants.map((grant) => grant.userId)),
     [grants],
   );
-  const availableGrantGroups = useMemo(
+  const inheritedFallbackByUserId = useMemo(
     () =>
-      groups.filter(
-        (group) => !groupGrants.some((grant) => grant.groupId === group.id),
-      ),
-    [groupGrants, groups],
-  );
-  const inheritedFallbackByGroupId = useMemo(
-    () =>
-      new Map(inheritedGrants.map((grant) => [grant.groupId, grant] as const)),
+      new Map(inheritedGrants.map((grant) => [grant.userId, grant] as const)),
     [inheritedGrants],
   );
   const visibleInheritedGrants = useMemo(
     () =>
       inheritedGrants.filter(
-        (grant) =>
-          !groupGrants.some((direct) => direct.groupId === grant.groupId),
+        (grant) => !grants.some((direct) => direct.userId === grant.userId),
       ),
-    [groupGrants, inheritedGrants],
+    [grants, inheritedGrants],
   );
 
   async function load() {
@@ -367,20 +364,15 @@ export function ContentClient() {
     setLoadingTree(false);
 
     if (selectedFolderId) {
-      const [fileResult, grantResult] = await Promise.all([
-        listFiles(selectedFolderId),
-        listPermissionGrants("folder", selectedFolderId),
-        loadAssignableGroups(selectedFolderId),
-      ]);
+      const fileResult = await listFiles(selectedFolderId);
       setFiles(fileResult.files);
-      setGrants(grantResult.grants);
-      setInheritedGrants(grantResult.inheritedGrants);
     } else {
       setFiles([]);
       setGrants([]);
       setInheritedGrants([]);
-      setGroups([]);
-      setGrantGroupId("");
+      setPermissionUsers([]);
+      setPermissionTags([]);
+      setGrantUserId("");
       setCanManageGrants(false);
     }
     setLoadingItems(false);
@@ -392,30 +384,14 @@ export function ContentClient() {
     setCanManagePins(result.canManagePins);
   }
 
-  async function loadAssignableGroups(folderId: string) {
-    try {
-      const groupResult = await listAssignablePermissionGroups({
-        targetType: "folder",
-        targetId: folderId,
-      });
-      setGroups(groupResult.groups);
-      setGrantGroupId((current) => current || groupResult.groups[0]?.id || "");
-      setCanManageGrants(true);
-    } catch {
-      setGroups([]);
-      setGrantGroupId("");
-      setCanManageGrants(false);
-    }
-  }
-
   async function openPermissions(target: PermissionTarget) {
     setOpenContentRowMenu(null);
     setError(null);
 
     try {
-      const [grantResult, groupResult] = await Promise.all([
+      const [grantResult, userResult] = await Promise.all([
         listPermissionGrants(target.type, target.id),
-        listAssignablePermissionGroups({
+        listAssignablePermissionUsers({
           targetType: target.type,
           targetId: target.id,
         }),
@@ -423,8 +399,9 @@ export function ContentClient() {
       setPermissionTarget(target);
       setGrants(grantResult.grants);
       setInheritedGrants(grantResult.inheritedGrants);
-      setGroups(groupResult.groups);
-      setGrantGroupId(groupResult.groups[0]?.id ?? "");
+      setPermissionUsers(userResult.users);
+      setPermissionTags(userResult.tags);
+      setGrantUserId("");
       setCanManageGrants(true);
       setShowPermissions(true);
     } catch (caught) {
@@ -474,14 +451,6 @@ export function ContentClient() {
       window.removeEventListener("resize", closeFloatingMenus);
     };
   }, []);
-
-  useEffect(() => {
-    if (availableGrantGroups.some((group) => group.id === grantGroupId)) {
-      return;
-    }
-
-    setGrantGroupId(availableGrantGroups[0]?.id ?? "");
-  }, [availableGrantGroups, grantGroupId]);
 
   function toggleFolderCollapsed(folderId: string) {
     setCollapsedFolderIds((current) => {
@@ -566,14 +535,8 @@ export function ContentClient() {
     persistActiveFolder(folderId);
     setShowCreateMenu(false);
     setError(null);
-    const [fileResult, grantResult] = await Promise.all([
-      listFiles(folderId),
-      listPermissionGrants("folder", folderId),
-      loadAssignableGroups(folderId),
-    ]);
+    const fileResult = await listFiles(folderId);
     setFiles(fileResult.files);
-    setGrants(grantResult.grants);
-    setInheritedGrants(grantResult.inheritedGrants);
     setMobilePane("contents");
   }
 
@@ -583,7 +546,8 @@ export function ContentClient() {
     setFiles([]);
     setGrants([]);
     setInheritedGrants([]);
-    setGroups([]);
+    setPermissionUsers([]);
+    setPermissionTags([]);
     setCanManageGrants(false);
     setShowCreateMenu(false);
     setOpenContentRowMenu(null);
@@ -743,15 +707,21 @@ export function ContentClient() {
     targetType: "folder" | "file",
     id: string,
     button: HTMLButtonElement,
+    surface: ContentRowMenuState["surface"],
   ) {
     setOpenContentRowMenu((current) => {
-      if (current?.targetType === targetType && current.id === id) {
+      if (
+        current?.targetType === targetType &&
+        current.id === id &&
+        current.surface === surface
+      ) {
         return null;
       }
 
       return {
         id,
         targetType,
+        surface,
         ...getFloatingMenuPosition(
           button,
           canManagePins && activeFolderId !== null ? 6 : 5,
@@ -1025,7 +995,10 @@ export function ContentClient() {
     }
   }
 
-  function renderContentRowContextMenu(item: ContentRowItem) {
+  function renderContentRowContextMenu(
+    item: ContentRowItem,
+    surface: ContentRowMenuState["surface"],
+  ) {
     const isFolder = item.kind === "folder";
     const id = isFolder ? item.folder.id : item.file.id;
     const label = isFolder ? item.folder.name : item.file.title;
@@ -1033,16 +1006,27 @@ export function ContentClient() {
 
     if (
       openContentRowMenu?.targetType !== targetType ||
-      openContentRowMenu.id !== id
+      openContentRowMenu.id !== id ||
+      openContentRowMenu.surface !== surface
     ) {
       return null;
     }
 
     const isPinned = pinnedTargetKeys.has(`${targetType}:${id}`);
+    const canPinItem =
+      canManagePins &&
+      activeFolderId !== null &&
+      (!isFolder || item.folder.parentId === activeFolderId);
+    const canEditItem = isFolder
+      ? canCreateFolder(item.folder.permission)
+      : canCreateFile(activeFolder?.permission ?? null);
+    const canManageItemPermissions =
+      canManagePins || (isFolder && item.folder.permission === "owner");
 
     return (
       <div
         className="context-menu floating-context-menu content-row-context-menu"
+        data-menu-root="true"
         style={{
           left: openContentRowMenu.x,
           top: openContentRowMenu.y,
@@ -1069,7 +1053,7 @@ export function ContentClient() {
             打开
           </Link>
         )}
-        {canManagePins && activeFolderId !== null ? (
+        {canPinItem ? (
           <button
             disabled={isUpdatingPins}
             onClick={() =>
@@ -1085,55 +1069,63 @@ export function ContentClient() {
             {isPinned ? "取消置顶" : "置顶"}
           </button>
         ) : null}
-        <button
-          onClick={() =>
-            isFolder
-              ? beginRenameFolder(item.folder)
-              : beginRenameFile(item.file)
-          }
-          type="button"
-        >
-          <Pencil aria-hidden="true" />
-          重命名
-        </button>
-        <button
-          onClick={() =>
-            isFolder ? beginMoveFolder(item.folder) : beginMoveFile(item.file)
-          }
-          type="button"
-        >
-          <MoveRight aria-hidden="true" />
-          移动到…
-        </button>
-        <button
-          onClick={() =>
-            void openPermissions({
-              type: targetType,
-              id,
-              name: label,
-              ...(isFolder ? { isRoot: item.folder.parentId === null } : {}),
-            })
-          }
-          type="button"
-        >
-          <Users aria-hidden="true" />
-          权限设置
-        </button>
-        <button
-          className="danger"
-          onClick={() => {
-            if (isFolder) {
-              beginDeleteFolder(item.folder);
-            } else {
-              setOpenContentRowMenu(null);
-              void onDeleteFile(item.file);
+        {canManageItemPermissions ? (
+          <button
+            onClick={() =>
+              void openPermissions({
+                type: targetType,
+                id,
+                name: label,
+                isRoot: isFolder && item.folder.parentId === null,
+              })
             }
-          }}
-          type="button"
-        >
-          <Trash2 aria-hidden="true" />
-          {isFolder ? "删除文件夹" : "删除"}
-        </button>
+            type="button"
+          >
+            <Users aria-hidden="true" />
+            权限
+          </button>
+        ) : null}
+        {canEditItem ? (
+          <>
+            <button
+              onClick={() =>
+                isFolder
+                  ? beginRenameFolder(item.folder)
+                  : beginRenameFile(item.file)
+              }
+              type="button"
+            >
+              <Pencil aria-hidden="true" />
+              重命名
+            </button>
+            <button
+              onClick={() =>
+                isFolder
+                  ? beginMoveFolder(item.folder)
+                  : beginMoveFile(item.file)
+              }
+              type="button"
+            >
+              <MoveRight aria-hidden="true" />
+              移动到…
+            </button>
+            <button
+              className="danger"
+              onClick={() => {
+                if (isFolder) {
+                  beginDeleteFolder(item.folder);
+                } else {
+                  setOpenContentRowMenu(null);
+                  void onDeleteFile(item.file);
+                }
+              }}
+              type="button"
+            >
+              <Trash2 aria-hidden="true" />
+              {isFolder ? "删除文件夹" : "删除"}
+            </button>
+          </>
+        ) : null}
       </div>
     );
   }
@@ -1293,6 +1285,7 @@ export function ContentClient() {
                     isFolder ? "folder" : "file",
                     id,
                     event.currentTarget,
+                    "table",
                   );
                 }}
                 title={isFolder ? "文件夹操作" : "文档操作"}
@@ -1300,7 +1293,7 @@ export function ContentClient() {
               >
                 <MoreHorizontal aria-hidden="true" />
               </button>
-              {renderContentRowContextMenu(item)}
+              {renderContentRowContextMenu(item, "table")}
             </div>
           </td>
         </tr>
@@ -1375,6 +1368,24 @@ export function ContentClient() {
                 {folder.fileCount}
               </em>
             ) : null}
+            <button
+              aria-label={`“${folder.name}”文件夹操作`}
+              className="tree-row-menu-button"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleContentRowMenu(
+                  "folder",
+                  folder.id,
+                  event.currentTarget,
+                  "tree",
+                );
+              }}
+              title="文件夹操作"
+              type="button"
+            >
+              <MoreHorizontal aria-hidden="true" />
+            </button>
+            {renderContentRowContextMenu({ kind: "folder", folder }, "tree")}
           </div>
         )}
         {movingFolderId === folder.id ? (
@@ -1425,8 +1436,8 @@ export function ContentClient() {
     setError(null);
     setMessage(null);
 
-    if (!permissionTarget || !grantGroupId) {
-      setError("请选择授权对象和权限组");
+    if (!permissionTarget || !grantUserId) {
+      setError("请选择成员");
       return;
     }
 
@@ -1434,7 +1445,7 @@ export function ContentClient() {
       await upsertPermissionGrant({
         targetType: permissionTarget.type,
         targetId: permissionTarget.id,
-        groupId: grantGroupId,
+        userId: grantUserId,
         level: grantLevel,
       });
       const grantResult = await listPermissionGrants(
@@ -1443,6 +1454,7 @@ export function ContentClient() {
       );
       setGrants(grantResult.grants);
       setInheritedGrants(grantResult.inheritedGrants);
+      setGrantUserId("");
       setMessage("权限已保存");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存权限失败");
@@ -1488,7 +1500,7 @@ export function ContentClient() {
       await upsertPermissionGrant({
         targetType: permissionTarget.type,
         targetId: permissionTarget.id,
-        groupId: grant.groupId ?? "",
+        userId: grant.userId,
         level,
       });
       const grantResult = await listPermissionGrants(
@@ -1509,7 +1521,9 @@ export function ContentClient() {
         <div>
           <p className="page-eyebrow">文档工作区</p>
           <h1>文档</h1>
-          <p className="muted">按文件夹组织教学文档，并管理文件权限。</p>
+          <p className="muted">
+            管理员编写与整理文档，普通成员可阅读已发布内容。
+          </p>
         </div>
       </header>
 
@@ -1549,6 +1563,14 @@ export function ContentClient() {
           )}
         </div>
         <div className="toolbar-row">
+          <Link className="button secondary" href={APP_ROUTES.ai}>
+            <Bot aria-hidden="true" className="button-icon" />
+            AI
+          </Link>
+          <Link className="button secondary" href={APP_ROUTES.library}>
+            <Paperclip aria-hidden="true" className="button-icon" />
+            文件
+          </Link>
           <SortIconSelect
             onChange={setContentSortMode}
             options={SORT_OPTIONS}
@@ -1643,14 +1665,16 @@ export function ContentClient() {
               <div className="empty-panel">
                 <strong>还没有文件夹</strong>
                 <span>先创建一个位置来存放文件。</span>
-                <button
-                  className="button secondary"
-                  onClick={() => beginCreateFolder(null)}
-                  type="button"
-                >
-                  <Plus aria-hidden="true" className="button-icon" />
-                  新建文件夹
-                </button>
+                {canCreateFolderHere ? (
+                  <button
+                    className="button secondary"
+                    onClick={() => beginCreateFolder(null)}
+                    type="button"
+                  >
+                    <Plus aria-hidden="true" className="button-icon" />
+                    新建文件夹
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -1696,6 +1720,7 @@ export function ContentClient() {
                               "folder",
                               folder.id,
                               event.currentTarget,
+                              "table",
                             );
                           }}
                           title="文件夹操作"
@@ -1703,10 +1728,13 @@ export function ContentClient() {
                         >
                           <MoreHorizontal aria-hidden="true" />
                         </button>
-                        {renderContentRowContextMenu({
-                          kind: "folder",
-                          folder,
-                        })}
+                        {renderContentRowContextMenu(
+                          {
+                            kind: "folder",
+                            folder,
+                          },
+                          "table",
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1753,6 +1781,7 @@ export function ContentClient() {
                                 "file",
                                 file.id,
                                 event.currentTarget,
+                                "table",
                               );
                             }}
                             title="文档操作"
@@ -1760,7 +1789,10 @@ export function ContentClient() {
                           >
                             <MoreHorizontal aria-hidden="true" />
                           </button>
-                          {renderContentRowContextMenu({ kind: "file", file })}
+                          {renderContentRowContextMenu(
+                            { kind: "file", file },
+                            "table",
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1777,27 +1809,37 @@ export function ContentClient() {
                         <div className="empty-panel">
                           <strong>还没有文件夹</strong>
                           <span>先创建一个位置来存放文件。</span>
-                          <button
-                            className="button secondary"
-                            onClick={() => beginCreateFolder(null)}
-                            type="button"
-                          >
-                            <Plus aria-hidden="true" className="button-icon" />
-                            新建文件夹
-                          </button>
+                          {canCreateFolderHere ? (
+                            <button
+                              className="button secondary"
+                              onClick={() => beginCreateFolder(null)}
+                              type="button"
+                            >
+                              <Plus
+                                aria-hidden="true"
+                                className="button-icon"
+                              />
+                              新建文件夹
+                            </button>
+                          ) : null}
                         </div>
                       ) : (
                         <div className="empty-panel">
                           <strong>当前文件夹还是空的</strong>
                           <span>可以新建文档、教案、课程或练习集。</span>
-                          <button
-                            className="button secondary"
-                            onClick={() => setShowCreateFile(true)}
-                            type="button"
-                          >
-                            <Plus aria-hidden="true" className="button-icon" />
-                            创建文档
-                          </button>
+                          {canCreateFileHere ? (
+                            <button
+                              className="button secondary"
+                              onClick={() => setShowCreateFile(true)}
+                              type="button"
+                            >
+                              <Plus
+                                aria-hidden="true"
+                                className="button-icon"
+                              />
+                              创建文档
+                            </button>
+                          ) : null}
                         </div>
                       )}
                     </td>
@@ -1836,20 +1878,20 @@ export function ContentClient() {
             </div>
             <div className="modal-body permission-panel">
               <div
-                className={`permission-inheritance-summary ${groupGrants.length > 0 ? "has-overrides" : ""}`}
+                className={`permission-inheritance-summary ${grants.length > 0 ? "has-overrides" : ""}`}
               >
                 <strong>
-                  {groupGrants.length > 0
+                  {grants.length > 0
                     ? "包含例外权限"
                     : permissionTarget?.isRoot
                       ? "沿用文档默认权限"
                       : "沿用上级权限"}
                 </strong>
                 <span>
-                  {groupGrants.length > 0
-                    ? `当前${permissionTarget?.type === "file" ? "文档" : "文件夹"}为 ${groupGrants.length} 个权限组单独设置；其他权限继续从上级继承。`
+                  {grants.length > 0
+                    ? `当前${permissionTarget?.type === "file" ? "文档" : "文件夹"}为 ${grants.length} 位成员单独设置；其他成员继续沿用上级权限。`
                     : permissionTarget?.isRoot
-                      ? "当前顶层文件夹没有单独设置，权限会随管理中心的文档默认权限自动变化。"
+                      ? "当前顶层文件夹没有单独设置，成员默认可查看，管理员默认可编辑。"
                       : `当前${permissionTarget?.type === "file" ? "文档" : "文件夹"}没有单独设置，权限会随上级文件夹自动变化。`}
                 </span>
               </div>
@@ -1858,70 +1900,60 @@ export function ContentClient() {
                   <Users aria-hidden="true" className="heading-icon" />
                   当前项目的例外
                 </h2>
-                <span className="badge">{groupGrants.length} 项</span>
+                <span className="badge">{grants.length} 项</span>
               </div>
               {canManageGrants ? (
                 <form
                   className="permission-add-row"
                   onSubmit={onGrantPermission}
                 >
-                  <select
-                    aria-label="选择权限组"
-                    className="select"
-                    value={grantGroupId}
-                    onChange={(event) => setGrantGroupId(event.target.value)}
-                  >
-                    {availableGrantGroups.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.name}（{group.memberCount} 人）
-                      </option>
-                    ))}
-                    {availableGrantGroups.length === 0 ? (
-                      <option value="">没有可添加权限组</option>
-                    ) : null}
-                  </select>
-                  <select
-                    aria-label="选择权限级别"
-                    className="select"
-                    value={grantLevel}
-                    onChange={(event) =>
-                      setGrantLevel(event.target.value as PermissionLevel)
-                    }
-                  >
-                    <option value="viewer">可查看</option>
-                    <option value="lecturer">可制作课件</option>
-                    <option value="editor">可编辑</option>
-                    <option value="owner">可管理</option>
-                    <option value="no_access">禁止访问</option>
-                  </select>
-                  <button
-                    className="button"
-                    disabled={
-                      !grantGroupId || availableGrantGroups.length === 0
-                    }
-                    type="submit"
-                  >
-                    添加例外
-                  </button>
+                  <PermissionUserPicker
+                    excludedUserIds={directGrantUserIds}
+                    onChange={setGrantUserId}
+                    selectedUserId={grantUserId}
+                    tags={permissionTags}
+                    users={permissionUsers}
+                  />
+                  <div className="permission-add-actions">
+                    <select
+                      aria-label="选择权限级别"
+                      className="select"
+                      value={grantLevel}
+                      onChange={(event) =>
+                        setGrantLevel(event.target.value as PermissionLevel)
+                      }
+                    >
+                      <option value="viewer">可查看</option>
+                      <option value="lecturer">可制作课件</option>
+                      <option value="editor">可编辑</option>
+                      <option value="owner">可管理</option>
+                      <option value="no_access">禁止访问</option>
+                    </select>
+                    <button
+                      className="button"
+                      disabled={!grantUserId}
+                      type="submit"
+                    >
+                      添加例外
+                    </button>
+                  </div>
                 </form>
               ) : (
                 <p className="muted">你没有调整这个文件夹权限的权限。</p>
               )}
               <div className="grant-list">
-                {groupGrants.map((grant) => (
+                {grants.map((grant) => (
                   <div className="grant-row" key={grant.id}>
                     <span
                       className="grant-member"
-                      title={
-                        grant.group?.description ?? grant.group?.name ?? ""
-                      }
+                      title={`@${grant.user.username}`}
                     >
-                      <strong>{grant.group?.name}</strong>
+                      <strong>{grant.user.displayName}</strong>
                       <small>
-                        {grant.group?.memberCount ?? 0} 人 · 当前项目单独设置
-                        {inheritedFallbackByGroupId.get(grant.groupId)
-                          ? `，恢复后为${permissionLabel(inheritedFallbackByGroupId.get(grant.groupId)?.level)}（来自「${inheritedFallbackByGroupId.get(grant.groupId)?.inheritedFrom.targetName}」）`
-                          : "，恢复后不再从上级获得权限"}
+                        @{grant.user.username} · 当前项目单独设置
+                        {inheritedFallbackByUserId.get(grant.userId)
+                          ? `，恢复后为${permissionLabel(inheritedFallbackByUserId.get(grant.userId)?.level)}（来自「${inheritedFallbackByUserId.get(grant.userId)?.inheritedFrom.targetName}」）`
+                          : "，恢复后使用默认权限"}
                       </small>
                     </span>
                     {canManageGrants ? (
@@ -1958,12 +1990,12 @@ export function ContentClient() {
                     ) : null}
                   </div>
                 ))}
-                {groupGrants.length === 0 ? (
+                {grants.length === 0 ? (
                   <div className="empty-panel compact">
                     <strong>没有例外权限</strong>
                     <span>
                       {permissionTarget?.isRoot
-                        ? "全部权限都沿用管理中心的文档默认权限。"
+                        ? "成员默认可查看，管理员默认可编辑。"
                         : "全部权限都沿用上级；通常只需在文件夹层统一管理。"}
                     </span>
                   </div>
@@ -1985,9 +2017,9 @@ export function ContentClient() {
                     {visibleInheritedGrants.map((grant) => (
                       <div className="grant-row inherited" key={grant.id}>
                         <span className="grant-member">
-                          <strong>{grant.group?.name ?? "权限组"}</strong>
+                          <strong>{grant.user.displayName}</strong>
                           <small>
-                            {grant.group?.memberCount ?? 0} 人 · 来自「
+                            @{grant.user.username} · 来自「
                             {grant.inheritedFrom.targetName}」
                           </small>
                         </span>

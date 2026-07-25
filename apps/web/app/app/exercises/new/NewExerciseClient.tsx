@@ -17,10 +17,9 @@ import {
   Pencil,
   Plus,
   Trash2,
-  Users,
   X,
 } from "lucide-react";
-import type { QuestionType, UserSummary } from "@liveboard/shared";
+import type { QuestionType } from "@liveboard/shared";
 import {
   getResourceNameError,
   normalizeResourceName,
@@ -30,13 +29,11 @@ import {
   CreateExerciseQuestionInput,
   ExerciseSetSummary,
   getExerciseSet,
-  getMe,
   listExerciseSets,
-  listVisibilityUsers,
+  updateExerciseSet,
 } from "@/lib/api";
-import { UserVisibilityPicker } from "@/components/UserVisibilityPicker";
 import { questionTypeLabel } from "@/lib/labels";
-import { APP_ROUTES } from "@/lib/routes";
+import { classroomDetail } from "@/lib/routes";
 import { AutoTextarea } from "@/components/AutoTextarea";
 
 const questionTypes: Array<{ value: QuestionType; label: string }> = [
@@ -52,6 +49,15 @@ type DraftAnswer = string | string[] | boolean | undefined;
 
 function toIsoString(value: string) {
   return new Date(value).toISOString();
+}
+
+function toLocalDateTime(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  const localDate = new Date(
+    date.getTime() - date.getTimezoneOffset() * 60_000,
+  );
+  return localDate.toISOString().slice(0, 16);
 }
 
 function formatBuilderAnswer(value: unknown) {
@@ -70,8 +76,16 @@ function getQuestionOptions(question: CreateExerciseQuestionInput) {
   return question.optionsJson?.options ?? [];
 }
 
-export function NewExerciseClient() {
-  const draftKey = "liveboard:exercise-builder-draft:v1";
+export function NewExerciseClient({
+  classroomId,
+  exerciseId,
+}: {
+  classroomId?: string;
+  exerciseId?: string;
+}) {
+  const [resolvedClassroomId, setResolvedClassroomId] = useState(classroomId);
+  const activeClassroomId = resolvedClassroomId ?? classroomId;
+  const draftKey = `liveboard:exercise-builder-draft:v2:${activeClassroomId ?? exerciseId ?? "missing"}`;
   const draftReadyRef = useRef(false);
   const router = useRouter();
   const [title, setTitle] = useState("");
@@ -90,16 +104,6 @@ export function NewExerciseClient() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [users, setUsers] = useState<UserSummary[]>([]);
-  const [creatorUserId, setCreatorUserId] = useState("");
-  const [selectedVisibleUserIds, setSelectedVisibleUserIds] = useState<
-    Set<string>
-  >(new Set());
-  const [visibilityQuery, setVisibilityQuery] = useState("");
-  const [showVisibilityModal, setShowVisibilityModal] = useState(false);
-  const [visibilityDraftUserIds, setVisibilityDraftUserIds] = useState<
-    Set<string>
-  >(new Set());
   const [draggingQuestionIndex, setDraggingQuestionIndex] = useState<
     number | null
   >(null);
@@ -118,6 +122,63 @@ export function NewExerciseClient() {
   );
 
   useEffect(() => {
+    if (exerciseId) {
+      getExerciseSet(exerciseId)
+        .then(async ({ exerciseSet }) => {
+          if (!exerciseSet.canManage) {
+            throw new Error("只有课堂教师可以编辑练习");
+          }
+          setResolvedClassroomId(exerciseSet.classroomId);
+          setTitle(exerciseSet.title);
+          setOpenAt(toLocalDateTime(exerciseSet.openAt));
+          setDueAt(toLocalDateTime(exerciseSet.dueAt));
+          setAllowMultipleSubmissions(exerciseSet.allowMultipleSubmissions);
+          setShowAnswerAfterSubmit(exerciseSet.showAnswerAfterSubmit);
+          setQuestions(
+            exerciseSet.questions.map((question) => ({
+              type: question.type,
+              promptJson: {
+                text:
+                  question.promptJson &&
+                  typeof question.promptJson === "object" &&
+                  "text" in question.promptJson &&
+                  typeof question.promptJson.text === "string"
+                    ? question.promptJson.text
+                    : "未命名题目",
+              },
+              ...(question.optionsJson &&
+              typeof question.optionsJson === "object"
+                ? {
+                    optionsJson: question.optionsJson as {
+                      options: string[];
+                    },
+                  }
+                : {}),
+              ...(question.answerJson !== undefined
+                ? { answerJson: question.answerJson }
+                : {}),
+              score: question.score,
+              required: question.required ?? true,
+            })),
+          );
+          const exerciseResult = await listExerciseSets(
+            exerciseSet.classroomId,
+          );
+          const reusable = exerciseResult.exerciseSets.filter(
+            (exercise) => exercise.canManage && exercise.id !== exerciseId,
+          );
+          setQuestionBank(reusable);
+          setSelectedQuestionBankId(reusable[0]?.id ?? "");
+        })
+        .catch((caught) =>
+          setError(caught instanceof Error ? caught.message : "加载练习失败"),
+        )
+        .finally(() => {
+          draftReadyRef.current = true;
+        });
+      return;
+    }
+
     const saved = window.localStorage.getItem(draftKey);
     if (saved) {
       try {
@@ -128,7 +189,6 @@ export function NewExerciseClient() {
           allowMultipleSubmissions?: boolean;
           showAnswerAfterSubmit?: boolean;
           questions?: CreateExerciseQuestionInput[];
-          visibleUserIds?: string[];
         };
         setTitle(draft.title ?? "");
         setOpenAt(draft.openAt ?? "");
@@ -136,7 +196,6 @@ export function NewExerciseClient() {
         setAllowMultipleSubmissions(Boolean(draft.allowMultipleSubmissions));
         setShowAnswerAfterSubmit(Boolean(draft.showAnswerAfterSubmit));
         setQuestions(draft.questions ?? []);
-        setSelectedVisibleUserIds(new Set(draft.visibleUserIds ?? []));
         setDraftRecovered(true);
       } catch {
         window.localStorage.removeItem(draftKey);
@@ -144,13 +203,12 @@ export function NewExerciseClient() {
     }
     draftReadyRef.current = true;
 
-    Promise.all([getMe(), listVisibilityUsers(), listExerciseSets()])
-      .then(([meResult, usersResult, exerciseResult]) => {
-        setUsers(usersResult.users);
-        setCreatorUserId(meResult.user.id);
-        setSelectedVisibleUserIds((current) =>
-          current.size ? current : new Set([meResult.user.id]),
-        );
+    if (!activeClassroomId) {
+      setError("请从课堂内创建练习");
+      return;
+    }
+    listExerciseSets(activeClassroomId)
+      .then((exerciseResult) => {
         const reusable = exerciseResult.exerciseSets.filter(
           (exercise) => exercise.canManage,
         );
@@ -160,10 +218,10 @@ export function NewExerciseClient() {
       .catch((caught) =>
         setError(caught instanceof Error ? caught.message : "加载用户失败"),
       );
-  }, [draftKey]);
+  }, [activeClassroomId, draftKey, exerciseId]);
 
   useEffect(() => {
-    if (!draftReadyRef.current) return;
+    if (!draftReadyRef.current || exerciseId) return;
     const timer = window.setTimeout(() => {
       window.localStorage.setItem(
         draftKey,
@@ -174,7 +232,6 @@ export function NewExerciseClient() {
           allowMultipleSubmissions,
           showAnswerAfterSubmit,
           questions,
-          visibleUserIds: [...selectedVisibleUserIds],
         }),
       );
     }, 300);
@@ -185,9 +242,9 @@ export function NewExerciseClient() {
     dueAt,
     openAt,
     questions,
-    selectedVisibleUserIds,
     showAnswerAfterSubmit,
     title,
+    exerciseId,
   ]);
 
   useEffect(() => {
@@ -207,17 +264,6 @@ export function NewExerciseClient() {
     setScore(5);
     setRequired(true);
     setError(null);
-  }
-
-  function openVisibilityModal() {
-    setVisibilityDraftUserIds(new Set(selectedVisibleUserIds));
-    setVisibilityQuery("");
-    setShowVisibilityModal(true);
-  }
-
-  function applyVisibilityDraft() {
-    setSelectedVisibleUserIds(new Set(visibilityDraftUserIds));
-    setShowVisibilityModal(false);
   }
 
   function changeQuestionType(nextType: QuestionType) {
@@ -545,22 +591,39 @@ export function NewExerciseClient() {
       setError("截止时间必须晚于开始时间");
       return;
     }
+    if (!activeClassroomId) {
+      setError("请从课堂内创建练习");
+      return;
+    }
 
     setLoading(true);
     try {
-      await createExerciseSet({
+      const payload = {
         title: normalizeResourceName(title),
         ...(openAt ? { openAt: toIsoString(openAt) } : {}),
         ...(dueAt ? { dueAt: toIsoString(dueAt) } : {}),
         allowMultipleSubmissions,
         showAnswerAfterSubmit,
         questions,
-        visibleUserIds: [...selectedVisibleUserIds],
-      });
-      window.localStorage.removeItem(draftKey);
-      router.push(APP_ROUTES.exercises);
+      };
+      if (exerciseId) {
+        await updateExerciseSet(exerciseId, payload);
+      } else {
+        await createExerciseSet({
+          classroomId: activeClassroomId,
+          ...payload,
+        });
+        window.localStorage.removeItem(draftKey);
+      }
+      router.push(classroomDetail(activeClassroomId));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "创建练习失败");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : exerciseId
+            ? "保存练习失败"
+            : "创建练习失败",
+      );
     } finally {
       setLoading(false);
     }
@@ -568,14 +631,17 @@ export function NewExerciseClient() {
 
   return (
     <div className="workspace quiz-builder">
-      <Link className="page-back-link" href={APP_ROUTES.exercises}>
+      <Link
+        className="page-back-link"
+        href={classroomDetail(activeClassroomId ?? "")}
+      >
         <ArrowLeft aria-hidden="true" />
         返回练习列表
       </Link>
       <section className="page-head">
         <div>
           <p className="page-eyebrow">在线练习</p>
-          <h1>创建练习</h1>
+          <h1>{exerciseId ? "编辑练习" : "创建练习"}</h1>
         </div>
       </section>
 
@@ -926,7 +992,13 @@ export function NewExerciseClient() {
               {questions.length} 道题 · 共 {totalScore} 分
             </span>
             <button className="button" disabled={loading} type="submit">
-              {loading ? "创建中" : "创建练习"}
+              {loading
+                ? exerciseId
+                  ? "保存中"
+                  : "创建中"
+                : exerciseId
+                  ? "保存练习"
+                  : "创建练习"}
             </button>
           </div>
         </div>
@@ -992,16 +1064,6 @@ export function NewExerciseClient() {
                 />
               </label>
             </div>
-            {creatorUserId ? (
-              <button
-                className="button secondary quiz-visibility-button"
-                onClick={openVisibilityModal}
-                type="button"
-              >
-                <Users aria-hidden="true" className="button-icon" />
-                可见范围（{selectedVisibleUserIds.size} 人）
-              </button>
-            ) : null}
           </section>
 
           <section className="action-panel quiz-publish">
@@ -1021,7 +1083,13 @@ export function NewExerciseClient() {
               disabled={loading}
               type="submit"
             >
-              {loading ? "创建中" : "创建练习"}
+              {loading
+                ? exerciseId
+                  ? "保存中"
+                  : "创建中"
+                : exerciseId
+                  ? "保存练习"
+                  : "创建练习"}
             </button>
           </section>
         </aside>
@@ -1170,56 +1238,6 @@ export function NewExerciseClient() {
               </button>
             </div>
           </section>
-        </div>
-      ) : null}
-      {showVisibilityModal && creatorUserId ? (
-        <div className="modal-backdrop" role="presentation">
-          <div
-            aria-labelledby="exercise-visibility-title"
-            aria-modal="true"
-            className="modal-panel quiz-visibility-modal"
-            role="dialog"
-          >
-            <div className="modal-head">
-              <h2 id="exercise-visibility-title">设置可见范围</h2>
-              <button
-                className="icon-button subtle"
-                onClick={() => setShowVisibilityModal(false)}
-                title="关闭"
-                type="button"
-              >
-                <X aria-hidden="true" />
-              </button>
-            </div>
-            <div className="modal-body">
-              <UserVisibilityPicker
-                creatorUserId={creatorUserId}
-                onChange={setVisibilityDraftUserIds}
-                onQueryChange={setVisibilityQuery}
-                query={visibilityQuery}
-                selectedUserIds={visibilityDraftUserIds}
-                users={users}
-              />
-            </div>
-            <div className="modal-foot">
-              <div className="button-row">
-                <button
-                  className="button secondary"
-                  onClick={() => setShowVisibilityModal(false)}
-                  type="button"
-                >
-                  取消
-                </button>
-                <button
-                  className="button"
-                  onClick={applyVisibilityDraft}
-                  type="button"
-                >
-                  保存可见范围
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       ) : null}
     </div>

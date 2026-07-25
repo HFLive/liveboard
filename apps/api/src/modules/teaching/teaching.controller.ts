@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from "@nestjs/common";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import { CreateTeachingDeckDto, UpdateTeachingDeckDto } from "./teaching.dto";
@@ -16,8 +17,11 @@ export class TeachingController {
   constructor(private readonly teachingService: TeachingService) {}
 
   @Get()
-  async list(@CurrentUserId() userId: string | null) {
-    return { decks: await this.teachingService.list(userId) };
+  async list(
+    @CurrentUserId() userId: string | null,
+    @Query("classroomId") classroomId?: string,
+  ) {
+    return { decks: await this.teachingService.list(userId, classroomId) };
   }
 
   @Get(":id")

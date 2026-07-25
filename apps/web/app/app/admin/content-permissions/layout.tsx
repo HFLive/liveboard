@@ -1,10 +1,9 @@
-import type { ReactNode } from "react";
 import "./content-permissions.css";
 
 export default function ContentPermissionsLayout({
   children,
-}: {
-  children: ReactNode;
-}) {
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return children;
 }

@@ -1,13 +1,20 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { askAiStream, getAiStatus, listAiConversations } from "@/lib/api";
+import {
+  askAiStream,
+  getAiStatus,
+  getAiUsage,
+  listAiConversations,
+} from "@/lib/api";
 import { AiAssistantClient } from "./AiAssistantClient";
 
 vi.mock("@/lib/api", () => ({
+  AI_USAGE_CONSUMED_EVENT: "liveboard:ai-usage-consumed",
   askAiStream: vi.fn(),
   deleteAiConversation: vi.fn(),
   getAiConversation: vi.fn(),
   getAiStatus: vi.fn(),
+  getAiUsage: vi.fn(),
   listAiConversations: vi.fn(),
 }));
 
@@ -23,6 +30,7 @@ describe("AiAssistantClient keyboard input", () => {
       },
     });
     vi.mocked(listAiConversations).mockResolvedValue({ conversations: [] });
+    vi.mocked(getAiUsage).mockResolvedValue({ used: 2, limit: 10 });
     vi.mocked(askAiStream).mockResolvedValue(undefined);
   });
 

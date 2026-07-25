@@ -1,7 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
-import type { UserSummary } from "@liveboard/shared";
+import type { UserSummary, UserTagSummary } from "@liveboard/shared";
 import styles from "./UserVisibilityPicker.module.css";
 
 interface UserVisibilityPickerProps {
@@ -12,6 +12,9 @@ interface UserVisibilityPickerProps {
   disabled?: boolean;
   query: string;
   onQueryChange: (query: string) => void;
+  tags?: UserTagSummary[];
+  tagId?: string;
+  onTagChange?: (tagId: string) => void;
 }
 
 export function UserVisibilityPicker({
@@ -22,14 +25,19 @@ export function UserVisibilityPicker({
   disabled = false,
   query,
   onQueryChange,
+  tags = [],
+  tagId = "all",
+  onTagChange,
 }: UserVisibilityPickerProps) {
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const filteredUsers = users.filter((user) =>
-    normalizedQuery
-      ? `${user.displayName} ${user.username}`
-          .toLocaleLowerCase()
-          .includes(normalizedQuery)
-      : true,
+  const filteredUsers = users.filter(
+    (user) =>
+      (tagId === "all" || user.tags?.some((tag) => tag.id === tagId)) &&
+      (normalizedQuery
+        ? `${user.displayName} ${user.username}`
+            .toLocaleLowerCase()
+            .includes(normalizedQuery)
+        : true),
   );
   const allSelected = users.every((user) => selectedUserIds.has(user.id));
 
@@ -71,6 +79,22 @@ export function UserVisibilityPicker({
           value={query}
         />
       </label>
+      {tags.length ? (
+        <select
+          aria-label="按成员标签筛选"
+          className={styles.tagFilter}
+          disabled={disabled}
+          onChange={(event) => onTagChange?.(event.target.value)}
+          value={tagId}
+        >
+          <option value="all">全部标签</option>
+          {tags.map((tag) => (
+            <option key={tag.id} value={tag.id}>
+              {tag.name}
+            </option>
+          ))}
+        </select>
+      ) : null}
       <div className={styles.users}>
         {filteredUsers.map((user) => {
           const isCreator = user.id === creatorUserId;

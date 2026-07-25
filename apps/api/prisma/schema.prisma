@@ -65,6 +65,11 @@ enum SubmissionStatus {
   late
 }
 
+enum ClassroomMemberRole {
+  teacher
+  student
+}
+
 enum ForumThreadStatus {
   open
   locked
@@ -93,24 +98,29 @@ model User {
   updatedAt         DateTime   @updatedAt
   activityReadAt    DateTime?
 
-  createdFolders             Folder[]                @relation("FolderCreatedBy")
-  createdFiles               File[]                  @relation("FileCreatedBy")
-  updatedFiles               File[]                  @relation("FileUpdatedBy")
-  grants                     PermissionGrant[]       @relation("PermissionUser")
-  permissionGroupMemberships PermissionGroupMember[]
-  createdPermissionGroups    PermissionGroup[]       @relation("PermissionGroupCreatedBy")
-  submissions                Submission[]
-  aiConversations            AiConversation[]
-  forumThreads               ForumThread[]           @relation("ForumThreadAuthor")
-  forumPosts                 ForumPost[]             @relation("ForumPostAuthor")
-  forumThreadStates          ForumThreadState[]
-  teachingDecks              TeachingDeck[]          @relation("TeachingDeckCreatedBy")
-  visibleTeachingDecks       TeachingDeckViewer[]
-  visibleExerciseSets        ExerciseSetViewer[]
-  createdExerciseSets        ExerciseSet[]           @relation("ExerciseSetCreatedBy")
-  uploadedAssets             FileAsset[]             @relation("FileAssetUploader")
-  activityDismissals         ActivityDismissal[]
-  forumPostVotes             ForumPostVote[]
+  createdFolders          Folder[]                @relation("FolderCreatedBy")
+  createdFiles            File[]                  @relation("FileCreatedBy")
+  updatedFiles            File[]                  @relation("FileUpdatedBy")
+  tagAssignments          UserTagAssignment[]
+  badgeAssignments        UserBadge[]             @relation("UserBadgeRecipient")
+  awardedBadges           UserBadge[]             @relation("UserBadgeAwardedBy")
+  createdBadges           Badge[]                 @relation("BadgeCreatedBy")
+  permissionGrants        PermissionGrant[]       @relation("PermissionGrantUser")
+  createdPermissionGrants PermissionGrant[]       @relation("PermissionGrantCreatedBy")
+  submissions             Submission[]
+  aiConversations         AiConversation[]
+  forumThreads            ForumThread[]           @relation("ForumThreadAuthor")
+  forumPosts              ForumPost[]             @relation("ForumPostAuthor")
+  forumThreadStates       ForumThreadState[]
+  teachingDecks           TeachingDeck[]          @relation("TeachingDeckCreatedBy")
+  createdExerciseSets     ExerciseSet[]           @relation("ExerciseSetCreatedBy")
+  uploadedAssets          FileAsset[]             @relation("FileAssetUploader")
+  createdClassrooms       Classroom[]             @relation("ClassroomCreatedBy")
+  classroomMemberships    ClassroomMember[]
+  uploadedClassroomFiles  ClassroomFile[]         @relation("ClassroomFileUploader")
+  classroomAnnouncements  ClassroomAnnouncement[]
+  activityDismissals      ActivityDismissal[]
+  forumPostVotes          ForumPostVote[]
 }
 
 model ActivityDismissal {
@@ -146,8 +156,9 @@ model Workspace {
 
   folders           Folder[]
   files             File[]
-  grants            PermissionGrant[]
-  permissionGroups  PermissionGroup[]
+  userTags          UserTag[]
+  badges            Badge[]
+  permissionGrants  PermissionGrant[]
   assets            FileAsset[]
   aiSettings        AiSettings?
   aiProviderConfigs AiProviderConfig[]
@@ -155,6 +166,7 @@ model Workspace {
   forumCategories   ForumCategory[]
   forumThreads      ForumThread[]
   teachingDecks     TeachingDeck[]
+  classrooms        Classroom[]
 }
 
 model ForumCategory {
@@ -305,55 +317,83 @@ model File {
   @@index([workspaceId, pinnedOrder])
 }
 
-model PermissionGrant {
-  id          String               @id @default(cuid())
-  workspaceId String
-  targetType  PermissionTargetType
-  targetId    String
-  userId      String?
-  groupId     String?
-  level       PermissionLevel
-  createdById String
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
-
-  workspace Workspace        @relation(fields: [workspaceId], references: [id])
-  user      User?            @relation("PermissionUser", fields: [userId], references: [id])
-  group     PermissionGroup? @relation(fields: [groupId], references: [id])
-
-  @@unique([targetType, targetId, userId])
-  @@unique([targetType, targetId, groupId])
-  @@index([groupId])
-}
-
-model PermissionGroup {
+model UserTag {
   id          String   @id @default(cuid())
   workspaceId String
   name        String
-  description String?
-  createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  workspace Workspace               @relation(fields: [workspaceId], references: [id])
-  createdBy User                    @relation("PermissionGroupCreatedBy", fields: [createdById], references: [id])
-  members   PermissionGroupMember[]
-  grants    PermissionGrant[]
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  assignments UserTagAssignment[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, name])
 }
 
-model PermissionGroupMember {
-  id        String   @id @default(cuid())
-  groupId   String
+model UserTagAssignment {
+  tagId     String   @map("tagId")
   userId    String
   createdAt DateTime @default(now())
 
-  group PermissionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tag  UserTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  user User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([groupId, userId])
+  @@id([tagId, userId])
+  @@index([userId])
+}
+
+model Badge {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  color       String   @default("gold")
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy   User        @relation("BadgeCreatedBy", fields: [createdById], references: [id])
+  assignments UserBadge[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, createdAt])
+}
+
+model UserBadge {
+  badgeId       String
+  userId        String
+  awardedById   String
+  awardedAt     DateTime @default(now())
+  equippedOrder Int?
+
+  badge     Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  user      User  @relation("UserBadgeRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  awardedBy User  @relation("UserBadgeAwardedBy", fields: [awardedById], references: [id])
+
+  @@id([badgeId, userId])
+  @@index([userId, equippedOrder])
+  @@index([awardedById])
+}
+
+model PermissionGrant {
+  id          String               @id @default(cuid())
+  workspaceId String
+  targetType  PermissionTargetType
+  targetId    String
+  userId      String
+  level       PermissionLevel
+  createdById String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation("PermissionGrantUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("PermissionGrantCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([targetType, targetId, userId])
+  @@index([workspaceId, targetType, targetId])
   @@index([userId])
 }
 
@@ -379,6 +419,7 @@ model ContentBlock {
 
 model ExerciseSet {
   id                       String    @id @default(cuid())
+  classroomId              String
   title                    String
   createdById              String
   fileId                   String?   @unique
@@ -389,29 +430,32 @@ model ExerciseSet {
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
-  createdBy         User                @relation("ExerciseSetCreatedBy", fields: [createdById], references: [id])
-  file              File?               @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  createdBy         User               @relation("ExerciseSetCreatedBy", fields: [createdById], references: [id])
+  classroom         Classroom          @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  file              File?              @relation(fields: [fileId], references: [id], onDelete: Cascade)
   questions         Question[]
   submissions       Submission[]
   teachingDeckItems TeachingDeckItem[]
-  viewers           ExerciseSetViewer[]
 
+  @@index([classroomId, updatedAt])
   @@index([createdById])
 }
 
 model TeachingDeck {
   id          String   @id @default(cuid())
   workspaceId String
+  classroomId String
   title       String
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  workspace Workspace            @relation(fields: [workspaceId], references: [id])
-  createdBy User                 @relation("TeachingDeckCreatedBy", fields: [createdById], references: [id])
+  workspace Workspace          @relation(fields: [workspaceId], references: [id])
+  classroom Classroom          @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  createdBy User               @relation("TeachingDeckCreatedBy", fields: [createdById], references: [id])
   items     TeachingDeckItem[]
-  viewers   TeachingDeckViewer[]
 
+  @@index([classroomId, updatedAt])
   @@index([workspaceId, updatedAt])
   @@index([createdById])
 }
@@ -442,28 +486,72 @@ model TeachingDeckItem {
   @@index([assetId])
 }
 
-model TeachingDeckViewer {
-  deckId    String
-  userId    String
-  createdAt DateTime @default(now())
+model Classroom {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  deck TeachingDeck @relation(fields: [deckId], references: [id], onDelete: Cascade)
-  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace     Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy     User                    @relation("ClassroomCreatedBy", fields: [createdById], references: [id])
+  members       ClassroomMember[]
+  decks         TeachingDeck[]
+  exercises     ExerciseSet[]
+  files         ClassroomFile[]
+  announcements ClassroomAnnouncement[]
 
-  @@id([deckId, userId])
-  @@index([userId])
+  @@unique([workspaceId, name])
+  @@index([workspaceId, updatedAt])
 }
 
-model ExerciseSetViewer {
-  exerciseSetId String
-  userId        String
-  createdAt     DateTime @default(now())
+model ClassroomMember {
+  classroomId String
+  userId      String
+  role        ClassroomMemberRole
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
 
-  exerciseSet ExerciseSet @relation(fields: [exerciseSetId], references: [id], onDelete: Cascade)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classroom Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([exerciseSetId, userId])
-  @@index([userId])
+  @@id([classroomId, userId])
+  @@index([userId, role])
+}
+
+model ClassroomFile {
+  id          String   @id @default(cuid())
+  classroomId String
+  storageKey  String   @unique
+  filename    String
+  mimeType    String
+  sizeBytes   Int
+  uploadedBy  String
+  createdAt   DateTime @default(now())
+
+  classroom Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  uploader  User      @relation("ClassroomFileUploader", fields: [uploadedBy], references: [id])
+
+  @@index([classroomId, createdAt])
+  @@index([uploadedBy, createdAt])
+}
+
+model ClassroomAnnouncement {
+  id          String   @id @default(cuid())
+  classroomId String
+  authorId    String
+  title       String
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  classroom Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([classroomId, createdAt])
+  @@index([authorId])
 }
 
 model Question {

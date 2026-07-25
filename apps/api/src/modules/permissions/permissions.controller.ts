@@ -22,7 +22,7 @@ class UpsertPermissionDto {
   targetId!: string;
 
   @IsString()
-  groupId!: string;
+  userId!: string;
 
   @IsIn(["owner", "editor", "lecturer", "viewer", "no_access"])
   level!: PermissionLevel;
@@ -42,6 +42,19 @@ export class PermissionsController {
     };
   }
 
+  @Get("assignable")
+  async assignable(
+    @CurrentUserId() actorUserId: string | null,
+    @Query("targetType") targetType: PermissionTargetType,
+    @Query("targetId") targetId: string,
+  ) {
+    return this.permissionsService.listAssignableUsers(
+      actorUserId,
+      targetType,
+      targetId,
+    );
+  }
+
   @Get("effective")
   @Public()
   effective(
@@ -52,7 +65,6 @@ export class PermissionsController {
       inherited && isPermissionLevel(inherited) ? inherited : null;
     const explicitLevel: PermissionLevel | null =
       explicit && isPermissionLevel(explicit) ? explicit : null;
-
     return this.permissionsService.getEffectivePermission(
       inheritedLevel,
       explicitLevel,

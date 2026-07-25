@@ -11,14 +11,12 @@ import {
   isSystemAdmin,
   type AdminUserSummary,
   type SystemRole,
+  type UserTagSummary,
   type UserSummary,
 } from "@liveboard/shared";
-import type { PermissionGroupSummary } from "@liveboard/shared";
-import type { PermissionTargetType } from "@liveboard/shared";
 import argon2 from "argon2";
 import { Prisma } from "@prisma/client";
 import { formatDateKey } from "../../common/date-key";
-import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 export interface CreateUserInput {
@@ -52,28 +50,34 @@ export interface UserStorageSummary {
   assetCount: number;
 }
 
-export interface CreatePermissionGroupInput {
+export interface CreateUserTagInput {
   name: string;
-  description?: string | null;
 }
 
-export interface UpdatePermissionGroupInput {
-  name?: string;
-  description?: string | null;
+export interface UpdateUserTagInput {
+  name: string;
 }
 
 @Injectable()
 export class UsersService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly permissions: PermissionsService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async listUsers(actorUserId: string | null): Promise<AdminUserSummary[]> {
     await this.requireAdmin(actorUserId);
 
     const [users, workspace] = await Promise.all([
-      this.prisma.user.findMany({ orderBy: [{ createdAt: "asc" }] }),
+      this.prisma.user.findMany({
+        orderBy: [{ createdAt: "asc" }],
+        include: {
+          tagAssignments: { include: { tag: true } },
+          badgeAssignments: {
+            where: { equippedOrder: { not: null } },
+            include: { badge: true },
+            orderBy: { equippedOrder: "asc" },
+            take: 3,
+          },
+        },
+      }),
       this.prisma.workspace.findFirst({
         orderBy: { createdAt: "asc" },
         select: { timeZone: true },
@@ -109,6 +113,15 @@ export class UsersService {
     const users = await this.prisma.user.findMany({
       where: { status: "active" },
       orderBy: [{ displayName: "asc" }, { username: "asc" }],
+      include: {
+        tagAssignments: { include: { tag: true } },
+        badgeAssignments: {
+          where: { equippedOrder: { not: null } },
+          include: { badge: true },
+          orderBy: { equippedOrder: "asc" },
+          take: 3,
+        },
+      },
     });
 
     return users.map((user) => this.toSummary(user));
@@ -119,25 +132,41 @@ export class UsersService {
   ): Promise<UserStorageSummary[]> {
     await this.requireAdmin(actorUserId);
 
-    const [users, groupedAssets] = await Promise.all([
+    const [users, groupedAssets, groupedClassroomFiles] = await Promise.all([
       this.prisma.user.findMany({
         orderBy: [{ createdAt: "asc" }],
+        include: {
+          badgeAssignments: {
+            where: { equippedOrder: { not: null } },
+            include: { badge: true },
+            orderBy: { equippedOrder: "asc" },
+            take: 3,
+          },
+        },
       }),
       this.prisma.fileAsset.groupBy({
         by: ["uploadedBy"],
         _sum: { sizeBytes: true },
         _count: { id: true },
       }),
+      this.prisma.classroomFile.groupBy({
+        by: ["uploadedBy"],
+        _sum: { sizeBytes: true },
+        _count: { id: true },
+      }),
     ]);
-    const usageByUserId = new Map(
-      groupedAssets.map((item) => [
-        item.uploadedBy,
-        {
-          storageUsedBytes: item._sum.sizeBytes ?? 0,
-          assetCount: item._count.id,
-        },
-      ]),
-    );
+    const usageByUserId = new Map<
+      string,
+      { storageUsedBytes: number; assetCount: number }
+    >();
+    for (const item of [...groupedAssets, ...groupedClassroomFiles]) {
+      const current = usageByUserId.get(item.uploadedBy);
+      usageByUserId.set(item.uploadedBy, {
+        storageUsedBytes:
+          (current?.storageUsedBytes ?? 0) + (item._sum.sizeBytes ?? 0),
+        assetCount: (current?.assetCount ?? 0) + item._count.id,
+      });
+    }
 
     return users.map((user) => {
       const usage = usageByUserId.get(user.id);
@@ -151,6 +180,117 @@ export class UsersService {
     });
   }
 
+  async listVisibleUserTags(actorUserId: string | null) {
+    await this.requireActiveUser(actorUserId);
+    return this.findUserTags();
+  }
+
+  async listUserTags(actorUserId: string | null) {
+    await this.requireAdmin(actorUserId);
+    return this.findUserTags();
+  }
+
+  async createUserTag(
+    actorUserId: string | null,
+    input: CreateUserTagInput,
+  ): Promise<UserTagSummary> {
+    await this.requireAdmin(actorUserId);
+    const workspace = await this.getDefaultWorkspace();
+    const name = this.normalizeTagName(input.name);
+    const existing = await this.prisma.userTag.findUnique({
+      where: { workspaceId_name: { workspaceId: workspace.id, name } },
+      select: { id: true },
+    });
+    if (existing) throw new ConflictException("标签名称已存在");
+    const tag = await this.prisma.userTag.create({
+      data: {
+        workspaceId: workspace.id,
+        name,
+      },
+    });
+    return { id: tag.id, name: tag.name, memberCount: 0 };
+  }
+
+  async updateUserTag(
+    actorUserId: string | null,
+    tagId: string,
+    input: UpdateUserTagInput,
+  ): Promise<UserTagSummary> {
+    await this.requireAdmin(actorUserId);
+    const current = await this.prisma.userTag.findUnique({
+      where: { id: tagId },
+      select: { id: true, workspaceId: true },
+    });
+    if (!current) throw new NotFoundException("Tag not found");
+    const name = this.normalizeTagName(input.name);
+    const duplicate = await this.prisma.userTag.findUnique({
+      where: {
+        workspaceId_name: { workspaceId: current.workspaceId, name },
+      },
+      select: { id: true },
+    });
+    if (duplicate && duplicate.id !== tagId) {
+      throw new ConflictException("标签名称已存在");
+    }
+    const tag = await this.prisma.userTag.update({
+      where: { id: tagId },
+      data: { name },
+      include: { _count: { select: { assignments: true } } },
+    });
+    return {
+      id: tag.id,
+      name: tag.name,
+      memberCount: tag._count.assignments,
+    };
+  }
+
+  async deleteUserTag(actorUserId: string | null, tagId: string) {
+    await this.requireAdmin(actorUserId);
+    await this.prisma.userTag.delete({ where: { id: tagId } });
+    return { ok: true };
+  }
+
+  async setUserTags(
+    actorUserId: string | null,
+    userId: string,
+    tagIds: string[],
+  ): Promise<UserSummary> {
+    await this.requireAdmin(actorUserId);
+    const uniqueTagIds = [...new Set(tagIds)];
+    const [user, tagCount] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      }),
+      this.prisma.userTag.count({ where: { id: { in: uniqueTagIds } } }),
+    ]);
+    if (!user) throw new NotFoundException("User not found");
+    if (tagCount !== uniqueTagIds.length) {
+      throw new BadRequestException("包含不存在的成员标签");
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.userTagAssignment.deleteMany({ where: { userId } }),
+      this.prisma.userTagAssignment.createMany({
+        data: uniqueTagIds.map((tagId) => ({ tagId, userId })),
+      }),
+    ]);
+    const updated = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      include: {
+        tagAssignments: { include: { tag: true } },
+        badgeAssignments: {
+          where: { equippedOrder: { not: null } },
+          include: { badge: true },
+          orderBy: { equippedOrder: "asc" },
+          take: 3,
+        },
+      },
+    });
+    return this.toSummary(updated);
+  }
+
+  /* Legacy permission-group implementation removed in the next migration.
   async listPermissionGroups(
     actorUserId: string | null,
   ): Promise<PermissionGroupSummary[]> {
@@ -341,6 +481,7 @@ export class UsersService {
 
     return this.getPermissionGroup(groupId);
   }
+  */
 
   async createUser(
     actorUserId: string | null,
@@ -645,6 +786,41 @@ export class UsersService {
     return actor;
   }
 
+  private async requireActiveUser(actorUserId: string | null) {
+    if (!actorUserId) {
+      throw new UnauthorizedException("Missing session");
+    }
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { id: true, status: true },
+    });
+    if (!actor || actor.status !== "active") {
+      throw new UnauthorizedException("User not found");
+    }
+    return actor;
+  }
+
+  private async findUserTags(): Promise<UserTagSummary[]> {
+    const tags = await this.prisma.userTag.findMany({
+      orderBy: [{ name: "asc" }],
+      include: { _count: { select: { assignments: true } } },
+    });
+    return tags.map((tag) => ({
+      id: tag.id,
+      name: tag.name,
+      memberCount: tag._count.assignments,
+    }));
+  }
+
+  private normalizeTagName(value: string) {
+    const name = value.trim();
+    if (!name) throw new BadRequestException("标签名称不能为空");
+    if (name.length > 32) {
+      throw new BadRequestException("标签名称不能超过 32 个字符");
+    }
+    return name;
+  }
+
   private async getDefaultWorkspace() {
     const workspace = await this.prisma.workspace.findFirst({
       orderBy: [{ createdAt: "asc" }],
@@ -657,6 +833,7 @@ export class UsersService {
     return workspace;
   }
 
+  /* Legacy permission-group helpers retained only for migration reference.
   private async resolveTargetWorkspaceId(
     targetType: PermissionTargetType,
     targetId: string,
@@ -733,6 +910,7 @@ export class UsersService {
       })),
     };
   }
+  */
 
   private toSummary(user: {
     id: string;
@@ -741,6 +919,15 @@ export class UsersService {
     avatarUpdatedAt?: Date | null;
     systemRole: UserSummary["systemRole"];
     status: UserSummary["status"];
+    tagAssignments?: Array<{ tag: { id: string; name: string } }>;
+    badgeAssignments?: Array<{
+      badge: {
+        id: string;
+        name: string;
+        description: string | null;
+        color: string;
+      };
+    }>;
   }): UserSummary {
     return {
       id: user.id,
@@ -751,6 +938,21 @@ export class UsersService {
         : null,
       systemRole: user.systemRole,
       status: user.status,
+      tags: user.tagAssignments
+        ?.map(({ tag }) => ({ id: tag.id, name: tag.name }))
+        .sort((left, right) => left.name.localeCompare(right.name, "zh-CN")),
+      badges: user.badgeAssignments?.map(({ badge }) => ({
+        id: badge.id,
+        name: badge.name,
+        description: badge.description,
+        color: normalizeBadgeColor(badge.color),
+      })),
     };
   }
+}
+
+function normalizeBadgeColor(value: string) {
+  return ["gold", "blue", "green", "purple", "red", "gray"].includes(value)
+    ? (value as NonNullable<UserSummary["badges"]>[number]["color"])
+    : ("gray" as const);
 }

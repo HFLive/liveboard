@@ -4,15 +4,21 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import type {
   AdminUserSummary,
   SystemRole,
+  UserTagSummary,
   UserSummary,
 } from "@liveboard/shared";
-import { FileUp, Pencil, Plus, Search, X } from "lucide-react";
+import { FileUp, Pencil, Plus, Search, Tags, Trash2, X } from "lucide-react";
 import {
+  createUserTag,
   createUser,
+  deleteUserTag,
   getMe,
   importUsers as importUsersApi,
   type ImportUsersResult,
   listUsers,
+  listUserTags,
+  setUserTags,
+  updateUserTag,
   updateUser,
 } from "@/lib/api";
 import { roleLabel, userStatusLabel } from "@/lib/labels";
@@ -26,6 +32,7 @@ type UserEditDraft = {
   status: UserSummary["status"];
   password: string;
   aiCallLimit: string;
+  tagIds: string[];
 };
 
 type ImportUserDraft = {
@@ -167,6 +174,7 @@ function parseUserImportCsv(text: string): ParsedImport {
 
 export function UserManagementClient() {
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
+  const [tags, setTags] = useState<UserTagSummary[]>([]);
   const [actor, setActor] = useState<UserSummary | null>(null);
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -180,6 +188,8 @@ export function UserManagementClient() {
   const [editDraft, setEditDraft] = useState<UserEditDraft | null>(null);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showTagModal, setShowTagModal] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -187,6 +197,7 @@ export function UserManagementClient() {
   const [statusFilter, setStatusFilter] = useState<
     "all" | UserSummary["status"]
   >("all");
+  const [tagFilter, setTagFilter] = useState("all");
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(
     new Set(),
   );
@@ -201,15 +212,21 @@ export function UserManagementClient() {
       (user) =>
         (roleFilter === "all" || user.systemRole === roleFilter) &&
         (statusFilter === "all" || user.status === statusFilter) &&
+        (tagFilter === "all" ||
+          user.tags?.some((tag) => tag.id === tagFilter)) &&
         (!normalizedQuery ||
           user.displayName.toLowerCase().includes(normalizedQuery) ||
           user.username.toLowerCase().includes(normalizedQuery)),
     );
-  }, [query, roleFilter, statusFilter, users]);
+  }, [query, roleFilter, statusFilter, tagFilter, users]);
 
   async function loadUsers() {
-    const result = await listUsers();
-    setUsers(result.users);
+    const [userResult, tagResult] = await Promise.all([
+      listUsers(),
+      listUserTags(),
+    ]);
+    setUsers(userResult.users);
+    setTags(tagResult.tags);
   }
 
   useEffect(() => {
@@ -302,6 +319,7 @@ export function UserManagementClient() {
       status: user.status,
       password: "",
       aiCallLimit: user.aiCallLimit === null ? "" : String(user.aiCallLimit),
+      tagIds: user.tags?.map((tag) => tag.id) ?? [],
     });
   }
 
@@ -344,11 +362,47 @@ export function UserManagementClient() {
         password: editDraft.password || undefined,
         ...(aiCallLimit !== currentAiCallLimit ? { aiCallLimit } : {}),
       });
+      await setUserTags(userId, editDraft.tagIds);
       setMessage("成员信息已更新");
       cancelEdit();
       await loadUsers();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "更新成员失败");
+    }
+  }
+
+  async function onCreateTag(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!newTagName.trim()) return;
+    setError(null);
+    try {
+      await createUserTag(newTagName);
+      setNewTagName("");
+      await loadUsers();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "创建标签失败");
+    }
+  }
+
+  async function onRenameTag(tag: UserTagSummary) {
+    const name = window.prompt("输入新的标签名称", tag.name)?.trim();
+    if (!name || name === tag.name) return;
+    try {
+      await updateUserTag(tag.id, name);
+      await loadUsers();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "重命名标签失败");
+    }
+  }
+
+  async function onDeleteTag(tag: UserTagSummary) {
+    if (!window.confirm(`删除标签“${tag.name}”？成员账号不会被删除。`)) return;
+    try {
+      await deleteUserTag(tag.id);
+      if (tagFilter === tag.id) setTagFilter("all");
+      await loadUsers();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "删除标签失败");
     }
   }
 
@@ -403,7 +457,7 @@ export function UserManagementClient() {
         <div>
           <p className="page-eyebrow">管理中心</p>
           <h1>成员管理</h1>
-          <p className="muted">创建、导入并维护平台成员的账号与权限。</p>
+          <p className="muted">创建、导入并维护平台成员的账号、角色和标签。</p>
         </div>
       </header>
 
@@ -426,6 +480,14 @@ export function UserManagementClient() {
               </h2>
             </div>
             <div className="button-row">
+              <button
+                className="button secondary"
+                onClick={() => setShowTagModal(true)}
+                type="button"
+              >
+                <Tags aria-hidden="true" className="button-icon" />
+                标签管理
+              </button>
               <button
                 className="button secondary"
                 onClick={() => setShowImportModal(true)}
@@ -453,6 +515,19 @@ export function UserManagementClient() {
                 value={query}
               />
             </label>
+            <select
+              aria-label="按标签筛选"
+              className="select compact-select"
+              onChange={(event) => setTagFilter(event.target.value)}
+              value={tagFilter}
+            >
+              <option value="all">全部标签</option>
+              {tags.map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.name}
+                </option>
+              ))}
+            </select>
             <select
               aria-label="按系统权限筛选"
               className="select compact-select"
@@ -516,6 +591,7 @@ export function UserManagementClient() {
                   <th aria-label="选择成员" />
                   <th>显示名</th>
                   <th>登录账号</th>
+                  <th>标签</th>
                   <th>系统权限</th>
                   <th>状态</th>
                   <th>今日 AI 调用</th>
@@ -524,7 +600,7 @@ export function UserManagementClient() {
               </thead>
               <tbody>
                 {loadingUsers ? (
-                  <TableSkeletonRows colSpan={7} count={6} />
+                  <TableSkeletonRows colSpan={8} count={6} />
                 ) : null}
                 {filteredUsers.map((user) => (
                   <tr key={user.id}>
@@ -545,6 +621,19 @@ export function UserManagementClient() {
                     </td>
                     <td data-label="登录账号">
                       <span className="account-code">{user.username}</span>
+                    </td>
+                    <td data-label="标签">
+                      <div className="user-tag-list">
+                        {user.tags?.length ? (
+                          user.tags.map((tag) => (
+                            <span className="user-tag" key={tag.id}>
+                              {tag.name}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </div>
                     </td>
                     <td data-label="系统权限">{roleLabel(user.systemRole)}</td>
                     <td data-label="状态">{userStatusLabel(user.status)}</td>
@@ -574,7 +663,7 @@ export function UserManagementClient() {
                 ))}
                 {!loadingUsers && filteredUsers.length === 0 ? (
                   <tr>
-                    <td className="empty-cell" colSpan={7}>
+                    <td className="empty-cell" colSpan={8}>
                       {users.length
                         ? "没有符合当前筛选条件的成员。"
                         : "暂无成员。"}
@@ -901,6 +990,31 @@ export function UserManagementClient() {
                   次；留空则跟随每日默认限额。
                 </small>
               </label>
+              <fieldset className="tag-choice-field">
+                <legend>成员标签</legend>
+                <div className="tag-choice-grid">
+                  {tags.map((tag) => (
+                    <label key={tag.id}>
+                      <input
+                        checked={editDraft.tagIds.includes(tag.id)}
+                        onChange={() =>
+                          setEditDraft({
+                            ...editDraft,
+                            tagIds: editDraft.tagIds.includes(tag.id)
+                              ? editDraft.tagIds.filter((id) => id !== tag.id)
+                              : [...editDraft.tagIds, tag.id],
+                          })
+                        }
+                        type="checkbox"
+                      />
+                      <span>{tag.name}</span>
+                    </label>
+                  ))}
+                  {tags.length === 0 ? (
+                    <span className="muted">请先在标签管理中创建标签。</span>
+                  ) : null}
+                </div>
+              </fieldset>
             </div>
             <div className="modal-foot">
               <div className="button-row">
@@ -917,6 +1031,71 @@ export function UserManagementClient() {
               </div>
             </div>
           </form>
+        </div>
+      ) : null}
+
+      {showTagModal ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-panel" role="dialog" aria-modal="true">
+            <div className="modal-head">
+              <div>
+                <h2>标签管理</h2>
+                <p className="muted">标签用于组织成员和快速筛选。</p>
+              </div>
+              <button
+                className="icon-button subtle"
+                onClick={() => setShowTagModal(false)}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <form className="tag-create-row" onSubmit={onCreateTag}>
+                <input
+                  autoFocus
+                  className="input"
+                  maxLength={32}
+                  onChange={(event) => setNewTagName(event.target.value)}
+                  placeholder="新标签名称"
+                  value={newTagName}
+                />
+                <button className="button" type="submit">
+                  创建标签
+                </button>
+              </form>
+              <div className="tag-manager-list">
+                {tags.map((tag) => (
+                  <div key={tag.id}>
+                    <span>
+                      <strong>{tag.name}</strong>
+                      <small>{tag.memberCount ?? 0} 人</small>
+                    </span>
+                    <div className="button-row">
+                      <button
+                        className="inline-icon-button"
+                        onClick={() => void onRenameTag(tag)}
+                        title="重命名标签"
+                        type="button"
+                      >
+                        <Pencil aria-hidden="true" />
+                      </button>
+                      <button
+                        className="inline-icon-button danger"
+                        onClick={() => void onDeleteTag(tag)}
+                        title="删除标签"
+                        type="button"
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {tags.length === 0 ? <p className="muted">暂无标签。</p> : null}
+              </div>
+            </div>
+          </section>
         </div>
       ) : null}
     </div>

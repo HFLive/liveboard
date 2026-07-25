@@ -9,6 +9,7 @@ export const APP_ROUTES = {
   ai: staticRoute("/app/ai"),
   content: staticRoute("/app/content"),
   library: staticRoute("/app/library"),
+  classrooms: staticRoute("/app/classrooms"),
   exercises: staticRoute("/app/exercises"),
   exercisesNew: staticRoute("/app/exercises/new"),
   teaching: staticRoute("/app/teaching"),
@@ -17,9 +18,9 @@ export const APP_ROUTES = {
   forumNew: staticRoute("/app/forum/new"),
   admin: staticRoute("/app/admin"),
   adminUsers: staticRoute("/app/admin/users"),
-  adminStorage: staticRoute("/app/admin/storage"),
-  adminGroups: staticRoute("/app/admin/groups"),
+  adminBadges: staticRoute("/app/admin/badges"),
   adminContentPermissions: staticRoute("/app/admin/content-permissions"),
+  adminStorage: staticRoute("/app/admin/storage"),
   adminForum: staticRoute("/app/admin/forum"),
   adminAi: staticRoute("/app/admin/ai"),
   adminServerStatus: staticRoute("/app/admin/server-status"),
@@ -41,6 +42,22 @@ export function contentEdit(fileId: string): Route {
 
 export function exerciseDetail(exerciseSetId: string): Route {
   return `/app/exercises/${routeSegment(exerciseSetId)}` as Route;
+}
+
+export function exerciseEdit(exerciseSetId: string): Route {
+  return `/app/exercises/${routeSegment(exerciseSetId)}/edit` as Route;
+}
+
+export function classroomDetail(classroomId: string): Route {
+  return `/app/classrooms/${routeSegment(classroomId)}` as Route;
+}
+
+export function classroomTeachingNew(classroomId: string): Route {
+  return `/app/teaching/new?classroomId=${routeSegment(classroomId)}` as Route;
+}
+
+export function classroomExerciseNew(classroomId: string): Route {
+  return `/app/exercises/new?classroomId=${routeSegment(classroomId)}` as Route;
 }
 
 export function teachingEdit(deckId: string): Route {
@@ -68,8 +85,7 @@ export function appRouteTitle(pathname: string) {
   const exactTitles = new Map<string, string>([
     [APP_ROUTES.ai, "AI"],
     [APP_ROUTES.content, "文档"],
-    [APP_ROUTES.library, "文件"],
-    [APP_ROUTES.exercises, "练习"],
+    [APP_ROUTES.classrooms, "课堂"],
     [APP_ROUTES.exercisesNew, "新建练习"],
     [APP_ROUTES.teaching, "课件"],
     [APP_ROUTES.teachingNew, "新建课件"],
@@ -77,9 +93,9 @@ export function appRouteTitle(pathname: string) {
     [APP_ROUTES.forumNew, "发布主题"],
     [APP_ROUTES.admin, "管理中心"],
     [APP_ROUTES.adminUsers, "成员管理"],
-    [APP_ROUTES.adminStorage, "容量管理"],
-    [APP_ROUTES.adminGroups, "权限组"],
+    [APP_ROUTES.adminBadges, "徽章认证"],
     [APP_ROUTES.adminContentPermissions, "文档权限"],
+    [APP_ROUTES.adminStorage, "容量管理"],
     [APP_ROUTES.adminForum, "论坛版块"],
     [APP_ROUTES.adminAi, "AI 服务"],
     [APP_ROUTES.adminServerStatus, "服务器状态"],
@@ -91,9 +107,11 @@ export function appRouteTitle(pathname: string) {
 
   if (/^\/app\/content\/[^/]+\/edit$/.test(pathname)) return "编辑文档";
   if (/^\/app\/content\/[^/]+$/.test(pathname)) return "文档";
+  if (/^\/app\/classrooms\/[^/]+$/.test(pathname)) return "课堂";
   if (/^\/app\/teaching\/[^/]+\/edit$/.test(pathname)) return "编辑课件";
   if (/^\/app\/teaching\/[^/]+\/present$/.test(pathname)) return "课件展示";
   if (/^\/app\/exercises\/[^/]+\/submissions$/.test(pathname)) return "批改";
+  if (/^\/app\/exercises\/[^/]+\/edit$/.test(pathname)) return "编辑练习";
   if (/^\/app\/exercises\/[^/]+$/.test(pathname)) return "练习";
   if (/^\/app\/forum\/[^/]+$/.test(pathname)) return "帖子";
   if (/^\/app\/users\/[^/]+$/.test(pathname)) return "个人主页";
