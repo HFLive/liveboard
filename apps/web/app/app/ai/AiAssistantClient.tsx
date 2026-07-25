@@ -25,11 +25,14 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import type { AiUsageSummary } from "@liveboard/shared";
 import {
+  AI_USAGE_CONSUMED_EVENT,
   askAiStream,
   deleteAiConversation,
   getAiConversation,
   getAiStatus,
+  getAiUsage,
   listAiConversations,
   updateAiConversation,
   type AiConversationSummary,
@@ -85,10 +88,14 @@ export function AiAssistantClient() {
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
+  const [usage, setUsage] = useState<AiUsageSummary | null>(null);
+  const [usageFailed, setUsageFailed] = useState(false);
   const [asking, setAsking] = useState(false);
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const usageLoadingRef = useRef(false);
+  const usageReloadPendingRef = useRef(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -137,6 +144,47 @@ export function AiAssistantClient() {
     };
   }, []);
 
+  function loadUsage() {
+    if (usageLoadingRef.current) {
+      usageReloadPendingRef.current = true;
+      return;
+    }
+
+    usageLoadingRef.current = true;
+    getAiUsage()
+      .then((result) => {
+        setUsage(result);
+        setUsageFailed(false);
+      })
+      .catch(() => setUsageFailed(true))
+      .finally(() => {
+        usageLoadingRef.current = false;
+        if (usageReloadPendingRef.current) {
+          usageReloadPendingRef.current = false;
+          loadUsage();
+        }
+      });
+  }
+
+  useEffect(() => {
+    loadUsage();
+
+    function onAiUsageConsumed() {
+      setUsage((current) =>
+        current
+          ? { ...current, used: Math.min(current.used + 1, current.limit) }
+          : current,
+      );
+      loadUsage();
+    }
+
+    window.addEventListener(AI_USAGE_CONSUMED_EVENT, onAiUsageConsumed);
+    return () =>
+      window.removeEventListener(AI_USAGE_CONSUMED_EVENT, onAiUsageConsumed);
+    // loadUsage 使用 ref 串行刷新，组件生命周期内只绑定一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const messagesContainer = messagesContainerRef.current;
     if (messagesContainer) {
@@ -178,6 +226,12 @@ export function AiAssistantClient() {
     conversations.find(
       (conversation) => conversation.id === activeConversationId,
     ) ?? null;
+  const usagePercent = usage
+    ? usage.limit === 0
+      ? 100
+      : Math.min(100, Math.round((usage.used / usage.limit) * 100))
+    : 0;
+  const usageExceeded = usage ? usage.used >= usage.limit : false;
   const normalizedHistoryQuery = historyQuery.trim().toLowerCase();
   const filteredConversations = normalizedHistoryQuery
     ? conversations.filter((conversation) =>
@@ -628,6 +682,36 @@ export function AiAssistantClient() {
                 {historyQuery ? "没有匹配的历史" : "暂无历史"}
               </span>
             ) : null}
+          </div>
+          <div
+            aria-label={
+              usage
+                ? `今日 AI 额度已用 ${usage.used} / ${usage.limit} 次`
+                : undefined
+            }
+            className={`ai-sidebar-usage${usageFailed ? " is-unavailable" : ""}`}
+            role="status"
+          >
+            {usage ? (
+              <>
+                <div>
+                  <span>今日 AI</span>
+                  <strong>
+                    {usage.used} / {usage.limit} 次
+                  </strong>
+                </div>
+                <span className="ai-sidebar-usage-bar" aria-hidden="true">
+                  <span
+                    className={usageExceeded ? "is-over" : ""}
+                    style={{ width: `${usagePercent}%` }}
+                  />
+                </span>
+              </>
+            ) : (
+              <span>
+                {usageFailed ? "AI 额度暂不可用" : "正在读取 AI 额度"}
+              </span>
+            )}
           </div>
         </aside>
 

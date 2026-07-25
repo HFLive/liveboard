@@ -227,13 +227,14 @@
 }
 
 .file-tree .tree-folder-item {
-  grid-template-columns: 22px minmax(0, 1fr) auto;
+  grid-template-columns: 22px minmax(0, 1fr) auto 24px;
   gap: 2px;
   padding-right: 4px;
   padding-left: calc(4px + min(var(--tree-depth, 0), 7) * 13px);
 }
 
 .file-tree .tree-count {
+  grid-column: 3;
   align-self: center;
   color: var(--muted);
   font-size: 11px;
@@ -244,8 +245,59 @@
 .file-tree .tree-main-button {
   display: flex;
   align-items: center;
-  width: 100%;
+  justify-self: start;
+  width: fit-content;
+  max-width: 100%;
   min-height: 24px;
+  border-radius: 7px;
+  padding: 2px 5px;
+}
+
+.workspace .files-layout .file-tree .tree-item:hover {
+  background: transparent;
+}
+
+.workspace .files-layout .file-tree .tree-item.active {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text);
+}
+
+.workspace .files-layout .file-tree .tree-main-button:hover {
+  background: var(--fill-hover);
+}
+
+.workspace .files-layout .file-tree .tree-item.active .tree-main-button {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.file-tree .tree-row-menu-button {
+  grid-column: 4;
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  opacity: 0;
+}
+
+.file-tree .tree-item:is(:hover, :focus-within, .active) .tree-row-menu-button {
+  opacity: 1;
+}
+
+.file-tree .tree-row-menu-button:hover {
+  color: var(--text);
+}
+
+.file-tree .tree-row-menu-button svg {
+  width: 15px;
+  height: 15px;
 }
 
 .tree-toggle-button,

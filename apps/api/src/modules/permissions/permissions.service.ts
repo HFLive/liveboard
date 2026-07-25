@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -10,7 +11,6 @@ import {
   canLecture,
   canManagePermissions,
   canView,
-  comparePermissions,
   computeEffectivePermission,
   isSystemAdmin,
 } from "@liveboard/shared";
@@ -20,9 +20,15 @@ import { PrismaService } from "../prisma/prisma.service";
 export interface UpsertPermissionInput {
   targetType: PermissionTargetType;
   targetId: string;
-  groupId: string;
+  userId: string;
   level: PermissionLevel;
 }
+
+type GrantSource = {
+  targetType: PermissionTargetType;
+  targetId: string;
+  targetName: string;
+};
 
 @Injectable()
 export class PermissionsService {
@@ -33,7 +39,6 @@ export class PermissionsService {
     explicit: PermissionLevel | null,
   ) {
     const level = computeEffectivePermission(inherited, explicit);
-
     return {
       level,
       capabilities: {
@@ -46,10 +51,6 @@ export class PermissionsService {
   }
 
   async getDefaultWorkspaceForPermissions(actorUserId: string | null) {
-    if (!actorUserId) {
-      throw new UnauthorizedException("Missing session");
-    }
-
     const actor = await this.requireActiveUser(actorUserId);
     if (!isSystemAdmin(actor.systemRole)) {
       throw new ForbiddenException(
@@ -61,12 +62,38 @@ export class PermissionsService {
       orderBy: { createdAt: "asc" },
       select: { id: true, name: true },
     });
-
-    if (!workspace) {
-      throw new NotFoundException("Workspace not found");
-    }
-
+    if (!workspace) throw new NotFoundException("Workspace not found");
     return workspace;
+  }
+
+  async listAssignableUsers(
+    actorUserId: string | null,
+    targetType: PermissionTargetType,
+    targetId: string,
+  ) {
+    const actor = await this.requireActiveUser(actorUserId);
+    await this.assertCanManageGrant(actor.id, targetType, targetId);
+
+    const [users, tags] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { status: "active", systemRole: "member" },
+        orderBy: [{ displayName: "asc" }, { username: "asc" }],
+        include: { tagAssignments: { include: { tag: true } } },
+      }),
+      this.prisma.userTag.findMany({
+        orderBy: { name: "asc" },
+        include: { _count: { select: { assignments: true } } },
+      }),
+    ]);
+
+    return {
+      users: users.map((user) => this.toUserSummary(user)),
+      tags: tags.map((tag) => ({
+        id: tag.id,
+        name: tag.name,
+        memberCount: tag._count.assignments,
+      })),
+    };
   }
 
   async listGrants(
@@ -74,229 +101,157 @@ export class PermissionsService {
     targetType: PermissionTargetType,
     targetId: string,
   ) {
-    if (!actorUserId) {
-      throw new UnauthorizedException("Missing session");
-    }
-
-    await this.assertCanViewGrantTarget(actorUserId, targetType, targetId);
+    const actor = await this.requireActiveUser(actorUserId);
+    await this.assertCanManageGrant(actor.id, targetType, targetId);
 
     const grants = await this.prisma.permissionGrant.findMany({
       where: { targetType, targetId },
       include: {
         user: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            systemRole: true,
-            status: true,
-          },
-        },
-        group: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            members: {
-              select: { id: true },
-              take: 1,
-            },
-            _count: {
-              select: { members: true },
-            },
-          },
+          include: { tagAssignments: { include: { tag: true } } },
         },
       },
-      orderBy: [{ createdAt: "asc" }],
+      orderBy: [
+        { user: { displayName: "asc" } },
+        { user: { username: "asc" } },
+      ],
     });
 
-    const directGrants = grants.map((grant) => ({
-      ...grant,
-      group: grant.group
-        ? {
-            id: grant.group.id,
-            name: grant.group.name,
-            description: grant.group.description,
-            memberCount: grant.group._count.members,
-          }
-        : null,
-    }));
-
     return {
-      grants: directGrants,
-      inheritedGrants: await this.listInheritedGroupGrants(
-        targetType,
-        targetId,
-      ),
+      grants: grants.map((grant) => ({
+        id: grant.id,
+        targetType: grant.targetType,
+        targetId: grant.targetId,
+        userId: grant.userId,
+        level: grant.level,
+        user: this.toUserSummary(grant.user),
+      })),
+      inheritedGrants: await this.listInheritedUserGrants(targetType, targetId),
     };
   }
 
   async upsertGrant(actorUserId: string | null, input: UpsertPermissionInput) {
-    if (!actorUserId) {
-      throw new UnauthorizedException("Missing session");
-    }
-
+    const actor = await this.requireActiveUser(actorUserId);
     const workspaceId = await this.resolveWorkspaceId(
       input.targetType,
       input.targetId,
     );
-    await this.assertCanManageGrant(
-      actorUserId,
-      input.targetType,
-      input.targetId,
-    );
+    await this.assertCanManageGrant(actor.id, input.targetType, input.targetId);
 
-    return this.upsertGrantUnchecked(actorUserId, workspaceId, input);
-  }
-
-  async deleteGrant(actorUserId: string | null, grantId: string) {
-    if (!actorUserId) {
-      throw new UnauthorizedException("Missing session");
+    const targetUser = await this.prisma.user.findUnique({
+      where: { id: input.userId },
+      select: { id: true, status: true, systemRole: true },
+    });
+    if (!targetUser || targetUser.status !== "active") {
+      throw new NotFoundException("User not found");
     }
-
-    const grant = await this.prisma.permissionGrant.findUnique({
-      where: { id: grantId },
-    });
-
-    if (!grant) {
-      throw new NotFoundException("Grant not found");
-    }
-
-    await this.assertCanManageGrant(
-      actorUserId,
-      grant.targetType,
-      grant.targetId,
-    );
-
-    await this.prisma.permissionGrant.delete({
-      where: { id: grantId },
-    });
-
-    return { ok: true };
-  }
-
-  async assertCanManageGrantTarget(
-    actorUserId: string,
-    targetType: PermissionTargetType,
-    targetId: string,
-  ) {
-    await this.assertCanManageGrant(actorUserId, targetType, targetId);
-  }
-
-  async upsertGrantUnchecked(
-    actorUserId: string,
-    workspaceId: string,
-    input: UpsertPermissionInput,
-  ) {
-    const group = await this.prisma.permissionGroup.findUnique({
-      where: { id: input.groupId },
-    });
-
-    if (!group || group.workspaceId !== workspaceId) {
-      throw new NotFoundException("Permission group not found");
+    if (isSystemAdmin(targetUser.systemRole)) {
+      throw new BadRequestException(
+        "Administrator document access is controlled by the system role",
+      );
     }
 
     return this.prisma.permissionGrant.upsert({
       where: {
-        targetType_targetId_groupId: {
+        targetType_targetId_userId: {
           targetType: input.targetType,
           targetId: input.targetId,
-          groupId: input.groupId,
+          userId: input.userId,
         },
       },
-      update: {
-        level: input.level,
-        userId: null,
-      },
+      update: { level: input.level },
       create: {
         workspaceId,
-        createdById: actorUserId,
         targetType: input.targetType,
         targetId: input.targetId,
-        groupId: input.groupId,
+        userId: input.userId,
         level: input.level,
+        createdById: actor.id,
       },
     });
+  }
+
+  async deleteGrant(actorUserId: string | null, grantId: string) {
+    const actor = await this.requireActiveUser(actorUserId);
+    const grant = await this.prisma.permissionGrant.findUnique({
+      where: { id: grantId },
+    });
+    if (!grant) throw new NotFoundException("Grant not found");
+
+    await this.assertCanManageGrant(actor.id, grant.targetType, grant.targetId);
+    await this.prisma.permissionGrant.delete({ where: { id: grantId } });
+    return { ok: true };
   }
 
   async getEffectiveLevelForFolder(
     userId: string,
     folderId: string,
-  ): Promise<PermissionLevel | null> {
+  ): Promise<PermissionLevel> {
     const user = await this.requireActiveUser(userId);
-
-    if (isSystemAdmin(user.systemRole)) {
-      return "owner";
-    }
+    if (isSystemAdmin(user.systemRole)) return "owner";
 
     const folder = await this.prisma.folder.findUnique({
       where: { id: folderId },
+      select: { id: true, workspaceId: true },
     });
+    if (!folder) throw new NotFoundException("Folder not found");
 
-    if (!folder) {
-      throw new NotFoundException("Folder not found");
-    }
-
+    let level: PermissionLevel = this.roleLevel(user.systemRole);
     const workspaceGrant = await this.findGrant(
       userId,
       "workspace",
       folder.workspaceId,
     );
-    let level = workspaceGrant?.level ?? null;
+    level =
+      computeEffectivePermission(level, workspaceGrant?.level ?? null) ?? level;
 
-    const path = await this.getFolderPath(folderId);
-    for (const item of path) {
+    for (const item of await this.getFolderPath(folderId)) {
       const grant = await this.findGrant(userId, "folder", item.id);
-      level = computeEffectivePermission(level, grant?.level ?? null);
+      level = computeEffectivePermission(level, grant?.level ?? null) ?? level;
     }
-
     return level;
   }
 
   async getEffectiveLevelForFile(
     userId: string,
     fileId: string,
-  ): Promise<PermissionLevel | null> {
+  ): Promise<PermissionLevel> {
     const user = await this.requireActiveUser(userId);
-
-    if (isSystemAdmin(user.systemRole)) {
-      return "owner";
-    }
+    if (isSystemAdmin(user.systemRole)) return "owner";
 
     const file = await this.prisma.file.findUnique({
       where: { id: fileId },
+      select: { id: true, folderId: true },
     });
-
-    if (!file) {
-      throw new NotFoundException("File not found");
-    }
+    if (!file) throw new NotFoundException("File not found");
 
     const inherited = await this.getEffectiveLevelForFolder(
       userId,
       file.folderId,
     );
     const explicit = await this.findGrant(userId, "file", file.id);
-
-    return computeEffectivePermission(inherited, explicit?.level ?? null);
+    return (
+      computeEffectivePermission(inherited, explicit?.level ?? null) ??
+      inherited
+    );
   }
 
   async getEffectiveLevelsForFolders(userId: string, folderIds: string[]) {
     const uniqueIds = [...new Set(folderIds)];
-    const result = new Map<string, PermissionLevel | null>();
+    const result = new Map<string, PermissionLevel>();
     if (uniqueIds.length === 0) return result;
 
     const user = await this.requireActiveUser(userId);
-    if (isSystemAdmin(user.systemRole)) {
-      for (const id of uniqueIds) result.set(id, "owner");
-      return result;
-    }
-
     const folders = await this.prisma.folder.findMany({
       select: { id: true, parentId: true, workspaceId: true },
     });
     const folderById = new Map(folders.map((folder) => [folder.id, folder]));
     for (const id of uniqueIds) {
       if (!folderById.has(id)) throw new NotFoundException("Folder not found");
+    }
+    if (isSystemAdmin(user.systemRole)) {
+      for (const id of uniqueIds) result.set(id, "owner");
+      return result;
     }
 
     const workspaceIds = [
@@ -309,10 +264,11 @@ export class PermissionsService {
         id: folder.id,
       })),
     ]);
-    const memo = new Map<string, PermissionLevel | null>();
+    const memo = new Map<string, PermissionLevel>();
     const visiting = new Set<string>();
-    const compute = (folderId: string): PermissionLevel | null => {
-      if (memo.has(folderId)) return memo.get(folderId) ?? null;
+    const compute = (folderId: string): PermissionLevel => {
+      const cached = memo.get(folderId);
+      if (cached) return cached;
       if (visiting.has(folderId)) {
         throw new ConflictException("Folder hierarchy contains a cycle");
       }
@@ -321,11 +277,13 @@ export class PermissionsService {
       if (!folder) throw new NotFoundException("Folder not found");
       const inherited = folder.parentId
         ? compute(folder.parentId)
-        : (grantLevels.get(`workspace:${folder.workspaceId}`) ?? null);
-      const level = computeEffectivePermission(
-        inherited,
-        grantLevels.get(`folder:${folder.id}`) ?? null,
-      );
+        : (grantLevels.get(`workspace:${folder.workspaceId}`) ??
+          this.roleLevel(user.systemRole));
+      const level =
+        computeEffectivePermission(
+          inherited,
+          grantLevels.get(`folder:${folder.id}`) ?? null,
+        ) ?? inherited;
       visiting.delete(folderId);
       memo.set(folderId, level);
       return level;
@@ -337,7 +295,7 @@ export class PermissionsService {
 
   async getEffectiveLevelsForFiles(userId: string, fileIds: string[]) {
     const uniqueIds = [...new Set(fileIds)];
-    const result = new Map<string, PermissionLevel | null>();
+    const result = new Map<string, PermissionLevel>();
     if (uniqueIds.length === 0) return result;
 
     const user = await this.requireActiveUser(userId);
@@ -365,54 +323,24 @@ export class PermissionsService {
       result.set(
         file.id,
         computeEffectivePermission(
-          folderLevels.get(file.folderId) ?? null,
+          folderLevels.get(file.folderId) ?? this.roleLevel(user.systemRole),
           grantLevels.get(`file:${file.id}`) ?? null,
-        ),
+        ) ?? this.roleLevel(user.systemRole),
       );
     }
     return result;
   }
 
-  private async resolveWorkspaceId(
-    targetType: PermissionTargetType,
-    targetId: string,
-  ): Promise<string> {
-    if (targetType === "workspace") {
-      const workspace = await this.prisma.workspace.findUnique({
-        where: { id: targetId },
-      });
-      if (!workspace) {
-        throw new NotFoundException("Workspace not found");
-      }
-      return workspace.id;
-    }
-
-    if (targetType === "folder") {
-      const folder = await this.prisma.folder.findUnique({
-        where: { id: targetId },
-      });
-      if (!folder) {
-        throw new NotFoundException("Folder not found");
-      }
-      return folder.workspaceId;
-    }
-
-    const file = await this.prisma.file.findUnique({ where: { id: targetId } });
-    if (!file) {
-      throw new NotFoundException("File not found");
-    }
-    return file.workspaceId;
+  private roleLevel(systemRole: "super_admin" | "admin" | "member") {
+    return isSystemAdmin(systemRole) ? ("owner" as const) : ("viewer" as const);
   }
 
-  private async listInheritedGroupGrants(
+  private async listInheritedUserGrants(
     targetType: PermissionTargetType,
     targetId: string,
   ) {
     const sources = await this.getInheritedGrantSources(targetType, targetId);
-
-    if (sources.length === 0) {
-      return [];
-    }
+    if (sources.length === 0) return [];
 
     const sourceByKey = new Map(
       sources.map((source, index) => [
@@ -422,51 +350,39 @@ export class PermissionsService {
     );
     const grants = await this.prisma.permissionGrant.findMany({
       where: {
-        groupId: { not: null },
         OR: sources.map((source) => ({
           targetType: source.targetType,
           targetId: source.targetId,
         })),
       },
       include: {
-        group: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            _count: { select: { members: true } },
-          },
+        user: {
+          include: { tagAssignments: { include: { tag: true } } },
         },
       },
     });
-    const orderedGrants = grants.sort((left, right) => {
-      const leftSource = sourceByKey.get(`${left.targetType}:${left.targetId}`);
-      const rightSource = sourceByKey.get(
-        `${right.targetType}:${right.targetId}`,
-      );
-      return (leftSource?.index ?? 0) - (rightSource?.index ?? 0);
-    });
-    const inheritedByGroup = new Map<
-      string,
-      (typeof orderedGrants)[number] & {
-        inheritedFrom: (typeof sources)[number];
-      }
-    >();
+    grants.sort(
+      (left, right) =>
+        (sourceByKey.get(`${left.targetType}:${left.targetId}`)?.index ?? 0) -
+        (sourceByKey.get(`${right.targetType}:${right.targetId}`)?.index ?? 0),
+    );
 
-    for (const grant of orderedGrants) {
-      if (!grant.groupId || !grant.group) continue;
+    const inheritedByUserId = new Map<
+      string,
+      (typeof grants)[number] & { inheritedFrom: GrantSource }
+    >();
+    for (const grant of grants) {
       const source = sourceByKey.get(`${grant.targetType}:${grant.targetId}`);
       if (!source) continue;
-      const current = inheritedByGroup.get(grant.groupId);
-      const nextLevel = computeEffectivePermission(
+      const current = inheritedByUserId.get(grant.userId);
+      const level = computeEffectivePermission(
         current?.level ?? null,
         grant.level,
       );
-
-      if (!current || nextLevel !== current.level) {
-        inheritedByGroup.set(grant.groupId, {
+      if (!current || level !== current.level) {
+        inheritedByUserId.set(grant.userId, {
           ...grant,
-          level: nextLevel ?? grant.level,
+          level: level ?? grant.level,
           inheritedFrom: {
             targetType: source.targetType,
             targetId: source.targetId,
@@ -476,30 +392,22 @@ export class PermissionsService {
       }
     }
 
-    return [...inheritedByGroup.values()].map((grant) => ({
-      ...grant,
-      group: {
-        id: grant.group!.id,
-        name: grant.group!.name,
-        description: grant.group!.description,
-        memberCount: grant.group!._count.members,
-      },
+    return [...inheritedByUserId.values()].map((grant) => ({
+      id: grant.id,
+      targetType: grant.targetType,
+      targetId: grant.targetId,
+      userId: grant.userId,
+      level: grant.level,
+      user: this.toUserSummary(grant.user),
+      inheritedFrom: grant.inheritedFrom,
     }));
   }
 
   private async getInheritedGrantSources(
     targetType: PermissionTargetType,
     targetId: string,
-  ): Promise<
-    Array<{
-      targetType: PermissionTargetType;
-      targetId: string;
-      targetName: string;
-    }>
-  > {
-    if (targetType === "workspace") {
-      return [];
-    }
+  ): Promise<GrantSource[]> {
+    if (targetType === "workspace") return [];
 
     const target =
       targetType === "folder"
@@ -511,20 +419,13 @@ export class PermissionsService {
             where: { id: targetId },
             select: { workspaceId: true, folderId: true },
           });
-
-    if (!target) {
-      throw new NotFoundException(
-        targetType === "folder" ? "Folder not found" : "File not found",
-      );
-    }
+    if (!target) throw new NotFoundException("Permission target not found");
 
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: target.workspaceId },
       select: { id: true, name: true },
     });
-    if (!workspace) {
-      throw new NotFoundException("Workspace not found");
-    }
+    if (!workspace) throw new NotFoundException("Workspace not found");
 
     const parentFolderId =
       "parentId" in target ? target.parentId : target.folderId;
@@ -559,52 +460,48 @@ export class PermissionsService {
     targetId: string,
   ) {
     const actor = await this.requireActiveUser(actorUserId);
-
-    if (isSystemAdmin(actor.systemRole)) {
-      return;
-    }
-
+    if (isSystemAdmin(actor.systemRole)) return;
     if (targetType === "workspace") {
       throw new ForbiddenException(
-        "Only system administrators can manage workspace grants",
+        "Only system administrators can manage workspace permissions",
       );
     }
 
     const level =
       targetType === "folder"
-        ? await this.getEffectiveLevelForFolder(actorUserId, targetId)
-        : await this.getEffectiveLevelForFile(actorUserId, targetId);
-
+        ? await this.getEffectiveLevelForFolder(actor.id, targetId)
+        : await this.getEffectiveLevelForFile(actor.id, targetId);
     if (level !== "owner") {
       throw new ForbiddenException("No permission to manage grants");
     }
   }
 
-  private async assertCanViewGrantTarget(
-    actorUserId: string,
+  private async resolveWorkspaceId(
     targetType: PermissionTargetType,
     targetId: string,
   ) {
-    const actor = await this.requireActiveUser(actorUserId);
-
-    if (isSystemAdmin(actor.systemRole)) {
-      return;
-    }
-
     if (targetType === "workspace") {
-      throw new ForbiddenException(
-        "Only system administrators can view workspace grants",
-      );
+      const workspace = await this.prisma.workspace.findUnique({
+        where: { id: targetId },
+        select: { id: true },
+      });
+      if (!workspace) throw new NotFoundException("Workspace not found");
+      return workspace.id;
     }
-
-    const level =
-      targetType === "folder"
-        ? await this.getEffectiveLevelForFolder(actorUserId, targetId)
-        : await this.getEffectiveLevelForFile(actorUserId, targetId);
-
-    if (!canView(level)) {
-      throw new ForbiddenException("No permission to view grants");
+    if (targetType === "folder") {
+      const folder = await this.prisma.folder.findUnique({
+        where: { id: targetId },
+        select: { workspaceId: true },
+      });
+      if (!folder) throw new NotFoundException("Folder not found");
+      return folder.workspaceId;
     }
+    const file = await this.prisma.file.findUnique({
+      where: { id: targetId },
+      select: { workspaceId: true },
+    });
+    if (!file) throw new NotFoundException("File not found");
+    return file.workspaceId;
   }
 
   private async findGrant(
@@ -612,29 +509,12 @@ export class PermissionsService {
     targetType: PermissionTargetType,
     targetId: string,
   ) {
-    const memberships = await this.prisma.permissionGroupMember.findMany({
-      where: { userId },
-      select: { groupId: true },
-    });
-    const groupIds = memberships.map((membership) => membership.groupId);
-    const grantFilters =
-      groupIds.length > 0
-        ? [{ userId }, { groupId: { in: groupIds } }]
-        : [{ userId }];
-
-    const grants = await this.prisma.permissionGrant.findMany({
+    return this.prisma.permissionGrant.findUnique({
       where: {
-        targetType,
-        targetId,
-        OR: grantFilters,
+        targetType_targetId_userId: { targetType, targetId, userId },
       },
+      select: { level: true },
     });
-    const level = grants.reduce<PermissionLevel | null>(
-      (current, grant) => comparePermissions(current, grant.level),
-      null,
-    );
-
-    return level ? { level } : null;
   }
 
   private async loadGrantLevels(
@@ -643,38 +523,28 @@ export class PermissionsService {
   ) {
     const levels = new Map<string, PermissionLevel>();
     if (targets.length === 0) return levels;
-    const memberships = await this.prisma.permissionGroupMember.findMany({
-      where: { userId },
-      select: { groupId: true },
-    });
-    const groupIds = memberships.map((membership) => membership.groupId);
     const grants = await this.prisma.permissionGrant.findMany({
       where: {
-        OR: [
-          { userId },
-          ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
-        ],
-        AND: [
-          {
-            OR: targets.map((target) => ({
-              targetType: target.targetType,
-              targetId: target.id,
-            })),
-          },
-        ],
+        userId,
+        OR: targets.map((target) => ({
+          targetType: target.targetType,
+          targetId: target.id,
+        })),
       },
       select: { targetType: true, targetId: true, level: true },
     });
     for (const grant of grants) {
-      const key = `${grant.targetType}:${grant.targetId}`;
-      const level = comparePermissions(levels.get(key) ?? null, grant.level);
-      if (level) levels.set(key, level);
+      levels.set(`${grant.targetType}:${grant.targetId}`, grant.level);
     }
     return levels;
   }
 
-  private async requireActiveUser(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  private async requireActiveUser(userId: string | null) {
+    if (!userId) throw new UnauthorizedException("Missing session");
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, systemRole: true, status: true },
+    });
     if (!user || user.status !== "active") {
       throw new UnauthorizedException("Missing or inactive session");
     }
@@ -690,22 +560,38 @@ export class PermissionsService {
       if (visited.has(currentId)) {
         throw new ConflictException("Folder hierarchy contains a cycle");
       }
-
       visited.add(currentId);
       const folder: { id: string; parentId: string | null } | null =
         await this.prisma.folder.findUnique({
           where: { id: currentId },
           select: { id: true, parentId: true },
         });
-
-      if (!folder) {
-        break;
-      }
-
+      if (!folder) break;
       path.unshift(folder);
       currentId = folder.parentId;
     }
-
     return path;
+  }
+
+  private toUserSummary(user: {
+    id: string;
+    username: string;
+    displayName: string;
+    systemRole: "super_admin" | "admin" | "member";
+    status: "active" | "disabled";
+    tagAssignments?: Array<{ tag: { id: string; name: string } }>;
+  }) {
+    return {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      avatarUrl: null,
+      systemRole: user.systemRole,
+      status: user.status,
+      tags: user.tagAssignments?.map(({ tag }) => ({
+        id: tag.id,
+        name: tag.name,
+      })),
+    };
   }
 }

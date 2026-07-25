@@ -8,25 +8,17 @@ import {
   Bot,
   Bell,
   ChevronDown,
-  ClipboardList,
-  Database,
   Files,
   MessageSquare,
-  Presentation,
+  School,
   UserCircle,
   Users,
   X,
 } from "lucide-react";
-import type {
-  ActivityItem,
-  AiUsageSummary,
-  UserSummary,
-} from "@liveboard/shared";
+import type { ActivityItem, UserSummary } from "@liveboard/shared";
 import {
-  AI_USAGE_CONSUMED_EVENT,
   apiResourceUrl,
   dismissActivity,
-  getAiUsage,
   getMe,
   listActivity,
   markActivityRead,
@@ -36,20 +28,13 @@ import { APP_ROUTES, userProfile } from "@/lib/routes";
 import { LogoutButton } from "./LogoutButton";
 
 const navItems = [
-  { href: APP_ROUTES.ai, label: "AI", Icon: Bot },
+  { href: APP_ROUTES.classrooms, label: "课堂", Icon: School },
   { href: APP_ROUTES.content, label: "文档", Icon: Files },
-  { href: APP_ROUTES.teaching, label: "课件", Icon: Presentation },
-  { href: APP_ROUTES.library, label: "文件", Icon: Database },
-  { href: APP_ROUTES.exercises, label: "练习", Icon: ClipboardList },
   { href: APP_ROUTES.forum, label: "论坛", Icon: MessageSquare },
   { href: APP_ROUTES.admin, label: "管理", Icon: Users },
 ] as const;
 
 function isActive(pathname: string, href: string) {
-  if (href === APP_ROUTES.ai) {
-    return pathname === href;
-  }
-
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -61,8 +46,6 @@ export function AppNav() {
     /^\/app\/(?:content\/[^/]+|teaching\/[^/]+)\/present$/.test(pathname);
   const [user, setUser] = useState<UserSummary | null>(null);
   const [userLoaded, setUserLoaded] = useState(false);
-  const [usage, setUsage] = useState<AiUsageSummary | null>(null);
-  const [usageFailed, setUsageFailed] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
   const [activityUnreadCount, setActivityUnreadCount] = useState(0);
@@ -75,8 +58,6 @@ export function AppNav() {
   const accountLinkRef = useRef<HTMLAnchorElement | null>(null);
   const activeNavLinkRef = useRef<HTMLAnchorElement | null>(null);
   const usageHoverTimerRef = useRef<number | null>(null);
-  const usageLoadingRef = useRef(false);
-  const usageReloadPendingRef = useRef(false);
   const displayName = userLoaded ? (user?.displayName ?? "未登录") : "账户信息";
   const userInitial = userLoaded
     ? displayName.trim().slice(0, 1).toUpperCase() || "L"
@@ -141,7 +122,6 @@ export function AppNav() {
   useEffect(() => {
     if (!user) return;
 
-    loadUsage();
     const loadSecondaryNavigationData = () => void loadActivity();
     const usesIdleCallback = typeof window.requestIdleCallback === "function";
     const idleCallback: number = usesIdleCallback
@@ -177,49 +157,6 @@ export function AppNav() {
       }
     };
   }, []);
-
-  function loadUsage() {
-    if (usageLoadingRef.current) {
-      usageReloadPendingRef.current = true;
-      return;
-    }
-
-    usageLoadingRef.current = true;
-    getAiUsage()
-      .then((result) => {
-        setUsage(result);
-        setUsageFailed(false);
-      })
-      .catch(() => {
-        setUsageFailed(true);
-      })
-      .finally(() => {
-        usageLoadingRef.current = false;
-        if (usageReloadPendingRef.current) {
-          usageReloadPendingRef.current = false;
-          loadUsage();
-        }
-      });
-  }
-
-  useEffect(() => {
-    if (!user) return;
-
-    function onAiUsageConsumed() {
-      setUsage((current) =>
-        current
-          ? { ...current, used: Math.min(current.used + 1, current.limit) }
-          : current,
-      );
-      loadUsage();
-    }
-
-    window.addEventListener(AI_USAGE_CONSUMED_EVENT, onAiUsageConsumed);
-    return () =>
-      window.removeEventListener(AI_USAGE_CONSUMED_EVENT, onAiUsageConsumed);
-    // loadUsage 使用 ref 串行刷新；仅在登录用户变化时重新绑定。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
 
   async function loadActivity() {
     try {
@@ -291,7 +228,6 @@ export function AppNav() {
         bottom: window.innerHeight - rect.top + 8,
       });
       setUsageOpen(true);
-      loadUsage();
     }, USAGE_HOVER_DELAY_MS);
   }
 
@@ -304,13 +240,6 @@ export function AppNav() {
     setUsageOpen(false);
   }
 
-  const usagePercent = usage
-    ? usage.limit === 0
-      ? 100
-      : Math.min(100, Math.round((usage.used / usage.limit) * 100))
-    : 0;
-  const usageExceeded = usage ? usage.used >= usage.limit : false;
-
   if (isPresentationRoute) {
     return null;
   }
@@ -322,7 +251,7 @@ export function AppNav() {
       <Link
         aria-label="LiveBoard 首页"
         className="rail-brand"
-        href={APP_ROUTES.root}
+        href={APP_ROUTES.classrooms}
         title="LiveBoard 首页"
       >
         <span className="rail-mark" aria-hidden="true">
@@ -372,36 +301,6 @@ export function AppNav() {
           );
         })}
         <div className="rail-mobile-footer-row">
-          {user && usage ? (
-            <div
-              aria-label={`今日 AI 额度已用 ${usage.used} / ${usage.limit} 次`}
-              className="rail-mobile-usage"
-              role="status"
-            >
-              <div className="rail-mobile-usage-head">
-                <span>今日 AI 额度</span>
-                <span>
-                  {usage.used} / {usage.limit} 次
-                </span>
-              </div>
-              <span className="rail-mobile-usage-bar" aria-hidden="true">
-                <span
-                  className={
-                    usageExceeded
-                      ? "rail-usage-bar-fill is-over"
-                      : "rail-usage-bar-fill"
-                  }
-                  style={{ width: `${usagePercent}%` }}
-                />
-              </span>
-            </div>
-          ) : usageFailed ? (
-            <div className="rail-mobile-usage is-unavailable" role="status">
-              AI 额度暂不可用
-            </div>
-          ) : (
-            <div className="rail-mobile-usage is-loading">正在读取 AI 额度</div>
-          )}
           <div className="rail-mobile-account-actions">
             <Link
               href={user ? userProfile(user.id) : APP_ROUTES.profile}
@@ -416,28 +315,6 @@ export function AppNav() {
       </nav>
 
       <div className="rail-footer">
-        {user && usage ? (
-          <div
-            aria-label={`今日 AI 额度已用 ${usage.used} / ${usage.limit} 次`}
-            className="rail-usage-strip"
-            role="status"
-          >
-            <div className="rail-usage-strip-head">
-              <span>今日 AI</span>
-              <span>{usagePercent}%</span>
-            </div>
-            <span className="rail-usage-strip-bar" aria-hidden="true">
-              <span
-                className={
-                  usageExceeded
-                    ? "rail-usage-bar-fill is-over"
-                    : "rail-usage-bar-fill"
-                }
-                style={{ width: `${usagePercent}%` }}
-              />
-            </span>
-          </div>
-        ) : null}
         <button
           aria-expanded={activityOpen}
           aria-label={

@@ -11,7 +11,8 @@ import {
 import type {
   ContentBlockType,
   PermissionLevel,
-  PermissionGroupSummary,
+  UserSummary,
+  UserTagSummary,
 } from "@liveboard/shared";
 import {
   getResourceNameError,
@@ -40,7 +41,7 @@ import {
   downloadMarkdown,
   FileDetail,
   getFile,
-  listAssignablePermissionGroups,
+  listAssignablePermissionUsers,
   listLibraryAssets,
   listPermissionGrants,
   listBlocks,
@@ -68,6 +69,7 @@ import { assetTypeLabel, permissionLabel } from "@/lib/labels";
 import { APP_ROUTES } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { PermissionUserPicker } from "@/components/PermissionUserPicker";
 
 const blockShortcuts: Array<{ command: string; type: ContentBlockType }> = [
   { command: "/h1", type: "heading_1" },
@@ -351,13 +353,14 @@ export function FileEditor({ fileId }: { fileId: string }) {
     x: number;
     y: number;
   } | null>(null);
-  const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
+  const [permissionUsers, setPermissionUsers] = useState<UserSummary[]>([]);
+  const [permissionTags, setPermissionTags] = useState<UserTagSummary[]>([]);
   const [grants, setGrants] = useState<PermissionGrantSummary[]>([]);
   const [inheritedGrants, setInheritedGrants] = useState<
     InheritedPermissionGrantSummary[]
   >([]);
   const [canManageGrants, setCanManageGrants] = useState(false);
-  const [grantGroupId, setGrantGroupId] = useState("");
+  const [grantUserId, setGrantUserId] = useState("");
   const [grantLevel, setGrantLevel] = useState<PermissionLevel>("viewer");
   const [showPermissions, setShowPermissions] = useState(false);
   const [showAssetModal, setShowAssetModal] = useState(false);
@@ -370,29 +373,21 @@ export function FileEditor({ fileId }: { fileId: string }) {
     "saved" | "dirty" | "saving" | "error"
   >("saved");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const groupGrants = useMemo(
-    () => grants.filter((grant) => grant.group),
+  const directGrantUserIds = useMemo(
+    () => new Set(grants.map((grant) => grant.userId)),
     [grants],
   );
-  const availableGrantGroups = useMemo(
+  const inheritedFallbackByUserId = useMemo(
     () =>
-      groups.filter(
-        (group) => !groupGrants.some((grant) => grant.groupId === group.id),
-      ),
-    [groupGrants, groups],
-  );
-  const inheritedFallbackByGroupId = useMemo(
-    () =>
-      new Map(inheritedGrants.map((grant) => [grant.groupId, grant] as const)),
+      new Map(inheritedGrants.map((grant) => [grant.userId, grant] as const)),
     [inheritedGrants],
   );
   const visibleInheritedGrants = useMemo(
     () =>
       inheritedGrants.filter(
-        (grant) =>
-          !groupGrants.some((direct) => direct.groupId === grant.groupId),
+        (grant) => !grants.some((direct) => direct.userId === grant.userId),
       ),
-    [groupGrants, inheritedGrants],
+    [grants, inheritedGrants],
   );
   const menuBlock = openBlockMenu
     ? blocks.find((block) => block.id === openBlockMenu.id)
@@ -423,38 +418,40 @@ export function FileEditor({ fileId }: { fileId: string }) {
   );
 
   async function load() {
-    const [fileResult, blockResult, grantResult, libraryResult] =
-      await Promise.all([
-        getFile(fileId),
-        listBlocks(fileId),
-        listPermissionGrants("file", fileId),
-        listLibraryAssets(),
-      ]);
+    const [fileResult, blockResult, libraryResult] = await Promise.all([
+      getFile(fileId),
+      listBlocks(fileId),
+      listLibraryAssets(),
+    ]);
 
     setFile(fileResult.file);
     setBlocks(blockResult.blocks);
     setLibraryAssets(libraryResult.assets);
-    setGrants(grantResult.grants);
-    setInheritedGrants(grantResult.inheritedGrants);
     setTitleInput(fileResult.file.title);
     setSaveState("saved");
     setLastSavedAt(new Date());
-    await loadAssignableGroups();
   }
 
-  async function loadAssignableGroups() {
+  async function openPermissions() {
+    setError(null);
     try {
-      const groupResult = await listAssignablePermissionGroups({
-        targetType: "file",
-        targetId: fileId,
-      });
-      setGroups(groupResult.groups);
-      setGrantGroupId((current) => current || groupResult.groups[0]?.id || "");
+      const [grantResult, userResult] = await Promise.all([
+        listPermissionGrants("file", fileId),
+        listAssignablePermissionUsers({
+          targetType: "file",
+          targetId: fileId,
+        }),
+      ]);
+      setGrants(grantResult.grants);
+      setInheritedGrants(grantResult.inheritedGrants);
+      setPermissionUsers(userResult.users);
+      setPermissionTags(userResult.tags);
+      setGrantUserId("");
       setCanManageGrants(true);
-    } catch {
-      setGroups([]);
-      setGrantGroupId("");
+      setShowPermissions(true);
+    } catch (caught) {
       setCanManageGrants(false);
+      setError(caught instanceof Error ? caught.message : "加载文件权限失败");
     }
   }
 
@@ -482,14 +479,6 @@ export function FileEditor({ fileId }: { fileId: string }) {
     document.addEventListener("mousedown", closeMenus);
     return () => document.removeEventListener("mousedown", closeMenus);
   }, []);
-
-  useEffect(() => {
-    if (availableGrantGroups.some((group) => group.id === grantGroupId)) {
-      return;
-    }
-
-    setGrantGroupId(availableGrantGroups[0]?.id ?? "");
-  }, [availableGrantGroups, grantGroupId]);
 
   useEffect(() => {
     function warnBeforeLeaving(event: BeforeUnloadEvent) {
@@ -865,8 +854,8 @@ export function FileEditor({ fileId }: { fileId: string }) {
     setError(null);
     setMessage(null);
 
-    if (!grantGroupId) {
-      setError("请选择权限组");
+    if (!grantUserId) {
+      setError("请选择成员");
       return;
     }
 
@@ -874,12 +863,13 @@ export function FileEditor({ fileId }: { fileId: string }) {
       await upsertPermissionGrant({
         targetType: "file",
         targetId: fileId,
-        groupId: grantGroupId,
+        userId: grantUserId,
         level: grantLevel,
       });
       const grantResult = await listPermissionGrants("file", fileId);
       setGrants(grantResult.grants);
       setInheritedGrants(grantResult.inheritedGrants);
+      setGrantUserId("");
       setMessage("文件权限已保存");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存文件权限失败");
@@ -912,7 +902,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
       await upsertPermissionGrant({
         targetType: "file",
         targetId: fileId,
-        groupId: grant.groupId ?? "",
+        userId: grant.userId,
         level,
       });
       const grantResult = await listPermissionGrants("file", fileId);
@@ -1203,6 +1193,20 @@ export function FileEditor({ fileId }: { fileId: string }) {
               <MoreHorizontal aria-hidden="true" />
             </summary>
             <div className="context-menu">
+              {file?.permission === "owner" ? (
+                <button
+                  onClick={(event) => {
+                    event.currentTarget
+                      .closest("details")
+                      ?.removeAttribute("open");
+                    void openPermissions();
+                  }}
+                  type="button"
+                >
+                  <Users aria-hidden="true" />
+                  权限
+                </button>
+              ) : null}
               <button
                 onClick={(event) => {
                   event.currentTarget
@@ -1214,18 +1218,6 @@ export function FileEditor({ fileId }: { fileId: string }) {
               >
                 <Upload aria-hidden="true" />
                 导出 Markdown
-              </button>
-              <button
-                onClick={(event) => {
-                  event.currentTarget
-                    .closest("details")
-                    ?.removeAttribute("open");
-                  setShowPermissions(true);
-                }}
-                type="button"
-              >
-                <Users aria-hidden="true" />
-                权限设置
               </button>
               <button
                 className="danger"
@@ -1551,14 +1543,14 @@ export function FileEditor({ fileId }: { fileId: string }) {
             </div>
             <div className="modal-body permission-panel">
               <div
-                className={`permission-inheritance-summary ${groupGrants.length > 0 ? "has-overrides" : ""}`}
+                className={`permission-inheritance-summary ${grants.length > 0 ? "has-overrides" : ""}`}
               >
                 <strong>
-                  {groupGrants.length > 0 ? "包含例外权限" : "沿用文件夹权限"}
+                  {grants.length > 0 ? "包含例外权限" : "沿用文件夹权限"}
                 </strong>
                 <span>
-                  {groupGrants.length > 0
-                    ? `当前文件为 ${groupGrants.length} 个权限组单独设置；其他权限继续从所在文件夹继承。`
+                  {grants.length > 0
+                    ? `当前文档为 ${grants.length} 位成员单独设置；其他成员继续从所在文件夹继承。`
                     : "当前文件没有单独设置，权限会随所在文件夹自动变化。"}
                 </span>
               </div>
@@ -1567,68 +1559,60 @@ export function FileEditor({ fileId }: { fileId: string }) {
                   <Users aria-hidden="true" className="heading-icon" />
                   当前文件的例外
                 </h2>
-                <span className="badge">{groupGrants.length} 项</span>
+                <span className="badge">{grants.length} 项</span>
               </div>
               {canManageGrants ? (
                 <form
                   className="permission-add-row"
                   onSubmit={onGrantPermission}
                 >
-                  <select
-                    aria-label="选择权限组"
-                    className="select"
-                    value={grantGroupId}
-                    onChange={(event) => setGrantGroupId(event.target.value)}
-                  >
-                    {availableGrantGroups.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.name}（{group.memberCount} 人）
-                      </option>
-                    ))}
-                    {availableGrantGroups.length === 0 ? (
-                      <option value="">没有可添加权限组</option>
-                    ) : null}
-                  </select>
-                  <select
-                    aria-label="选择权限级别"
-                    className="select"
-                    value={grantLevel}
-                    onChange={(event) =>
-                      setGrantLevel(event.target.value as PermissionLevel)
-                    }
-                  >
-                    <option value="viewer">可查看</option>
-                    <option value="lecturer">可制作课件</option>
-                    <option value="editor">可编辑</option>
-                    <option value="owner">可管理</option>
-                    <option value="no_access">禁止访问</option>
-                  </select>
-                  <button
-                    className="button"
-                    disabled={
-                      !grantGroupId || availableGrantGroups.length === 0
-                    }
-                    type="submit"
-                  >
-                    添加例外
-                  </button>
+                  <PermissionUserPicker
+                    excludedUserIds={directGrantUserIds}
+                    onChange={setGrantUserId}
+                    selectedUserId={grantUserId}
+                    tags={permissionTags}
+                    users={permissionUsers}
+                  />
+                  <div className="permission-add-actions">
+                    <select
+                      aria-label="选择权限级别"
+                      className="select"
+                      value={grantLevel}
+                      onChange={(event) =>
+                        setGrantLevel(event.target.value as PermissionLevel)
+                      }
+                    >
+                      <option value="viewer">可查看</option>
+                      <option value="lecturer">可制作课件</option>
+                      <option value="editor">可编辑</option>
+                      <option value="owner">可管理</option>
+                      <option value="no_access">禁止访问</option>
+                    </select>
+                    <button
+                      className="button"
+                      disabled={!grantUserId}
+                      type="submit"
+                    >
+                      添加例外
+                    </button>
+                  </div>
                 </form>
               ) : (
                 <p className="muted">你没有调整这个文件权限的权限。</p>
               )}
               <div className="grant-list">
-                {groupGrants.map((grant) => (
+                {grants.map((grant) => (
                   <div className="grant-row" key={grant.id}>
                     <span
                       className="grant-member"
-                      title={grant.group?.name ?? "权限组"}
+                      title={`@${grant.user.username}`}
                     >
-                      <strong>{grant.group?.name ?? "权限组"}</strong>
+                      <strong>{grant.user.displayName}</strong>
                       <small>
-                        {grant.group?.memberCount ?? 0} 人 · 当前文件单独设置
-                        {inheritedFallbackByGroupId.get(grant.groupId)
-                          ? `，恢复后为${permissionLabel(inheritedFallbackByGroupId.get(grant.groupId)?.level)}（来自「${inheritedFallbackByGroupId.get(grant.groupId)?.inheritedFrom.targetName}」）`
-                          : "，恢复后不再从上级获得权限"}
+                        @{grant.user.username} · 当前文档单独设置
+                        {inheritedFallbackByUserId.get(grant.userId)
+                          ? `，恢复后为${permissionLabel(inheritedFallbackByUserId.get(grant.userId)?.level)}（来自「${inheritedFallbackByUserId.get(grant.userId)?.inheritedFrom.targetName}」）`
+                          : "，恢复后使用默认权限"}
                       </small>
                     </span>
                     {canManageGrants ? (
@@ -1665,7 +1649,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
                     ) : null}
                   </div>
                 ))}
-                {groupGrants.length === 0 ? (
+                {grants.length === 0 ? (
                   <div className="empty-panel compact">
                     <strong>没有例外权限</strong>
                     <span>
@@ -1686,9 +1670,9 @@ export function FileEditor({ fileId }: { fileId: string }) {
                     {visibleInheritedGrants.map((grant) => (
                       <div className="grant-row inherited" key={grant.id}>
                         <span className="grant-member">
-                          <strong>{grant.group?.name ?? "权限组"}</strong>
+                          <strong>{grant.user.displayName}</strong>
                           <small>
-                            {grant.group?.memberCount ?? 0} 人 · 来自「
+                            @{grant.user.username} · 来自「
                             {grant.inheritedFrom.targetName}」
                           </small>
                         </span>

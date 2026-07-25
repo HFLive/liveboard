@@ -22,6 +22,7 @@ import type { Prisma } from "@prisma/client";
 import { requireResourceName } from "../../common/resource-name";
 import { PrismaService } from "../prisma/prisma.service";
 import { PermissionsService } from "../permissions/permissions.service";
+import { AssetsService } from "./assets.service";
 import {
   decodeMarkdown,
   exportMarkdown,
@@ -93,6 +94,7 @@ export class FilesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly permissions: PermissionsService,
+    private readonly assets: AssetsService,
   ) {}
 
   async getFolderTree(userId: string | null): Promise<{
@@ -343,34 +345,13 @@ export class FilesService {
       }
       workspace = parent.workspace;
     }
-    const ownerGroupId = input.parentId
-      ? null
-      : await this.resolveOwnerGroupId(userId, workspace.id);
-
-    return this.prisma.$transaction(async (tx) => {
-      const folder = await tx.folder.create({
-        data: {
-          workspaceId: workspace.id,
-          parentId: input.parentId ?? null,
-          name,
-          createdById: userId,
-        },
-      });
-
-      if (ownerGroupId) {
-        await tx.permissionGrant.create({
-          data: {
-            workspaceId: workspace.id,
-            createdById: userId,
-            targetType: "folder",
-            targetId: folder.id,
-            groupId: ownerGroupId,
-            level: "owner",
-          },
-        });
-      }
-
-      return folder;
+    return this.prisma.folder.create({
+      data: {
+        workspaceId: workspace.id,
+        parentId: input.parentId ?? null,
+        name,
+        createdById: userId,
+      },
     });
   }
 
@@ -479,6 +460,7 @@ export class FilesService {
       throw new BadRequestException("请确认递归删除并输入正确的文件夹名称");
     }
 
+    const affectedAssetIds: string[] = [];
     await this.prisma.$transaction(async (tx) => {
       const current = await tx.folder.findUnique({
         where: { id: folderId },
@@ -514,19 +496,14 @@ export class FilesService {
         where: { folderId: { in: [...folderIds] } },
         select: { id: true },
       });
-      await tx.permissionGrant.deleteMany({
-        where: {
-          OR: [
-            { targetType: "folder", targetId: { in: [...folderIds] } },
-            {
-              targetType: "file",
-              targetId: { in: files.map((file) => file.id) },
-            },
-          ],
-        },
+      const assets = await tx.fileAsset.findMany({
+        where: { fileId: { in: files.map((file) => file.id) } },
+        select: { id: true },
       });
+      affectedAssetIds.push(...assets.map((asset) => asset.id));
       await tx.folder.delete({ where: { id: folderId } });
     });
+    await this.assets.cleanupUnreferencedAssets(affectedAssetIds);
 
     return { ok: true };
   }
@@ -926,7 +903,8 @@ export class FilesService {
       input.dataJson,
     );
 
-    return this.prisma.$transaction(async (tx) => {
+    const previousAssetId = getBlockAssetId(block.type, block.dataJson);
+    const updated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.contentBlock.update({
         where: { id: blockId },
         data: {
@@ -941,6 +919,10 @@ export class FilesService {
       });
       return updated;
     });
+    if (previousAssetId) {
+      await this.assets.cleanupUnreferencedAssets([previousAssetId]);
+    }
+    return updated;
   }
 
   async deleteBlock(userId: string | null, blockId: string) {
@@ -972,6 +954,10 @@ export class FilesService {
         data: { version: { increment: 1 }, updatedById: userId },
       }),
     ]);
+    const previousAssetId = getBlockAssetId(block.type, block.dataJson);
+    if (previousAssetId) {
+      await this.assets.cleanupUnreferencedAssets([previousAssetId]);
+    }
 
     return { ok: true };
   }
@@ -1015,12 +1001,14 @@ export class FilesService {
       throw new ForbiddenException("No permission to delete file");
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.permissionGrant.deleteMany({
-        where: { targetType: "file", targetId: fileId },
-      });
-      await tx.file.delete({ where: { id: fileId } });
+    const assets = await this.prisma.fileAsset.findMany({
+      where: { fileId },
+      select: { id: true },
     });
+    await this.prisma.file.delete({ where: { id: fileId } });
+    await this.assets.cleanupUnreferencedAssets(
+      assets.map((asset) => asset.id),
+    );
 
     return { ok: true };
   }
@@ -1054,33 +1042,6 @@ export class FilesService {
     }
 
     return workspace;
-  }
-
-  private async resolveOwnerGroupId(userId: string, workspaceId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { systemRole: true },
-    });
-
-    if (!user) {
-      throw new UnauthorizedException("Missing session");
-    }
-
-    if (isSystemAdmin(user.systemRole)) {
-      return null;
-    }
-
-    const membership = await this.prisma.permissionGroupMember.findFirst({
-      where: { userId, group: { workspaceId } },
-      orderBy: [{ createdAt: "asc" }],
-      select: { groupId: true },
-    });
-
-    if (!membership) {
-      throw new ForbiddenException("请先将成员加入权限组，再创建顶层位置");
-    }
-
-    return membership.groupId;
   }
 
   private toSummary(file: {
@@ -1216,6 +1177,14 @@ export class FilesService {
 
     return path;
   }
+}
+
+function getBlockAssetId(type: string, dataJson: Prisma.JsonValue) {
+  if (type !== "image" && type !== "attachment") return null;
+  if (!dataJson || typeof dataJson !== "object" || Array.isArray(dataJson)) {
+    return null;
+  }
+  return typeof dataJson.assetId === "string" ? dataJson.assetId : null;
 }
 
 function getBlockText(value: unknown) {

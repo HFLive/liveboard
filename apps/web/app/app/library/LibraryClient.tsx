@@ -1,6 +1,7 @@
 "use client";
 
-import { ChangeEvent, MouseEvent, useEffect, useMemo, useState } from "react";
+import { MouseEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Download,
   File,
@@ -10,7 +11,6 @@ import {
   Rows3,
   Search,
   Trash2,
-  Upload,
   X,
 } from "lucide-react";
 import {
@@ -20,14 +20,13 @@ import {
   FileAssetSummary,
   listLibraryAssets,
   listAssetReferences,
-  uploadAsset,
 } from "@/lib/api";
 import {
   assetTypeLabel,
   formatDateTime,
   formatRelativeTime,
 } from "@/lib/labels";
-import { contentDetail, teachingPresent } from "@/lib/routes";
+import { APP_ROUTES, contentDetail, teachingPresent } from "@/lib/routes";
 import { SortIconSelect } from "@/components/SortIconSelect";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
@@ -50,7 +49,6 @@ export function LibraryClient() {
   const [view, setView] = useState<AssetView>("grid");
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
-  const [showUploadModal, setShowUploadModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<FileAssetSummary | null>(
     null,
   );
@@ -61,7 +59,6 @@ export function LibraryClient() {
   } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [loadingAssets, setLoadingAssets] = useState(true);
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(
     new Set(),
@@ -218,31 +215,6 @@ export function LibraryClient() {
     }
   }
 
-  async function onUpload(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-
-    if (!file) {
-      return;
-    }
-
-    setUploading(true);
-    setError(null);
-    setMessage(null);
-    setBlockedDelete(null);
-
-    try {
-      await uploadAsset({ file });
-      setMessage("文件已加入网盘");
-      setShowUploadModal(false);
-      await load();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "上传失败");
-    } finally {
-      setUploading(false);
-    }
-  }
-
   async function onDelete(asset: FileAssetSummary) {
     setError(null);
     setMessage(null);
@@ -270,11 +242,16 @@ export function LibraryClient() {
 
   return (
     <div className="workspace library-workspace">
+      <Link className="page-back-link" href={APP_ROUTES.content}>
+        返回文档
+      </Link>
       <header className="page-head">
         <div>
           <p className="page-eyebrow">资源管理</p>
           <h1>文件</h1>
-          <p className="muted">管理你上传的图片与附件资源。</p>
+          <p className="muted">
+            查看文档正在引用的图片与附件。新文件只能在编辑文档时上传。
+          </p>
         </div>
       </header>
 
@@ -293,14 +270,6 @@ export function LibraryClient() {
               />
             </label>
             <div className="toolbar-row">
-              <button
-                className="button"
-                onClick={() => setShowUploadModal(true)}
-                type="button"
-              >
-                <Upload aria-hidden="true" className="button-icon" />
-                上传文件
-              </button>
               <select
                 className="select compact-select"
                 value={kindFilter}
@@ -584,37 +553,6 @@ export function LibraryClient() {
           </>
         ) : null}
       </section>
-
-      {showUploadModal ? (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal-panel">
-            <div className="modal-head">
-              <h2>上传到网盘</h2>
-              <button
-                className="icon-button subtle"
-                onClick={() => setShowUploadModal(false)}
-                title="关闭"
-                type="button"
-              >
-                <X aria-hidden="true" />
-              </button>
-            </div>
-            <div className="modal-body">
-              <label className="upload-dropzone large">
-                <input
-                  disabled={uploading}
-                  onChange={(event) => void onUpload(event)}
-                  type="file"
-                />
-                <span>
-                  <Upload aria-hidden="true" />
-                  {uploading ? "上传中" : "选择文件"}
-                </span>
-              </label>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {deleteTarget ? (
         <div className="modal-backdrop" role="presentation">

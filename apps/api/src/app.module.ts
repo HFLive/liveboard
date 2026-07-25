@@ -15,6 +15,8 @@ import { SettingsModule } from "./modules/settings/settings.module";
 import { ServerStatusModule } from "./modules/server-status/server-status.module";
 import { UsersModule } from "./modules/users/users.module";
 import { TeachingModule } from "./modules/teaching/teaching.module";
+import { ClassroomsModule } from "./modules/classrooms/classrooms.module";
+import { BadgesModule } from "./modules/badges/badges.module";
 
 @Module({
   imports: [
@@ -31,7 +33,9 @@ import { TeachingModule } from "./modules/teaching/teaching.module";
     ServerStatusModule,
     AiModule,
     ActivityModule,
+    ClassroomsModule,
     TeachingModule,
+    BadgesModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ActiveUserGuard }],
 })

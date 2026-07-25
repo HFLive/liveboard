@@ -341,21 +341,55 @@ export class AssetsService {
       );
     }
 
-    return assets.map((asset) => ({
-      ...asset,
-      url: this.getAssetUrl(asset.id),
-      referenceCount: referenceCounts.get(asset.id) ?? 0,
-      uploader: {
-        id: asset.uploader.id,
-        username: asset.uploader.username,
-        displayName: asset.uploader.displayName,
-        avatarUrl: asset.uploader.avatarUpdatedAt
-          ? `/auth/avatar/${asset.uploader.id}?v=${asset.uploader.avatarUpdatedAt.getTime()}`
-          : null,
-        systemRole: asset.uploader.systemRole,
-        status: asset.uploader.status,
-      },
-    }));
+    const unreferencedAssetIds = assets
+      .filter((asset) => !referenceCounts.has(asset.id))
+      .map((asset) => asset.id);
+    await this.cleanupUnreferencedAssets(unreferencedAssetIds);
+
+    return assets
+      .filter((asset) =>
+        references.some(
+          (reference) =>
+            reference.assetId === asset.id && reference.targetType === "file",
+        ),
+      )
+      .map((asset) => ({
+        ...asset,
+        url: this.getAssetUrl(asset.id),
+        referenceCount: referenceCounts.get(asset.id) ?? 0,
+        uploader: {
+          id: asset.uploader.id,
+          username: asset.uploader.username,
+          displayName: asset.uploader.displayName,
+          avatarUrl: asset.uploader.avatarUpdatedAt
+            ? `/auth/avatar/${asset.uploader.id}?v=${asset.uploader.avatarUpdatedAt.getTime()}`
+            : null,
+          systemRole: asset.uploader.systemRole,
+          status: asset.uploader.status,
+        },
+      }));
+  }
+
+  async cleanupUnreferencedAssets(assetIds: string[]) {
+    const uniqueIds = [...new Set(assetIds.filter(Boolean))];
+    if (uniqueIds.length === 0) return;
+    const [assets, references] = await Promise.all([
+      this.prisma.fileAsset.findMany({
+        where: { id: { in: uniqueIds }, forumPostId: null },
+      }),
+      this.getAssetReferences(uniqueIds),
+    ]);
+    const referencedIds = new Set(
+      references.map((reference) => reference.assetId),
+    );
+    await Promise.allSettled(
+      assets
+        .filter((asset) => !referencedIds.has(asset.id))
+        .map(async (asset) => {
+          await this.minio.removeObject(this.bucket, asset.storageKey);
+          await this.prisma.fileAsset.delete({ where: { id: asset.id } });
+        }),
+    );
   }
 
   async listAssetReferences(userId: string | null, assetId: string) {
@@ -418,60 +452,20 @@ export class AssetsService {
   }
 
   private async resolveUploadContext(userId: string, input: UploadAssetInput) {
-    if (input.fileId) {
-      const file = await this.prisma.file.findUnique({
-        where: { id: input.fileId },
-      });
-
-      if (!file || file.status === "archived") {
-        throw new NotFoundException("File not found");
-      }
-
-      const level = await this.permissions.getEffectiveLevelForFile(
-        userId,
-        file.id,
-      );
-
-      if (!canEdit(level) && level !== "lecturer") {
-        throw new ForbiddenException("No permission to upload asset");
-      }
-
-      return {
-        workspaceId: file.workspaceId,
-        folderId: file.folderId,
-        fileId: file.id,
-      };
+    if (!input.fileId) {
+      throw new BadRequestException("文件只能在编辑文档时上传");
     }
-
-    if (!input.folderId) {
-      const workspace = await this.prisma.workspace.findFirst({
-        orderBy: { createdAt: "asc" },
-      });
-
-      if (!workspace) {
-        throw new NotFoundException(
-          "Workspace not found. Run pnpm db:seed first.",
-        );
-      }
-
-      return {
-        workspaceId: workspace.id,
-        folderId: null,
-        fileId: null,
-      };
-    }
-
-    const folder = await this.prisma.folder.findUnique({
-      where: { id: input.folderId },
+    const file = await this.prisma.file.findUnique({
+      where: { id: input.fileId },
     });
 
-    if (!folder) {
-      throw new NotFoundException("Folder not found");
+    if (!file || file.status === "archived") {
+      throw new NotFoundException("File not found");
     }
 
-    const level = await this.permissions.getEffectiveLevelForFolder(
+    const level = await this.permissions.getEffectiveLevelForFile(
       userId,
-      folder.id,
+      file.id,
     );
 
     if (!canEdit(level) && level !== "lecturer") {
@@ -479,9 +473,9 @@ export class AssetsService {
     }
 
     return {
-      workspaceId: folder.workspaceId,
-      folderId: folder.id,
-      fileId: null,
+      workspaceId: file.workspaceId,
+      folderId: file.folderId,
+      fileId: file.id,
     };
   }
 
@@ -536,10 +530,7 @@ export class AssetsService {
             ? {}
             : {
                 deck: {
-                  OR: [
-                    { createdById: userId },
-                    { viewers: { some: { userId } } },
-                  ],
+                  classroom: { members: { some: { userId } } },
                 },
               }),
         },
@@ -680,12 +671,20 @@ export class AssetsService {
             });
             if (!user) throw new UnauthorizedException("Missing session");
 
-            const usage = await tx.fileAsset.aggregate({
-              where: { uploadedBy: userId },
-              _sum: { sizeBytes: true },
-            });
+            const [documentUsage, classroomUsage] = await Promise.all([
+              tx.fileAsset.aggregate({
+                where: { uploadedBy: userId },
+                _sum: { sizeBytes: true },
+              }),
+              tx.classroomFile.aggregate({
+                where: { uploadedBy: userId },
+                _sum: { sizeBytes: true },
+              }),
+            ]);
             if (
-              (usage._sum.sizeBytes ?? 0) + incomingBytes >
+              (documentUsage._sum.sizeBytes ?? 0) +
+                (classroomUsage._sum.sizeBytes ?? 0) +
+                incomingBytes >
               user.storageQuotaBytes
             ) {
               throw new BadRequestException(

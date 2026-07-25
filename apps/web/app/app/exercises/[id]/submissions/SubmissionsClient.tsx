@@ -21,7 +21,7 @@ import {
   questionTypeLabel,
   submissionStatusLabel,
 } from "@/lib/labels";
-import { APP_ROUTES } from "@/lib/routes";
+import { classroomDetail } from "@/lib/routes";
 import { AutoTextarea } from "@/components/AutoTextarea";
 
 export function SubmissionsClient({
@@ -39,6 +39,7 @@ export function SubmissionsClient({
   const [filter, setFilter] = useState<"pending" | "graded">("pending");
   const [saving, setSaving] = useState(false);
   const [exerciseTitle, setExerciseTitle] = useState("练习");
+  const [classroomId, setClassroomId] = useState("");
 
   const filteredSubmissions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -80,6 +81,7 @@ export function SubmissionsClient({
       getExerciseSet(exerciseSetId),
     ]);
     setExerciseTitle(exerciseResult.exerciseSet.title);
+    setClassroomId(exerciseResult.exerciseSet.classroomId);
     setSubmissions(result.submissions);
     setSelectedId((current) => {
       if (
@@ -147,7 +149,7 @@ export function SubmissionsClient({
 
   return (
     <div className="workspace review-page">
-      <Link className="page-back-link" href={APP_ROUTES.exercises}>
+      <Link className="page-back-link" href={classroomDetail(classroomId)}>
         <ArrowLeft aria-hidden="true" />
         返回练习列表
       </Link>

@@ -24,7 +24,9 @@ vi.mock("@/lib/api", () => ({
   deletePermissionGrant: vi.fn(),
   getFolderTree: vi.fn(),
   importMarkdown: vi.fn(),
-  listAssignablePermissionGroups: vi.fn().mockResolvedValue({ groups: [] }),
+  listAssignablePermissionUsers: vi
+    .fn()
+    .mockResolvedValue({ users: [], tags: [] }),
   listFiles: vi.fn().mockResolvedValue({ files: [] }),
   listPermissionGrants: vi
     .fn()
@@ -123,6 +125,29 @@ describe("ContentClient folder deletion", () => {
       within(tree as HTMLElement).getByRole("button", {
         name: "展开“课程资料”",
       }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens member-level permissions from the folder menu", async () => {
+    vi.mocked(getFolderTree).mockReset().mockResolvedValue({
+      folders: folderTree,
+      canManagePins: true,
+    });
+
+    render(<ContentClient />);
+
+    fireEvent.click(
+      await within(getTree()).findByRole("button", {
+        name: "“课程资料”文件夹操作",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "权限" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "文件夹权限" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "搜索成员" }),
     ).toBeInTheDocument();
   });
 

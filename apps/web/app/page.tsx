@@ -51,8 +51,8 @@ export default function HomePage() {
           </article>
           <article>
             <ShieldCheck aria-hidden="true" />
-            <h3>成员与权限</h3>
-            <p>按成员和权限组控制资料的查看、编辑与管理范围。</p>
+            <h3>成员与课堂</h3>
+            <p>用成员标签快速组织师生，并按课堂管理教学范围。</p>
           </article>
         </div>
       </section>

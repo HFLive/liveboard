@@ -27,10 +27,7 @@ export class ActivityService {
         this.prisma.exerciseSet.findMany({
           where: {
             updatedAt: { gte: since },
-            OR: [
-              { createdById: user.id },
-              { viewers: { some: { userId: user.id } } },
-            ],
+            classroom: { members: { some: { userId: user.id } } },
           },
           orderBy: { updatedAt: "desc" },
           take: 10,

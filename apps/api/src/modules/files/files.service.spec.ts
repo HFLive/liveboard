@@ -30,10 +30,15 @@ describe("FilesService", () => {
       updateMany: jest.fn(),
       delete: jest.fn(),
     },
-    permissionGrant: { deleteMany: jest.fn() },
+    fileAsset: { findMany: jest.fn() },
   };
   const prisma = {
-    file: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn() },
+    file: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+      delete: jest.fn(),
+    },
     folder: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
@@ -42,7 +47,7 @@ describe("FilesService", () => {
     },
     user: { findUnique: jest.fn() },
     workspace: { findFirst: jest.fn() },
-    fileAsset: { findUnique: jest.fn() },
+    fileAsset: { findUnique: jest.fn(), findMany: jest.fn() },
     contentBlock: {
       findFirst: jest.fn(),
       create: jest.fn(),
@@ -57,6 +62,7 @@ describe("FilesService", () => {
     service = new FilesService(
       prisma as unknown as PrismaService,
       permissions as unknown as PermissionsService,
+      { cleanupUnreferencedAssets: jest.fn() } as never,
     );
     permissions.getEffectiveLevelForFile.mockResolvedValue("editor");
     prisma.file.findUnique.mockResolvedValue({ workspaceId: "workspace-1" });
@@ -68,6 +74,8 @@ describe("FilesService", () => {
       folderId: null,
     });
     tx.contentBlock.findFirst.mockResolvedValue(null);
+    tx.fileAsset.findMany.mockResolvedValue([]);
+    prisma.fileAsset.findMany.mockResolvedValue([]);
     tx.contentBlock.create.mockResolvedValue({ id: "block-1" });
     tx.file.create.mockResolvedValue({
       id: "imported-file",
@@ -315,7 +323,7 @@ describe("FilesService", () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it("deletes descendant permissions before cascading a folder subtree", async () => {
+  it("cascades a confirmed folder subtree", async () => {
     permissions.getEffectiveLevelForFolder.mockResolvedValue("editor");
     prisma.folder.findUnique.mockResolvedValue({
       id: "folder-1",
@@ -340,33 +348,17 @@ describe("FilesService", () => {
       confirmationName: "课程资料",
     });
 
-    expect(tx.permissionGrant.deleteMany).toHaveBeenCalledWith({
-      where: {
-        OR: [
-          {
-            targetType: "folder",
-            targetId: {
-              in: expect.arrayContaining(["folder-1", "folder-2", "folder-3"]),
-            },
-          },
-          { targetType: "file", targetId: { in: ["file-1", "file-2"] } },
-        ],
-      },
-    });
     expect(tx.folder.delete).toHaveBeenCalledWith({
       where: { id: "folder-1" },
     });
   });
 
-  it("permanently deletes a file and its direct permission grants", async () => {
+  it("permanently deletes a file", async () => {
     permissions.getEffectiveLevelForFile.mockResolvedValue("editor");
 
     await service.deleteFile("editor-1", "file-1");
 
-    expect(tx.permissionGrant.deleteMany).toHaveBeenCalledWith({
-      where: { targetType: "file", targetId: "file-1" },
-    });
-    expect(tx.file.delete).toHaveBeenCalledWith({
+    expect(prisma.file.delete).toHaveBeenCalledWith({
       where: { id: "file-1" },
     });
     expect(tx.file.update).not.toHaveBeenCalledWith(

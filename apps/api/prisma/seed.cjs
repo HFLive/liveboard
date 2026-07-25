@@ -22,20 +22,13 @@ async function upsertUser({ username, displayName, systemRole, password }) {
   });
 }
 
-async function upsertPermissionGroup({
-  workspaceId,
-  name,
-  createdById,
-  description,
-}) {
-  return prisma.permissionGroup.upsert({
+async function upsertUserTag({ workspaceId, name }) {
+  return prisma.userTag.upsert({
     where: { workspaceId_name: { workspaceId, name } },
-    update: { description: description ?? null },
+    update: {},
     create: {
       workspaceId,
       name,
-      description: description ?? null,
-      createdById,
     },
   });
 }
@@ -61,11 +54,11 @@ async function upsertForumCategory({
   });
 }
 
-async function addGroupMember(groupId, userId) {
-  await prisma.permissionGroupMember.upsert({
-    where: { groupId_userId: { groupId, userId } },
+async function assignUserTag(tagId, userId) {
+  await prisma.userTagAssignment.upsert({
+    where: { tagId_userId: { tagId, userId } },
     update: {},
-    create: { groupId, userId },
+    create: { tagId, userId },
   });
 }
 
@@ -127,28 +120,22 @@ async function main() {
     sortOrder: 30,
   });
 
-  const authorGroup = await upsertPermissionGroup({
+  const authorTag = await upsertUserTag({
     workspaceId: workspace.id,
     name: "作者",
-    description: "可维护课程资料和模板",
-    createdById: admin.id,
   });
-  const lecturerGroup = await upsertPermissionGroup({
+  const lecturerTag = await upsertUserTag({
     workspaceId: workspace.id,
     name: "讲师",
-    description: "可制作课件和查看已发布文档",
-    createdById: admin.id,
   });
-  const learnerGroup = await upsertPermissionGroup({
+  const learnerTag = await upsertUserTag({
     workspaceId: workspace.id,
     name: "学习者",
-    description: "默认学习访问范围",
-    createdById: admin.id,
   });
 
-  await addGroupMember(authorGroup.id, author.id);
-  await addGroupMember(lecturerGroup.id, lecturer.id);
-  await addGroupMember(learnerGroup.id, learner.id);
+  await assignUserTag(authorTag.id, author.id);
+  await assignUserTag(lecturerTag.id, lecturer.id);
+  await assignUserTag(learnerTag.id, learner.id);
 
   const publicFolder = await prisma.folder.upsert({
     where: { id: "seed_folder_public" },
@@ -186,65 +173,6 @@ async function main() {
       createdById: admin.id,
     },
   });
-
-  await prisma.permissionGrant.deleteMany({
-    where: {
-      targetId: {
-        in: [
-          workspace.id,
-          publicFolder.id,
-          templatesFolder.id,
-          courseFolder.id,
-        ],
-      },
-      userId: { in: [admin.id, author.id, lecturer.id, learner.id] },
-    },
-  });
-
-  const grants = [
-    {
-      targetType: "folder",
-      targetId: publicFolder.id,
-      groupId: learnerGroup.id,
-      level: "viewer",
-    },
-    {
-      targetType: "folder",
-      targetId: templatesFolder.id,
-      groupId: authorGroup.id,
-      level: "editor",
-    },
-    {
-      targetType: "folder",
-      targetId: courseFolder.id,
-      groupId: lecturerGroup.id,
-      level: "lecturer",
-    },
-    {
-      targetType: "folder",
-      targetId: publicFolder.id,
-      groupId: lecturerGroup.id,
-      level: "lecturer",
-    },
-  ];
-
-  for (const grant of grants) {
-    await prisma.permissionGrant.upsert({
-      where: {
-        targetType_targetId_groupId: {
-          targetType: grant.targetType,
-          targetId: grant.targetId,
-          groupId: grant.groupId,
-        },
-      },
-      update: { level: grant.level },
-      create: {
-        workspaceId: workspace.id,
-        createdById: admin.id,
-        ...grant,
-      },
-    });
-  }
 
   const handbookFile = await prisma.file.upsert({
     where: { id: "seed_file_handbook" },

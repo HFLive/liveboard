@@ -34,10 +34,15 @@ describe("TeachingService", () => {
       $transaction: jest.fn(),
     };
     const permissions = { getEffectiveLevelForFile: jest.fn() };
+    const classrooms = { requireTeacher: jest.fn().mockResolvedValue({}) };
     return {
       prisma,
       permissions,
-      service: new TeachingService(prisma as never, permissions as never),
+      service: new TeachingService(
+        prisma as never,
+        permissions as never,
+        classrooms as never,
+      ),
     };
   }
 
@@ -48,7 +53,11 @@ describe("TeachingService", () => {
       title: "公开课件",
       createdById: "teacher-1",
       createdBy: { ...activeUser, id: "teacher-1" },
-      viewers: [{ userId: activeUser.id }],
+      classroomId: "classroom-1",
+      classroom: {
+        name: "课堂",
+        members: [{ userId: activeUser.id, role: "student" }],
+      },
       createdAt: new Date("2026-07-13T00:00:00Z"),
       updatedAt: new Date("2026-07-13T00:00:00Z"),
       items: [],
@@ -68,7 +77,8 @@ describe("TeachingService", () => {
       title: "私有课件",
       createdById: "teacher-1",
       createdBy: { ...activeUser, id: "teacher-1" },
-      viewers: [],
+      classroomId: "classroom-1",
+      classroom: { name: "课堂", members: [] },
       createdAt: new Date("2026-07-13T00:00:00Z"),
       updatedAt: new Date("2026-07-13T00:00:00Z"),
       items: [],
@@ -90,6 +100,7 @@ describe("TeachingService", () => {
 
     await expect(
       service.create(activeUser.id, {
+        classroomId: "classroom-1",
         title: "课件",
         items: [{ type: "content_block", sourceBlockId: "block-1" }],
       }),

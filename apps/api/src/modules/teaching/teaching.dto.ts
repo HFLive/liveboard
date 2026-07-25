@@ -31,6 +31,9 @@ export class TeachingDeckItemDto {
 
 export class CreateTeachingDeckDto {
   @IsString()
+  classroomId!: string;
+
+  @IsString()
   @MaxLength(120)
   title!: string;
 
@@ -39,12 +42,6 @@ export class CreateTeachingDeckDto {
   @ValidateNested({ each: true })
   @Type(() => TeachingDeckItemDto)
   items!: TeachingDeckItemDto[];
-
-  @IsOptional()
-  @IsArray()
-  @ArrayUnique()
-  @IsString({ each: true })
-  visibleUserIds?: string[];
 }
 
 export class UpdateTeachingDeckDto {
@@ -59,10 +56,4 @@ export class UpdateTeachingDeckDto {
   @ValidateNested({ each: true })
   @Type(() => TeachingDeckItemDto)
   items?: TeachingDeckItemDto[];
-
-  @IsOptional()
-  @IsArray()
-  @ArrayUnique()
-  @IsString({ each: true })
-  visibleUserIds?: string[];
 }

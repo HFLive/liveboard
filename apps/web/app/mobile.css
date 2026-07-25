@@ -146,7 +146,8 @@
   .rail-mobile-footer-row {
     display: grid;
     grid-column: 1 / -1;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto;
+    justify-content: end;
     align-items: center;
     gap: 8px;
     margin-top: 4px;

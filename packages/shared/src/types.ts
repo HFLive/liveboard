@@ -56,6 +56,36 @@ export interface UserSummary {
   avatarUrl: string | null;
   systemRole: SystemRole;
   status: "active" | "disabled";
+  tags?: UserTagSummary[];
+  badges?: BadgeSummary[];
+}
+
+export interface UserTagSummary {
+  id: string;
+  name: string;
+  memberCount?: number;
+}
+
+export type BadgeColor = "gold" | "blue" | "green" | "purple" | "red" | "gray";
+
+export interface BadgeSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  color: BadgeColor;
+}
+
+export interface UserBadgeSummary extends BadgeSummary {
+  equipped: boolean;
+  equippedOrder: number | null;
+  awardedAt: string;
+}
+
+export interface AdminBadgeSummary extends BadgeSummary {
+  recipientIds: string[];
+  recipientCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface UserProfile extends UserSummary {
@@ -150,19 +180,6 @@ export interface ServerStatusSummary {
   retentionHours: number;
 }
 
-export interface PermissionGroupMemberSummary {
-  id: string;
-  user: UserSummary;
-}
-
-export interface PermissionGroupSummary {
-  id: string;
-  name: string;
-  description: string | null;
-  memberCount: number;
-  members?: PermissionGroupMemberSummary[];
-}
-
 export interface FolderNode {
   id: string;
   name: string;
@@ -194,8 +211,42 @@ export interface ContentPinTarget {
 
 export type TeachingDeckItemType = "content_block" | "exercise";
 
+export type ClassroomMemberRole = "teacher" | "student";
+
+export interface ClassroomSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  role: ClassroomMemberRole | "administrator";
+  teacherCount: number;
+  studentCount: number;
+  deckCount: number;
+  exerciseCount: number;
+  fileCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClassroomMemberSummary {
+  user: UserSummary;
+  role: ClassroomMemberRole;
+  createdAt: string;
+}
+
+export interface ClassroomAnnouncementSummary {
+  id: string;
+  classroomId: string;
+  title: string;
+  content: string;
+  author: UserSummary;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TeachingDeckSummary {
   id: string;
+  classroomId: string;
+  classroomName: string;
   title: string;
   itemCount: number;
   createdBy: UserSummary;

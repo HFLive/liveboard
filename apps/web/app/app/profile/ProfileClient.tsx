@@ -1,12 +1,20 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
-import { Camera, ImagePlus, KeyRound, UserRound } from "lucide-react";
-import type { UserProfile } from "@liveboard/shared";
+import {
+  BadgeCheck,
+  Camera,
+  ImagePlus,
+  KeyRound,
+  UserRound,
+} from "lucide-react";
+import type { UserBadgeSummary, UserProfile } from "@liveboard/shared";
 import {
   apiResourceUrl,
   changePassword,
   getMe,
+  listMyBadges,
+  setEquippedBadges,
   updateProfile,
   uploadAvatar,
   uploadProfileBanner,
@@ -14,6 +22,7 @@ import {
 import { roleLabel, userStatusLabel } from "@/lib/labels";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { UserBadges } from "@/components/UserBadges";
 
 const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
 const MAX_BANNER_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -65,6 +74,9 @@ export function ProfileClient() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSavedAt, setProfileSavedAt] = useState<Date | null>(null);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [awardedBadges, setAwardedBadges] = useState<UserBadgeSummary[]>([]);
+  const [equippedBadgeIds, setEquippedBadgeIds] = useState<string[]>([]);
+  const [savingBadges, setSavingBadges] = useState(false);
   const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
   const [cropSourceUrl, setCropSourceUrl] = useState<string | null>(null);
   const [savingCrop, setSavingCrop] = useState(false);
@@ -72,11 +84,21 @@ export function ProfileClient() {
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    getMe()
-      .then((result) => {
+    Promise.all([getMe(), listMyBadges()])
+      .then(([result, badgeResult]) => {
         setUser(result.user);
         setDisplayName(result.user.displayName);
         setBio(result.user.bio ?? "");
+        setAwardedBadges(badgeResult.badges);
+        setEquippedBadgeIds(
+          badgeResult.badges
+            .filter((badge) => badge.equipped)
+            .sort(
+              (left, right) =>
+                (left.equippedOrder ?? 0) - (right.equippedOrder ?? 0),
+            )
+            .map((badge) => badge.id),
+        );
       })
       .catch((caught) => {
         setError(caught instanceof Error ? caught.message : "加载个人信息失败");
@@ -245,6 +267,47 @@ export function ProfileClient() {
     }
   }
 
+  function toggleEquippedBadge(badgeId: string) {
+    setProfileMessage(null);
+    setError(null);
+    setEquippedBadgeIds((current) => {
+      if (current.includes(badgeId)) {
+        return current.filter((id) => id !== badgeId);
+      }
+      if (current.length >= 3) {
+        setError("最多同时佩戴 3 个徽章");
+        return current;
+      }
+      return [...current, badgeId];
+    });
+  }
+
+  async function saveEquippedBadges() {
+    setSavingBadges(true);
+    setError(null);
+    try {
+      const result = await setEquippedBadges(equippedBadgeIds);
+      setAwardedBadges(result.badges);
+      setEquippedBadgeIds(
+        result.badges
+          .filter((badge) => badge.equipped)
+          .sort(
+            (left, right) =>
+              (left.equippedOrder ?? 0) - (right.equippedOrder ?? 0),
+          )
+          .map((badge) => badge.id),
+      );
+      const refreshed = await getMe();
+      setUser(refreshed.user);
+      window.dispatchEvent(new Event("liveboard:profile-updated"));
+      setProfileMessage("佩戴徽章已更新");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "保存佩戴徽章失败");
+    } finally {
+      setSavingBadges(false);
+    }
+  }
+
   return (
     <div className="workspace">
       <header className="page-head">
@@ -375,6 +438,43 @@ export function ProfileClient() {
         </div>
 
         <aside className="workbench-side">
+          <section className="action-panel profile-badge-panel">
+            <h2>
+              <BadgeCheck aria-hidden="true" className="heading-icon" />
+              我的徽章
+            </h2>
+            {awardedBadges.length ? (
+              <>
+                <p className="muted">
+                  选择最多 3 个公开展示，选择顺序即展示顺序。
+                </p>
+                <div className="profile-badge-choices">
+                  {awardedBadges.map((badge) => (
+                    <label key={badge.id}>
+                      <input
+                        checked={equippedBadgeIds.includes(badge.id)}
+                        onChange={() => toggleEquippedBadge(badge.id)}
+                        type="checkbox"
+                      />
+                      <UserBadges badges={[badge]} />
+                    </label>
+                  ))}
+                </div>
+                <button
+                  className="button secondary"
+                  disabled={savingBadges}
+                  onClick={() => void saveEquippedBadges()}
+                  type="button"
+                >
+                  {savingBadges
+                    ? "保存中"
+                    : `保存佩戴（${equippedBadgeIds.length}/3）`}
+                </button>
+              </>
+            ) : (
+              <p className="muted">尚未获得徽章。</p>
+            )}
+          </section>
           <section className="action-panel profile-account-panel">
             <h2>账号信息</h2>
             <div className="profile-readonly-grid">

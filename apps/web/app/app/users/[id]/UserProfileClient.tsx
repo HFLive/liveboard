@@ -13,6 +13,7 @@ import {
 import { APP_ROUTES, forumThread, teachingPresent } from "@/lib/routes";
 import { formatRelativeTime } from "@/lib/labels";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
+import { UserBadges } from "@/components/UserBadges";
 
 export function UserProfileClient({ userId }: { userId: string }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -60,7 +61,10 @@ export function UserProfileClient({ userId }: { userId: string }) {
             </div>
             <div className="user-profile-heading">
               <div>
-                <h1>{profile.displayName}</h1>
+                <div className="user-profile-name">
+                  <h1>{profile.displayName}</h1>
+                  <UserBadges badges={profile.badges} />
+                </div>
                 <p>@{profile.username}</p>
               </div>
               {isOwnProfile ? (
@@ -81,7 +85,7 @@ export function UserProfileClient({ userId }: { userId: string }) {
           <div className="user-profile-activity">
             <section>
               <div className="panel-head">
-                <h2>公开课件</h2>
+                <h2>可访问课件</h2>
               </div>
               {activity?.teachingDecks.length ? (
                 <div className="user-profile-activity-list">

@@ -13,10 +13,8 @@ import {
   Plus,
   Save,
   Trash2,
-  Users,
-  X,
 } from "lucide-react";
-import type { FileSummary, UserSummary } from "@liveboard/shared";
+import type { FileSummary } from "@liveboard/shared";
 import {
   getResourceNameError,
   normalizeResourceName,
@@ -26,15 +24,12 @@ import {
   createTeachingDeck,
   ExerciseSetSummary,
   getTeachingDeck,
-  getMe,
   listBlocks,
   listExerciseSets,
   listFiles,
-  listVisibilityUsers,
   updateTeachingDeck,
 } from "@/lib/api";
-import { UserVisibilityPicker } from "@/components/UserVisibilityPicker";
-import { APP_ROUTES, teachingEdit, teachingPresent } from "@/lib/routes";
+import { classroomDetail, teachingEdit, teachingPresent } from "@/lib/routes";
 import {
   getBlockLabel,
   getBlockText,
@@ -58,7 +53,13 @@ type DraftItem =
       source: string;
     };
 
-export function TeachingEditor({ deckId }: { deckId?: string }) {
+export function TeachingEditor({
+  deckId,
+  classroomId,
+}: {
+  deckId?: string;
+  classroomId?: string;
+}) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [files, setFiles] = useState<FileSummary[]>([]);
@@ -70,17 +71,7 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
   );
   const [selectedExerciseId, setSelectedExerciseId] = useState("");
   const [items, setItems] = useState<DraftItem[]>([]);
-  const [users, setUsers] = useState<UserSummary[]>([]);
-  const [creatorUserId, setCreatorUserId] = useState("");
-  const [selectedVisibleUserIds, setSelectedVisibleUserIds] = useState<
-    Set<string>
-  >(new Set());
-  const [visibilityQuery, setVisibilityQuery] = useState("");
-  const [showVisibilityModal, setShowVisibilityModal] = useState(false);
-  const [visibilityDraftUserIds, setVisibilityDraftUserIds] = useState<
-    Set<string>
-  >(new Set());
-  const [canManageVisibility, setCanManageVisibility] = useState(!deckId);
+  const [activeClassroomId, setActiveClassroomId] = useState(classroomId ?? "");
   const [loading, setLoading] = useState(false);
   const [sourceTab, setSourceTab] = useState<"document" | "exercise">(
     "document",
@@ -94,75 +85,62 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
   );
 
   useEffect(() => {
-    Promise.all([
-      listFiles(),
-      listExerciseSets(),
-      getMe(),
-      listVisibilityUsers(),
-      deckId ? getTeachingDeck(deckId) : Promise.resolve(null),
-    ])
-      .then(
-        ([fileResult, exerciseResult, meResult, usersResult, deckResult]) => {
-          const contentFiles = fileResult.files.filter(
-            (file) => file.type !== "exercise_set" && file.type !== "asset",
-          );
-          setFiles(contentFiles);
-          setExercises(exerciseResult.exerciseSets);
-          setUsers(usersResult.users);
-          setSelectedFileId(contentFiles[0]?.id ?? "");
-          setSelectedExerciseId(exerciseResult.exerciseSets[0]?.id ?? "");
-          if (deckResult) {
-            if (!deckResult.deck.canEdit) {
-              throw new Error("只有创建者或管理员可以编辑课件");
-            }
-            setTitle(deckResult.deck.title);
-            setCreatorUserId(deckResult.deck.createdBy.id);
-            setCanManageVisibility(deckResult.deck.canManageVisibility);
-            setSelectedVisibleUserIds(
-              new Set(
-                deckResult.deck.visibleUserIds ?? [
-                  deckResult.deck.createdBy.id,
-                ],
-              ),
-            );
-            setItems(
-              deckResult.deck.items.reduce<DraftItem[]>((result, item) => {
-                if (item.type === "content_block" && item.sourceBlockId) {
-                  result.push({
-                    key: item.id,
-                    type: "content_block" as const,
-                    sourceBlockId: item.sourceBlockId,
-                    label: item.block
-                      ? getBlockText(item.block) ||
-                        getBlockLabel(item.block.type)
-                      : "文档段落",
-                    source: item.sourceFileTitle ?? "文档",
-                    blockType: item.block?.type ?? "paragraph",
-                    imageFit: getTeachingImageFit(item.block),
-                  });
-                }
-                if (item.type === "exercise" && item.exerciseSetId) {
-                  result.push({
-                    key: item.id,
-                    type: "exercise" as const,
-                    exerciseSetId: item.exerciseSetId,
-                    label: item.exerciseTitle ?? "练习",
-                    source: "嵌套练习",
-                  });
-                }
-                return result;
-              }, []),
-            );
-          } else {
-            setCreatorUserId(meResult.user.id);
-            setSelectedVisibleUserIds(new Set([meResult.user.id]));
-          }
-        },
-      )
-      .catch((caught) =>
-        setError(caught instanceof Error ? caught.message : "加载编辑器失败"),
+    async function load() {
+      const deckResult = deckId ? await getTeachingDeck(deckId) : null;
+      const resolvedClassroomId =
+        classroomId ?? deckResult?.deck.classroomId ?? "";
+      if (!resolvedClassroomId) {
+        throw new Error("请从课堂内创建课件");
+      }
+      setActiveClassroomId(resolvedClassroomId);
+      const [fileResult, exerciseResult] = await Promise.all([
+        listFiles(),
+        listExerciseSets(resolvedClassroomId),
+      ]);
+      const contentFiles = fileResult.files.filter(
+        (file) => file.type !== "exercise_set" && file.type !== "asset",
       );
-  }, [deckId]);
+      setFiles(contentFiles);
+      setExercises(exerciseResult.exerciseSets);
+      setSelectedFileId(contentFiles[0]?.id ?? "");
+      setSelectedExerciseId(exerciseResult.exerciseSets[0]?.id ?? "");
+      if (!deckResult) return;
+      if (!deckResult.deck.canEdit) {
+        throw new Error("只有课堂教师可以编辑课件");
+      }
+      setTitle(deckResult.deck.title);
+      setItems(
+        deckResult.deck.items.reduce<DraftItem[]>((result, item) => {
+          if (item.type === "content_block" && item.sourceBlockId) {
+            result.push({
+              key: item.id,
+              type: "content_block" as const,
+              sourceBlockId: item.sourceBlockId,
+              label: item.block
+                ? getBlockText(item.block) || getBlockLabel(item.block.type)
+                : "文档段落",
+              source: item.sourceFileTitle ?? "文档",
+              blockType: item.block?.type ?? "paragraph",
+              imageFit: getTeachingImageFit(item.block),
+            });
+          }
+          if (item.type === "exercise" && item.exerciseSetId) {
+            result.push({
+              key: item.id,
+              type: "exercise" as const,
+              exerciseSetId: item.exerciseSetId,
+              label: item.exerciseTitle ?? "练习",
+              source: "嵌套练习",
+            });
+          }
+          return result;
+        }, []),
+      );
+    }
+    load().catch((caught) =>
+      setError(caught instanceof Error ? caught.message : "加载编辑器失败"),
+    );
+  }, [classroomId, deckId]);
 
   useEffect(() => {
     if (!selectedFileId) {
@@ -238,17 +216,6 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
     });
   }
 
-  function openVisibilityModal() {
-    setVisibilityDraftUserIds(new Set(selectedVisibleUserIds));
-    setVisibilityQuery("");
-    setShowVisibilityModal(true);
-  }
-
-  function confirmVisibility() {
-    setSelectedVisibleUserIds(new Set(visibilityDraftUserIds));
-    setShowVisibilityModal(false);
-  }
-
   async function save() {
     const nameError = getResourceNameError(title, "课件名称");
     if (nameError) {
@@ -262,6 +229,7 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
     setLoading(true);
     setError(null);
     const payload = {
+      classroomId: activeClassroomId,
       title: normalizeResourceName(title),
       items: items.map((item) =>
         item.type === "content_block"
@@ -274,13 +242,13 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
             }
           : { type: item.type, exerciseSetId: item.exerciseSetId },
       ),
-      ...(canManageVisibility
-        ? { visibleUserIds: [...selectedVisibleUserIds] }
-        : {}),
     };
     try {
       const result = deckId
-        ? await updateTeachingDeck(deckId, payload)
+        ? await updateTeachingDeck(deckId, {
+            title: payload.title,
+            items: payload.items,
+          })
         : await createTeachingDeck(payload);
       if (!deckId) {
         router.replace(teachingEdit(result.deck.id));
@@ -295,7 +263,10 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
 
   return (
     <div className="workspace teaching-editor-workspace">
-      <Link className="page-back-link" href={APP_ROUTES.teaching}>
+      <Link
+        className="page-back-link"
+        href={classroomDetail(activeClassroomId)}
+      >
         <ArrowLeft aria-hidden="true" />
         <span>返回课件</span>
       </Link>
@@ -316,16 +287,6 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
               <span className="teaching-editor-head-meta">
                 按顺序排列，展示时自动分页
               </span>
-              {canManageVisibility && creatorUserId ? (
-                <button
-                  className="button secondary teaching-visibility-button"
-                  onClick={openVisibilityModal}
-                  type="button"
-                >
-                  <Users aria-hidden="true" className="button-icon" />
-                  可见范围（{selectedVisibleUserIds.size} 人）
-                </button>
-              ) : null}
             </div>
           </div>
 
@@ -584,56 +545,6 @@ export function TeachingEditor({ deckId }: { deckId?: string }) {
           ) : null}
         </aside>
       </div>
-      {showVisibilityModal && creatorUserId ? (
-        <div className="modal-backdrop" role="presentation">
-          <div
-            aria-labelledby="teaching-visibility-title"
-            aria-modal="true"
-            className="modal-panel teaching-visibility-modal"
-            role="dialog"
-          >
-            <div className="modal-head">
-              <h2 id="teaching-visibility-title">设置可见范围</h2>
-              <button
-                className="icon-button subtle"
-                onClick={() => setShowVisibilityModal(false)}
-                title="关闭"
-                type="button"
-              >
-                <X aria-hidden="true" />
-              </button>
-            </div>
-            <div className="modal-body">
-              <UserVisibilityPicker
-                creatorUserId={creatorUserId}
-                onChange={setVisibilityDraftUserIds}
-                onQueryChange={setVisibilityQuery}
-                query={visibilityQuery}
-                selectedUserIds={visibilityDraftUserIds}
-                users={users}
-              />
-            </div>
-            <div className="modal-foot">
-              <div className="button-row">
-                <button
-                  className="button secondary"
-                  onClick={() => setShowVisibilityModal(false)}
-                  type="button"
-                >
-                  取消
-                </button>
-                <button
-                  className="button"
-                  onClick={confirmVisibility}
-                  type="button"
-                >
-                  确定
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

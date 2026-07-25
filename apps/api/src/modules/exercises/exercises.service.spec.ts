@@ -34,7 +34,12 @@ describe("ExercisesService", () => {
       Promise.resolve(where.id.in.map((id: string) => ({ id }))),
     );
     prisma.teachingDeckItem.count.mockResolvedValue(0);
-    service = new ExercisesService(prisma as unknown as PrismaService);
+    service = new ExercisesService(
+      prisma as unknown as PrismaService,
+      {
+        requireTeacher: jest.fn().mockResolvedValue({}),
+      } as never,
+    );
   });
 
   it("lists quizzes with aggregated submissions", async () => {
@@ -53,7 +58,8 @@ describe("ExercisesService", () => {
           systemRole: "member",
           status: "active",
         },
-        viewers: [],
+        classroomId: "classroom-1",
+        classroom: { name: "课堂", members: [{ role: "student" }] },
         _count: { questions: 3, submissions: 12 },
         submissions: [{ status: "graded", score: 8, maxScore: 10 }],
         openAt: null,
@@ -84,7 +90,8 @@ describe("ExercisesService", () => {
       fileId: null,
       title: "练习",
       createdById: "teacher-1",
-      viewers: [{ userId: "learner-1" }],
+      classroomId: "classroom-1",
+      classroom: { name: "课堂", members: [{ role: "student" }] },
       showAnswerAfterSubmit: true,
       submissions: [],
       questions: [
@@ -104,6 +111,7 @@ describe("ExercisesService", () => {
   it("rejects duplicate choice options before creating a quiz", async () => {
     await expect(
       service.createExerciseSet("lecturer-1", {
+        classroomId: "classroom-1",
         title: "章节测验",
         questions: [
           {
@@ -123,6 +131,7 @@ describe("ExercisesService", () => {
     prisma.exerciseSet.create.mockResolvedValue({ id: "exercise-1" });
 
     await service.createExerciseSet("lecturer-1", {
+      classroomId: "classroom-1",
       title: "  章节测验  ",
       questions: [
         {
@@ -147,13 +156,36 @@ describe("ExercisesService", () => {
     );
   });
 
+  it("refuses to replace questions after a student has submitted", async () => {
+    prisma.exerciseSet.findUnique.mockResolvedValue({
+      classroomId: "classroom-1",
+      _count: { submissions: 1 },
+    });
+
+    await expect(
+      service.updateExerciseSet("teacher-1", "exercise-1", {
+        title: "章节测验",
+        questions: [
+          {
+            type: "true_false",
+            promptJson: { text: "修改后的题目" },
+            answerJson: true,
+            score: 2,
+          },
+        ],
+      }),
+    ).rejects.toThrow("已有学生提交，不能再修改练习题目");
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it("reveals correct answers after a learner has submitted when enabled", async () => {
     prisma.exerciseSet.findUnique.mockResolvedValue({
       id: "exercise-1",
       fileId: null,
       title: "练习",
       createdById: "teacher-1",
-      viewers: [{ userId: "learner-1" }],
+      classroomId: "classroom-1",
+      classroom: { name: "课堂", members: [{ role: "student" }] },
       showAnswerAfterSubmit: true,
       submissions: [{ id: "submission-1" }],
       questions: [
@@ -176,7 +208,8 @@ describe("ExercisesService", () => {
       fileId: null,
       title: "练习",
       createdById: "teacher-1",
-      viewers: [{ userId: "learner-1" }],
+      classroomId: "classroom-1",
+      classroom: { name: "课堂", members: [{ role: "student" }] },
       openAt: null,
       dueAt: null,
       allowMultipleSubmissions: false,
@@ -217,7 +250,10 @@ describe("ExercisesService", () => {
   it("rejects grading an answer that belongs to another submission", async () => {
     prisma.submission.findUnique.mockResolvedValue({
       id: "submission-1",
-      exerciseSet: { createdById: "lecturer-1" },
+      exerciseSet: {
+        createdById: "lecturer-1",
+        classroom: { members: [{ role: "teacher" }] },
+      },
       answers: [{ id: "answer-1", question: { score: 5 }, score: null }],
     });
 
@@ -232,7 +268,10 @@ describe("ExercisesService", () => {
   it("rejects a score higher than the question maximum", async () => {
     prisma.submission.findUnique.mockResolvedValue({
       id: "submission-1",
-      exerciseSet: { createdById: "lecturer-1" },
+      exerciseSet: {
+        createdById: "lecturer-1",
+        classroom: { members: [{ role: "teacher" }] },
+      },
       answers: [{ id: "answer-1", question: { score: 5 }, score: null }],
     });
 

@@ -86,6 +86,14 @@ export class AuthService {
 
     const user = await this.prisma.user.findUnique({
       where: { username: normalizedUsername },
+      include: {
+        badgeAssignments: {
+          where: { equippedOrder: { not: null } },
+          include: { badge: true },
+          orderBy: { equippedOrder: "asc" },
+          take: 3,
+        },
+      },
     });
     const passwordMatches = await argon2.verify(
       user?.passwordHash ?? (await this.dummyPasswordHash),
@@ -111,6 +119,14 @@ export class AuthService {
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      include: {
+        badgeAssignments: {
+          where: { equippedOrder: { not: null } },
+          include: { badge: true },
+          orderBy: { equippedOrder: "asc" },
+          take: 3,
+        },
+      },
     });
 
     if (!user || user.status !== "active") {
@@ -127,6 +143,14 @@ export class AuthService {
     await this.requireActiveUser(userId);
     const target = await this.prisma.user.findUnique({
       where: { id: targetUserId },
+      include: {
+        badgeAssignments: {
+          where: { equippedOrder: { not: null } },
+          include: { badge: true },
+          orderBy: { equippedOrder: "asc" },
+          take: 3,
+        },
+      },
     });
 
     if (!target || target.status !== "active") {
@@ -154,9 +178,9 @@ export class AuthService {
       this.prisma.teachingDeck.findMany({
         where: {
           createdById: targetUserId,
-          ...(actor.systemRole === "super_admin" || actor.id === targetUserId
+          ...(actor.systemRole === "super_admin"
             ? {}
-            : { viewers: { some: { userId: actor.id } } }),
+            : { classroom: { members: { some: { userId: actor.id } } } }),
         },
         include: { _count: { select: { items: true } } },
         orderBy: { updatedAt: "desc" },
@@ -434,6 +458,15 @@ export class AuthService {
     avatarUpdatedAt?: Date | null;
     systemRole: UserSummary["systemRole"];
     status: UserSummary["status"];
+    badgeAssignments?: Array<{
+      equippedOrder: number | null;
+      badge: {
+        id: string;
+        name: string;
+        description: string | null;
+        color: string;
+      };
+    }>;
   }): UserSummary {
     return {
       id: user.id,
@@ -444,6 +477,12 @@ export class AuthService {
         : null,
       systemRole: user.systemRole,
       status: user.status,
+      badges: user.badgeAssignments?.map(({ badge }) => ({
+        id: badge.id,
+        name: badge.name,
+        description: badge.description,
+        color: normalizeBadgeColor(badge.color),
+      })),
     };
   }
 
@@ -456,6 +495,15 @@ export class AuthService {
     bannerUpdatedAt?: Date | null;
     systemRole: UserSummary["systemRole"];
     status: UserSummary["status"];
+    badgeAssignments?: Array<{
+      equippedOrder: number | null;
+      badge: {
+        id: string;
+        name: string;
+        description: string | null;
+        color: string;
+      };
+    }>;
   }): UserProfile {
     return {
       ...this.toSummary(user),
@@ -465,6 +513,12 @@ export class AuthService {
         : null,
     };
   }
+}
+
+function normalizeBadgeColor(value: string) {
+  return ["gold", "blue", "green", "purple", "red", "gray"].includes(value)
+    ? (value as NonNullable<UserSummary["badges"]>[number]["color"])
+    : ("gray" as const);
 }
 
 function normalizeProfileImageMimeType(

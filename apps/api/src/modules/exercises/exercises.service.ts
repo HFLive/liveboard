@@ -11,32 +11,48 @@ import type { QuestionType } from "@liveboard/shared";
 import { Prisma } from "@prisma/client";
 import { requireResourceName } from "../../common/resource-name";
 import { PrismaService } from "../prisma/prisma.service";
+import { ClassroomsService } from "../classrooms/classrooms.service";
 import type {
   CreateExerciseSetDto,
   GradeSubmissionDto,
   SubmitExerciseDto,
+  UpdateExerciseSetDto,
 } from "./exercises.dto";
 
 @Injectable()
 export class ExercisesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly classrooms: ClassroomsService,
+  ) {}
 
-  async listExerciseSets(userId: string | null) {
+  async listExerciseSets(userId: string | null, classroomId?: string) {
     const user = await this.requireUser(userId);
 
     const [exerciseSets, pendingCounts] = await Promise.all([
       this.prisma.exerciseSet.findMany({
-        where: isSuperAdmin(user.systemRole)
-          ? undefined
-          : {
-              OR: [
-                { createdById: user.id },
-                { viewers: { some: { userId: user.id } } },
-              ],
-            },
+        where: {
+          ...(classroomId ? { classroomId } : {}),
+          ...(isSystemAdmin(user.systemRole)
+            ? {}
+            : { classroom: { members: { some: { userId: user.id } } } }),
+        },
         include: {
-          createdBy: true,
-          viewers: { select: { userId: true } },
+          createdBy: {
+            include: {
+              badgeAssignments: {
+                where: { equippedOrder: { not: null } },
+                include: { badge: true },
+                orderBy: { equippedOrder: "asc" },
+                take: 3,
+              },
+            },
+          },
+          classroom: {
+            include: {
+              members: { where: { userId: user.id }, select: { role: true } },
+            },
+          },
           _count: { select: { questions: true, submissions: true } },
           submissions: {
             where: { userId: user.id },
@@ -68,6 +84,8 @@ export class ExercisesService {
 
       visible.push({
         id: exerciseSet.id,
+        classroomId: exerciseSet.classroomId,
+        classroomName: exerciseSet.classroom.name,
         fileId: exerciseSet.fileId,
         title: exerciseSet.title,
         createdBy: {
@@ -79,14 +97,15 @@ export class ExercisesService {
             : null,
           systemRole: exerciseSet.createdBy.systemRole,
           status: exerciseSet.createdBy.status,
+          badges: exerciseSet.createdBy.badgeAssignments?.map(({ badge }) => ({
+            id: badge.id,
+            name: badge.name,
+            description: badge.description,
+            color: normalizeBadgeColor(badge.color),
+          })),
         },
         questionCount: exerciseSet._count.questions,
-        canManage:
-          exerciseSet.createdById === user.id || isSystemAdmin(user.systemRole),
-        viaSuperAdmin:
-          isSuperAdmin(user.systemRole) &&
-          exerciseSet.createdById !== user.id &&
-          !exerciseSet.viewers.some((viewer) => viewer.userId === user.id),
+        canManage: exerciseSet.classroom.members[0]?.role === "teacher",
         submissionCount: exerciseSet._count.submissions,
         pendingReviewCount: pendingByExerciseSet.get(exerciseSet.id) ?? 0,
         openAt: exerciseSet.openAt?.toISOString() ?? null,
@@ -103,6 +122,7 @@ export class ExercisesService {
 
   async createExerciseSet(userId: string | null, input: CreateExerciseSetDto) {
     const user = await this.requireUser(userId);
+    await this.classrooms.requireTeacher(user, input.classroomId);
 
     const title = requireResourceName(input.title, "练习名称");
 
@@ -125,24 +145,15 @@ export class ExercisesService {
       this.validateQuestion(question, index);
     });
 
-    const visibleUserIds = await this.normalizeVisibleUserIds(
-      user.id,
-      input.visibleUserIds,
-    );
-
     return this.prisma.exerciseSet.create({
       data: {
+        classroomId: input.classroomId,
         title,
         createdById: user.id,
         openAt,
         dueAt,
         allowMultipleSubmissions: input.allowMultipleSubmissions ?? false,
         showAnswerAfterSubmit: input.showAnswerAfterSubmit ?? false,
-        viewers: {
-          create: visibleUserIds.map((viewerUserId) => ({
-            userId: viewerUserId,
-          })),
-        },
         questions: {
           create: input.questions.map((question, index) => ({
             type: question.type,
@@ -159,13 +170,79 @@ export class ExercisesService {
     });
   }
 
+  async updateExerciseSet(
+    userId: string | null,
+    exerciseSetId: string,
+    input: UpdateExerciseSetDto,
+  ) {
+    const user = await this.requireUser(userId);
+    const existing = await this.prisma.exerciseSet.findUnique({
+      where: { id: exerciseSetId },
+      select: {
+        classroomId: true,
+        _count: { select: { submissions: true } },
+      },
+    });
+    if (!existing) throw new NotFoundException("Exercise set not found");
+    await this.classrooms.requireTeacher(user, existing.classroomId);
+    if (existing._count.submissions > 0) {
+      throw new ConflictException("已有学生提交，不能再修改练习题目");
+    }
+
+    const title = requireResourceName(input.title, "练习名称");
+    const openAt = input.openAt ? new Date(input.openAt) : null;
+    const dueAt = input.dueAt ? new Date(input.dueAt) : null;
+    if (openAt && Number.isNaN(openAt.getTime())) {
+      throw new BadRequestException("开始时间无效");
+    }
+    if (dueAt && Number.isNaN(dueAt.getTime())) {
+      throw new BadRequestException("截止时间无效");
+    }
+    if (openAt && dueAt && dueAt <= openAt) {
+      throw new BadRequestException("截止时间必须晚于开始时间");
+    }
+    input.questions.forEach((question, index) => {
+      this.validateQuestion(question, index);
+    });
+
+    return this.prisma.$transaction(async (transaction) => {
+      await transaction.question.deleteMany({ where: { exerciseSetId } });
+      return transaction.exerciseSet.update({
+        where: { id: exerciseSetId },
+        data: {
+          title,
+          openAt,
+          dueAt,
+          allowMultipleSubmissions: input.allowMultipleSubmissions ?? false,
+          showAnswerAfterSubmit: input.showAnswerAfterSubmit ?? false,
+          questions: {
+            create: input.questions.map((question, index) => ({
+              type: question.type,
+              promptJson: question.promptJson as Prisma.InputJsonValue,
+              optionsJson: question.optionsJson as Prisma.InputJsonValue,
+              answerJson: question.answerJson as Prisma.InputJsonValue,
+              score: question.score,
+              required: question.required ?? true,
+              sortOrder: index,
+            })),
+          },
+        },
+        include: { questions: true },
+      });
+    });
+  }
+
   async getExerciseSet(userId: string | null, exerciseSetId: string) {
     const user = await this.requireUser(userId);
 
     const exerciseSet = await this.prisma.exerciseSet.findUnique({
       where: { id: exerciseSetId },
       include: {
-        viewers: { select: { userId: true } },
+        classroom: {
+          include: {
+            members: { where: { userId: user.id }, select: { role: true } },
+          },
+        },
         questions: {
           orderBy: { sortOrder: "asc" },
         },
@@ -182,28 +259,25 @@ export class ExercisesService {
     }
 
     if (
-      !this.canAccessExerciseSet(user, exerciseSet) &&
-      !(await this.hasTeachingDeckAccess(user, exerciseSetId))
+      !isSystemAdmin(user.systemRole) &&
+      exerciseSet.classroom.members.length === 0
     ) {
       throw new ForbiddenException("No permission to view exercise set");
     }
 
     const canSeeAnswers =
-      exerciseSet.createdById === user.id ||
+      exerciseSet.classroom.members[0]?.role === "teacher" ||
       isSystemAdmin(user.systemRole) ||
       (exerciseSet.showAnswerAfterSubmit && exerciseSet.submissions.length > 0);
-    const canManageVisibility = exerciseSet.createdById === user.id;
     const {
       submissions: _submissions,
-      viewers,
+      classroom,
       ...exerciseSetWithoutSubmissions
     } = exerciseSet;
     const detail = {
       ...exerciseSetWithoutSubmissions,
-      canManageVisibility,
-      visibleUserIds: canManageVisibility
-        ? viewers.map((viewer) => viewer.userId)
-        : undefined,
+      classroomName: classroom.name,
+      canManage: classroom.members[0]?.role === "teacher",
     };
 
     if (!canSeeAnswers) {
@@ -218,42 +292,6 @@ export class ExercisesService {
     return detail;
   }
 
-  async updateVisibility(
-    userId: string | null,
-    exerciseSetId: string,
-    visibleUserIds: string[],
-  ) {
-    const user = await this.requireUser(userId);
-    const exerciseSet = await this.prisma.exerciseSet.findUnique({
-      where: { id: exerciseSetId },
-    });
-
-    if (!exerciseSet) {
-      throw new NotFoundException("Exercise set not found");
-    }
-    if (exerciseSet.createdById !== user.id) {
-      throw new ForbiddenException("只有创建者可以修改可见范围");
-    }
-
-    const normalized = await this.normalizeVisibleUserIds(
-      exerciseSet.createdById,
-      visibleUserIds,
-    );
-    await this.prisma.$transaction(async (transaction) => {
-      await transaction.exerciseSetViewer.deleteMany({
-        where: { exerciseSetId },
-      });
-      await transaction.exerciseSetViewer.createMany({
-        data: normalized.map((viewerUserId) => ({
-          exerciseSetId,
-          userId: viewerUserId,
-        })),
-      });
-    });
-
-    return this.getExerciseSet(user.id, exerciseSetId);
-  }
-
   async submitExercise(
     userId: string | null,
     exerciseSetId: string,
@@ -264,7 +302,11 @@ export class ExercisesService {
     const exerciseSet = await this.prisma.exerciseSet.findUnique({
       where: { id: exerciseSetId },
       include: {
-        viewers: { select: { userId: true } },
+        classroom: {
+          include: {
+            members: { where: { userId: user.id }, select: { role: true } },
+          },
+        },
         questions: true,
         submissions: {
           where: { userId: user.id },
@@ -277,10 +319,7 @@ export class ExercisesService {
       throw new NotFoundException("Exercise set not found");
     }
 
-    if (
-      !this.canAccessExerciseSet(user, exerciseSet) &&
-      !(await this.hasTeachingDeckAccess(user, exerciseSetId))
-    ) {
+    if (exerciseSet.classroom.members[0]?.role !== "student") {
       throw new ForbiddenException("No permission to submit exercise");
     }
 
@@ -411,23 +450,36 @@ export class ExercisesService {
 
     const exerciseSet = await this.prisma.exerciseSet.findUnique({
       where: { id: exerciseSetId },
+      include: {
+        classroom: {
+          include: {
+            members: { where: { userId: user.id }, select: { role: true } },
+          },
+        },
+      },
     });
 
     if (!exerciseSet) {
       throw new NotFoundException("Exercise set not found");
     }
 
-    if (
-      exerciseSet.createdById !== user.id &&
-      !isSystemAdmin(user.systemRole)
-    ) {
+    if (exerciseSet.classroom.members[0]?.role !== "teacher") {
       throw new ForbiddenException("No permission to list submissions");
     }
 
     return this.prisma.submission.findMany({
       where: { exerciseSetId },
       include: {
-        user: true,
+        user: {
+          include: {
+            badgeAssignments: {
+              where: { equippedOrder: { not: null } },
+              include: { badge: true },
+              orderBy: { equippedOrder: "asc" },
+              take: 3,
+            },
+          },
+        },
         answers: {
           include: {
             question: {
@@ -459,7 +511,11 @@ export class ExercisesService {
     const exerciseSet = await this.prisma.exerciseSet.findUnique({
       where: { id: exerciseSetId },
       include: {
-        viewers: { select: { userId: true } },
+        classroom: {
+          include: {
+            members: { where: { userId: user.id }, select: { role: true } },
+          },
+        },
       },
     });
 
@@ -468,8 +524,8 @@ export class ExercisesService {
     }
 
     if (
-      !this.canAccessExerciseSet(user, exerciseSet) &&
-      !(await this.hasTeachingDeckAccess(user, exerciseSetId))
+      !isSystemAdmin(user.systemRole) &&
+      exerciseSet.classroom.members.length === 0
     ) {
       throw new ForbiddenException("No permission to view submissions");
     }
@@ -477,7 +533,16 @@ export class ExercisesService {
     const submissions = await this.prisma.submission.findMany({
       where: { exerciseSetId, userId: user.id },
       include: {
-        user: true,
+        user: {
+          include: {
+            badgeAssignments: {
+              where: { equippedOrder: { not: null } },
+              include: { badge: true },
+              orderBy: { equippedOrder: "asc" },
+              take: 3,
+            },
+          },
+        },
         answers: {
           include: {
             question: {
@@ -529,7 +594,18 @@ export class ExercisesService {
     const submission = await this.prisma.submission.findUnique({
       where: { id: submissionId },
       include: {
-        exerciseSet: true,
+        exerciseSet: {
+          include: {
+            classroom: {
+              include: {
+                members: {
+                  where: { userId: user.id },
+                  select: { role: true },
+                },
+              },
+            },
+          },
+        },
         answers: { include: { question: true } },
       },
     });
@@ -538,10 +614,7 @@ export class ExercisesService {
       throw new NotFoundException("Submission not found");
     }
 
-    if (
-      submission.exerciseSet.createdById !== user.id &&
-      !isSystemAdmin(user.systemRole)
-    ) {
+    if (submission.exerciseSet.classroom.members[0]?.role !== "teacher") {
       throw new ForbiddenException("No permission to grade submission");
     }
 
@@ -599,58 +672,6 @@ export class ExercisesService {
         include: { answers: true },
       });
     });
-  }
-
-  private async hasTeachingDeckAccess(
-    user: Awaited<ReturnType<ExercisesService["requireUser"]>>,
-    exerciseSetId: string,
-  ) {
-    return (
-      (await this.prisma.teachingDeckItem.count({
-        where: {
-          exerciseSetId,
-          ...(isSuperAdmin(user.systemRole)
-            ? {}
-            : {
-                deck: {
-                  OR: [
-                    { createdById: user.id },
-                    { viewers: { some: { userId: user.id } } },
-                  ],
-                },
-              }),
-        },
-      })) > 0
-    );
-  }
-
-  private canAccessExerciseSet(
-    user: Awaited<ReturnType<ExercisesService["requireUser"]>>,
-    exerciseSet: {
-      createdById: string;
-      viewers: Array<{ userId: string }>;
-    },
-  ) {
-    return (
-      isSuperAdmin(user.systemRole) ||
-      exerciseSet.createdById === user.id ||
-      exerciseSet.viewers.some((viewer) => viewer.userId === user.id)
-    );
-  }
-
-  private async normalizeVisibleUserIds(
-    creatorUserId: string,
-    visibleUserIds: string[] | undefined,
-  ) {
-    const normalized = [...new Set([creatorUserId, ...(visibleUserIds ?? [])])];
-    const users = await this.prisma.user.findMany({
-      where: { id: { in: normalized }, status: "active" },
-      select: { id: true },
-    });
-    if (users.length !== normalized.length) {
-      throw new BadRequestException("可见范围中包含无效用户");
-    }
-    return normalized;
   }
 
   private async requireUser(userId: string | null) {
@@ -730,4 +751,10 @@ export class ExercisesService {
       throw new BadRequestException(`${label}只能设置一个标准答案`);
     }
   }
+}
+
+function normalizeBadgeColor(value: string) {
+  return ["gold", "blue", "green", "purple", "red", "gray"].includes(value)
+    ? (value as "gold" | "blue" | "green" | "purple" | "red" | "gray")
+    : ("gray" as const);
 }

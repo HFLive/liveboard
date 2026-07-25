@@ -1,52 +1,16 @@
-.content-permissions-workspace {
+.content-permissions-workspace,
+.content-permission-panel {
   min-width: 0;
 }
 
-.content-permission-overview,
 .content-permission-panel {
   width: min(960px, 100%);
+  margin-top: 12px;
 }
 
-/* 说明区：无边框 muted 段落，不再是带底色的信息块。 */
-.content-permission-overview {
-  display: grid;
-  gap: 4px;
-  margin-top: 18px;
-  padding: 0 2px;
-}
-
-.content-permission-overview h2,
-.content-permission-overview p {
-  margin: 0;
-}
-
-.content-permission-overview h2 {
-  color: var(--text);
-  font-size: 14px;
-}
-
-.content-permission-overview p {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-/* 面板：扁平无外框，标题区复用全局 .panel-head。 */
-.content-permission-panel {
-  margin-top: 16px;
-  background: transparent;
-}
-
-.content-permissions-workspace
-  .content-permission-panel
-  .content-permission-head {
+.content-permission-head {
   align-items: center;
-  padding: 13px 16px;
-}
-
-.content-permission-head h2,
-.content-permission-head p {
-  margin: 0;
+  padding: 12px 0;
 }
 
 .content-permission-head > div {
@@ -55,96 +19,107 @@
   min-width: 0;
 }
 
+.content-permission-head h2,
 .content-permission-head p {
   margin: 0;
+}
+
+.content-permission-head p,
+.content-permission-head > span {
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.5;
 }
 
 .content-permission-head > span {
   flex: 0 0 auto;
   border-radius: 7px;
   background: var(--fill-active);
-  color: var(--muted);
   padding: 3px 8px;
-  font-size: 11px;
 }
 
-/* 权限行：行之间用间距分隔。 */
+.content-permission-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.content-permission-filters label {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.content-permission-filters label svg {
+  position: absolute;
+  left: 10px;
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.content-permission-filters label .input {
+  padding-left: 32px;
+}
+
 .content-permission-list {
   display: grid;
-  gap: 2px;
 }
 
 .content-permission-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 200px;
+  grid-template-columns: minmax(0, 1fr) 210px;
   align-items: center;
   gap: 18px;
   min-width: 0;
-  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  padding: 10px 2px;
 }
 
 .content-permission-row:hover {
-  border-radius: 10px;
   background: var(--fill-hover);
 }
 
-.content-permission-row .select {
-  background: var(--fill-subtle);
+.content-permission-row > div,
+.content-permission-row > label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
-.content-permission-row > div {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
+.content-permission-row strong,
+.content-permission-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .content-permission-row strong {
-  overflow: hidden;
-  color: var(--text);
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 13px;
 }
 
-.content-permission-row span {
-  overflow: hidden;
+.content-permission-row span,
+.content-permission-row small {
   color: var(--muted);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 11px;
 }
 
-.content-permission-row label,
+.content-permission-row > label {
+  justify-items: end;
+}
+
 .content-permission-row .select {
   width: 100%;
-  min-width: 0;
 }
 
-.content-permission-list > .empty-panel.compact {
-  border: 0;
-  background: transparent;
-}
-
-@media (max-width: 620px) {
+@media (max-width: 720px) {
+  .content-permission-filters,
   .content-permission-row {
     grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
   }
 
-  .content-permission-row span {
-    white-space: normal;
+  .content-permission-row > label {
+    justify-items: stretch;
   }
-}
-.content-permission-row > label {
-  display: grid;
-  justify-items: end;
-  gap: 4px;
-}
-
-.content-permission-save-state {
-  color: var(--muted);
-  font-size: 10px;
 }
