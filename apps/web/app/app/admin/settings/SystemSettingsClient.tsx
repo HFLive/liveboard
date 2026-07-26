@@ -6,16 +6,19 @@ import {
   Globe2,
   ImageUp,
   LockKeyhole,
+  Power,
   RotateCcw,
   Save,
   ShieldCheck,
 } from "lucide-react";
 import {
   apiResourceUrl,
+  disableHttps,
   enableHttps,
   getHttpsStatus,
   getSystemSettings,
   resetSystemFavicon,
+  setHttpsAutoRenew,
   type HttpsStatus,
   type SystemSettings,
   updateSystemSettings,
@@ -115,8 +118,11 @@ export function SystemSettingsClient() {
   const [httpsStatus, setHttpsStatus] = useState<HttpsStatus | null>(null);
   const [httpsDomain, setHttpsDomain] = useState("");
   const [httpsEmail, setHttpsEmail] = useState("");
+  const [httpHost, setHttpHost] = useState("");
   const [loadingHttps, setLoadingHttps] = useState(true);
   const [enablingHttps, setEnablingHttps] = useState(false);
+  const [disablingHttps, setDisablingHttps] = useState(false);
+  const [updatingAutoRenew, setUpdatingAutoRenew] = useState(false);
   const timeZoneOptions = useMemo(
     () => getAvailableTimeZones(timeZone),
     [timeZone],
@@ -141,6 +147,10 @@ export function SystemSettingsClient() {
         setHttpsStatus(result.https);
         if (result.https.domain) {
           setHttpsDomain(result.https.domain);
+          setHttpHost(result.https.domain);
+        } else if (result.https.httpHost) {
+          setHttpHost(result.https.httpHost);
+          setHttpsDomain(result.https.httpHost);
         } else if (
           window.location.hostname !== "localhost" &&
           !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(window.location.hostname)
@@ -236,6 +246,7 @@ export function SystemSettingsClient() {
         email: httpsEmail,
       });
       setHttpsStatus(result.https);
+      setHttpHost(result.https.domain ?? "");
       setMessage("HTTPS 已启用，正在重新载入服务并切换到安全地址");
       if (!result.https.domain) {
         throw new Error("HTTPS 已启用，但服务器没有返回网站域名");
@@ -248,6 +259,63 @@ export function SystemSettingsClient() {
       setError(caught instanceof Error ? caught.message : "HTTPS 配置失败");
     } finally {
       setEnablingHttps(false);
+    }
+  }
+
+  async function onDisableHttps() {
+    const fallbackHost = httpHost.trim();
+    if (!fallbackHost) {
+      setError("请填写停用后用于 HTTP 访问的域名或公网 IPv4");
+      return;
+    }
+    if (
+      !window.confirm(
+        `确定停用 HTTPS 并切换到 http://${fallbackHost} 吗？停用后需要重新登录。`,
+      )
+    ) {
+      return;
+    }
+
+    setDisablingHttps(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await disableHttps({ httpHost: fallbackHost });
+      setHttpsStatus(result.https);
+      setMessage("HTTPS 已停用，正在重新载入服务并切换到 HTTP");
+      window.setTimeout(() => {
+        window.location.replace(`http://${fallbackHost}/app/admin/settings`);
+      }, 12_000);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "停用 HTTPS 失败");
+    } finally {
+      setDisablingHttps(false);
+    }
+  }
+
+  async function onAutoRenewChange(enabled: boolean) {
+    if (
+      !enabled &&
+      httpsStatus?.subjectType === "ip" &&
+      !window.confirm(
+        "IP HTTPS 证书只有约 6 天有效期。关闭自动续期后网站很快会出现证书错误，仍要关闭吗？",
+      )
+    ) {
+      return;
+    }
+    setUpdatingAutoRenew(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await setHttpsAutoRenew(enabled);
+      setHttpsStatus(result.https);
+      setMessage(enabled ? "自动续期已开启" : "自动续期已关闭");
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "更新自动续期设置失败",
+      );
+    } finally {
+      setUpdatingAutoRenew(false);
     }
   }
 
@@ -379,18 +447,70 @@ export function SystemSettingsClient() {
                         </a>
                       </p>
                       <p className="muted">
-                        证书有效期至{" "}
+                        {httpsStatus.subjectType === "ip"
+                          ? "公网 IPv4 短证书"
+                          : "域名证书"}
+                        ，有效期至{" "}
                         {httpsStatus.expiresAt
                           ? formatDateTime(httpsStatus.expiresAt)
                           : "未知"}
-                        ，系统每天自动检查续期
+                        {httpsStatus.autoRenewEnabled
+                          ? "；系统已开启自动续期"
+                          : "；自动续期已关闭"}
                         {httpsStatus.challengeType === "tls-alpn-01"
-                          ? "；续期验证时 HTTPS 可能短暂不可用。"
+                          ? "，续期验证时 HTTPS 可能短暂不可用。"
                           : "。"}
                       </p>
+                      {httpsStatus.subjectType === "ip" ? (
+                        <p className="muted">
+                          IP 证书使用 Let&apos;s Encrypt shortlived
+                          profile，有效期约 6 天，建议始终开启自动续期。
+                        </p>
+                      ) : null}
                       {httpsStatus.lastError ? (
                         <p className="error-text">{httpsStatus.lastError}</p>
                       ) : null}
+                      <div className="https-management-controls">
+                        <label className="https-renew-control">
+                          <span>
+                            <strong>自动续期</strong>
+                            <small>定时检查并在证书接近到期时自动更新</small>
+                          </span>
+                          <input
+                            aria-label="自动续期"
+                            checked={httpsStatus.autoRenewEnabled}
+                            disabled={updatingAutoRenew || disablingHttps}
+                            onChange={(event) =>
+                              void onAutoRenewChange(event.target.checked)
+                            }
+                            type="checkbox"
+                          />
+                        </label>
+                        <div className="https-disable-controls">
+                          <label>
+                            <span>停用后的 HTTP 访问地址</span>
+                            <input
+                              autoCapitalize="none"
+                              disabled={disablingHttps}
+                              onChange={(event) =>
+                                setHttpHost(event.target.value)
+                              }
+                              placeholder="8.166.143.156"
+                              spellCheck={false}
+                              value={httpHost}
+                            />
+                          </label>
+                          <button
+                            className="button danger"
+                            disabled={disablingHttps || updatingAutoRenew}
+                            onClick={() => void onDisableHttps()}
+                            type="button"
+                          >
+                            <Power aria-hidden="true" className="button-icon" />
+                            {disablingHttps ? "正在停用" : "停用 HTTPS"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ) : httpsStatus?.available ? (
@@ -399,13 +519,13 @@ export function SystemSettingsClient() {
                     onSubmit={(event) => void onEnableHttps(event)}
                   >
                     <label>
-                      <span>网站域名</span>
+                      <span>网站域名或公网 IPv4</span>
                       <input
                         autoCapitalize="none"
                         autoComplete="url"
                         disabled={enablingHttps}
                         onChange={(event) => setHttpsDomain(event.target.value)}
-                        placeholder="board.example.com"
+                        placeholder="board.example.com 或 8.166.143.156"
                         required
                         spellCheck={false}
                         value={httpsDomain}
@@ -425,9 +545,9 @@ export function SystemSettingsClient() {
                     </label>
                     <div className="https-enable-actions">
                       <p className="muted">
-                        请确认域名指向本服务器并开放 TCP 443；如果 TCP 80
-                        可达会优先使用 HTTP 验证，否则自动通过 443
-                        验证。配置失败会恢复原入口。
+                        域名需指向本服务器；公网 IPv4 将使用约 6
+                        天有效期的短证书。TCP 80 可达时优先使用 HTTP
+                        验证，否则自动通过 TCP 443 验证；配置失败会恢复原入口。
                       </p>
                       <button
                         className="button"

@@ -180,6 +180,16 @@ export class SettingsService {
     return this.httpsAgent.enable(domain.trim(), email.trim());
   }
 
+  async disableHttps(userId: string | null, httpHost: string) {
+    await this.requireAdmin(userId);
+    return this.httpsAgent.disable(httpHost.trim());
+  }
+
+  async setHttpsAutoRenew(userId: string | null, enabled: boolean) {
+    await this.requireAdmin(userId);
+    return this.httpsAgent.setAutoRenew(enabled);
+  }
+
   async getFavicon() {
     const workspace = await this.getDefaultWorkspace();
     if (!workspace.faviconStorageKey) {

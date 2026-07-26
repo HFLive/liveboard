@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import ipaddress
 import json
 import os
 import re
@@ -53,6 +54,9 @@ DOMAIN_PATTERN = re.compile(
 EMAIL_PATTERN = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}$")
 HTTP_CHALLENGE = "http-01"
 TLS_ALPN_CHALLENGE = "tls-alpn-01"
+DOMAIN_SUBJECT = "domain"
+IP_SUBJECT = "ip"
+SHORTLIVED_PROFILE = "shortlived"
 
 
 class HttpsError(RuntimeError):
@@ -113,6 +117,17 @@ def normalize_domain(value: str) -> str:
     if not DOMAIN_PATTERN.fullmatch(domain):
         raise HttpsError("请输入有效的完整域名，例如 board.example.com")
     return domain
+
+
+def normalize_subject(value: str) -> tuple[str, str]:
+    subject = value.strip().rstrip(".").lower()
+    try:
+        address = ipaddress.ip_address(subject)
+    except ValueError:
+        return normalize_domain(subject), DOMAIN_SUBJECT
+    if address.version != 4 or not address.is_global:
+        raise HttpsError("IP HTTPS 目前只支持可从公网访问的 IPv4 地址")
+    return str(address), IP_SUBJECT
 
 
 def normalize_email(value: str) -> str:
@@ -327,10 +342,11 @@ def select_challenge_type(domain: str) -> tuple[str, str | None]:
 
 
 def lego_arguments(
-    domain: str,
+    subject: str,
     email: str,
     action: str,
     challenge_type: str,
+    subject_type: str,
 ) -> list[str]:
     arguments = [
         str(LEGO_BIN),
@@ -341,8 +357,10 @@ def lego_arguments(
         email,
         "--accept-tos",
         "--domains",
-        domain,
+        subject,
     ]
+    if subject_type == IP_SUBJECT:
+        arguments.extend(["--profile", SHORTLIVED_PROFILE])
     if challenge_type == HTTP_CHALLENGE:
         arguments.extend(["--http", "--http.webroot", str(WEBROOT)])
     elif challenge_type == TLS_ALPN_CHALLENGE:
@@ -350,7 +368,8 @@ def lego_arguments(
     else:
         raise HttpsError(f"不支持的 ACME 验证方式：{challenge_type}")
     if action == "renew":
-        arguments.extend(["--renew-days", "30", "--no-random-sleep"])
+        renew_days = "3" if subject_type == IP_SUBJECT else "30"
+        arguments.extend(["--renew-days", renew_days, "--no-random-sleep"])
     elif action != "run":
         raise HttpsError(f"不支持的证书操作：{action}")
     return arguments
@@ -403,21 +422,24 @@ def wait_for_tls_challenge_port(timeout: int = 15) -> None:
             probe.close()
 
 
-def verify_local_https(domain: str) -> None:
-    run(
-        [
-            require_command("curl"),
-            "--fail",
-            "--silent",
-            "--show-error",
-            "--max-time",
-            "15",
-            "--resolve",
-            f"{domain}:443:127.0.0.1",
-            f"https://{domain}/",
-        ],
-        timeout=20,
-    )
+def verify_local_https(subject: str) -> None:
+    _, subject_type = normalize_subject(subject)
+    arguments = [
+        require_command("curl"),
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--max-time",
+        "15",
+    ]
+    if subject_type == IP_SUBJECT:
+        arguments.extend(
+            ["--connect-to", f"{subject}:443:127.0.0.1:443"]
+        )
+    else:
+        arguments.extend(["--resolve", f"{subject}:443:127.0.0.1"])
+    arguments.append(f"https://{subject}/")
+    run(arguments, timeout=20)
 
 
 def schedule_runtime_apply() -> None:
@@ -491,7 +513,7 @@ def operation_lock():
 
 
 def enable_https(domain_value: str, email_value: str) -> dict[str, Any]:
-    domain = normalize_domain(domain_value)
+    subject, subject_type = normalize_subject(domain_value)
     email = normalize_email(email_value)
     if not LEGO_BIN.is_file() or not os.access(LEGO_BIN, os.X_OK):
         raise HttpsError("当前发布包缺少 ACME 客户端，请先升级 LiveBoard")
@@ -509,17 +531,23 @@ def enable_https(domain_value: str, email_value: str) -> dict[str, Any]:
             if INSTALL_CONF.is_file()
             else None
         )
-        certificate, key = certificate_paths(domain)
+        certificate, key = certificate_paths(subject)
         original_certificate = snapshot_file(certificate)
         original_key = snapshot_file(key)
         try:
-            install_nginx_config(http_nginx_config(domain))
-            challenge_type, http_failure = select_challenge_type(domain)
+            install_nginx_config(http_nginx_config(subject))
+            challenge_type, http_failure = select_challenge_type(subject)
             if challenge_type == TLS_ALPN_CHALLENGE:
                 wait_for_tls_challenge_port()
             try:
                 run(
-                    lego_arguments(domain, email, "run", challenge_type),
+                    lego_arguments(
+                        subject,
+                        email,
+                        "run",
+                        challenge_type,
+                        subject_type,
+                    ),
                     timeout=240,
                 )
             except HttpsError as caught:
@@ -530,10 +558,11 @@ def enable_https(domain_value: str, email_value: str) -> dict[str, Any]:
                     try:
                         run(
                             lego_arguments(
-                                domain,
+                                subject,
                                 email,
                                 "run",
                                 challenge_type,
+                                subject_type,
                             ),
                             timeout=240,
                         )
@@ -552,27 +581,40 @@ def enable_https(domain_value: str, email_value: str) -> dict[str, Any]:
             if not certificate.is_file() or not key.is_file():
                 raise HttpsError("证书机构返回成功，但没有找到证书文件")
             os.chmod(key, 0o600)
-            install_nginx_config(https_nginx_config(domain, certificate, key))
-            verify_local_https(domain)
+            install_nginx_config(
+                https_nginx_config(subject, certificate, key)
+            )
+            verify_local_https(subject)
             update_env_values(
                 {
                     "SESSION_COOKIE_SECURE": "true",
-                    "WEB_ORIGIN": f"https://{domain}",
+                    "WEB_ORIGIN": f"https://{subject}",
                 }
             )
             update_key_value_file(
                 INSTALL_CONF,
                 {
-                    "ACCESS_MODE": "https-domain",
-                    "HTTPS_DOMAIN": domain,
+                    "ACCESS_MODE": (
+                        "https-ip"
+                        if subject_type == IP_SUBJECT
+                        else "https-domain"
+                    ),
+                    "HTTPS_DOMAIN": subject,
                     "UPDATED_AT": now_iso(),
                 },
             )
             config = {
                 "enabled": True,
-                "domain": domain,
+                "domain": subject,
+                "subjectType": subject_type,
                 "email": email,
                 "challengeType": challenge_type,
+                "certificateProfile": (
+                    SHORTLIVED_PROFILE
+                    if subject_type == IP_SUBJECT
+                    else None
+                ),
+                "autoRenewEnabled": True,
                 "enabledAt": now_iso(),
                 "lastRenewedAt": now_iso(),
                 "lastRenewalCheckAt": now_iso(),
@@ -601,38 +643,50 @@ def enable_https(domain_value: str, email_value: str) -> dict[str, Any]:
             raise HttpsError(str(caught)) from caught
 
 
-def renew_https() -> dict[str, Any]:
+def renew_https(*, scheduled: bool = False) -> dict[str, Any]:
     with operation_lock():
         config = read_json(CONFIG_FILE)
         if not config.get("enabled"):
             return https_status()
-        domain = normalize_domain(str(config.get("domain", "")))
+        if scheduled and not config.get("autoRenewEnabled", True):
+            return https_status()
+        subject, detected_subject_type = normalize_subject(
+            str(config.get("domain", ""))
+        )
+        subject_type = str(
+            config.get("subjectType", detected_subject_type)
+        )
+        if subject_type not in (DOMAIN_SUBJECT, IP_SUBJECT):
+            subject_type = detected_subject_type
         email = normalize_email(str(config.get("email", "")))
         challenge_type = str(config.get("challengeType", HTTP_CHALLENGE))
         if challenge_type not in (HTTP_CHALLENGE, TLS_ALPN_CHALLENGE):
             raise HttpsError("HTTPS 配置中的 ACME 验证方式无效")
-        certificate, key = certificate_paths(domain)
+        certificate, key = certificate_paths(subject)
         before = certificate.stat().st_mtime_ns if certificate.exists() else 0
         original_nginx = NGINX_SITE.read_text(encoding="utf-8")
         original_certificate = snapshot_file(certificate)
         original_key = snapshot_file(key)
         try:
             if challenge_type == TLS_ALPN_CHALLENGE:
-                install_nginx_config(http_nginx_config(domain))
+                install_nginx_config(http_nginx_config(subject))
                 wait_for_tls_challenge_port()
             run(
                 lego_arguments(
-                    domain,
+                    subject,
                     email,
                     "renew",
                     challenge_type,
+                    subject_type,
                 ),
                 timeout=240,
             )
             after = certificate.stat().st_mtime_ns if certificate.exists() else 0
             config["lastRenewalCheckAt"] = now_iso()
             if challenge_type == TLS_ALPN_CHALLENGE:
-                install_nginx_config(https_nginx_config(domain, certificate, key))
+                install_nginx_config(
+                    https_nginx_config(subject, certificate, key)
+                )
             elif after != before:
                 run([require_command("nginx"), "-t"], timeout=30)
                 run([require_command("systemctl"), "reload", "nginx"], timeout=30)
@@ -654,10 +708,96 @@ def renew_https() -> dict[str, Any]:
         return https_status()
 
 
+def disable_https(http_host_value: str) -> dict[str, Any]:
+    http_host, _ = normalize_subject(http_host_value)
+    with operation_lock():
+        config = read_json(CONFIG_FILE)
+        original_nginx = NGINX_SITE.read_text(encoding="utf-8")
+        original_env = ENV_FILE.read_text(encoding="utf-8")
+        original_install_conf = (
+            INSTALL_CONF.read_text(encoding="utf-8")
+            if INSTALL_CONF.is_file()
+            else None
+        )
+        try:
+            install_nginx_config(http_nginx_config(http_host))
+            update_env_values(
+                {
+                    "SESSION_COOKIE_SECURE": "false",
+                    "WEB_ORIGIN": f"http://{http_host}",
+                }
+            )
+            update_key_value_file(
+                INSTALL_CONF,
+                {
+                    "ACCESS_MODE": "http-ip",
+                    "HTTPS_DOMAIN": "",
+                    "UPDATED_AT": now_iso(),
+                },
+            )
+            config.update(
+                {
+                    "enabled": False,
+                    "domain": None,
+                    "subjectType": None,
+                    "challengeType": None,
+                    "certificateProfile": None,
+                    "autoRenewEnabled": False,
+                    "disabledAt": now_iso(),
+                    "httpHost": http_host,
+                }
+            )
+            save_config(config)
+            LAST_ERROR_FILE.unlink(missing_ok=True)
+            schedule_runtime_apply()
+            return https_status()
+        except Exception as caught:
+            atomic_write(NGINX_SITE, original_nginx, mode=0o644)
+            atomic_write(ENV_FILE, original_env)
+            if original_install_conf is None:
+                INSTALL_CONF.unlink(missing_ok=True)
+            else:
+                atomic_write(INSTALL_CONF, original_install_conf)
+            try:
+                run([require_command("nginx"), "-t"], timeout=30)
+                run(
+                    [require_command("systemctl"), "reload", "nginx"],
+                    timeout=30,
+                )
+            except Exception:
+                pass
+            if isinstance(caught, HttpsError):
+                raise
+            raise HttpsError(str(caught)) from caught
+
+
+def set_auto_renew(enabled: bool) -> dict[str, Any]:
+    with operation_lock():
+        config = read_json(CONFIG_FILE)
+        if not config.get("enabled"):
+            raise HttpsError("HTTPS 尚未启用，无法配置自动续期")
+        previous = config.get("autoRenewEnabled", True)
+        config["autoRenewEnabled"] = enabled
+        try:
+            save_config(config)
+        except Exception:
+            config["autoRenewEnabled"] = previous
+            save_config(config)
+            raise
+        return https_status()
+
+
 def https_status() -> dict[str, Any]:
     config = read_json(CONFIG_FILE)
     domain = str(config.get("domain", ""))
     certificate = certificate_paths(domain)[0] if domain else None
+    detected_subject_type = None
+    if domain:
+        try:
+            _, detected_subject_type = normalize_subject(domain)
+        except HttpsError:
+            pass
+    subject_type = config.get("subjectType") or detected_subject_type
     last_error = ""
     try:
         last_error = LAST_ERROR_FILE.read_text(encoding="utf-8").strip()
@@ -667,7 +807,16 @@ def https_status() -> dict[str, Any]:
         "available": LEGO_BIN.is_file() and os.access(LEGO_BIN, os.X_OK),
         "enabled": bool(config.get("enabled")),
         "domain": domain or None,
+        "subjectType": subject_type,
         "challengeType": config.get("challengeType"),
+        "certificateProfile": (
+            config.get("certificateProfile")
+            or (SHORTLIVED_PROFILE if subject_type == IP_SUBJECT else None)
+        ),
+        "autoRenewEnabled": bool(
+            config.get("autoRenewEnabled", bool(config.get("enabled")))
+        ),
+        "httpHost": config.get("httpHost"),
         "expiresAt": certificate_expiry(certificate) if certificate else None,
         "lastRenewedAt": config.get("lastRenewedAt"),
         "lastRenewalCheckAt": config.get("lastRenewalCheckAt"),
@@ -689,6 +838,16 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any]:
         }
     if action == "renew":
         return {"ok": True, "status": renew_https()}
+    if action == "disable":
+        return {
+            "ok": True,
+            "status": disable_https(str(request.get("httpHost", ""))),
+        }
+    if action == "set-auto-renew":
+        enabled = request.get("enabled")
+        if not isinstance(enabled, bool):
+            raise HttpsError("自动续期开关值无效")
+        return {"ok": True, "status": set_auto_renew(enabled)}
     raise HttpsError("不支持的 HTTPS 助手操作")
 
 
@@ -741,7 +900,15 @@ def parse_arguments() -> argparse.Namespace:
     enable.add_argument("--domain", required=True)
     enable.add_argument("--email", required=True)
     subparsers.add_parser("status")
-    subparsers.add_parser("renew")
+    renew = subparsers.add_parser("renew")
+    renew.add_argument("--scheduled", action="store_true")
+    disable = subparsers.add_parser("disable")
+    disable.add_argument("--http-host", required=True)
+    auto_renew = subparsers.add_parser("set-auto-renew")
+    auto_renew.add_argument(
+        "state",
+        choices=("on", "off"),
+    )
     subparsers.add_parser("apply-runtime")
     subparsers.add_parser("serve")
     return parser.parse_args()
@@ -756,7 +923,11 @@ def main() -> int:
         if arguments.command == "enable":
             result = enable_https(arguments.domain, arguments.email)
         elif arguments.command == "renew":
-            result = renew_https()
+            result = renew_https(scheduled=arguments.scheduled)
+        elif arguments.command == "disable":
+            result = disable_https(arguments.http_host)
+        elif arguments.command == "set-auto-renew":
+            result = set_auto_renew(arguments.state == "on")
         elif arguments.command == "apply-runtime":
             apply_runtime()
             return 0

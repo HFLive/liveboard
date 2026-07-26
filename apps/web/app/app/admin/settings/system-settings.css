@@ -132,6 +132,60 @@
   text-underline-offset: 3px;
 }
 
+.system-settings-page .https-management-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.system-settings-page .https-renew-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.system-settings-page .https-renew-control > span {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  min-width: 0;
+}
+
+.system-settings-page .https-renew-control small,
+.system-settings-page .https-disable-controls label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.system-settings-page .https-renew-control input {
+  width: 17px;
+  height: 17px;
+}
+
+.system-settings-page .https-disable-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.system-settings-page .https-disable-controls label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+}
+
+.system-settings-page .https-disable-controls input {
+  width: 100%;
+  min-width: 0;
+}
+
 .system-settings-page .https-enable-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -283,6 +337,14 @@
 
   .system-settings-page .https-enable-form {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .system-settings-page .https-disable-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .system-settings-page .https-disable-controls .button {
+    width: 100%;
   }
 
   .system-settings-page .https-enable-actions {

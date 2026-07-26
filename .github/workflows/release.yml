@@ -75,14 +75,14 @@ jobs:
           bundle="liveboard-${GITHUB_REF_NAME}-linux-amd64"
           asset="${bundle}.run"
           bundle_dir="dist/${bundle}"
-          lego_version="5.2.1"
+          lego_version="5.3.1"
           lego_archive="/tmp/lego_v${lego_version}_linux_amd64.tar.gz"
 
           mkdir -p "$bundle_dir"
           curl --fail --location --retry 3 \
             "https://github.com/go-acme/lego/releases/download/v${lego_version}/lego_v${lego_version}_linux_amd64.tar.gz" \
             --output "$lego_archive"
-          echo "c5c7f34594daa8d05ec568069fa6c97ace1ef428367533a6d42bf9b3d5164169  $lego_archive" \
+          echo "b3c71b122ee1947eacfe0b809b955647f6377239fe4bfc49f73b1a091ae1252a  $lego_archive" \
             | sha256sum --check
           tar -xzf "$lego_archive" -C "$bundle_dir" lego
           "$bundle_dir/lego" run \
@@ -92,6 +92,16 @@ jobs:
             --domains board.example.com \
             --tls \
             --renew-days 30 \
+            --no-random-sleep \
+            --help >/dev/null
+          "$bundle_dir/lego" run \
+            --path /tmp/liveboard-lego-ip-cli-check \
+            --email admin@example.com \
+            --accept-tos \
+            --domains 192.0.2.1 \
+            --profile shortlived \
+            --tls \
+            --renew-days 3 \
             --no-random-sleep \
             --help >/dev/null
 

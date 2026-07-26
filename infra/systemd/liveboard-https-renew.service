@@ -6,7 +6,7 @@ Requires=nginx.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /opt/liveboard/bin/liveboard-https-agent.py renew
+ExecStart=/usr/bin/python3 /opt/liveboard/bin/liveboard-https-agent.py renew --scheduled
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true

@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import {
+  IsBoolean,
   IsEmail,
   IsNotEmpty,
   IsOptional,
@@ -41,6 +42,18 @@ class EnableHttpsDto {
   @IsEmail()
   @MaxLength(254)
   email!: string;
+}
+
+class DisableHttpsDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(253)
+  httpHost!: string;
+}
+
+class UpdateHttpsRenewalDto {
+  @IsBoolean()
+  enabled!: boolean;
 }
 
 @Controller()
@@ -117,6 +130,26 @@ export class SettingsController {
         body.domain,
         body.email,
       ),
+    };
+  }
+
+  @Post("admin/settings/https/disable")
+  async disableHttps(
+    @CurrentUserId() userId: string | null,
+    @Body() body: DisableHttpsDto,
+  ) {
+    return {
+      https: await this.settingsService.disableHttps(userId, body.httpHost),
+    };
+  }
+
+  @Patch("admin/settings/https/auto-renew")
+  async setHttpsAutoRenew(
+    @CurrentUserId() userId: string | null,
+    @Body() body: UpdateHttpsRenewalDto,
+  ) {
+    return {
+      https: await this.settingsService.setHttpsAutoRenew(userId, body.enabled),
     };
   }
 }
