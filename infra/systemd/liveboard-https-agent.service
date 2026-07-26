@@ -2,6 +2,7 @@
 Description=LiveBoard HTTPS management agent
 After=network-online.target nginx.service docker.service
 Wants=network-online.target
+Requires=nginx.service
 
 [Service]
 Type=simple
@@ -13,7 +14,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/opt/liveboard /etc/nginx/sites-available /run/liveboard
+ReadWritePaths=/opt/liveboard /etc/nginx/sites-available /run/liveboard -/run/nginx.pid
 
 [Install]
 WantedBy=multi-user.target

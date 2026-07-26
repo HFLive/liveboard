@@ -243,7 +243,7 @@ export function SystemSettingsClient() {
       const enabledDomain = result.https.domain;
       window.setTimeout(() => {
         window.location.replace(`https://${enabledDomain}/app/admin/settings`);
-      }, 4_000);
+      }, 12_000);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "HTTPS 配置失败");
     } finally {

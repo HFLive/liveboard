@@ -44,6 +44,8 @@ cp "$ROOT_DIR/.env.production.example" "$BUNDLE_DIR/.env.example"
 cp "$ROOT_DIR/infra/systemd/liveboard-https-agent.service" "$BUNDLE_DIR/liveboard-https-agent.service"
 cp "$ROOT_DIR/infra/systemd/liveboard-https-renew.service" "$BUNDLE_DIR/liveboard-https-renew.service"
 cp "$ROOT_DIR/infra/systemd/liveboard-https-renew.timer" "$BUNDLE_DIR/liveboard-https-renew.timer"
+grep -q -- '-/run/nginx.pid' "$BUNDLE_DIR/liveboard-https-agent.service"
+grep -q -- '-/run/nginx.pid' "$BUNDLE_DIR/liveboard-https-renew.service"
 
 for file in docker-compose.yml SHA256SUMS; do
   : >"$BUNDLE_DIR/$file"
@@ -56,7 +58,11 @@ EOF
 chmod +x "$BUNDLE_DIR/lego"
 
 printf '%s\n' 'mock-image-data' | "$REAL_GZIP" -c >"$BUNDLE_DIR/images.tar.gz"
-printf '%s\n' '# Managed by LiveBoard' >"$BUNDLE_DIR/nginx.conf"
+printf '%s\n' \
+  '# Managed by LiveBoard' \
+  'proxy_read_timeout 150s;' \
+  'proxy_send_timeout 150s;' \
+  >"$BUNDLE_DIR/nginx.conf"
 printf '%s\n' 'release=v1.0.0' >"$BUNDLE_DIR/manifest.txt"
 
 cat >"$BIN_DIR/docker" <<'EOF'
@@ -154,6 +160,8 @@ grep -q '^ACCESS_MODE=http-ip$' "$STATE_DIR/install.conf"
 test -L "$NGINX_ENABLED"
 test "$(readlink "$NGINX_ENABLED")" = "$NGINX_SITE"
 test -f "$STATE_DIR/gateway/default-site.backup"
+grep -q '^proxy_read_timeout 480s;$' "$NGINX_SITE"
+grep -q '^proxy_send_timeout 480s;$' "$NGINX_SITE"
 
 for index in 01 02 03 04 05 06 07 08 09 10 11; do
   printf '%s\n' old >"$STATE_DIR/backups/postgres-20000101-0000${index}.dump"
