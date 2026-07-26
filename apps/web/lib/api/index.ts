@@ -477,6 +477,27 @@ export function resetSystemFavicon() {
   });
 }
 
+export interface HttpsStatus {
+  available: boolean;
+  enabled: boolean;
+  domain: string | null;
+  expiresAt: string | null;
+  lastRenewedAt: string | null;
+  lastRenewalCheckAt: string | null;
+  lastError: string | null;
+}
+
+export function getHttpsStatus() {
+  return request<{ https: HttpsStatus }>("/admin/settings/https");
+}
+
+export function enableHttps(input: { domain: string; email: string }) {
+  return request<{ https: HttpsStatus }>("/admin/settings/https/enable", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function getServerStatus(hours = 24) {
   return request<ServerStatusSummary>(
     `/admin/server-status?hours=${encodeURIComponent(hours)}`,

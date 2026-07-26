@@ -10,7 +10,13 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { IsOptional, IsString } from "class-validator";
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from "class-validator";
 import type { Response } from "express";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import { Public } from "../../common/public.decorator";
@@ -24,6 +30,17 @@ class UpdateSystemSettingsDto {
   @IsOptional()
   @IsString()
   timeZone?: string;
+}
+
+class EnableHttpsDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(253)
+  domain!: string;
+
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
 }
 
 @Controller()
@@ -81,6 +98,25 @@ export class SettingsController {
   async resetFavicon(@CurrentUserId() userId: string | null) {
     return {
       settings: await this.settingsService.resetFavicon(userId),
+    };
+  }
+
+  @Get("admin/settings/https")
+  async httpsStatus(@CurrentUserId() userId: string | null) {
+    return { https: await this.settingsService.getHttpsStatus(userId) };
+  }
+
+  @Post("admin/settings/https/enable")
+  async enableHttps(
+    @CurrentUserId() userId: string | null,
+    @Body() body: EnableHttpsDto,
+  ) {
+    return {
+      https: await this.settingsService.enableHttps(
+        userId,
+        body.domain,
+        body.email,
+      ),
     };
   }
 }

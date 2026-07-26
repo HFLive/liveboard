@@ -100,6 +100,16 @@ sudo liveboard logs
 sudo liveboard restart
 ```
 
+为域名添加指向服务器公网 IP 的 DNS 记录并开放 TCP 80、443 后，最高管理员可进入“管理中心 → 系统设置 → HTTPS”，填写域名和通知邮箱，一键签发证书并切换到 HTTPS。该功能使用标准 ACME HTTP-01，不依赖 Cloudflare 或特定域名商；发布包已离线携带固定版本的 ACME 客户端，服务器配置时不需要下载程序。系统每天自动检查续期，只有拿到有效证书且 Nginx 校验和本机 HTTPS 探测均成功后才会切换配置。
+
+也可在服务器执行同一套操作：
+
+```bash
+sudo liveboard https status
+sudo liveboard https enable --domain board.example.com --email admin@example.com
+sudo liveboard https renew
+```
+
 升级时上传新的 `.run` 文件，不需要手动解压：
 
 ```bash
@@ -135,7 +145,7 @@ liveboard help
 完整步骤见 [Ubuntu 24.04 单文件部署教程](./docs/deploy-ubuntu-24.04.md)。
 部署路线的取舍、已删除兼容代码和保留边界见 [生产部署链路复盘](./docs/deployment-review.md)。
 
-Compose 的 PostgreSQL、Redis、MinIO、API 和 Web 端口只绑定 `127.0.0.1`，公网访问必须经过由安装器管理的 Nginx 配置。升级不会覆盖已有的 LiveBoard Nginx 配置。HTTP IP 部署使用 `SESSION_COOKIE_SECURE=false`；改用 HTTPS 时必须设为 `true`。
+Compose 的 PostgreSQL、Redis、MinIO、API 和 Web 端口只绑定 `127.0.0.1`，公网访问必须经过由安装器管理的 Nginx 配置。升级不会覆盖已有的 LiveBoard Nginx 配置。HTTP IP 部署使用 `SESSION_COOKIE_SECURE=false`；一键启用 HTTPS 后会自动改为 `true`。
 
 > PostgreSQL 备份不包含 MinIO 上传文件。生产环境还应为 `minio-data` 配置独立卷快照或对象存储备份。不得使用 `docker compose down -v` 更新或停止服务。
 

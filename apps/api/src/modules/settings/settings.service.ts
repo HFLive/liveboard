@@ -11,6 +11,7 @@ import { Client } from "minio";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { PrismaService } from "../prisma/prisma.service";
+import { HttpsAgentClient } from "./https-agent.client";
 
 export interface UpdateSystemSettingsInput {
   timeZone?: string;
@@ -33,6 +34,7 @@ export class SettingsService {
   constructor(
     private readonly prisma: PrismaService,
     config: ConfigService,
+    private readonly httpsAgent: HttpsAgentClient,
   ) {
     this.bucket = config.get<string>("MINIO_BUCKET", "liveboard-assets");
     this.minio = new Client({
@@ -166,6 +168,16 @@ export class SettingsService {
       .catch(() => undefined);
 
     return this.toPublicSettings(updated);
+  }
+
+  async getHttpsStatus(userId: string | null) {
+    await this.requireAdmin(userId);
+    return this.httpsAgent.status();
+  }
+
+  async enableHttps(userId: string | null, domain: string, email: string) {
+    await this.requireAdmin(userId);
+    return this.httpsAgent.enable(domain.trim(), email.trim());
   }
 
   async getFavicon() {

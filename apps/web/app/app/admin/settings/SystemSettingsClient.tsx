@@ -1,11 +1,22 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Clock, Globe2, ImageUp, RotateCcw, Save } from "lucide-react";
+import {
+  Clock,
+  Globe2,
+  ImageUp,
+  LockKeyhole,
+  RotateCcw,
+  Save,
+  ShieldCheck,
+} from "lucide-react";
 import {
   apiResourceUrl,
+  enableHttps,
+  getHttpsStatus,
   getSystemSettings,
   resetSystemFavicon,
+  type HttpsStatus,
   type SystemSettings,
   updateSystemSettings,
   uploadSystemFavicon,
@@ -101,6 +112,11 @@ export function SystemSettingsClient() {
   const [uploadingFavicon, setUploadingFavicon] = useState(false);
   const [resettingFavicon, setResettingFavicon] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
+  const [httpsStatus, setHttpsStatus] = useState<HttpsStatus | null>(null);
+  const [httpsDomain, setHttpsDomain] = useState("");
+  const [httpsEmail, setHttpsEmail] = useState("");
+  const [loadingHttps, setLoadingHttps] = useState(true);
+  const [enablingHttps, setEnablingHttps] = useState(false);
   const timeZoneOptions = useMemo(
     () => getAvailableTimeZones(timeZone),
     [timeZone],
@@ -117,6 +133,27 @@ export function SystemSettingsClient() {
         setError(caught instanceof Error ? caught.message : "加载系统设置失败");
       })
       .finally(() => setLoadingSettings(false));
+  }, []);
+
+  useEffect(() => {
+    getHttpsStatus()
+      .then((result) => {
+        setHttpsStatus(result.https);
+        if (result.https.domain) {
+          setHttpsDomain(result.https.domain);
+        } else if (
+          window.location.hostname !== "localhost" &&
+          !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(window.location.hostname)
+        ) {
+          setHttpsDomain(window.location.hostname);
+        }
+      })
+      .catch((caught) => {
+        setError(
+          caught instanceof Error ? caught.message : "加载 HTTPS 状态失败",
+        );
+      })
+      .finally(() => setLoadingHttps(false));
   }, []);
 
   useEffect(() => {
@@ -180,13 +217,47 @@ export function SystemSettingsClient() {
     }
   }
 
+  async function onEnableHttps(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (
+      !window.confirm(
+        `确定为 ${httpsDomain.trim()} 签发证书并将网站切换到 HTTPS 吗？`,
+      )
+    ) {
+      return;
+    }
+
+    setEnablingHttps(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await enableHttps({
+        domain: httpsDomain,
+        email: httpsEmail,
+      });
+      setHttpsStatus(result.https);
+      setMessage("HTTPS 已启用，正在重新载入服务并切换到安全地址");
+      if (!result.https.domain) {
+        throw new Error("HTTPS 已启用，但服务器没有返回网站域名");
+      }
+      const enabledDomain = result.https.domain;
+      window.setTimeout(() => {
+        window.location.replace(`https://${enabledDomain}/app/admin/settings`);
+      }, 4_000);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "HTTPS 配置失败");
+    } finally {
+      setEnablingHttps(false);
+    }
+  }
+
   return (
     <div className="workspace admin-workspace system-settings-page">
       <header className="page-head">
         <div>
           <p className="page-eyebrow">管理中心</p>
           <h1>系统设置</h1>
-          <p className="muted">管理网站时区和浏览器标签页图标。</p>
+          <p className="muted">管理网站时区、HTTPS 和浏览器标签页图标。</p>
         </div>
       </header>
 
@@ -272,6 +343,113 @@ export function SystemSettingsClient() {
               </form>
 
               <section
+                aria-labelledby="https-setting-title"
+                className="system-setting-section https-setting-section"
+              >
+                <div className="panel-head">
+                  <div>
+                    <h2 id="https-setting-title">
+                      <LockKeyhole
+                        aria-hidden="true"
+                        className="heading-icon"
+                      />
+                      HTTPS
+                    </h2>
+                    <p className="muted">
+                      使用通用 ACME HTTP 验证签发证书，不绑定域名服务商。
+                    </p>
+                  </div>
+                </div>
+
+                {loadingHttps ? (
+                  <SkeletonRows count={3} />
+                ) : httpsStatus?.enabled ? (
+                  <div className="https-enabled-panel">
+                    <ShieldCheck aria-hidden="true" />
+                    <div>
+                      <strong>HTTPS 已启用</strong>
+                      <p>
+                        <a
+                          href={`https://${httpsStatus.domain}`}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {httpsStatus.domain}
+                        </a>
+                      </p>
+                      <p className="muted">
+                        证书有效期至{" "}
+                        {httpsStatus.expiresAt
+                          ? formatDateTime(httpsStatus.expiresAt)
+                          : "未知"}
+                        ，系统每天自动检查续期。
+                      </p>
+                      {httpsStatus.lastError ? (
+                        <p className="error-text">{httpsStatus.lastError}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : httpsStatus?.available ? (
+                  <form
+                    className="https-enable-form"
+                    onSubmit={(event) => void onEnableHttps(event)}
+                  >
+                    <label>
+                      <span>网站域名</span>
+                      <input
+                        autoCapitalize="none"
+                        autoComplete="url"
+                        disabled={enablingHttps}
+                        onChange={(event) => setHttpsDomain(event.target.value)}
+                        placeholder="board.example.com"
+                        required
+                        spellCheck={false}
+                        value={httpsDomain}
+                      />
+                    </label>
+                    <label>
+                      <span>证书通知邮箱</span>
+                      <input
+                        autoComplete="email"
+                        disabled={enablingHttps}
+                        onChange={(event) => setHttpsEmail(event.target.value)}
+                        placeholder="admin@example.com"
+                        required
+                        type="email"
+                        value={httpsEmail}
+                      />
+                    </label>
+                    <div className="https-enable-actions">
+                      <p className="muted">
+                        启用前请确认域名已经指向本服务器，并开放 TCP 80 和
+                        443。配置失败会恢复原来的 HTTP 入口。
+                      </p>
+                      <button
+                        className="button"
+                        disabled={enablingHttps}
+                        type="submit"
+                      >
+                        <LockKeyhole
+                          aria-hidden="true"
+                          className="button-icon"
+                        />
+                        {enablingHttps ? "正在签发并配置" : "检查并启用 HTTPS"}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="https-unavailable-panel">
+                    <strong>当前部署不支持面板配置 HTTPS</strong>
+                    <p className="muted">
+                      请先使用包含 HTTPS
+                      助手的新版生产安装包升级服务器。开发环境不会操作本机
+                      Nginx。
+                    </p>
+                  </div>
+                )}
+              </section>
+
+              <section
                 aria-labelledby="favicon-setting-title"
                 className="system-setting-section favicon-setting-section"
               >
@@ -348,6 +526,16 @@ export function SystemSettingsClient() {
             <div>
               <dt>当前时区</dt>
               <dd>{settings?.timeZone ?? "-"}</dd>
+            </div>
+            <div>
+              <dt>HTTPS</dt>
+              <dd>
+                {httpsStatus?.enabled
+                  ? httpsStatus.domain
+                  : httpsStatus?.available
+                    ? "未启用"
+                    : "不可用"}
+              </dd>
             </div>
             <div>
               <dt>最近更新</dt>

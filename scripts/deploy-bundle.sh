@@ -44,7 +44,7 @@ install_system_dependencies() {
   command -v apt-get >/dev/null 2>&1 || return 0
 
   missing_base=false
-  for command in curl sha256sum gzip od nginx; do
+  for command in curl sha256sum gzip od nginx python3 openssl; do
     if ! command -v "$command" >/dev/null 2>&1; then
       missing_base=true
     fi
@@ -53,7 +53,7 @@ install_system_dependencies() {
   if [ "$missing_base" = true ]; then
     echo "安装 Nginx 和基础部署工具..."
     apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get install -y nginx curl ca-certificates tar gzip coreutils
+    DEBIAN_FRONTEND=noninteractive apt-get install -y nginx curl ca-certificates tar gzip coreutils python3 openssl
   fi
 
   if ! command -v docker >/dev/null 2>&1; then
@@ -69,7 +69,7 @@ install_system_dependencies() {
 
 install_system_dependencies
 
-for command in docker curl sha256sum gzip od tar; do
+for command in docker curl sha256sum gzip od tar python3 openssl; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "缺少部署依赖：$command" >&2
     exit 1
@@ -100,6 +100,11 @@ for file in \
   "$SOURCE_MANIFEST_FILE" \
   "$SOURCE_BUNDLE_DIR/nginx.conf" \
   "$SOURCE_BUNDLE_DIR/manager.sh" \
+  "$SOURCE_BUNDLE_DIR/https-agent.py" \
+  "$SOURCE_BUNDLE_DIR/lego" \
+  "$SOURCE_BUNDLE_DIR/liveboard-https-agent.service" \
+  "$SOURCE_BUNDLE_DIR/liveboard-https-renew.service" \
+  "$SOURCE_BUNDLE_DIR/liveboard-https-renew.timer" \
   "$SOURCE_BUNDLE_DIR/SHA256SUMS" \
   "$SOURCE_BUNDLE_DIR/.env.example"; do
   if [ ! -f "$file" ]; then
@@ -469,6 +474,44 @@ install_gateway() {
 
 install_gateway
 
+install_https_agent() {
+  mkdir -p "$STATE_DIR/bin" "$STATE_DIR/https" "$STATE_DIR/gateway"
+  cp "$BUNDLE_DIR/lego" "$STATE_DIR/bin/lego"
+  cp "$BUNDLE_DIR/https-agent.py" "$STATE_DIR/bin/liveboard-https-agent.py"
+  chmod 755 "$STATE_DIR/bin/lego" "$STATE_DIR/bin/liveboard-https-agent.py"
+
+  if [ "$STATE_DIR" != /opt/liveboard ] || ! command -v systemctl >/dev/null 2>&1; then
+    echo "已安装 HTTPS 助手文件；当前为测试状态目录，跳过 systemd 服务。"
+    return
+  fi
+
+  mkdir -p /run/liveboard
+  chown root:1000 /run/liveboard
+  chmod 770 /run/liveboard
+  cp "$BUNDLE_DIR/liveboard-https-agent.service" /etc/systemd/system/liveboard-https-agent.service
+  cp "$BUNDLE_DIR/liveboard-https-renew.service" /etc/systemd/system/liveboard-https-renew.service
+  cp "$BUNDLE_DIR/liveboard-https-renew.timer" /etc/systemd/system/liveboard-https-renew.timer
+  systemctl daemon-reload
+  systemctl enable liveboard-https-agent.service liveboard-https-renew.timer
+  systemctl restart liveboard-https-agent.service
+  systemctl start liveboard-https-renew.timer
+
+  attempt=0
+  until [ -S /run/liveboard/https-agent.sock ]; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 10 ]; then
+      echo "HTTPS 助手未能创建通信 Socket。" >&2
+      systemctl status liveboard-https-agent.service --no-pager >&2 || true
+      exit 1
+    fi
+    sleep 1
+  done
+  systemctl is-active --quiet liveboard-https-agent.service
+  systemctl is-active --quiet liveboard-https-renew.timer
+}
+
+install_https_agent
+
 mkdir -p "$(dirname "$MANAGER_PATH")"
 cp "$BUNDLE_DIR/manager.sh" "$MANAGER_PATH"
 chmod 755 "$MANAGER_PATH"
@@ -480,9 +523,13 @@ INSTALLED_AT=$(awk -F= '$1 == "INSTALLED_AT" { sub(/^[^=]*=/, ""); print; exit }
 [ -n "$INSTALLED_AT" ] || INSTALLED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 ACCESS_MODE=$(awk -F= '$1 == "ACCESS_MODE" { sub(/^[^=]*=/, ""); print; exit }' "$INSTALL_CONF" 2>/dev/null || true)
 [ -n "$ACCESS_MODE" ] || ACCESS_MODE=http-ip
+HTTPS_DOMAIN=$(awk -F= '$1 == "HTTPS_DOMAIN" { sub(/^[^=]*=/, ""); print; exit }' "$INSTALL_CONF" 2>/dev/null || true)
 {
   echo "CURRENT_VERSION=$VERSION"
   echo "ACCESS_MODE=$ACCESS_MODE"
+  if [ -n "$HTTPS_DOMAIN" ]; then
+    echo "HTTPS_DOMAIN=$HTTPS_DOMAIN"
+  fi
   echo "INSTALLED_AT=$INSTALLED_AT"
   echo "UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >"$INSTALL_CONF.tmp"

@@ -75,8 +75,17 @@ jobs:
           bundle="liveboard-${GITHUB_REF_NAME}-linux-amd64"
           asset="${bundle}.run"
           bundle_dir="dist/${bundle}"
+          lego_version="5.2.1"
+          lego_archive="/tmp/lego_v${lego_version}_linux_amd64.tar.gz"
 
           mkdir -p "$bundle_dir"
+          curl --fail --location --retry 3 \
+            "https://github.com/go-acme/lego/releases/download/v${lego_version}/lego_v${lego_version}_linux_amd64.tar.gz" \
+            --output "$lego_archive"
+          echo "c5c7f34594daa8d05ec568069fa6c97ace1ef428367533a6d42bf9b3d5164169  $lego_archive" \
+            | sha256sum --check
+          tar -xzf "$lego_archive" -C "$bundle_dir" lego
+
           docker save \
             postgres:16-alpine \
             redis:7-alpine \
@@ -88,9 +97,17 @@ jobs:
           cp docker-compose.yml "${bundle_dir}/docker-compose.yml"
           cp .env.production.example "${bundle_dir}/.env.example"
           cp infra/nginx/liveboard.conf "${bundle_dir}/nginx.conf"
+          cp infra/systemd/liveboard-https-agent.service "${bundle_dir}/liveboard-https-agent.service"
+          cp infra/systemd/liveboard-https-renew.service "${bundle_dir}/liveboard-https-renew.service"
+          cp infra/systemd/liveboard-https-renew.timer "${bundle_dir}/liveboard-https-renew.timer"
           cp scripts/deploy-bundle.sh "${bundle_dir}/deploy.sh"
+          cp scripts/liveboard-https-agent.py "${bundle_dir}/https-agent.py"
           cp scripts/liveboard-manager.sh "${bundle_dir}/manager.sh"
-          chmod +x "${bundle_dir}/deploy.sh" "${bundle_dir}/manager.sh"
+          chmod +x \
+            "${bundle_dir}/deploy.sh" \
+            "${bundle_dir}/https-agent.py" \
+            "${bundle_dir}/lego" \
+            "${bundle_dir}/manager.sh"
 
           {
             echo "release=${GITHUB_REF_NAME}"
@@ -112,7 +129,20 @@ jobs:
 
           (
             cd "$bundle_dir"
-            sha256sum images.tar.gz docker-compose.yml deploy.sh manager.sh nginx.conf .env.example manifest.txt >SHA256SUMS
+            sha256sum \
+              images.tar.gz \
+              docker-compose.yml \
+              deploy.sh \
+              manager.sh \
+              https-agent.py \
+              lego \
+              nginx.conf \
+              liveboard-https-agent.service \
+              liveboard-https-renew.service \
+              liveboard-https-renew.timer \
+              .env.example \
+              manifest.txt \
+              >SHA256SUMS
           )
 
           sh scripts/build-self-extracting-release.sh \

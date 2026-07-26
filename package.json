@@ -14,7 +14,7 @@
     "infra:down": "docker compose down",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r test && sh scripts/deploy-bundle.spec.sh",
+    "test": "pnpm -r test && sh scripts/deploy-bundle.spec.sh && sh scripts/liveboard-https-agent.spec.sh",
     "typecheck": "pnpm --filter @liveboard/shared build && pnpm -r typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -100,6 +100,84 @@
   padding: 12px;
 }
 
+.system-settings-page
+  :is(.https-enabled-panel, .https-unavailable-panel, .https-enable-form) {
+  min-width: 0;
+  border-radius: 10px;
+  background: var(--fill-subtle);
+  padding: 14px;
+}
+
+.system-settings-page .https-enabled-panel {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: start;
+  gap: 11px;
+}
+
+.system-settings-page .https-enabled-panel > svg {
+  width: 24px;
+  height: 24px;
+  color: var(--accent-dark);
+}
+
+.system-settings-page .https-enabled-panel p {
+  margin: 4px 0 0;
+}
+
+.system-settings-page .https-enabled-panel a {
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.system-settings-page .https-enable-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.system-settings-page .https-enable-form label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.system-settings-page .https-enable-form input {
+  width: 100%;
+  min-width: 0;
+}
+
+.system-settings-page .https-enable-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-top: 2px;
+}
+
+.system-settings-page .https-enable-actions p,
+.system-settings-page .https-unavailable-panel p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.system-settings-page .https-enable-actions .button {
+  flex: 0 0 auto;
+}
+
+.system-settings-page .https-unavailable-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+}
+
 .system-settings-page .favicon-preview {
   display: grid;
   place-items: center;
@@ -201,5 +279,18 @@
 
   .system-settings-page .favicon-setting-actions > :is(.button, label) {
     flex: 1 1 0;
+  }
+
+  .system-settings-page .https-enable-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .system-settings-page .https-enable-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .system-settings-page .https-enable-actions .button {
+    width: 100%;
   }
 }

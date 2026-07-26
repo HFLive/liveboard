@@ -51,6 +51,8 @@ docker compose up --build -d
 
 Nginx 站点配置是跨版本持久状态。安装器只在首次缺失时安装带 `# Managed by LiveBoard` 标记的配置，升级不得用发布包模板覆盖现有 HTTP、IP HTTPS 或域名 HTTPS 配置。
 
+域名 HTTPS 使用发布包离线携带的固定版本 ACME 客户端和 HTTP-01，不依赖特定 DNS 服务商。最高管理员通过管理中心调用宿主机受限 Unix Socket 助手；API 容器不得挂载 Docker Socket 或获得 root 权限。证书与状态保存在 `/opt/liveboard/https`，systemd timer 每天检查续期。首次切换必须依次通过公网挑战路径、证书签发、Nginx 校验和本机 TLS 探测；失败时恢复原 Nginx、`.env` 与 `install.conf`。一键流程只覆盖单域名证书，泛域名所需的 DNS-01 不纳入通用流程。
+
 生产首次初始化由 `apps/api/src/bootstrap-production.ts` 自动完成，只创建一个随机密码的最高管理员、默认 workspace 和论坛分类。部署脚本必须在最终总结中醒目显示首次凭据，并将其保存到权限为 `600` 的 `/opt/liveboard/initial-admin-credentials.txt`；用户修改密码后应删除该文件。升级不得生成或覆盖管理员密码。`apps/api/prisma/seed.cjs` 仅用于本地演示，生产部署不得调用。
 
 `docker-compose.yml` 中的 Web 明确使用 `NODE_ENV=production`。用户要求“开发版本”时，不得只执行 `docker compose up`；应停止 `web`、`api` 容器，保留基础设施，再运行 `pnpm dev`。
@@ -251,5 +253,6 @@ UI 修改额外确认：
 - 2026-07-26：课堂成为登录后的默认首页，LB 标志直接进入课堂；课堂列表使用克制的圆角矩形块展示。课堂详情默认显示公告，课堂教师可发布、编辑和删除公告，学生只读。AI 不再占用主导航入口，改由文档页工具栏进入；管理中心删除总览页面，`/app/admin` 直接进入成员管理。
 - 2026-07-26：管理员可在课堂详情编辑课堂名称和说明。AI 每日额度从全局应用侧栏移入 AI 历史栏左下角，仅在 AI 页面展示。文档左侧文件夹树的 hover 只作用于图标与名称按钮，不再铺满整行；每个文件夹增加与右侧列表共用操作逻辑的三点菜单，置顶仅在目标属于当前目录时提供。
 - 2026-07-26：正式发布包改为可直接执行的 `.run` 自解压单文件；首次安装与升级分别使用 `install`/`upgrade`，固定状态收口到 `/opt/liveboard`，应用镜像按 Release 版本标记。新增 `liveboard` 管理命令统一状态、诊断、日志、启停、安全旧版本清理和保留数据卷的可恢复卸载；升级不再覆盖持久化 Nginx 配置。
+- 2026-07-26：生产部署新增提供商无关的一键 HTTPS：Release 离线携带固定版本 ACME 客户端，最高管理员可在系统设置使用 HTTP-01 签发单域名证书；宿主机受限助手通过专用 Unix Socket 提供状态与启用操作，systemd timer 自动续期，切换失败会恢复原 Nginx、环境变量和安装状态。
 
 后续纪要只记录会影响未来开发判断的决策、迁移或故障原因，不记录每个微小样式调整。
