@@ -9,6 +9,7 @@ ENV_FILE=${LIVEBOARD_ENV_FILE:-"$STATE_DIR/.env"}
 NGINX_SITE=${LIVEBOARD_NGINX_SITE:-/etc/nginx/sites-available/liveboard}
 NGINX_ENABLED=${LIVEBOARD_NGINX_ENABLED:-/etc/nginx/sites-enabled/liveboard}
 NGINX_DEFAULT=${LIVEBOARD_NGINX_DEFAULT:-/etc/nginx/sites-enabled/default}
+HTTPS_AGENT=${LIVEBOARD_HTTPS_AGENT:-"$STATE_DIR/bin/liveboard-https-agent.py"}
 LOCK_DIR="$STATE_DIR/.operation-lock"
 LOCK_HELD=false
 
@@ -23,6 +24,7 @@ usage() {
   stop                   停止服务但保留容器和数据
   restart                重启全部服务
   doctor                 检查安装、服务、端口和备份状态
+  https <子命令>         查看、启用或续期 HTTPS
   clean [选项]           清理旧版本文件和对应应用镜像
   uninstall [--yes]      卸载应用，保留配置、备份和数据卷
 
@@ -31,6 +33,11 @@ clean 选项：
   --packages             同时清理 /opt 中的旧 .run 安装包
   --dry-run              只显示将被删除的内容
   --yes                  跳过交互确认
+
+https 子命令：
+  status
+  enable --domain 域名 --email 邮箱
+  renew
 EOF
 }
 
@@ -242,9 +249,66 @@ command_doctor() {
     echo "  [提醒] 首次凭据文件仍存在；修改密码后应删除它。"
   fi
 
+  if [ -x "$HTTPS_AGENT" ]; then
+    echo "  [正常] HTTPS 助手已安装"
+    if [ "$STATE_DIR" = /opt/liveboard ] && command -v systemctl >/dev/null 2>&1; then
+      if systemctl is-active --quiet liveboard-https-agent.service &&
+        systemctl is-active --quiet liveboard-https-renew.timer; then
+        echo "  [正常] HTTPS 助手与自动续期定时器正在运行"
+      else
+        echo "  [失败] HTTPS 助手或自动续期定时器未运行"
+        failed=true
+      fi
+    fi
+  else
+    echo "  [警告] 当前版本未安装 HTTPS 助手"
+  fi
+
   if [ "$failed" = true ]; then
     exit 1
   fi
+}
+
+command_https() {
+  require_root
+  [ -x "$HTTPS_AGENT" ] || die "当前版本未安装 HTTPS 助手，请先升级生产部署包。"
+  shift
+  subcommand=${1:-status}
+  shift || true
+
+  case "$subcommand" in
+    status)
+      [ "$#" -eq 0 ] || die "https status 不接受额外参数。"
+      python3 "$HTTPS_AGENT" status
+      ;;
+    renew)
+      [ "$#" -eq 0 ] || die "https renew 不接受额外参数。"
+      python3 "$HTTPS_AGENT" renew
+      ;;
+    enable)
+      domain=
+      email=
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --domain)
+            [ "$#" -ge 2 ] || die "--domain 需要域名。"
+            domain=$2
+            shift 2
+            ;;
+          --email)
+            [ "$#" -ge 2 ] || die "--email 需要邮箱。"
+            email=$2
+            shift 2
+            ;;
+          *) die "无法识别的 https enable 参数：$1" ;;
+        esac
+      done
+      [ -n "$domain" ] || die "缺少 --domain。"
+      [ -n "$email" ] || die "缺少 --email。"
+      python3 "$HTTPS_AGENT" enable --domain "$domain" --email "$email"
+      ;;
+    *) die "未知 HTTPS 子命令：$subcommand" ;;
+  esac
 }
 
 command_clean() {
@@ -376,8 +440,14 @@ command_uninstall() {
   echo "以下内容会保留："
   echo "  $ENV_FILE"
   echo "  $STATE_DIR/backups"
+  echo "  $STATE_DIR/https 中的证书和续期状态"
   echo "  Docker 命名卷 liveboard_postgres-data、liveboard_redis-data、liveboard_minio-data"
   confirm "确认执行可恢复卸载？" "$assume_yes"
+
+  if [ "$STATE_DIR" = /opt/liveboard ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl disable --now liveboard-https-renew.timer liveboard-https-agent.service >/dev/null 2>&1 || true
+    rm -f /run/liveboard/https-agent.sock
+  fi
 
   compose_for "$release_dir" down --remove-orphans
 
@@ -418,6 +488,7 @@ case "$COMMAND" in
   stop) command_stop ;;
   restart) command_restart ;;
   doctor) command_doctor ;;
+  https) command_https "$@" ;;
   clean) command_clean "$@" ;;
   uninstall) command_uninstall "$@" ;;
   -h | --help | help | '') usage ;;

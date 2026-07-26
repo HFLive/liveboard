@@ -77,8 +77,11 @@ services:
       REDIS_URL: redis://redis:6379
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
+      LIVEBOARD_HTTPS_SOCKET: /run/liveboard/https-agent.sock
     ports:
       - "127.0.0.1:4000:4000"
+    volumes:
+      - /run/liveboard:/run/liveboard
     depends_on:
       postgres:
         condition: service_healthy

@@ -4,6 +4,8 @@ import {
   AI_USAGE_CONSUMED_EVENT,
   askAiStream,
   downloadMarkdown,
+  enableHttps,
+  getHttpsStatus,
   getMe,
   importMarkdown,
 } from "./index";
@@ -120,6 +122,58 @@ describe("Markdown API", () => {
         status: 400,
       }),
     );
+  });
+});
+
+describe("HTTPS settings API", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("loads host HTTPS status and submits the selected domain", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            https: { available: true, enabled: false, domain: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            https: {
+              available: true,
+              enabled: true,
+              domain: "board.example.com",
+            },
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getHttpsStatus();
+    await enableHttps({
+      domain: "board.example.com",
+      email: "admin@example.com",
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `${API_URL}/admin/settings/https`,
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      `${API_URL}/admin/settings/https/enable`,
+    );
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({
+        domain: "board.example.com",
+        email: "admin@example.com",
+      }),
+    });
   });
 });
 

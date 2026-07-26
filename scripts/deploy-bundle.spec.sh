@@ -38,12 +38,22 @@ export LIVEBOARD_NGINX_DEFAULT="$NGINX_DEFAULT"
 mkdir -p "$BUNDLE_DIR" "$BIN_DIR" "$(dirname "$NGINX_DEFAULT")"
 : >"$NGINX_DEFAULT"
 cp "$ROOT_DIR/scripts/deploy-bundle.sh" "$BUNDLE_DIR/deploy.sh"
+cp "$ROOT_DIR/scripts/liveboard-https-agent.py" "$BUNDLE_DIR/https-agent.py"
 cp "$ROOT_DIR/scripts/liveboard-manager.sh" "$BUNDLE_DIR/manager.sh"
 cp "$ROOT_DIR/.env.production.example" "$BUNDLE_DIR/.env.example"
+cp "$ROOT_DIR/infra/systemd/liveboard-https-agent.service" "$BUNDLE_DIR/liveboard-https-agent.service"
+cp "$ROOT_DIR/infra/systemd/liveboard-https-renew.service" "$BUNDLE_DIR/liveboard-https-renew.service"
+cp "$ROOT_DIR/infra/systemd/liveboard-https-renew.timer" "$BUNDLE_DIR/liveboard-https-renew.timer"
 
 for file in docker-compose.yml SHA256SUMS; do
   : >"$BUNDLE_DIR/$file"
 done
+
+cat >"$BUNDLE_DIR/lego" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x "$BUNDLE_DIR/lego"
 
 printf '%s\n' 'mock-image-data' | "$REAL_GZIP" -c >"$BUNDLE_DIR/images.tar.gz"
 printf '%s\n' '# Managed by LiveBoard' >"$BUNDLE_DIR/nginx.conf"
@@ -135,6 +145,8 @@ fi
 test "$MODE" = "600"
 BEFORE=$(cksum "$CREDENTIALS_FILE")
 test -x "$MANAGER_PATH"
+test -x "$STATE_DIR/bin/lego"
+test -x "$STATE_DIR/bin/liveboard-https-agent.py"
 test "$(cat "$STATE_DIR/releases/current")" = "v1.0.0"
 test "$(readlink "$STATE_DIR/releases/active")" = "$STATE_DIR/releases/v1.0.0"
 grep -q '^CURRENT_VERSION=v1.0.0$' "$STATE_DIR/install.conf"
@@ -147,6 +159,12 @@ for index in 01 02 03 04 05 06 07 08 09 10 11; do
   printf '%s\n' old >"$STATE_DIR/backups/postgres-20000101-0000${index}.dump"
 done
 
+printf '%s\n' \
+  'CURRENT_VERSION=v1.0.0' \
+  'ACCESS_MODE=https-domain' \
+  'HTTPS_DOMAIN=board.example.com' \
+  'INSTALLED_AT=2026-07-26T00:00:00Z' \
+  >"$STATE_DIR/install.conf"
 printf '%s\n' 'release=v1.0.1' >"$BUNDLE_DIR/manifest.txt"
 PATH="$BIN_DIR:$PATH" \
   LIVEBOARD_STATE_DIR="$STATE_DIR" \
@@ -162,6 +180,8 @@ test "$(find "$STATE_DIR/backups" -type f -name 'postgres-*.dump' | wc -l | tr -
 test "$(cat "$STATE_DIR/releases/current")" = "v1.0.1"
 test "$(readlink "$STATE_DIR/releases/active")" = "$STATE_DIR/releases/v1.0.1"
 grep -q '^CURRENT_VERSION=v1.0.1$' "$STATE_DIR/install.conf"
+grep -q '^ACCESS_MODE=https-domain$' "$STATE_DIR/install.conf"
+grep -q '^HTTPS_DOMAIN=board.example.com$' "$STATE_DIR/install.conf"
 if grep -q '^密码：test-random-password$' "$TEST_DIR/second-run.log"; then
   echo "重复部署不应再次显示首次管理员密码。" >&2
   exit 1

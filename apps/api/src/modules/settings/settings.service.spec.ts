@@ -1,5 +1,6 @@
 import type { PrismaService } from "../prisma/prisma.service";
 import type { ConfigService } from "@nestjs/config";
+import type { HttpsAgentClient } from "./https-agent.client";
 import { SettingsService } from "./settings.service";
 
 describe("SettingsService", () => {
@@ -27,6 +28,10 @@ describe("SettingsService", () => {
   const config = {
     get: jest.fn((_key: string, fallback: unknown) => fallback),
   };
+  const httpsAgent = {
+    status: jest.fn(),
+    enable: jest.fn(),
+  };
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -36,6 +41,7 @@ describe("SettingsService", () => {
     service = new SettingsService(
       prisma as unknown as PrismaService,
       config as unknown as ConfigService,
+      httpsAgent as unknown as HttpsAgentClient,
     );
     Object.assign(service as unknown as { minio: typeof minio }, { minio });
     minio.bucketExists.mockResolvedValue(true);
@@ -46,6 +52,24 @@ describe("SettingsService", () => {
       id: "admin-1",
       systemRole: "super_admin",
       status: "active",
+    });
+    httpsAgent.status.mockResolvedValue({
+      available: true,
+      enabled: false,
+      domain: null,
+      expiresAt: null,
+      lastRenewedAt: null,
+      lastRenewalCheckAt: null,
+      lastError: null,
+    });
+    httpsAgent.enable.mockResolvedValue({
+      available: true,
+      enabled: true,
+      domain: "board.example.com",
+      expiresAt: "2026-10-24T00:00:00Z",
+      lastRenewedAt: "2026-07-26T00:00:00Z",
+      lastRenewalCheckAt: "2026-07-26T00:00:00Z",
+      lastError: null,
     });
   });
 
@@ -150,5 +174,26 @@ describe("SettingsService", () => {
     await expect(
       service.updateSettings("user-1", { timeZone: "UTC" }),
     ).rejects.toThrow("Only super administrators");
+  });
+
+  it("returns HTTPS host status only to a super administrator", async () => {
+    await expect(service.getHttpsStatus("admin-1")).resolves.toMatchObject({
+      available: true,
+      enabled: false,
+    });
+    expect(httpsAgent.status).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes HTTPS inputs before calling the host agent", async () => {
+    await service.enableHttps(
+      "admin-1",
+      " board.example.com ",
+      " admin@example.com ",
+    );
+
+    expect(httpsAgent.enable).toHaveBeenCalledWith(
+      "board.example.com",
+      "admin@example.com",
+    );
   });
 });

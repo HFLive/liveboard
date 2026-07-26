@@ -1,0 +1,11 @@
+[Unit]
+Description=Check the LiveBoard HTTPS certificate every day
+
+[Timer]
+OnCalendar=*-*-* 03:35:00
+RandomizedDelaySec=1h
+Persistent=true
+Unit=liveboard-https-renew.service
+
+[Install]
+WantedBy=timers.target

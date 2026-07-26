@@ -12,6 +12,7 @@
 | ---- | ---- | --------------- | ---------------- |
 | TCP  | 22   | 你的固定公网 IP | SSH 登录         |
 | TCP  | 80   | `0.0.0.0/0`     | 通过公网 IP 访问 |
+| TCP  | 443  | `0.0.0.0/0`     | 域名 HTTPS 访问  |
 
 不要开放 `3000`、`4000`、`5432`、`6379`、`9000` 或 `9001`。这些端口只绑定服务器本机。
 
@@ -68,6 +69,7 @@ sudo sh /opt/liveboard-v0.3.0-linux-amd64.run install
 - 等待 API 与 Web 都通过健康检查；
 - 在空数据库中创建唯一的最高管理员和基础 workspace；
 - 配置并检查 Nginx；
+- 安装 HTTPS 助手与自动续期定时器；
 - 安装固定的 `liveboard` 管理命令。
 
 首次安装时，终端最后会用醒目的独立区块显示随机管理员账号和密码，同时将其保存到仅 root 可读、权限为 `600` 的文件：
@@ -160,12 +162,40 @@ liveboard uninstall
 
 ## 9. 改用 HTTPS
 
-配置域名和 HTTPS 后，将 `/opt/liveboard/.env` 中的配置改为：
+该功能使用标准 ACME HTTP-01，适用于任意域名注册商和权威 DNS 服务商，不要求使用 Cloudflare API。
 
-```text
-SESSION_COOKIE_SECURE=true
+启用前确认：
+
+1. 域名的 A 记录指向这台服务器的公网 IPv4；只有服务器确实配置了公网 IPv6 时才添加 AAAA 记录。
+2. 公网 TCP 80 和 443 均已放行。
+3. `http://你的域名` 能到达本机 LiveBoard。首次签发时不要在 CDN 侧强制跳转 HTTPS；使用 Cloudflare 代理时，如检查失败可先切到“仅 DNS”完成首次签发。
+
+然后以最高管理员进入“管理中心 → 系统设置 → HTTPS”，填写完整域名和证书通知邮箱，点击“检查并启用 HTTPS”。系统会依次完成公网验证、证书签发、Nginx 校验、本机 HTTPS 探测和应用安全 Cookie 切换。任一步失败都会恢复原 HTTP 配置，不会用半成品证书替换当前站点。
+
+也可以通过服务器命令启用：
+
+```bash
+sudo liveboard https status
+sudo liveboard https enable \
+  --domain board.example.com \
+  --email admin@example.com
 ```
 
-随后使用支持 HTTPS 的 Nginx 配置并执行 `liveboard restart`。不要在纯 HTTP 环境中启用该值。升级器不会覆盖已配置的 HTTPS 站点。
+启用成功后：
+
+- HTTP 自动跳转 HTTPS；
+- `/opt/liveboard/.env` 中的 `SESSION_COOKIE_SECURE` 和 `WEB_ORIGIN` 自动更新；
+- `liveboard-https-renew.timer` 每天检查一次证书，并在需要时续期和重新载入 Nginx；
+- 证书及续期状态保存在 `/opt/liveboard/https`，升级不会覆盖。
+
+手动检查或立即执行续期：
+
+```bash
+sudo liveboard https status
+sudo liveboard https renew
+systemctl status liveboard-https-renew.timer
+```
+
+当前一键流程只签发单个完整域名，不签发泛域名证书；泛域名必须使用依赖 DNS 服务商 API 的 DNS-01，不属于这套通用流程。HTTPS 只解决传输加密，不改变服务器所在地相关的域名备案或接入要求。
 
 Ubuntu 24.04 官方仓库提供 [`docker.io`](https://packages.ubuntu.com/noble/docker.io) 和 [`docker-compose-v2`](https://packages.ubuntu.com/noble/docker-compose-v2)；Nginx 的安装方式可参考 [Ubuntu Server 官方文档](https://documentation.ubuntu.com/server/how-to/web-services/install-nginx/)。
