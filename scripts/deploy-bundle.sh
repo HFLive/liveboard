@@ -3,27 +3,82 @@
 set -eu
 umask 077
 
-BUNDLE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ACTION=${1:-}
+case "$ACTION" in
+  install | upgrade) ;;
+  *)
+    echo "用法：sudo sh deploy.sh <install|upgrade>" >&2
+    exit 1
+    ;;
+esac
+
+SOURCE_BUNDLE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 STATE_DIR=${LIVEBOARD_STATE_DIR:-/opt/liveboard}
 ENV_FILE=${LIVEBOARD_ENV_FILE:-"$STATE_DIR/.env"}
 BACKUP_DIR=${BACKUP_DIR:-"$STATE_DIR/backups"}
+RELEASES_DIR="$STATE_DIR/releases"
+ACTIVE_LINK="$RELEASES_DIR/active"
+INSTALL_CONF="$STATE_DIR/install.conf"
 BACKUP_RETENTION_OVERRIDE=${BACKUP_RETENTION_COUNT+x}
 BACKUP_RETENTION_COUNT=${BACKUP_RETENTION_COUNT:-10}
 HEALTH_URL=${HEALTH_URL:-"http://127.0.0.1:4000/health"}
 WEB_HEALTH_URL=${WEB_HEALTH_URL:-"http://127.0.0.1:3000"}
-COMPOSE_FILE="$BUNDLE_DIR/docker-compose.yml"
-IMAGES_FILE="$BUNDLE_DIR/images.tar.gz"
-MANIFEST_FILE="$BUNDLE_DIR/manifest.txt"
-NGINX_FILE="$BUNDLE_DIR/nginx.conf"
+NGINX_HEALTH_URL=${NGINX_HEALTH_URL:-"http://127.0.0.1"}
+MANAGER_PATH=${LIVEBOARD_MANAGER_PATH:-/usr/local/bin/liveboard}
+NGINX_SITE=${LIVEBOARD_NGINX_SITE:-/etc/nginx/sites-available/liveboard}
+NGINX_ENABLED=${LIVEBOARD_NGINX_ENABLED:-/etc/nginx/sites-enabled/liveboard}
+NGINX_DEFAULT=${LIVEBOARD_NGINX_DEFAULT:-/etc/nginx/sites-enabled/default}
 INITIAL_ADMIN_CREDENTIALS_FILE="$STATE_DIR/initial-admin-credentials.txt"
 INITIAL_ADMIN_CREATED=false
+STAGING_DIR=
+LOCK_DIR="$STATE_DIR/.operation-lock"
 
-for command in docker curl sha256sum gzip od; do
+if [ "$(id -u)" -ne 0 ] && [ "$STATE_DIR" = /opt/liveboard ]; then
+  echo "正式安装需要 root 权限，请使用 sudo。" >&2
+  exit 1
+fi
+
+install_system_dependencies() {
+  [ "$ACTION" = install ] || return 0
+  [ "$STATE_DIR" = /opt/liveboard ] || return 0
+  command -v apt-get >/dev/null 2>&1 || return 0
+
+  missing_base=false
+  for command in curl sha256sum gzip od nginx; do
+    if ! command -v "$command" >/dev/null 2>&1; then
+      missing_base=true
+    fi
+  done
+
+  if [ "$missing_base" = true ]; then
+    echo "安装 Nginx 和基础部署工具..."
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y nginx curl ca-certificates tar gzip coreutils
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "安装 Ubuntu 仓库中的 Docker 与 Compose..."
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose-v2
+  elif ! docker compose version >/dev/null 2>&1; then
+    echo "检测到已有 Docker，但缺少匹配的 Compose 插件。" >&2
+    echo "为避免混装 docker.io 与 docker-ce，请先从现有 Docker 软件源安装 Compose 插件。" >&2
+    exit 1
+  fi
+}
+
+install_system_dependencies
+
+for command in docker curl sha256sum gzip od tar; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "缺少部署依赖：$command" >&2
     exit 1
   fi
 done
+
+if [ "$STATE_DIR" = /opt/liveboard ] && command -v systemctl >/dev/null 2>&1; then
+  systemctl enable --now docker
+fi
 
 case "$(uname -m)" in
   x86_64 | amd64) ;;
@@ -38,14 +93,110 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
-for file in "$COMPOSE_FILE" "$IMAGES_FILE" "$MANIFEST_FILE" "$NGINX_FILE" "$BUNDLE_DIR/SHA256SUMS" "$BUNDLE_DIR/.env.example"; do
+SOURCE_MANIFEST_FILE="$SOURCE_BUNDLE_DIR/manifest.txt"
+for file in \
+  "$SOURCE_BUNDLE_DIR/docker-compose.yml" \
+  "$SOURCE_BUNDLE_DIR/images.tar.gz" \
+  "$SOURCE_MANIFEST_FILE" \
+  "$SOURCE_BUNDLE_DIR/nginx.conf" \
+  "$SOURCE_BUNDLE_DIR/manager.sh" \
+  "$SOURCE_BUNDLE_DIR/SHA256SUMS" \
+  "$SOURCE_BUNDLE_DIR/.env.example"; do
   if [ ! -f "$file" ]; then
     echo "发布包不完整，缺少：$file" >&2
     exit 1
   fi
 done
 
-mkdir -p "$STATE_DIR" "$BACKUP_DIR" "$STATE_DIR/releases"
+echo "校验发布包..."
+(
+  cd "$SOURCE_BUNDLE_DIR"
+  sha256sum -c SHA256SUMS
+)
+
+VERSION=$(awk -F= '$1 == "release" { print $2; exit }' "$SOURCE_MANIFEST_FILE")
+case "$VERSION" in
+  v[0-9]*.[0-9]*.[0-9]*) ;;
+  *)
+    echo "发布清单中的版本无效：${VERSION:-空}" >&2
+    exit 1
+    ;;
+esac
+
+mkdir -p "$STATE_DIR" "$BACKUP_DIR" "$RELEASES_DIR"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  lock_pid=$(sed -n '1p' "$LOCK_DIR/pid" 2>/dev/null || true)
+  if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
+    echo "另一个 LiveBoard 安装、升级或管理操作正在运行（PID $lock_pid）。" >&2
+    exit 1
+  fi
+  rm -f "$LOCK_DIR/pid"
+  rmdir "$LOCK_DIR" 2>/dev/null || {
+    echo "无法清理失效的操作锁：$LOCK_DIR" >&2
+    exit 1
+  }
+  mkdir "$LOCK_DIR"
+fi
+printf '%s\n' "$$" >"$LOCK_DIR/pid"
+cleanup_deploy() {
+  if [ -n "$STAGING_DIR" ] && [ -d "$STAGING_DIR" ]; then
+    rm -rf "$STAGING_DIR"
+  fi
+  rm -f "$LOCK_DIR/pid"
+  rmdir "$LOCK_DIR" 2>/dev/null || true
+}
+trap cleanup_deploy EXIT HUP INT TERM
+
+if [ "$ACTION" = install ] && [ -L "$ACTIVE_LINK" ]; then
+  echo "LiveBoard 已经安装。请上传新版本并执行 upgrade。" >&2
+  exit 1
+fi
+if [ "$ACTION" = upgrade ] && [ ! -L "$ACTIVE_LINK" ]; then
+  echo "尚未检测到 LiveBoard 安装，请执行 install。" >&2
+  exit 1
+fi
+if [ "$ACTION" = upgrade ] && [ -f "$RELEASES_DIR/current" ]; then
+  CURRENT_VERSION=$(sed -n '1p' "$RELEASES_DIR/current")
+  if [ "$CURRENT_VERSION" = "$VERSION" ]; then
+    echo "当前已经是 ${VERSION}，无需重复升级。"
+    exit 0
+  fi
+fi
+if [ "$ACTION" = install ] && command -v nginx >/dev/null 2>&1 && [ -e "$NGINX_SITE" ]; then
+  if ! grep -q '^# Managed by LiveBoard$' "$NGINX_SITE"; then
+    echo "现有 Nginx 配置不属于 LiveBoard，拒绝覆盖：$NGINX_SITE" >&2
+    exit 1
+  fi
+fi
+
+RELEASE_DIR="$RELEASES_DIR/$VERSION"
+case "$RELEASE_DIR" in
+  "$RELEASES_DIR"/v*) ;;
+  *) echo "拒绝使用无效版本目录：$RELEASE_DIR" >&2; exit 1 ;;
+esac
+
+if [ "$SOURCE_BUNDLE_DIR" != "$RELEASE_DIR" ]; then
+  STAGING_DIR="$RELEASES_DIR/.staging-$VERSION-$$"
+  mkdir "$STAGING_DIR"
+  (
+    cd "$SOURCE_BUNDLE_DIR"
+    tar -cf - .
+  ) | (
+    cd "$STAGING_DIR"
+    tar -xf -
+  )
+  if [ -e "$RELEASE_DIR" ]; then
+    rm -rf "$RELEASE_DIR"
+  fi
+  mv "$STAGING_DIR" "$RELEASE_DIR"
+  STAGING_DIR=
+fi
+
+BUNDLE_DIR="$RELEASE_DIR"
+COMPOSE_FILE="$BUNDLE_DIR/docker-compose.yml"
+IMAGES_FILE="$BUNDLE_DIR/images.tar.gz"
+MANIFEST_FILE="$BUNDLE_DIR/manifest.txt"
+NGINX_FILE="$BUNDLE_DIR/nginx.conf"
 
 if [ ! -f "$ENV_FILE" ]; then
   cp "$BUNDLE_DIR/.env.example" "$ENV_FILE"
@@ -148,12 +299,6 @@ if [ "$(read_env_value NODE_ENV)" != "production" ]; then
   exit 1
 fi
 
-echo "校验发布包..."
-(
-  cd "$BUNDLE_DIR"
-  sha256sum -c SHA256SUMS
-)
-
 echo "导入离线镜像包..."
 gzip -dc "$IMAGES_FILE" | docker load
 
@@ -161,8 +306,8 @@ for image in \
   postgres:16-alpine \
   redis:7-alpine \
   minio/minio:RELEASE.2024-12-18T13-15-44Z \
-  liveboard-api:local \
-  liveboard-web:local; do
+  "liveboard-api:${VERSION}" \
+  "liveboard-web:${VERSION}"; do
   if ! docker image inspect "$image" >/dev/null 2>&1; then
     echo "发布包缺少镜像：$image" >&2
     exit 1
@@ -170,11 +315,13 @@ for image in \
 done
 
 compose() {
-  docker compose \
-    --project-name liveboard \
-    --project-directory "$BUNDLE_DIR" \
-    --file "$COMPOSE_FILE" \
-    "$@"
+  LIVEBOARD_API_IMAGE="liveboard-api:${VERSION}" \
+    LIVEBOARD_WEB_IMAGE="liveboard-web:${VERSION}" \
+    docker compose \
+      --project-name liveboard \
+      --project-directory "$BUNDLE_DIR" \
+      --file "$COMPOSE_FILE" \
+      "$@"
 }
 
 echo "启动基础设施服务..."
@@ -274,17 +421,79 @@ case "$BOOTSTRAP_CREATED" in
     ;;
 esac
 
-VERSION=$(awk -F= '$1 == "release" { print $2; exit }' "$MANIFEST_FILE")
-if [ -z "$VERSION" ]; then
-  VERSION=unknown
-fi
+install_gateway() {
+  if ! command -v nginx >/dev/null 2>&1; then
+    echo "未检测到 Nginx，跳过公网入口配置。"
+    return
+  fi
 
-printf '%s\n' "$VERSION" >"$STATE_DIR/releases/current"
-ln -sfn "$BUNDLE_DIR" "$STATE_DIR/releases/active"
+  mkdir -p "$(dirname "$NGINX_SITE")" "$(dirname "$NGINX_ENABLED")" "$STATE_DIR/gateway"
+  if [ -e "$NGINX_SITE" ]; then
+    if ! grep -q '^# Managed by LiveBoard$' "$NGINX_SITE"; then
+      if [ "$ACTION" = upgrade ]; then
+        echo "保留现有 Nginx 配置，不使用发布包模板覆盖：$NGINX_SITE"
+      else
+        echo "现有 Nginx 配置不属于 LiveBoard，拒绝覆盖：$NGINX_SITE" >&2
+        exit 1
+      fi
+    fi
+  else
+    cp "$NGINX_FILE" "$NGINX_SITE"
+  fi
+
+  if [ -e "$NGINX_DEFAULT" ] || [ -L "$NGINX_DEFAULT" ]; then
+    if [ ! -e "$STATE_DIR/gateway/default-site.backup" ]; then
+      mv "$NGINX_DEFAULT" "$STATE_DIR/gateway/default-site.backup"
+    else
+      rm -f "$NGINX_DEFAULT"
+    fi
+  fi
+
+  ln -sfn "$NGINX_SITE" "$NGINX_ENABLED"
+  nginx -t
+  if [ "$STATE_DIR" = /opt/liveboard ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl enable --now nginx
+    systemctl reload nginx
+  fi
+
+  attempt=0
+  until curl --fail --silent --show-error "$NGINX_HEALTH_URL" >/dev/null 2>&1; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 15 ]; then
+      echo "Nginx 未在 30 秒内通过健康检查。" >&2
+      exit 1
+    fi
+    sleep 2
+  done
+}
+
+install_gateway
+
+mkdir -p "$(dirname "$MANAGER_PATH")"
+cp "$BUNDLE_DIR/manager.sh" "$MANAGER_PATH"
+chmod 755 "$MANAGER_PATH"
+
+printf '%s\n' "$VERSION" >"$RELEASES_DIR/current"
+ln -sfn "$BUNDLE_DIR" "$ACTIVE_LINK"
+
+INSTALLED_AT=$(awk -F= '$1 == "INSTALLED_AT" { sub(/^[^=]*=/, ""); print; exit }' "$INSTALL_CONF" 2>/dev/null || true)
+[ -n "$INSTALLED_AT" ] || INSTALLED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+ACCESS_MODE=$(awk -F= '$1 == "ACCESS_MODE" { sub(/^[^=]*=/, ""); print; exit }' "$INSTALL_CONF" 2>/dev/null || true)
+[ -n "$ACCESS_MODE" ] || ACCESS_MODE=http-ip
+{
+  echo "CURRENT_VERSION=$VERSION"
+  echo "ACCESS_MODE=$ACCESS_MODE"
+  echo "INSTALLED_AT=$INSTALLED_AT"
+  echo "UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} >"$INSTALL_CONF.tmp"
+mv "$INSTALL_CONF.tmp" "$INSTALL_CONF"
+chmod 600 "$INSTALL_CONF"
+
 compose ps
 echo "发布部署完成：$VERSION"
 echo "数据库备份：$BACKUP_FILE"
 echo "发布清单：$MANIFEST_FILE"
+echo "管理命令：liveboard status"
 
 if [ "$INITIAL_ADMIN_CREATED" = true ]; then
   echo

@@ -42,7 +42,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    image: liveboard-api:local
+    image: ${LIVEBOARD_API_IMAGE:-liveboard-api:local}
     env_file:
       - .env
     restart: "no"
@@ -68,7 +68,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    image: liveboard-api:local
+    image: ${LIVEBOARD_API_IMAGE:-liveboard-api:local}
     env_file:
       - .env
     restart: unless-stopped
@@ -107,7 +107,7 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
         NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS: ${NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS:-false}
-    image: liveboard-web:local
+    image: ${LIVEBOARD_WEB_IMAGE:-liveboard-web:local}
     env_file:
       - .env
     restart: unless-stopped
