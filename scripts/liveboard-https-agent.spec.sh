@@ -79,6 +79,8 @@ grep -q '^WEB_ORIGIN=https://board.example.com$' "$ENV_FILE"
 grep -q '^ACCESS_MODE=https-domain$' "$STATE_DIR/install.conf"
 grep -q '^HTTPS_DOMAIN=board.example.com$' "$STATE_DIR/install.conf"
 grep -q '^  listen 443 ssl;$' "$NGINX_SITE"
+grep -q '^    proxy_read_timeout 480s;$' "$NGINX_SITE"
+grep -q '^    proxy_send_timeout 480s;$' "$NGINX_SITE"
 test -f "$STATE_DIR/https/lego/certificates/board.example.com.crt"
 test -f "$STATE_DIR/https/lego/certificates/board.example.com.key"
 
@@ -89,6 +91,16 @@ env $AGENT_ENV \
   python3 "$ROOT_DIR/scripts/liveboard-https-agent.py" status \
   >"$TEST_DIR/status.json"
 grep -q '"expiresAt": "' "$TEST_DIR/status.json"
+
+chmod -x "$LEGO_BIN"
+env $AGENT_ENV \
+  LIVEBOARD_STATE_DIR="$STATE_DIR" \
+  LIVEBOARD_NGINX_SITE="$NGINX_SITE" \
+  LIVEBOARD_LEGO_BIN="$LEGO_BIN" \
+  python3 "$ROOT_DIR/scripts/liveboard-https-agent.py" status \
+  >"$TEST_DIR/unavailable.json"
+grep -q '"available": false' "$TEST_DIR/unavailable.json"
+chmod +x "$LEGO_BIN"
 
 env $AGENT_ENV \
   LIVEBOARD_STATE_DIR="$STATE_DIR" \

@@ -44,6 +44,12 @@
 
 证书签发前先用公网域名回读随机验证文件，签发后再执行 Nginx 配置校验与本机 TLS 探测。只有全部成功才写入安全 Cookie 和域名来源配置；失败时恢复原 Nginx、环境和安装状态。systemd timer 每天进行带随机延迟的续期检查。
 
+### HTTPS 助手沙箱与长请求超时
+
+首个一键 HTTPS Release 将助手置于 `ProtectSystem=strict`，但只开放了 `/run/liveboard`。Ubuntu 的 `nginx -t` 即使已经确认配置语法正确，仍会打开 `/run/nginx.pid`，因此在助手沙箱内报只读文件系统错误。现在助手和续期 unit 都通过 `-/run/nginx.pid` 精确开放该文件，并用 `Requires=nginx.service` 保证测试时 Nginx 已运行；没有放宽整个 `/run`。
+
+同一次审计发现 ACME 最长允许执行 240 秒，而旧 Nginx API 超时只有 150 秒、API Socket 超时只有 300 秒，可能出现后台最终成功但浏览器先收到超时。现在 Nginx 为 480 秒、Socket 为 420 秒，切换 HTTPS 地址前等待 12 秒让 API/Web 完成重建。升级只替换 LiveBoard 管理配置中精确匹配的旧超时行。
+
 ### 生产误用 demo seed
 
 旧教程要求手工执行 demo seed，生产数据库会出现四个固定密码账号、演示权限组和演示内容，且每次部署都重复提示。现在生产使用独立 bootstrap：仅在空数据库创建一个随机密码最高管理员、默认 workspace 和论坛分类；demo seed 只服务本地开发。

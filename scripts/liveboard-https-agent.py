@@ -201,8 +201,8 @@ def nginx_proxy_locations() -> str:
   location /api/ {
     proxy_pass http://127.0.0.1:4000/;
     proxy_buffering off;
-    proxy_read_timeout 150s;
-    proxy_send_timeout 150s;
+    proxy_read_timeout 480s;
+    proxy_send_timeout 480s;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -519,7 +519,7 @@ def https_status() -> dict[str, Any]:
     except FileNotFoundError:
         pass
     return {
-        "available": LEGO_BIN.is_file(),
+        "available": LEGO_BIN.is_file() and os.access(LEGO_BIN, os.X_OK),
         "enabled": bool(config.get("enabled")),
         "domain": domain or None,
         "expiresAt": certificate_expiry(certificate) if certificate else None,

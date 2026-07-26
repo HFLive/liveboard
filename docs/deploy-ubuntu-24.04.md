@@ -188,6 +188,8 @@ sudo liveboard https enable \
 - `liveboard-https-renew.timer` 每天检查一次证书，并在需要时续期和重新载入 Nginx；
 - 证书及续期状态保存在 `/opt/liveboard/https`，升级不会覆盖。
 
+HTTPS 签发可能持续数分钟。LiveBoard 管理的 Nginx API 读写超时为 480 秒，API 与宿主机助手的 Socket 超时为 420 秒；升级器只会将带 `# Managed by LiveBoard` 标记的旧配置中精确的 `150s` 值迁移为 `480s`，不会覆盖其他 Nginx 自定义内容。首次配置如果经过带短请求时限的 CDN 代理，建议临时使用“仅 DNS”直连源站。
+
 手动检查或立即执行续期：
 
 ```bash

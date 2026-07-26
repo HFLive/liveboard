@@ -42,7 +42,7 @@ export class HttpsAgentClient {
 
   async enable(domain: string, email: string): Promise<HttpsStatus> {
     try {
-      return await this.request({ action: "enable", domain, email }, 300_000);
+      return await this.request({ action: "enable", domain, email }, 420_000);
     } catch (caught) {
       if (isUnavailableSocketError(caught)) {
         throw new ServiceUnavailableException(

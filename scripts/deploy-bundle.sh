@@ -446,6 +446,21 @@ install_gateway() {
     cp "$NGINX_FILE" "$NGINX_SITE"
   fi
 
+  if grep -q '^# Managed by LiveBoard$' "$NGINX_SITE"; then
+    timeout_update=$(mktemp "$STATE_DIR/gateway/nginx-timeout-update.XXXXXX")
+    sed \
+      -e 's/proxy_read_timeout 150s;/proxy_read_timeout 480s;/g' \
+      -e 's/proxy_send_timeout 150s;/proxy_send_timeout 480s;/g' \
+      "$NGINX_SITE" >"$timeout_update"
+    if cmp -s "$NGINX_SITE" "$timeout_update"; then
+      rm -f "$timeout_update"
+    else
+      chmod 644 "$timeout_update"
+      mv "$timeout_update" "$NGINX_SITE"
+      echo "已将 LiveBoard Nginx API 超时迁移为 480 秒。"
+    fi
+  fi
+
   if [ -e "$NGINX_DEFAULT" ] || [ -L "$NGINX_DEFAULT" ]; then
     if [ ! -e "$STATE_DIR/gateway/default-site.backup" ]; then
       mv "$NGINX_DEFAULT" "$STATE_DIR/gateway/default-site.backup"
