@@ -51,7 +51,7 @@ docker compose up --build -d
 
 Nginx 站点配置是跨版本持久状态。安装器只在首次缺失时安装带 `# Managed by LiveBoard` 标记的配置，升级不得用发布包模板覆盖现有 HTTP、IP HTTPS 或域名 HTTPS 配置。
 
-域名 HTTPS 使用发布包离线携带的固定版本 ACME 客户端和 HTTP-01，不依赖特定 DNS 服务商。最高管理员通过管理中心调用宿主机受限 Unix Socket 助手；API 容器不得挂载 Docker Socket 或获得 root 权限。证书与状态保存在 `/opt/liveboard/https`，systemd timer 每天检查续期。首次切换必须依次通过公网挑战路径、证书签发、Nginx 校验和本机 TLS 探测；失败时恢复原 Nginx、`.env` 与 `install.conf`。一键流程只覆盖单域名证书，泛域名所需的 DNS-01 不纳入通用流程。HTTPS 助手的 systemd 沙箱必须精确允许访问 `/run/nginx.pid`、`/var/log/nginx` 和 `/var/lib/nginx`，否则 Ubuntu 的 `nginx -t` 会在语法正确后因 PID、日志或临时目录处于只读文件系统而失败；不得为此放宽整个 `/run` 或 `/var`。面板到助手的整条请求链超时必须长于 ACME 操作上限，Nginx 使用 480 秒、API Socket 使用 420 秒。
+域名 HTTPS 使用发布包离线携带的固定版本 ACME 客户端，不依赖特定 DNS 服务商。助手优先检查 HTTP-01；公网 TCP 80 或 HTTP Host 不可用时自动改用需要独占 TCP 443 的 TLS-ALPN-01，并在续期时复用首次成功的验证方式。TLS-ALPN 操作通过临时安装 HTTP-only Nginx 配置并 reload 释放 443，不停止 Nginx systemd unit；完成或失败后必须恢复 HTTPS 配置。最高管理员通过管理中心调用宿主机受限 Unix Socket 助手；API 容器不得挂载 Docker Socket 或获得 root 权限。证书与状态保存在 `/opt/liveboard/https`，systemd timer 每天检查续期。首次切换必须依次通过验证、证书签发、Nginx 校验和本机 TLS 探测；失败时恢复原 Nginx、证书、`.env` 与 `install.conf`。一键流程只覆盖单域名证书，泛域名所需的 DNS-01 不纳入通用流程。HTTPS 助手的 systemd 沙箱必须精确允许访问 `/run/nginx.pid`、`/var/log/nginx` 和 `/var/lib/nginx`，否则 Ubuntu 的 `nginx -t` 会在语法正确后因 PID、日志或临时目录处于只读文件系统而失败；不得为此放宽整个 `/run` 或 `/var`。面板到助手的整条请求链超时必须长于 ACME 操作上限，Nginx 使用 480 秒、API Socket 使用 420 秒。
 
 生产首次初始化由 `apps/api/src/bootstrap-production.ts` 自动完成，只创建一个随机密码的最高管理员、默认 workspace 和论坛分类。部署脚本必须在最终总结中醒目显示首次凭据，并将其保存到权限为 `600` 的 `/opt/liveboard/initial-admin-credentials.txt`；用户修改密码后应删除该文件。升级不得生成或覆盖管理员密码。`apps/api/prisma/seed.cjs` 仅用于本地演示，生产部署不得调用。
 
@@ -255,5 +255,6 @@ UI 修改额外确认：
 - 2026-07-26：正式发布包改为可直接执行的 `.run` 自解压单文件；首次安装与升级分别使用 `install`/`upgrade`，固定状态收口到 `/opt/liveboard`，应用镜像按 Release 版本标记。新增 `liveboard` 管理命令统一状态、诊断、日志、启停、安全旧版本清理和保留数据卷的可恢复卸载；升级不再覆盖持久化 Nginx 配置。
 - 2026-07-26：生产部署新增提供商无关的一键 HTTPS：Release 离线携带固定版本 ACME 客户端，最高管理员可在系统设置使用 HTTP-01 签发单域名证书；宿主机受限助手通过专用 Unix Socket 提供状态与启用操作，systemd timer 自动续期，切换失败会恢复原 Nginx、环境变量和安装状态。
 - 2026-07-27：修复 HTTPS 助手在 `ProtectSystem=strict` 下无法完整运行 Ubuntu `nginx -t` 的问题；助手与续期 unit 精确开放 `/run/nginx.pid`、`/var/log/nginx` 和 `/var/lib/nginx` 并要求 Nginx 服务，不放宽整个 `/run` 或 `/var`。同步将 Nginx API 超时提高到 480 秒、API Socket 超时提高到 420 秒、前端安全地址跳转等待提高到 12 秒；升级器只迁移 LiveBoard 管理配置中旧的 150 秒超时，不覆盖其他自定义 Nginx 内容。
+- 2026-07-27：一键 HTTPS 增加 TLS-ALPN-01 自动回退。公网 80 或 HTTP Host 被阻断时，助手临时将 Nginx reload 为 HTTP-only 配置以释放 443，完成验证后恢复 HTTPS；续期固定复用首次成功的验证方式。签发与续期失败均恢复原证书和 Nginx，避免证书文件已覆盖却只回滚配置。
 
 后续纪要只记录会影响未来开发判断的决策、迁移或故障原因，不记录每个微小样式调整。

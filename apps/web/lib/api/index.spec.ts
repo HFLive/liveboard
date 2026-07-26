@@ -136,7 +136,12 @@ describe("HTTPS settings API", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            https: { available: true, enabled: false, domain: null },
+            https: {
+              available: true,
+              enabled: false,
+              domain: null,
+              challengeType: null,
+            },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
@@ -148,6 +153,7 @@ describe("HTTPS settings API", () => {
               available: true,
               enabled: true,
               domain: "board.example.com",
+              challengeType: "tls-alpn-01",
             },
           }),
           { status: 201, headers: { "Content-Type": "application/json" } },

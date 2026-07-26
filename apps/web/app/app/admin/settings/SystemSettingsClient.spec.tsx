@@ -36,6 +36,7 @@ describe("SystemSettingsClient HTTPS settings", () => {
         available: true,
         enabled: false,
         domain: null,
+        challengeType: null,
         expiresAt: null,
         lastRenewedAt: null,
         lastRenewalCheckAt: null,
@@ -47,6 +48,7 @@ describe("SystemSettingsClient HTTPS settings", () => {
         available: true,
         enabled: true,
         domain: "board.example.com",
+        challengeType: "tls-alpn-01",
         expiresAt: "2026-10-24T00:00:00.000Z",
         lastRenewedAt: "2026-07-26T00:00:00.000Z",
         lastRenewalCheckAt: "2026-07-26T00:00:00.000Z",
@@ -77,5 +79,8 @@ describe("SystemSettingsClient HTTPS settings", () => {
       });
     });
     expect(await screen.findByText("HTTPS 已启用")).toBeInTheDocument();
+    expect(
+      screen.getByText(/续期验证时 HTTPS 可能短暂不可用/),
+    ).toBeInTheDocument();
   });
 });

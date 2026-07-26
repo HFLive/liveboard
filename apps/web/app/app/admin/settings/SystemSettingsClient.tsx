@@ -356,7 +356,8 @@ export function SystemSettingsClient() {
                       HTTPS
                     </h2>
                     <p className="muted">
-                      使用通用 ACME HTTP 验证签发证书，不绑定域名服务商。
+                      自动尝试 ACME HTTP-01；TCP 80 无法验证时改用基于 TCP 443
+                      的 TLS-ALPN-01，不绑定域名服务商。
                     </p>
                   </div>
                 </div>
@@ -382,7 +383,10 @@ export function SystemSettingsClient() {
                         {httpsStatus.expiresAt
                           ? formatDateTime(httpsStatus.expiresAt)
                           : "未知"}
-                        ，系统每天自动检查续期。
+                        ，系统每天自动检查续期
+                        {httpsStatus.challengeType === "tls-alpn-01"
+                          ? "；续期验证时 HTTPS 可能短暂不可用。"
+                          : "。"}
                       </p>
                       {httpsStatus.lastError ? (
                         <p className="error-text">{httpsStatus.lastError}</p>
@@ -421,8 +425,9 @@ export function SystemSettingsClient() {
                     </label>
                     <div className="https-enable-actions">
                       <p className="muted">
-                        启用前请确认域名已经指向本服务器，并开放 TCP 80 和
-                        443。配置失败会恢复原来的 HTTP 入口。
+                        请确认域名指向本服务器并开放 TCP 443；如果 TCP 80
+                        可达会优先使用 HTTP 验证，否则自动通过 443
+                        验证。配置失败会恢复原入口。
                       </p>
                       <button
                         className="button"

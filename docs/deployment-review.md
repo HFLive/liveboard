@@ -40,9 +40,9 @@
 
 ### HTTPS 依赖特定域名商或手工改配置
 
-生产包现在离线携带固定版本并校验哈希的 ACME 客户端。最高管理员通过管理中心调用宿主机上受限的 HTTPS 助手，使用通用 HTTP-01 完成签发；API 容器只挂载专用 Unix Socket，不挂载 Docker Socket，也不以 root 运行。助手只接受状态、启用和续期三种操作，并对域名和邮箱做严格校验。
+生产包现在离线携带固定版本并校验哈希的 ACME 客户端。最高管理员通过管理中心调用宿主机上受限的 HTTPS 助手，优先使用通用 HTTP-01；公网 80 或 HTTP Host 无法回读时自动回退到 TLS-ALPN-01，并临时释放 443 给 ACME 客户端。API 容器只挂载专用 Unix Socket，不挂载 Docker Socket，也不以 root 运行。助手只接受状态、启用和续期三种操作，并对域名和邮箱做严格校验。
 
-证书签发前先用公网域名回读随机验证文件，签发后再执行 Nginx 配置校验与本机 TLS 探测。只有全部成功才写入安全 Cookie 和域名来源配置；失败时恢复原 Nginx、环境和安装状态。systemd timer 每天进行带随机延迟的续期检查。
+证书签发前先用公网域名回读随机验证文件，失败后才选择 443 验证；签发后再执行 Nginx 配置校验与本机 TLS 探测。只有全部成功才写入安全 Cookie 和域名来源配置；失败时恢复原 Nginx、证书、环境和安装状态。systemd timer 每天进行带随机延迟的续期检查，并复用首次成功的验证方式。
 
 ### HTTPS 助手沙箱与长请求超时
 
@@ -72,4 +72,4 @@
 - 生产初始化：自动 bootstrap，不运行 demo seed。
 - 公网入口：Nginx；容器端口只绑定 `127.0.0.1`。
 - HTTP 与 HTTPS Cookie 策略通过 `SESSION_COOKIE_SECURE` 明确区分。
-- 域名 HTTPS 使用提供商无关的 ACME HTTP-01；证书和助手状态位于 `/opt/liveboard/https`，升级不得清理。
+- 域名 HTTPS 自动使用提供商无关的 ACME HTTP-01 或 TLS-ALPN-01；证书和助手状态位于 `/opt/liveboard/https`，升级不得清理。

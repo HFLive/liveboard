@@ -6,6 +6,7 @@ export interface HttpsStatus {
   available: boolean;
   enabled: boolean;
   domain: string | null;
+  challengeType: "http-01" | "tls-alpn-01" | null;
   expiresAt: string | null;
   lastRenewedAt: string | null;
   lastRenewalCheckAt: string | null;
@@ -127,6 +128,7 @@ const unavailableStatus: HttpsStatus = {
   available: false,
   enabled: false,
   domain: null,
+  challengeType: null,
   expiresAt: null,
   lastRenewedAt: null,
   lastRenewalCheckAt: null,
