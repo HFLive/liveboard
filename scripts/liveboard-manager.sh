@@ -106,7 +106,7 @@ compose_for() {
 }
 
 reload_nginx_if_available() {
-  if command -v nginx >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1; then
+  if [ "$STATE_DIR" = /opt/liveboard ] && command -v nginx >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1; then
     nginx -t
     systemctl reload nginx
   fi
