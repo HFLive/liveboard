@@ -76,7 +76,7 @@ for command in docker curl sha256sum gzip od tar; do
   fi
 done
 
-if command -v systemctl >/dev/null 2>&1; then
+if [ "$STATE_DIR" = /opt/liveboard ] && command -v systemctl >/dev/null 2>&1; then
   systemctl enable --now docker
 fi
 
