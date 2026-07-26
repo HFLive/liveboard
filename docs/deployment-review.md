@@ -46,7 +46,7 @@
 
 ### HTTPS 助手沙箱与长请求超时
 
-首个一键 HTTPS Release 将助手置于 `ProtectSystem=strict`，但只开放了 `/run/liveboard`。Ubuntu 的 `nginx -t` 即使已经确认配置语法正确，仍会打开 `/run/nginx.pid`，因此在助手沙箱内报只读文件系统错误。现在助手和续期 unit 都通过 `-/run/nginx.pid` 精确开放该文件，并用 `Requires=nginx.service` 保证测试时 Nginx 已运行；没有放宽整个 `/run`。
+首个一键 HTTPS Release 将助手置于 `ProtectSystem=strict`，但只开放了 `/run/liveboard`。Ubuntu 的 `nginx -t` 即使已经确认配置语法正确，仍会打开 `/run/nginx.pid`、`/var/log/nginx` 下的日志，并可能初始化 `/var/lib/nginx` 下的临时目录，因此会在助手沙箱内报只读文件系统错误。现在助手和续期 unit 都精确开放这三个 Nginx 路径，并用 `Requires=nginx.service` 保证测试时 Nginx 已运行；没有放宽整个 `/run` 或 `/var`。
 
 同一次审计发现 ACME 最长允许执行 240 秒，而旧 Nginx API 超时只有 150 秒、API Socket 超时只有 300 秒，可能出现后台最终成功但浏览器先收到超时。现在 Nginx 为 480 秒、Socket 为 420 秒，切换 HTTPS 地址前等待 12 秒让 API/Web 完成重建。升级只替换 LiveBoard 管理配置中精确匹配的旧超时行。
 

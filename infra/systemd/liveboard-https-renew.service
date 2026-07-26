@@ -11,4 +11,4 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/opt/liveboard /etc/nginx/sites-available -/run/nginx.pid
+ReadWritePaths=/opt/liveboard /etc/nginx/sites-available -/run/nginx.pid -/var/log/nginx -/var/lib/nginx

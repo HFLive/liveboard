@@ -46,6 +46,10 @@ cp "$ROOT_DIR/infra/systemd/liveboard-https-renew.service" "$BUNDLE_DIR/liveboar
 cp "$ROOT_DIR/infra/systemd/liveboard-https-renew.timer" "$BUNDLE_DIR/liveboard-https-renew.timer"
 grep -q -- '-/run/nginx.pid' "$BUNDLE_DIR/liveboard-https-agent.service"
 grep -q -- '-/run/nginx.pid' "$BUNDLE_DIR/liveboard-https-renew.service"
+grep -q -- '-/var/log/nginx' "$BUNDLE_DIR/liveboard-https-agent.service"
+grep -q -- '-/var/log/nginx' "$BUNDLE_DIR/liveboard-https-renew.service"
+grep -q -- '-/var/lib/nginx' "$BUNDLE_DIR/liveboard-https-agent.service"
+grep -q -- '-/var/lib/nginx' "$BUNDLE_DIR/liveboard-https-renew.service"
 
 for file in docker-compose.yml SHA256SUMS; do
   : >"$BUNDLE_DIR/$file"
