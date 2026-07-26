@@ -75,20 +75,67 @@ pnpm dev
 
 ## 生产部署
 
-生产环境只保留一种发布方式：GitHub Release 单文件包。服务器不拉取源码、不构建镜像，也不直接访问 Docker Hub 或 npm registry。
+生产环境只保留一种发布方式：GitHub Release 自解压单文件包。服务器不拉取源码、不构建镜像，也不直接访问 Docker Hub 或 npm registry。
 
 推送 `v*` 标签后，Release 工作流会构建 Linux AMD64 的 API/Web 和固定版本基础镜像，并生成唯一资产：
 
 ```text
-liveboard-<version>-linux-amd64.tar.gz
+liveboard-<version>-linux-amd64.run
 ```
 
-用户在电脑下载并上传该文件，服务器解压后运行包内 `deploy.sh`。脚本会生成基础密钥、备份 PostgreSQL、执行 migration、等待 API/Web 健康，并在空数据库中创建唯一的随机密码最高管理员。API 健康检查会实际探测 PostgreSQL、Redis 和 MinIO。PostgreSQL 备份默认保留最近 10 份，可通过 `BACKUP_RETENTION_COUNT` 调整。首次凭据会在部署总结最后醒目显示，并保存到权限为 `600` 的 `/opt/liveboard/initial-admin-credentials.txt`；修改密码后应删除该文件。生产过程不运行 demo seed。
+用户在电脑下载该文件并上传到服务器 `/opt`，然后执行：
+
+```bash
+sudo sh /opt/liveboard-v0.3.0-linux-amd64.run install
+```
+
+将文件名替换为实际下载的版本。安装包会校验并解压自身，按需安装 Ubuntu 基础依赖，生成安全密钥，导入离线镜像，备份 PostgreSQL，执行 migration，配置 Nginx 并等待 API/Web 健康。空数据库会创建唯一的随机密码最高管理员；凭据在总结最后醒目显示，并保存到权限为 `600` 的 `/opt/liveboard/initial-admin-credentials.txt`。首次登录并修改密码后应删除该文件。生产过程不运行 demo seed。
+
+安装完成后可使用固定管理命令：
+
+```bash
+sudo liveboard status
+sudo liveboard doctor
+sudo liveboard logs
+sudo liveboard restart
+```
+
+升级时上传新的 `.run` 文件，不需要手动解压：
+
+```bash
+sudo sh /opt/liveboard-v0.3.1-linux-amd64.run upgrade
+```
+
+升级沿用 `/opt/liveboard/.env`、管理员账号、数据库和对象存储卷；执行 migration 前会创建 PostgreSQL 备份，全部健康检查通过后才切换 `/opt/liveboard/releases/active`。
+
+清理旧版本前可以先预览：
+
+```bash
+sudo liveboard clean --dry-run
+sudo liveboard clean
+sudo liveboard clean --keep 3 --packages
+```
+
+默认保留当前及上一个版本。清理只处理 LiveBoard 旧版本目录和对应的版本化 API/Web 镜像；`--packages` 额外清理 `/opt` 下的旧 `.run`/`.tar.gz` 安装包，不会删除数据库备份或数据卷。
+
+可恢复卸载：
+
+```bash
+sudo liveboard uninstall
+```
+
+卸载会停止并删除 LiveBoard 容器、应用镜像、版本文件并禁用 Nginx 站点，但保留 `/opt/liveboard/.env`、数据库备份和 PostgreSQL/Redis/MinIO 命名卷。重新上传发布包并执行 `install` 可接回原数据。普通卸载不提供彻底删除业务数据的选项。
+
+管理命令完整帮助：
+
+```bash
+liveboard help
+```
 
 完整步骤见 [Ubuntu 24.04 单文件部署教程](./docs/deploy-ubuntu-24.04.md)。
 部署路线的取舍、已删除兼容代码和保留边界见 [生产部署链路复盘](./docs/deployment-review.md)。
 
-Compose 的 PostgreSQL、Redis、MinIO、API 和 Web 端口只绑定 `127.0.0.1`，公网访问必须经过包内 Nginx 配置。HTTP IP 部署使用 `SESSION_COOKIE_SECURE=false`；改用 HTTPS 时必须设为 `true`。
+Compose 的 PostgreSQL、Redis、MinIO、API 和 Web 端口只绑定 `127.0.0.1`，公网访问必须经过由安装器管理的 Nginx 配置。升级不会覆盖已有的 LiveBoard Nginx 配置。HTTP IP 部署使用 `SESSION_COOKIE_SECURE=false`；改用 HTTPS 时必须设为 `true`。
 
 > PostgreSQL 备份不包含 MinIO 上传文件。生产环境还应为 `minio-data` 配置独立卷快照或对象存储备份。不得使用 `docker compose down -v` 更新或停止服务。
 

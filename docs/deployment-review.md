@@ -52,8 +52,9 @@
 
 ## 最终生产边界
 
-- 唯一发布资产：`liveboard-<version>-linux-amd64.tar.gz`。
-- 唯一正式安装入口：包内 `deploy.sh`。
+- 唯一发布资产：`liveboard-<version>-linux-amd64.run` 自解压包。
+- 正式安装入口：`sudo sh <包> install`；升级入口：`sudo sh <包> upgrade`。
+- 安装完成后的日常运维统一使用 `/usr/local/bin/liveboard`。
 - 稳定状态目录：`/opt/liveboard`。
 - 当前版本软链接：`/opt/liveboard/releases/active`。
 - 生产初始化：自动 bootstrap，不运行 demo seed。

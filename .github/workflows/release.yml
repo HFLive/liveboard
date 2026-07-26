@@ -57,14 +57,14 @@ jobs:
           docker build \
             --platform linux/amd64 \
             --file apps/api/Dockerfile \
-            --tag liveboard-api:local \
+            --tag "liveboard-api:${GITHUB_REF_NAME}" \
             .
           docker build \
             --platform linux/amd64 \
             --build-arg NEXT_PUBLIC_API_URL=/api \
             --build-arg NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=false \
             --file apps/web/Dockerfile \
-            --tag liveboard-web:local \
+            --tag "liveboard-web:${GITHUB_REF_NAME}" \
             .
 
       - name: Package release assets
@@ -73,7 +73,7 @@ jobs:
           set -euo pipefail
 
           bundle="liveboard-${GITHUB_REF_NAME}-linux-amd64"
-          asset="${bundle}.tar.gz"
+          asset="${bundle}.run"
           bundle_dir="dist/${bundle}"
 
           mkdir -p "$bundle_dir"
@@ -81,15 +81,16 @@ jobs:
             postgres:16-alpine \
             redis:7-alpine \
             minio/minio:RELEASE.2024-12-18T13-15-44Z \
-            liveboard-api:local \
-            liveboard-web:local \
+            "liveboard-api:${GITHUB_REF_NAME}" \
+            "liveboard-web:${GITHUB_REF_NAME}" \
             | gzip -1 >"${bundle_dir}/images.tar.gz"
 
           cp docker-compose.yml "${bundle_dir}/docker-compose.yml"
           cp .env.production.example "${bundle_dir}/.env.example"
           cp infra/nginx/liveboard.conf "${bundle_dir}/nginx.conf"
           cp scripts/deploy-bundle.sh "${bundle_dir}/deploy.sh"
-          chmod +x "${bundle_dir}/deploy.sh"
+          cp scripts/liveboard-manager.sh "${bundle_dir}/manager.sh"
+          chmod +x "${bundle_dir}/deploy.sh" "${bundle_dir}/manager.sh"
 
           {
             echo "release=${GITHUB_REF_NAME}"
@@ -101,8 +102,8 @@ jobs:
               postgres:16-alpine \
               redis:7-alpine \
               minio/minio:RELEASE.2024-12-18T13-15-44Z \
-              liveboard-api:local \
-              liveboard-web:local; do
+              "liveboard-api:${GITHUB_REF_NAME}" \
+              "liveboard-web:${GITHUB_REF_NAME}"; do
               docker image inspect \
                 --format '{{.RepoTags}} {{.Id}} {{json .RepoDigests}}' \
                 "$image"
@@ -111,10 +112,13 @@ jobs:
 
           (
             cd "$bundle_dir"
-            sha256sum images.tar.gz docker-compose.yml deploy.sh nginx.conf .env.example manifest.txt >SHA256SUMS
+            sha256sum images.tar.gz docker-compose.yml deploy.sh manager.sh nginx.conf .env.example manifest.txt >SHA256SUMS
           )
 
-          tar -C dist -cf - "$bundle" | gzip -1 >"dist/${asset}"
+          sh scripts/build-self-extracting-release.sh \
+            scripts/liveboard-self-extract.sh \
+            "$bundle_dir" \
+            "dist/${asset}"
           size=$(stat -c %s "dist/${asset}")
           if [ "$size" -ge 2147483648 ]; then
             echo "Release bundle must stay below GitHub's 2 GiB per-asset limit." >&2
@@ -128,7 +132,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            "dist/liveboard-${GITHUB_REF_NAME}-linux-amd64.tar.gz" \
+            "dist/liveboard-${GITHUB_REF_NAME}-linux-amd64.run" \
             --verify-tag \
             --title "$GITHUB_REF_NAME" \
             --generate-notes
