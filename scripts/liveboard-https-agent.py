@@ -334,6 +334,7 @@ def lego_arguments(
 ) -> list[str]:
     arguments = [
         str(LEGO_BIN),
+        "run",
         "--path",
         str(LEGO_PATH),
         "--email",
@@ -348,9 +349,10 @@ def lego_arguments(
         arguments.append("--tls")
     else:
         raise HttpsError(f"不支持的 ACME 验证方式：{challenge_type}")
-    arguments.append(action)
     if action == "renew":
-        arguments.extend(["--days", "30"])
+        arguments.extend(["--renew-days", "30", "--no-random-sleep"])
+    elif action != "run":
+        raise HttpsError(f"不支持的证书操作：{action}")
     return arguments
 
 

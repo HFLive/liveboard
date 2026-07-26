@@ -50,6 +50,10 @@
 
 同一次审计发现 ACME 最长允许执行 240 秒，而旧 Nginx API 超时只有 150 秒、API Socket 超时只有 300 秒，可能出现后台最终成功但浏览器先收到超时。现在 Nginx 为 480 秒、Socket 为 420 秒，切换 HTTPS 地址前等待 12 秒让 API/Web 完成重建。升级只替换 LiveBoard 管理配置中精确匹配的旧超时行。
 
+### ACME 客户端主版本 CLI 不兼容
+
+Release 固定携带 lego v5.2.1，但最初仍按 v4 风格把 `run`/`renew` 放在选项末尾，并使用已经移除的 `renew --days`。v5 要求先写 `run` 子命令，续期也通过 `run --renew-days` 完成。现在签发和续期统一生成 v5 命令，自动续期增加 `--no-random-sleep`，因为 systemd timer 已负责随机错峰；Release 打包时会直接用下载到的真实 lego 二进制解析完整参数，避免仅靠宽松 mock 放过错误。
+
 ### 生产误用 demo seed
 
 旧教程要求手工执行 demo seed，生产数据库会出现四个固定密码账号、演示权限组和演示内容，且每次部署都重复提示。现在生产使用独立 bootstrap：仅在空数据库创建一个随机密码最高管理员、默认 workspace 和论坛分类；demo seed 只服务本地开发。

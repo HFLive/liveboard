@@ -46,6 +46,7 @@ cp "$ROOT_DIR/infra/systemd/liveboard-https-renew.service" "$BUNDLE_DIR/liveboar
 cp "$ROOT_DIR/infra/systemd/liveboard-https-renew.timer" "$BUNDLE_DIR/liveboard-https-renew.timer"
 grep -q 'TLS_ALPN_CHALLENGE = "tls-alpn-01"' "$BUNDLE_DIR/https-agent.py"
 grep -q 'arguments.append("--tls")' "$BUNDLE_DIR/https-agent.py"
+grep -q '"--renew-days", "30", "--no-random-sleep"' "$BUNDLE_DIR/https-agent.py"
 grep -q 'restore_file(certificate, original_certificate)' "$BUNDLE_DIR/https-agent.py"
 grep -q -- '-/run/nginx.pid' "$BUNDLE_DIR/liveboard-https-agent.service"
 grep -q -- '-/run/nginx.pid' "$BUNDLE_DIR/liveboard-https-renew.service"

@@ -39,20 +39,26 @@ cat >"$LEGO_BIN" <<'EOF'
 set -eu
 lego_path=
 domain=
-action=
+operation=run
 challenge=
+[ "$1" = run ] || {
+  echo "lego v5 子命令必须位于全部选项之前" >&2
+  exit 64
+}
+shift
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --path) lego_path=$2; shift 2 ;;
     --domains) domain=$2; shift 2 ;;
     --http) challenge=http-01; shift ;;
     --tls) challenge=tls-alpn-01; shift ;;
-    run | renew) action=$1; shift ;;
+    --renew-days) operation=renew; shift 2 ;;
+    --no-random-sleep) shift ;;
     *) shift ;;
   esac
 done
-[ -n "$lego_path" ] && [ -n "$domain" ] && [ -n "$action" ] && [ -n "$challenge" ]
-printf '%s %s %s\n' "$action" "$domain" "$challenge" >>"$LIVEBOARD_TEST_LEGO_LOG"
+[ -n "$lego_path" ] && [ -n "$domain" ] && [ -n "$challenge" ]
+printf '%s %s %s\n' "$operation" "$domain" "$challenge" >>"$LIVEBOARD_TEST_LEGO_LOG"
 if [ "$challenge" = http-01 ] &&
   [ "${LIVEBOARD_TEST_HTTP_ISSUANCE_FAILURE:-0}" = 1 ]; then
   echo "mock HTTP issuance failed" >&2
