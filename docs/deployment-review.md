@@ -52,7 +52,7 @@
 
 ### ACME 客户端主版本 CLI 不兼容
 
-Release 固定携带 lego v5.2.1，但最初仍按 v4 风格把 `run`/`renew` 放在选项末尾，并使用已经移除的 `renew --days`。v5 要求先写 `run` 子命令，续期也通过 `run --renew-days` 完成。现在签发和续期统一生成 v5 命令，自动续期增加 `--no-random-sleep`，因为 systemd timer 已负责随机错峰；Release 打包时会直接用下载到的真实 lego 二进制解析完整参数，避免仅靠宽松 mock 放过错误。
+Release 固定携带 lego v5.3.1。早期版本仍按 v4 风格把 `run`/`renew` 放在选项末尾，并使用已经移除的 `renew --days`；v5 要求先写 `run` 子命令，续期也通过 `run --renew-days` 完成。现在签发和续期统一生成 v5 命令，自动续期增加 `--no-random-sleep`，因为 systemd timer 已负责随机错峰；Release 打包时会直接用下载到的真实 lego 二进制解析域名证书和 IP `shortlived` profile 的完整参数，避免仅靠宽松 mock 放过错误。
 
 ### 生产误用 demo seed
 

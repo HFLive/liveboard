@@ -37,6 +37,7 @@ done
 cat >"$LEGO_BIN" <<'EOF'
 #!/bin/sh
 set -eu
+printf '%s\n' "$*" >>"$LIVEBOARD_TEST_LEGO_ARGUMENTS_LOG"
 lego_path=
 domain=
 operation=run
@@ -77,6 +78,8 @@ chmod +x "$LEGO_BIN"
 AGENT_ENV="PATH=$BIN_DIR:$PATH"
 LEGO_LOG="$TEST_DIR/lego.log"
 export LIVEBOARD_TEST_LEGO_LOG="$LEGO_LOG"
+LEGO_ARGUMENTS_LOG="$TEST_DIR/lego-arguments.log"
+export LIVEBOARD_TEST_LEGO_ARGUMENTS_LOG="$LEGO_ARGUMENTS_LOG"
 export LIVEBOARD_SKIP_TLS_PORT_CHECK=1
 
 env $AGENT_ENV \
@@ -160,6 +163,85 @@ env $AGENT_ENV \
 grep -q '"lastRenewalCheckAt": "' "$TEST_DIR/renew.json"
 grep -q '^renew board.example.com tls-alpn-01$' "$LEGO_LOG"
 grep -q '^  listen 443 ssl;$' "$NGINX_SITE"
+
+env $AGENT_ENV \
+  LIVEBOARD_STATE_DIR="$STATE_DIR" \
+  LIVEBOARD_NGINX_SITE="$NGINX_SITE" \
+  LIVEBOARD_LEGO_BIN="$LEGO_BIN" \
+  LIVEBOARD_SKIP_PUBLIC_CHALLENGE_CHECK=1 \
+  LIVEBOARD_SKIP_RUNTIME_RECREATE=1 \
+  python3 "$ROOT_DIR/scripts/liveboard-https-agent.py" enable \
+    --domain 8.166.143.156 \
+    --email admin@example.com \
+    >"$TEST_DIR/enable-ip.json"
+grep -q '"subjectType": "ip"' "$TEST_DIR/enable-ip.json"
+grep -q '"certificateProfile": "shortlived"' "$TEST_DIR/enable-ip.json"
+grep -q '"autoRenewEnabled": true' "$TEST_DIR/enable-ip.json"
+grep -q '^ACCESS_MODE=https-ip$' "$STATE_DIR/install.conf"
+grep -q '^WEB_ORIGIN=https://8.166.143.156$' "$ENV_FILE"
+grep -q -- '--domains 8.166.143.156 --profile shortlived' "$LEGO_ARGUMENTS_LOG"
+
+env $AGENT_ENV \
+  LIVEBOARD_STATE_DIR="$STATE_DIR" \
+  LIVEBOARD_NGINX_SITE="$NGINX_SITE" \
+  LIVEBOARD_LEGO_BIN="$LEGO_BIN" \
+  python3 "$ROOT_DIR/scripts/liveboard-https-agent.py" renew \
+    >"$TEST_DIR/renew-ip.json"
+grep -q -- '--domains 8.166.143.156 --profile shortlived.*--renew-days 3' \
+  "$LEGO_ARGUMENTS_LOG"
+
+env $AGENT_ENV \
+  LIVEBOARD_STATE_DIR="$STATE_DIR" \
+  LIVEBOARD_NGINX_SITE="$NGINX_SITE" \
+  LIVEBOARD_LEGO_BIN="$LEGO_BIN" \
+  python3 "$ROOT_DIR/scripts/liveboard-https-agent.py" set-auto-renew off \
+    >"$TEST_DIR/auto-renew-off.json"
+grep -q '"autoRenewEnabled": false' "$TEST_DIR/auto-renew-off.json"
+BEFORE_SCHEDULED_RENEW=$(wc -l <"$LEGO_LOG")
+env $AGENT_ENV \
+  LIVEBOARD_STATE_DIR="$STATE_DIR" \
+  LIVEBOARD_NGINX_SITE="$NGINX_SITE" \
+  LIVEBOARD_LEGO_BIN="$LEGO_BIN" \
+  python3 "$ROOT_DIR/scripts/liveboard-https-agent.py" renew --scheduled \
+    >"$TEST_DIR/scheduled-renew-disabled.json"
+test "$BEFORE_SCHEDULED_RENEW" -eq "$(wc -l <"$LEGO_LOG")"
+
+env $AGENT_ENV \
+  LIVEBOARD_STATE_DIR="$STATE_DIR" \
+  LIVEBOARD_NGINX_SITE="$NGINX_SITE" \
+  LIVEBOARD_LEGO_BIN="$LEGO_BIN" \
+  python3 "$ROOT_DIR/scripts/liveboard-https-agent.py" renew \
+    >"$TEST_DIR/manual-renew-while-disabled.json"
+test "$((BEFORE_SCHEDULED_RENEW + 1))" -eq "$(wc -l <"$LEGO_LOG")"
+
+env $AGENT_ENV \
+  LIVEBOARD_STATE_DIR="$STATE_DIR" \
+  LIVEBOARD_NGINX_SITE="$NGINX_SITE" \
+  LIVEBOARD_LEGO_BIN="$LEGO_BIN" \
+  LIVEBOARD_SKIP_RUNTIME_RECREATE=1 \
+  python3 "$ROOT_DIR/scripts/liveboard-https-agent.py" disable \
+    --http-host 8.166.143.156 \
+    >"$TEST_DIR/disable.json"
+grep -q '"enabled": false' "$TEST_DIR/disable.json"
+grep -q '"httpHost": "8.166.143.156"' "$TEST_DIR/disable.json"
+grep -q '^SESSION_COOKIE_SECURE=false$' "$ENV_FILE"
+grep -q '^WEB_ORIGIN=http://8.166.143.156$' "$ENV_FILE"
+grep -q '^ACCESS_MODE=http-ip$' "$STATE_DIR/install.conf"
+if grep -q '^  listen 443 ssl;$' "$NGINX_SITE"; then
+  echo "停用 HTTPS 后不应继续监听 TLS。" >&2
+  exit 1
+fi
+
+env $AGENT_ENV \
+  LIVEBOARD_STATE_DIR="$STATE_DIR" \
+  LIVEBOARD_NGINX_SITE="$NGINX_SITE" \
+  LIVEBOARD_LEGO_BIN="$LEGO_BIN" \
+  LIVEBOARD_SKIP_PUBLIC_CHALLENGE_CHECK=1 \
+  LIVEBOARD_SKIP_RUNTIME_RECREATE=1 \
+  python3 "$ROOT_DIR/scripts/liveboard-https-agent.py" enable \
+    --domain board.example.com \
+    --email admin@example.com \
+    >"$TEST_DIR/re-enable-domain.json"
 
 ORIGINAL_NGINX=$(cksum "$NGINX_SITE")
 ORIGINAL_ENV=$(cksum "$ENV_FILE")

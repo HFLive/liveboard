@@ -24,7 +24,7 @@ usage() {
   stop                   停止服务但保留容器和数据
   restart                重启全部服务
   doctor                 检查安装、服务、端口和备份状态
-  https <子命令>         查看、启用或续期 HTTPS
+  https <子命令>         查看、启用、停用或续期 HTTPS
   clean [选项]           清理旧版本文件和对应应用镜像
   uninstall [--yes]      卸载应用，保留配置、备份和数据卷
 
@@ -36,7 +36,9 @@ clean 选项：
 
 https 子命令：
   status
-  enable --domain 域名 --email 邮箱
+  enable --domain 域名或公网IPv4 --email 邮箱
+  disable --http-host 域名或公网IPv4
+  auto-renew on|off
   renew
 EOF
 }
@@ -284,6 +286,28 @@ command_https() {
     renew)
       [ "$#" -eq 0 ] || die "https renew 不接受额外参数。"
       python3 "$HTTPS_AGENT" renew
+      ;;
+    disable)
+      http_host=
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --http-host)
+            [ "$#" -ge 2 ] || die "--http-host 需要域名或公网 IPv4。"
+            http_host=$2
+            shift 2
+            ;;
+          *) die "无法识别的 https disable 参数：$1" ;;
+        esac
+      done
+      [ -n "$http_host" ] || die "缺少 --http-host。"
+      python3 "$HTTPS_AGENT" disable --http-host "$http_host"
+      ;;
+    auto-renew)
+      [ "$#" -eq 1 ] || die "用法：liveboard https auto-renew on|off"
+      case "$1" in
+        on | off) python3 "$HTTPS_AGENT" set-auto-renew "$1" ;;
+        *) die "自动续期只支持 on 或 off。" ;;
+      esac
       ;;
     enable)
       domain=

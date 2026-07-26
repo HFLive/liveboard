@@ -3,11 +3,13 @@ import { API_URL } from "./client";
 import {
   AI_USAGE_CONSUMED_EVENT,
   askAiStream,
+  disableHttps,
   downloadMarkdown,
   enableHttps,
   getHttpsStatus,
   getMe,
   importMarkdown,
+  setHttpsAutoRenew,
 } from "./index";
 
 describe("Current user API", () => {
@@ -130,7 +132,7 @@ describe("HTTPS settings API", () => {
     vi.unstubAllGlobals();
   });
 
-  it("loads host HTTPS status and submits the selected domain", async () => {
+  it("loads and updates host HTTPS settings", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -158,6 +160,18 @@ describe("HTTPS settings API", () => {
           }),
           { status: 201, headers: { "Content-Type": "application/json" } },
         ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ https: { enabled: true } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ https: { enabled: false } }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
       );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -166,6 +180,8 @@ describe("HTTPS settings API", () => {
       domain: "board.example.com",
       email: "admin@example.com",
     });
+    await setHttpsAutoRenew(false);
+    await disableHttps({ httpHost: "8.166.143.156" });
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       `${API_URL}/admin/settings/https`,
@@ -179,6 +195,20 @@ describe("HTTPS settings API", () => {
         domain: "board.example.com",
         email: "admin@example.com",
       }),
+    });
+    expect(fetchMock.mock.calls[2]?.[0]).toBe(
+      `${API_URL}/admin/settings/https/auto-renew`,
+    );
+    expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({
+      method: "PATCH",
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(fetchMock.mock.calls[3]?.[0]).toBe(
+      `${API_URL}/admin/settings/https/disable`,
+    );
+    expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({ httpHost: "8.166.143.156" }),
     });
   });
 });

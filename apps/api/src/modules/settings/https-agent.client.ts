@@ -6,7 +6,11 @@ export interface HttpsStatus {
   available: boolean;
   enabled: boolean;
   domain: string | null;
+  subjectType: "domain" | "ip" | null;
   challengeType: "http-01" | "tls-alpn-01" | null;
+  certificateProfile: "shortlived" | null;
+  autoRenewEnabled: boolean;
+  httpHost: string | null;
   expiresAt: string | null;
   lastRenewedAt: string | null;
   lastRenewalCheckAt: string | null;
@@ -54,8 +58,34 @@ export class HttpsAgentClient {
     }
   }
 
+  async disable(httpHost: string): Promise<HttpsStatus> {
+    try {
+      return await this.request({ action: "disable", httpHost }, 180_000);
+    } catch (caught) {
+      if (isUnavailableSocketError(caught)) {
+        throw new ServiceUnavailableException(
+          "当前服务器未安装 HTTPS 助手，请先升级生产部署包",
+        );
+      }
+      throw caught;
+    }
+  }
+
+  async setAutoRenew(enabled: boolean): Promise<HttpsStatus> {
+    try {
+      return await this.request({ action: "set-auto-renew", enabled }, 30_000);
+    } catch (caught) {
+      if (isUnavailableSocketError(caught)) {
+        throw new ServiceUnavailableException(
+          "当前服务器未安装 HTTPS 助手，请先升级生产部署包",
+        );
+      }
+      throw caught;
+    }
+  }
+
   private request(
-    payload: Record<string, string>,
+    payload: Record<string, unknown>,
     timeoutMs: number,
   ): Promise<HttpsStatus> {
     return new Promise((resolve, reject) => {
@@ -128,7 +158,11 @@ const unavailableStatus: HttpsStatus = {
   available: false,
   enabled: false,
   domain: null,
+  subjectType: null,
   challengeType: null,
+  certificateProfile: null,
+  autoRenewEnabled: false,
+  httpHost: null,
   expiresAt: null,
   lastRenewedAt: null,
   lastRenewalCheckAt: null,

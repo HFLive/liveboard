@@ -100,14 +100,20 @@ sudo liveboard logs
 sudo liveboard restart
 ```
 
-为域名添加指向服务器公网 IP 的 DNS 记录并开放 TCP 443 后，最高管理员可进入“管理中心 → 系统设置 → HTTPS”，填写域名和通知邮箱，一键签发证书并切换到 HTTPS。系统会优先使用 ACME HTTP-01；如果公网 TCP 80 或 HTTP Host 被阻断，则自动改用 TLS-ALPN-01 通过 TCP 443 验证，因此不依赖 Cloudflare 或特定域名商。发布包已离线携带固定版本的 ACME 客户端，服务器配置时不需要下载程序。系统每天自动检查续期，只有拿到有效证书且 Nginx 校验和本机 HTTPS 探测均成功后才会切换配置。
+最高管理员可进入“管理中心 → 系统设置 → HTTPS”，为指向本服务器的域名或服务器公网 IPv4 一键签发证书。域名证书使用常规 Let’s Encrypt profile；公网 IPv4 使用 `shortlived` profile，证书有效期约 6 天，因此应保持自动续期开启。系统优先使用 ACME HTTP-01；如果公网 TCP 80 或 HTTP Host 被阻断，则自动改用 TLS-ALPN-01 通过 TCP 443 验证，不依赖域名服务商。发布包已离线携带固定版本的 ACME 客户端，服务器配置时不需要下载程序。只有拿到有效证书且 Nginx 校验和本机 HTTPS 探测均成功后才会切换配置。
+
+HTTPS 面板可以单独开启或关闭自动续期，也可以停用 HTTPS 并切回指定的 HTTP 域名或公网 IPv4。停用会把 `SESSION_COOKIE_SECURE` 改回 `false` 并重新载入 API/Web，浏览器切换到 HTTP 后需要重新登录。关闭自动续期不影响手动执行续期；定时任务仍会每天读取配置，但在开关关闭时不会联系证书机构。
 
 也可在服务器执行同一套操作：
 
 ```bash
 sudo liveboard https status
 sudo liveboard https enable --domain board.example.com --email admin@example.com
+sudo liveboard https enable --domain 8.166.143.156 --email admin@example.com
+sudo liveboard https auto-renew off
+sudo liveboard https auto-renew on
 sudo liveboard https renew
+sudo liveboard https disable --http-host 8.166.143.156
 ```
 
 升级时上传新的 `.run` 文件，不需要手动解压：

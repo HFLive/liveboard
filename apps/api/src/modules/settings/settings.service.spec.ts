@@ -31,6 +31,8 @@ describe("SettingsService", () => {
   const httpsAgent = {
     status: jest.fn(),
     enable: jest.fn(),
+    disable: jest.fn(),
+    setAutoRenew: jest.fn(),
   };
 
   beforeEach(() => {
@@ -57,7 +59,11 @@ describe("SettingsService", () => {
       available: true,
       enabled: false,
       domain: null,
+      subjectType: null,
       challengeType: null,
+      certificateProfile: null,
+      autoRenewEnabled: false,
+      httpHost: null,
       expiresAt: null,
       lastRenewedAt: null,
       lastRenewalCheckAt: null,
@@ -67,7 +73,39 @@ describe("SettingsService", () => {
       available: true,
       enabled: true,
       domain: "board.example.com",
+      subjectType: "domain",
       challengeType: "tls-alpn-01",
+      certificateProfile: null,
+      autoRenewEnabled: true,
+      httpHost: null,
+      expiresAt: "2026-10-24T00:00:00Z",
+      lastRenewedAt: "2026-07-26T00:00:00Z",
+      lastRenewalCheckAt: "2026-07-26T00:00:00Z",
+      lastError: null,
+    });
+    httpsAgent.disable.mockResolvedValue({
+      available: true,
+      enabled: false,
+      domain: null,
+      subjectType: null,
+      challengeType: null,
+      certificateProfile: null,
+      autoRenewEnabled: false,
+      httpHost: "8.166.143.156",
+      expiresAt: null,
+      lastRenewedAt: null,
+      lastRenewalCheckAt: null,
+      lastError: null,
+    });
+    httpsAgent.setAutoRenew.mockResolvedValue({
+      available: true,
+      enabled: true,
+      domain: "board.example.com",
+      subjectType: "domain",
+      challengeType: "tls-alpn-01",
+      certificateProfile: null,
+      autoRenewEnabled: false,
+      httpHost: null,
       expiresAt: "2026-10-24T00:00:00Z",
       lastRenewedAt: "2026-07-26T00:00:00Z",
       lastRenewalCheckAt: "2026-07-26T00:00:00Z",
@@ -197,5 +235,17 @@ describe("SettingsService", () => {
       "board.example.com",
       "admin@example.com",
     );
+  });
+
+  it("normalizes the HTTP fallback host before disabling HTTPS", async () => {
+    await service.disableHttps("admin-1", " 8.166.143.156 ");
+
+    expect(httpsAgent.disable).toHaveBeenCalledWith("8.166.143.156");
+  });
+
+  it("updates automatic renewal through the host agent", async () => {
+    await service.setHttpsAutoRenew("admin-1", false);
+
+    expect(httpsAgent.setAutoRenew).toHaveBeenCalledWith(false);
   });
 });

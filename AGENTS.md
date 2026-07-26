@@ -256,6 +256,7 @@ UI 修改额外确认：
 - 2026-07-26：生产部署新增提供商无关的一键 HTTPS：Release 离线携带固定版本 ACME 客户端，最高管理员可在系统设置使用 HTTP-01 签发单域名证书；宿主机受限助手通过专用 Unix Socket 提供状态与启用操作，systemd timer 自动续期，切换失败会恢复原 Nginx、环境变量和安装状态。
 - 2026-07-27：修复 HTTPS 助手在 `ProtectSystem=strict` 下无法完整运行 Ubuntu `nginx -t` 的问题；助手与续期 unit 精确开放 `/run/nginx.pid`、`/var/log/nginx` 和 `/var/lib/nginx` 并要求 Nginx 服务，不放宽整个 `/run` 或 `/var`。同步将 Nginx API 超时提高到 480 秒、API Socket 超时提高到 420 秒、前端安全地址跳转等待提高到 12 秒；升级器只迁移 LiveBoard 管理配置中旧的 150 秒超时，不覆盖其他自定义 Nginx 内容。
 - 2026-07-27：一键 HTTPS 增加 TLS-ALPN-01 自动回退。公网 80 或 HTTP Host 被阻断时，助手临时将 Nginx reload 为 HTTP-only 配置以释放 443，完成验证后恢复 HTTPS；续期固定复用首次成功的验证方式。签发与续期失败均恢复原证书和 Nginx，避免证书文件已覆盖却只回滚配置。
-- 2026-07-27：Release 固定携带的 lego v5.2.1 要求 `run` 子命令位于全部选项之前，续期同样使用 `run --renew-days`，不存在旧版 `renew --days` 命令。systemd timer 已负责随机错峰，因此续期传入 `--no-random-sleep`。Release 打包必须用真实 lego 二进制执行完整参数的 `--help` 解析检查，不能只依赖忽略未知参数的 mock。
+- 2026-07-27：Release 固定携带的 lego v5.3.1 要求 `run` 子命令位于全部选项之前，续期同样使用 `run --renew-days`，不存在旧版 `renew --days` 命令。systemd timer 已负责随机错峰，因此续期传入 `--no-random-sleep`。Release 打包必须用真实 lego 二进制执行域名证书与 IP `shortlived` profile 的完整参数检查，不能只依赖忽略未知参数的 mock。
+- 2026-07-27：HTTPS 管理支持停用并切回指定 HTTP 主机、自动续期开关和公网 IPv4 HTTPS。IP 证书使用 Let’s Encrypt `shortlived` profile，有效期约 6 天，进入 3 天续期窗口后更新；关闭自动续期只跳过 systemd 定时检查，手动续期仍可执行。停用 HTTPS 不删除已有证书，但会恢复 HTTP Nginx、`SESSION_COOKIE_SECURE=false` 和 HTTP `WEB_ORIGIN`。
 
 后续纪要只记录会影响未来开发判断的决策、迁移或故障原因，不记录每个微小样式调整。

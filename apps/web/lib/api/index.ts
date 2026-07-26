@@ -481,7 +481,11 @@ export interface HttpsStatus {
   available: boolean;
   enabled: boolean;
   domain: string | null;
+  subjectType: "domain" | "ip" | null;
   challengeType: "http-01" | "tls-alpn-01" | null;
+  certificateProfile: "shortlived" | null;
+  autoRenewEnabled: boolean;
+  httpHost: string | null;
   expiresAt: string | null;
   lastRenewedAt: string | null;
   lastRenewalCheckAt: string | null;
@@ -496,6 +500,20 @@ export function enableHttps(input: { domain: string; email: string }) {
   return request<{ https: HttpsStatus }>("/admin/settings/https/enable", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export function disableHttps(input: { httpHost: string }) {
+  return request<{ https: HttpsStatus }>("/admin/settings/https/disable", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function setHttpsAutoRenew(enabled: boolean) {
+  return request<{ https: HttpsStatus }>("/admin/settings/https/auto-renew", {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
   });
 }
 
