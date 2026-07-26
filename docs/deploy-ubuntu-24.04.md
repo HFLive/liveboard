@@ -162,15 +162,15 @@ liveboard uninstall
 
 ## 9. 改用 HTTPS
 
-该功能使用标准 ACME HTTP-01，适用于任意域名注册商和权威 DNS 服务商，不要求使用 Cloudflare API。
+该功能自动使用标准 ACME HTTP-01 或 TLS-ALPN-01，适用于任意域名注册商和权威 DNS 服务商，不要求使用 Cloudflare API。TCP 80 或 HTTP Host 被上游阻断时，会自动通过 TCP 443 完成验证。
 
 启用前确认：
 
 1. 域名的 A 记录指向这台服务器的公网 IPv4；只有服务器确实配置了公网 IPv6 时才添加 AAAA 记录。
-2. 公网 TCP 80 和 443 均已放行。
-3. `http://你的域名` 能到达本机 LiveBoard。首次签发时不要在 CDN 侧强制跳转 HTTPS；使用 Cloudflare 代理时，如检查失败可先切到“仅 DNS”完成首次签发。
+2. 公网 TCP 443 已放行；TCP 80 可达时会优先使用无中断的 HTTP-01。
+3. 域名必须直接解析到这台服务器。使用 CDN 代理时，如果代理不转发 ACME TLS-ALPN 协议，应临时切到“仅 DNS”完成签发。
 
-然后以最高管理员进入“管理中心 → 系统设置 → HTTPS”，填写完整域名和证书通知邮箱，点击“检查并启用 HTTPS”。系统会依次完成公网验证、证书签发、Nginx 校验、本机 HTTPS 探测和应用安全 Cookie 切换。任一步失败都会恢复原 HTTP 配置，不会用半成品证书替换当前站点。
+然后以最高管理员进入“管理中心 → 系统设置 → HTTPS”，填写完整域名和证书通知邮箱，点击“检查并启用 HTTPS”。系统先检查 HTTP-01；无法从公网回读验证文件时会自动释放 443 并改用 TLS-ALPN-01，然后完成证书签发、Nginx 校验、本机 HTTPS 探测和应用安全 Cookie 切换。任一步失败都会恢复原 Nginx、证书、环境和安装状态，不会用半成品证书替换当前站点。
 
 也可以通过服务器命令启用：
 
@@ -189,6 +189,8 @@ sudo liveboard https enable \
 - 证书及续期状态保存在 `/opt/liveboard/https`，升级不会覆盖。
 
 HTTPS 签发可能持续数分钟。LiveBoard 管理的 Nginx API 读写超时为 480 秒，API 与宿主机助手的 Socket 超时为 420 秒；升级器只会将带 `# Managed by LiveBoard` 标记的旧配置中精确的 `150s` 值迁移为 `480s`，不会覆盖其他 Nginx 自定义内容。首次配置如果经过带短请求时限的 CDN 代理，建议临时使用“仅 DNS”直连源站。
+
+TLS-ALPN-01 要独占 TCP 443。首次从 HTTP 启用时不会影响当前 HTTP 管理请求；后续自动续期会先让 Nginx 暂时只保留 HTTP 入口，完成验证后立即恢复 HTTPS，因此安全地址可能短暂不可用。失败时助手同样恢复续期前的证书和 Nginx 配置。
 
 手动检查或立即执行续期：
 

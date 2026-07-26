@@ -51,6 +51,8 @@ DOMAIN_PATTERN = re.compile(
     r"(?=^.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
 )
 EMAIL_PATTERN = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}$")
+HTTP_CHALLENGE = "http-01"
+TLS_ALPN_CHALLENGE = "tls-alpn-01"
 
 
 class HttpsError(RuntimeError):
@@ -280,6 +282,8 @@ def install_nginx_config(content: str) -> None:
 def check_http_challenge(domain: str) -> None:
     if os.environ.get("LIVEBOARD_SKIP_PUBLIC_CHALLENGE_CHECK") == "1":
         return
+    if os.environ.get("LIVEBOARD_TEST_PUBLIC_CHALLENGE_FAILURE") == "1":
+        raise HttpsError("无法通过公网域名访问 HTTP 验证路径")
     token = f"liveboard-{os.urandom(12).hex()}"
     challenge_directory = WEBROOT / ".well-known/acme-challenge"
     challenge_directory.mkdir(parents=True, exist_ok=True)
@@ -304,7 +308,30 @@ def check_http_challenge(domain: str) -> None:
         target.unlink(missing_ok=True)
 
 
-def lego_arguments(domain: str, email: str, action: str) -> list[str]:
+def select_challenge_type(domain: str) -> tuple[str, str | None]:
+    forced = os.environ.get("LIVEBOARD_ACME_CHALLENGE", "auto").strip().lower()
+    if forced == HTTP_CHALLENGE:
+        check_http_challenge(domain)
+        return HTTP_CHALLENGE, None
+    if forced == TLS_ALPN_CHALLENGE:
+        return TLS_ALPN_CHALLENGE, None
+    if forced != "auto":
+        raise HttpsError(
+            "LIVEBOARD_ACME_CHALLENGE 只支持 auto、http-01 或 tls-alpn-01"
+        )
+    try:
+        check_http_challenge(domain)
+        return HTTP_CHALLENGE, None
+    except HttpsError as caught:
+        return TLS_ALPN_CHALLENGE, str(caught)
+
+
+def lego_arguments(
+    domain: str,
+    email: str,
+    action: str,
+    challenge_type: str,
+) -> list[str]:
     arguments = [
         str(LEGO_BIN),
         "--path",
@@ -314,14 +341,64 @@ def lego_arguments(domain: str, email: str, action: str) -> list[str]:
         "--accept-tos",
         "--domains",
         domain,
-        "--http",
-        "--http.webroot",
-        str(WEBROOT),
-        action,
     ]
+    if challenge_type == HTTP_CHALLENGE:
+        arguments.extend(["--http", "--http.webroot", str(WEBROOT)])
+    elif challenge_type == TLS_ALPN_CHALLENGE:
+        arguments.append("--tls")
+    else:
+        raise HttpsError(f"不支持的 ACME 验证方式：{challenge_type}")
+    arguments.append(action)
     if action == "renew":
         arguments.extend(["--days", "30"])
     return arguments
+
+
+def snapshot_file(path: Path) -> tuple[bytes, int] | None:
+    if not path.is_file():
+        return None
+    return path.read_bytes(), path.stat().st_mode & 0o777
+
+
+def restore_file(path: Path, snapshot: tuple[bytes, int] | None) -> None:
+    if snapshot is None:
+        path.unlink(missing_ok=True)
+        return
+    content, mode = snapshot
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def wait_for_tls_challenge_port(timeout: int = 15) -> None:
+    if os.environ.get("LIVEBOARD_SKIP_TLS_PORT_CHECK") == "1":
+        return
+    deadline = time.monotonic() + timeout
+    while True:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            probe.bind(("0.0.0.0", 443))
+            return
+        except OSError as caught:
+            if time.monotonic() >= deadline:
+                raise HttpsError(
+                    "无法释放 TCP 443 供 TLS-ALPN 验证使用；"
+                    "请检查是否有其他程序占用 443"
+                ) from caught
+            time.sleep(0.5)
+        finally:
+            probe.close()
 
 
 def verify_local_https(domain: str) -> None:
@@ -430,11 +507,46 @@ def enable_https(domain_value: str, email_value: str) -> dict[str, Any]:
             if INSTALL_CONF.is_file()
             else None
         )
+        certificate, key = certificate_paths(domain)
+        original_certificate = snapshot_file(certificate)
+        original_key = snapshot_file(key)
         try:
             install_nginx_config(http_nginx_config(domain))
-            check_http_challenge(domain)
-            run(lego_arguments(domain, email, "run"), timeout=240)
-            certificate, key = certificate_paths(domain)
+            challenge_type, http_failure = select_challenge_type(domain)
+            if challenge_type == TLS_ALPN_CHALLENGE:
+                wait_for_tls_challenge_port()
+            try:
+                run(
+                    lego_arguments(domain, email, "run", challenge_type),
+                    timeout=240,
+                )
+            except HttpsError as caught:
+                if challenge_type == HTTP_CHALLENGE:
+                    http_failure = f"HTTP-01 证书签发失败：{caught}"
+                    challenge_type = TLS_ALPN_CHALLENGE
+                    wait_for_tls_challenge_port()
+                    try:
+                        run(
+                            lego_arguments(
+                                domain,
+                                email,
+                                "run",
+                                challenge_type,
+                            ),
+                            timeout=240,
+                        )
+                    except HttpsError as tls_caught:
+                        raise HttpsError(
+                            f"{http_failure}；已自动改用 TCP 443 的 TLS-ALPN "
+                            f"验证，但仍然失败：{tls_caught}"
+                        ) from tls_caught
+                elif http_failure:
+                    raise HttpsError(
+                        f"{http_failure}；已自动改用 TCP 443 的 TLS-ALPN 验证，"
+                        f"但仍然失败：{caught}"
+                    ) from caught
+                else:
+                    raise
             if not certificate.is_file() or not key.is_file():
                 raise HttpsError("证书机构返回成功，但没有找到证书文件")
             os.chmod(key, 0o600)
@@ -458,6 +570,7 @@ def enable_https(domain_value: str, email_value: str) -> dict[str, Any]:
                 "enabled": True,
                 "domain": domain,
                 "email": email,
+                "challengeType": challenge_type,
                 "enabledAt": now_iso(),
                 "lastRenewedAt": now_iso(),
                 "lastRenewalCheckAt": now_iso(),
@@ -469,6 +582,8 @@ def enable_https(domain_value: str, email_value: str) -> dict[str, Any]:
         except Exception as caught:
             atomic_write(NGINX_SITE, original_nginx, mode=0o644)
             atomic_write(ENV_FILE, original_env)
+            restore_file(certificate, original_certificate)
+            restore_file(key, original_key)
             if original_install_conf is None:
                 INSTALL_CONF.unlink(missing_ok=True)
             else:
@@ -491,19 +606,47 @@ def renew_https() -> dict[str, Any]:
             return https_status()
         domain = normalize_domain(str(config.get("domain", "")))
         email = normalize_email(str(config.get("email", "")))
-        certificate, _key = certificate_paths(domain)
+        challenge_type = str(config.get("challengeType", HTTP_CHALLENGE))
+        if challenge_type not in (HTTP_CHALLENGE, TLS_ALPN_CHALLENGE):
+            raise HttpsError("HTTPS 配置中的 ACME 验证方式无效")
+        certificate, key = certificate_paths(domain)
         before = certificate.stat().st_mtime_ns if certificate.exists() else 0
+        original_nginx = NGINX_SITE.read_text(encoding="utf-8")
+        original_certificate = snapshot_file(certificate)
+        original_key = snapshot_file(key)
         try:
-            run(lego_arguments(domain, email, "renew"), timeout=240)
+            if challenge_type == TLS_ALPN_CHALLENGE:
+                install_nginx_config(http_nginx_config(domain))
+                wait_for_tls_challenge_port()
+            run(
+                lego_arguments(
+                    domain,
+                    email,
+                    "renew",
+                    challenge_type,
+                ),
+                timeout=240,
+            )
             after = certificate.stat().st_mtime_ns if certificate.exists() else 0
             config["lastRenewalCheckAt"] = now_iso()
-            if after != before:
+            if challenge_type == TLS_ALPN_CHALLENGE:
+                install_nginx_config(https_nginx_config(domain, certificate, key))
+            elif after != before:
                 run([require_command("nginx"), "-t"], timeout=30)
                 run([require_command("systemctl"), "reload", "nginx"], timeout=30)
+            if after != before:
                 config["lastRenewedAt"] = now_iso()
             save_config(config)
             LAST_ERROR_FILE.unlink(missing_ok=True)
         except Exception as caught:
+            restore_file(certificate, original_certificate)
+            restore_file(key, original_key)
+            atomic_write(NGINX_SITE, original_nginx, mode=0o644)
+            try:
+                run([require_command("nginx"), "-t"], timeout=30)
+                run([require_command("systemctl"), "reload", "nginx"], timeout=30)
+            except Exception:
+                pass
             atomic_write(LAST_ERROR_FILE, f"{now_iso()} 自动续期失败：{caught}\n")
             raise
         return https_status()
@@ -522,6 +665,7 @@ def https_status() -> dict[str, Any]:
         "available": LEGO_BIN.is_file() and os.access(LEGO_BIN, os.X_OK),
         "enabled": bool(config.get("enabled")),
         "domain": domain or None,
+        "challengeType": config.get("challengeType"),
         "expiresAt": certificate_expiry(certificate) if certificate else None,
         "lastRenewedAt": config.get("lastRenewedAt"),
         "lastRenewalCheckAt": config.get("lastRenewalCheckAt"),
