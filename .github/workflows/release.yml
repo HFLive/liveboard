@@ -85,6 +85,15 @@ jobs:
           echo "c5c7f34594daa8d05ec568069fa6c97ace1ef428367533a6d42bf9b3d5164169  $lego_archive" \
             | sha256sum --check
           tar -xzf "$lego_archive" -C "$bundle_dir" lego
+          "$bundle_dir/lego" run \
+            --path /tmp/liveboard-lego-cli-check \
+            --email admin@example.com \
+            --accept-tos \
+            --domains board.example.com \
+            --tls \
+            --renew-days 30 \
+            --no-random-sleep \
+            --help >/dev/null
 
           docker save \
             postgres:16-alpine \
