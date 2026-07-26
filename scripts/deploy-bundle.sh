@@ -451,7 +451,7 @@ install_gateway() {
 
   ln -sfn "$NGINX_SITE" "$NGINX_ENABLED"
   nginx -t
-  if command -v systemctl >/dev/null 2>&1; then
+  if [ "$STATE_DIR" = /opt/liveboard ] && command -v systemctl >/dev/null 2>&1; then
     systemctl enable --now nginx
     systemctl reload nginx
   fi

@@ -26,17 +26,25 @@ STATE_DIR="$TEST_DIR/state"
 BIN_DIR="$TEST_DIR/bin"
 MANAGER_PATH="$TEST_DIR/liveboard"
 MOCK_DOCKER_STATE="$TEST_DIR/docker-state"
+NGINX_SITE="$TEST_DIR/nginx/sites-available/liveboard"
+NGINX_ENABLED="$TEST_DIR/nginx/sites-enabled/liveboard"
+NGINX_DEFAULT="$TEST_DIR/nginx/sites-enabled/default"
 export MOCK_DOCKER_STATE
+export LIVEBOARD_NGINX_SITE="$NGINX_SITE"
+export LIVEBOARD_NGINX_ENABLED="$NGINX_ENABLED"
+export LIVEBOARD_NGINX_DEFAULT="$NGINX_DEFAULT"
 
-mkdir -p "$BUNDLE_DIR" "$BIN_DIR"
+mkdir -p "$BUNDLE_DIR" "$BIN_DIR" "$(dirname "$NGINX_DEFAULT")"
+: >"$NGINX_DEFAULT"
 cp "$ROOT_DIR/scripts/deploy-bundle.sh" "$BUNDLE_DIR/deploy.sh"
 cp "$ROOT_DIR/scripts/liveboard-manager.sh" "$BUNDLE_DIR/manager.sh"
 cp "$ROOT_DIR/.env.production.example" "$BUNDLE_DIR/.env.example"
 
-for file in docker-compose.yml images.tar.gz nginx.conf SHA256SUMS; do
+for file in docker-compose.yml images.tar.gz SHA256SUMS; do
   : >"$BUNDLE_DIR/$file"
 done
 
+printf '%s\n' '# Managed by LiveBoard' >"$BUNDLE_DIR/nginx.conf"
 printf '%s\n' 'release=v1.0.0' >"$BUNDLE_DIR/manifest.txt"
 
 cat >"$BIN_DIR/docker" <<'EOF'
@@ -96,7 +104,12 @@ cat >"$BIN_DIR/uname" <<'EOF'
 printf '%s\n' 'x86_64'
 EOF
 
-chmod +x "$BIN_DIR/docker" "$BIN_DIR/curl" "$BIN_DIR/sha256sum" "$BIN_DIR/gzip" "$BIN_DIR/od" "$BIN_DIR/uname"
+cat >"$BIN_DIR/nginx" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+
+chmod +x "$BIN_DIR/docker" "$BIN_DIR/curl" "$BIN_DIR/sha256sum" "$BIN_DIR/gzip" "$BIN_DIR/od" "$BIN_DIR/uname" "$BIN_DIR/nginx"
 
 PATH="$BIN_DIR:$PATH" \
   LIVEBOARD_STATE_DIR="$STATE_DIR" \
@@ -129,6 +142,9 @@ test "$(cat "$STATE_DIR/releases/current")" = "v1.0.0"
 test "$(readlink "$STATE_DIR/releases/active")" = "$STATE_DIR/releases/v1.0.0"
 grep -q '^CURRENT_VERSION=v1.0.0$' "$STATE_DIR/install.conf"
 grep -q '^ACCESS_MODE=http-ip$' "$STATE_DIR/install.conf"
+test -L "$NGINX_ENABLED"
+test "$(readlink "$NGINX_ENABLED")" = "$NGINX_SITE"
+test -f "$STATE_DIR/gateway/default-site.backup"
 
 for index in 01 02 03 04 05 06 07 08 09 10 11; do
   printf '%s\n' old >"$STATE_DIR/backups/postgres-20000101-0000${index}.dump"
@@ -169,6 +185,8 @@ PATH="$BIN_DIR:$PATH" LIVEBOARD_STATE_DIR="$STATE_DIR" "$MANAGER_PATH" uninstall
 test ! -e "$STATE_DIR/releases/active"
 test -f "$ENV_FILE"
 test -d "$STATE_DIR/backups"
+test ! -e "$NGINX_ENABLED"
+test -f "$NGINX_DEFAULT"
 grep -q '业务数据和配置仍保留' "$TEST_DIR/uninstall.log"
 
 RUN_FILE="$TEST_DIR/liveboard-v1.0.1-linux-amd64.run"
@@ -197,5 +215,6 @@ PATH="$BIN_DIR:$PATH" \
   sh "$RUN_FILE" install >"$TEST_DIR/self-extract-install.log" 2>&1
 test "$(cat "$SECOND_STATE_DIR/releases/current")" = "v1.0.1"
 test -x "$SECOND_MANAGER_PATH"
+test -L "$NGINX_ENABLED"
 
 printf '%s\n' 'deploy bundle and manager checks passed'
