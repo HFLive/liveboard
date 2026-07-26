@@ -4,6 +4,7 @@ set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 REAL_SHA256SUM=$(command -v sha256sum)
+REAL_GZIP=$(command -v gzip)
 export REAL_SHA256SUM
 TEST_DIR=$(mktemp -d)
 cleanup() {
@@ -40,10 +41,11 @@ cp "$ROOT_DIR/scripts/deploy-bundle.sh" "$BUNDLE_DIR/deploy.sh"
 cp "$ROOT_DIR/scripts/liveboard-manager.sh" "$BUNDLE_DIR/manager.sh"
 cp "$ROOT_DIR/.env.production.example" "$BUNDLE_DIR/.env.example"
 
-for file in docker-compose.yml images.tar.gz SHA256SUMS; do
+for file in docker-compose.yml SHA256SUMS; do
   : >"$BUNDLE_DIR/$file"
 done
 
+printf '%s\n' 'mock-image-data' | "$REAL_GZIP" -c >"$BUNDLE_DIR/images.tar.gz"
 printf '%s\n' '# Managed by LiveBoard' >"$BUNDLE_DIR/nginx.conf"
 printf '%s\n' 'release=v1.0.0' >"$BUNDLE_DIR/manifest.txt"
 
@@ -89,11 +91,6 @@ fi
 exec "$REAL_SHA256SUM" "$@"
 EOF
 
-cat >"$BIN_DIR/gzip" <<'EOF'
-#!/bin/sh
-printf '%s\n' 'mock-image-data'
-EOF
-
 cat >"$BIN_DIR/od" <<'EOF'
 #!/bin/sh
 printf '%s\n' '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
@@ -109,7 +106,7 @@ cat >"$BIN_DIR/nginx" <<'EOF'
 exit 0
 EOF
 
-chmod +x "$BIN_DIR/docker" "$BIN_DIR/curl" "$BIN_DIR/sha256sum" "$BIN_DIR/gzip" "$BIN_DIR/od" "$BIN_DIR/uname" "$BIN_DIR/nginx"
+chmod +x "$BIN_DIR/docker" "$BIN_DIR/curl" "$BIN_DIR/sha256sum" "$BIN_DIR/od" "$BIN_DIR/uname" "$BIN_DIR/nginx"
 
 PATH="$BIN_DIR:$PATH" \
   LIVEBOARD_STATE_DIR="$STATE_DIR" \
