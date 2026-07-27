@@ -25,6 +25,7 @@ import {
   uploadSystemFavicon,
 } from "@/lib/api";
 import { formatDateTime, setAppTimeZone } from "@/lib/labels";
+import { waitForWebReady } from "@/lib/waitForWebReady";
 import { setAppFavicon } from "@/components/app-shell/AppSettingsProvider";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
@@ -123,6 +124,9 @@ export function SystemSettingsClient() {
   const [enablingHttps, setEnablingHttps] = useState(false);
   const [disablingHttps, setDisablingHttps] = useState(false);
   const [updatingAutoRenew, setUpdatingAutoRenew] = useState(false);
+  const [protocolSwitchTarget, setProtocolSwitchTarget] = useState<
+    string | null
+  >(null);
   const timeZoneOptions = useMemo(
     () => getAvailableTimeZones(timeZone),
     [timeZone],
@@ -240,6 +244,7 @@ export function SystemSettingsClient() {
     setEnablingHttps(true);
     setError(null);
     setMessage(null);
+    setProtocolSwitchTarget(null);
     try {
       const result = await enableHttps({
         domain: httpsDomain,
@@ -247,14 +252,21 @@ export function SystemSettingsClient() {
       });
       setHttpsStatus(result.https);
       setHttpHost(result.https.domain ?? "");
-      setMessage("HTTPS 已启用，正在重新载入服务并切换到安全地址");
       if (!result.https.domain) {
         throw new Error("HTTPS 已启用，但服务器没有返回网站域名");
       }
       const enabledDomain = result.https.domain;
-      window.setTimeout(() => {
-        window.location.replace(`https://${enabledDomain}/app/admin/settings`);
-      }, 12_000);
+      const target = `https://${enabledDomain}/app/admin/settings`;
+      setMessage("HTTPS 已启用，正在等待 Web 服务恢复后切换到安全地址");
+      const ready = await waitForWebReady(new URL(target).origin);
+      if (!ready) {
+        setProtocolSwitchTarget(target);
+        setError(
+          "HTTPS 已成功启用，但等待 Web 服务恢复超时。请稍后通过下方安全地址重试。",
+        );
+        return;
+      }
+      window.location.replace(target);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "HTTPS 配置失败");
     } finally {
@@ -331,6 +343,11 @@ export function SystemSettingsClient() {
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
+      {protocolSwitchTarget ? (
+        <p className="muted">
+          <a href={protocolSwitchTarget}>打开 HTTPS 管理页面</a>
+        </p>
+      ) : null}
 
       <section className="workbench system-settings-layout">
         <div className="workbench-main system-settings-sections">
