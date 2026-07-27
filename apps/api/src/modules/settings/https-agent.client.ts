@@ -11,6 +11,8 @@ export interface HttpsStatus {
   certificateProfile: "shortlived" | null;
   autoRenewEnabled: boolean;
   httpHost: string | null;
+  httpPrimaryHost: string | null;
+  httpAllowedHosts: string[];
   expiresAt: string | null;
   lastRenewedAt: string | null;
   lastRenewalCheckAt: string | null;
@@ -58,9 +60,31 @@ export class HttpsAgentClient {
     }
   }
 
-  async disable(httpHost: string): Promise<HttpsStatus> {
+  async disable(httpHost?: string): Promise<HttpsStatus> {
     try {
-      return await this.request({ action: "disable", httpHost }, 180_000);
+      return await this.request(
+        { action: "disable", httpHost: httpHost ?? "" },
+        180_000,
+      );
+    } catch (caught) {
+      if (isUnavailableSocketError(caught)) {
+        throw new ServiceUnavailableException(
+          "当前服务器未安装 HTTPS 助手，请先升级生产部署包",
+        );
+      }
+      throw caught;
+    }
+  }
+
+  async configureHttpAccess(
+    primaryHost: string,
+    allowedHosts: string[],
+  ): Promise<HttpsStatus> {
+    try {
+      return await this.request(
+        { action: "configure-http", primaryHost, allowedHosts },
+        180_000,
+      );
     } catch (caught) {
       if (isUnavailableSocketError(caught)) {
         throw new ServiceUnavailableException(
@@ -163,6 +187,8 @@ const unavailableStatus: HttpsStatus = {
   certificateProfile: null,
   autoRenewEnabled: false,
   httpHost: null,
+  httpPrimaryHost: null,
+  httpAllowedHosts: [],
   expiresAt: null,
   lastRenewedAt: null,
   lastRenewalCheckAt: null,

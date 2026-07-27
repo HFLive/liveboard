@@ -11,6 +11,8 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsEmail,
   IsNotEmpty,
@@ -45,10 +47,23 @@ class EnableHttpsDto {
 }
 
 class DisableHttpsDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(253)
+  httpHost?: string;
+}
+
+class ConfigureHttpAccessDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(253)
-  httpHost!: string;
+  primaryHost!: string;
+
+  @IsArray()
+  @ArrayMaxSize(8)
+  @IsString({ each: true })
+  @MaxLength(253, { each: true })
+  allowedHosts!: string[];
 }
 
 class UpdateHttpsRenewalDto {
@@ -140,6 +155,20 @@ export class SettingsController {
   ) {
     return {
       https: await this.settingsService.disableHttps(userId, body.httpHost),
+    };
+  }
+
+  @Patch("admin/settings/https/http-access")
+  async configureHttpAccess(
+    @CurrentUserId() userId: string | null,
+    @Body() body: ConfigureHttpAccessDto,
+  ) {
+    return {
+      https: await this.settingsService.configureHttpAccess(
+        userId,
+        body.primaryHost,
+        body.allowedHosts,
+      ),
     };
   }
 

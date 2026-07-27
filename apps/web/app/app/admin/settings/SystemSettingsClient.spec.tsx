@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SystemSettingsClient } from "./SystemSettingsClient";
 
 const apiMocks = vi.hoisted(() => ({
+  configureHttpAccess: vi.fn(),
   disableHttps: vi.fn(),
   enableHttps: vi.fn(),
   getHttpsStatus: vi.fn(),
@@ -88,6 +89,24 @@ describe("SystemSettingsClient HTTPS settings", () => {
         lastError: null,
       },
     });
+    apiMocks.configureHttpAccess.mockResolvedValue({
+      https: {
+        available: true,
+        enabled: true,
+        domain: "8.166.143.156",
+        subjectType: "ip",
+        challengeType: "tls-alpn-01",
+        certificateProfile: "shortlived",
+        autoRenewEnabled: true,
+        httpHost: "8.166.143.156",
+        httpPrimaryHost: "8.166.143.156",
+        httpAllowedHosts: ["8.166.143.156", "board.example.com"],
+        expiresAt: "2026-08-01T00:00:00.000Z",
+        lastRenewedAt: "2026-07-26T00:00:00.000Z",
+        lastRenewalCheckAt: "2026-07-26T00:00:00.000Z",
+        lastError: null,
+      },
+    });
     apiMocks.disableHttps.mockResolvedValue({
       https: {
         available: true,
@@ -150,6 +169,8 @@ describe("SystemSettingsClient HTTPS settings", () => {
         certificateProfile: "shortlived",
         autoRenewEnabled: true,
         httpHost: null,
+        httpPrimaryHost: "8.166.143.156",
+        httpAllowedHosts: ["8.166.143.156"],
         expiresAt: "2026-08-01T00:00:00.000Z",
         lastRenewedAt: "2026-07-26T00:00:00.000Z",
         lastRenewalCheckAt: "2026-07-26T00:00:00.000Z",
@@ -200,14 +221,62 @@ describe("SystemSettingsClient HTTPS settings", () => {
       expect(apiMocks.setHttpsAutoRenew).toHaveBeenCalledWith(false);
     });
 
-    fireEvent.change(screen.getByLabelText("停用后的 HTTP 访问地址"), {
-      target: { value: "8.166.143.156" },
+    fireEvent.change(screen.getByLabelText("其他允许地址"), {
+      target: { value: "board.example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存降级设置" }));
+    await waitFor(() => {
+      expect(apiMocks.configureHttpAccess).toHaveBeenCalledWith({
+        primaryHost: "8.166.143.156",
+        allowedHosts: ["8.166.143.156", "board.example.com"],
+      });
     });
     fireEvent.click(screen.getByRole("button", { name: "停用 HTTPS" }));
     await waitFor(() => {
-      expect(apiMocks.disableHttps).toHaveBeenCalledWith({
-        httpHost: "8.166.143.156",
+      expect(apiMocks.disableHttps).toHaveBeenCalledWith();
+    });
+  });
+
+  it("applies HTTP access settings while HTTPS is disabled", async () => {
+    const httpStatus = {
+      available: true,
+      enabled: false,
+      domain: null,
+      subjectType: null,
+      challengeType: null,
+      certificateProfile: null,
+      autoRenewEnabled: false,
+      httpHost: "8.166.143.156",
+      httpPrimaryHost: "8.166.143.156",
+      httpAllowedHosts: ["8.166.143.156"],
+      expiresAt: null,
+      lastRenewedAt: null,
+      lastRenewalCheckAt: null,
+      lastError: null,
+    };
+    apiMocks.getHttpsStatus.mockResolvedValueOnce({ https: httpStatus });
+    apiMocks.configureHttpAccess.mockResolvedValueOnce({
+      https: {
+        ...httpStatus,
+        httpAllowedHosts: ["8.166.143.156", "board.example.com"],
+      },
+    });
+    render(<SystemSettingsClient />);
+
+    await screen.findByText("HTTP 访问设置");
+    fireEvent.change(screen.getByLabelText("其他允许地址"), {
+      target: { value: "board.example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "应用 HTTP 设置" }));
+
+    await waitFor(() => {
+      expect(apiMocks.configureHttpAccess).toHaveBeenCalledWith({
+        primaryHost: "8.166.143.156",
+        allowedHosts: ["8.166.143.156", "board.example.com"],
       });
     });
+    expect(readinessMocks.waitForWebReady).toHaveBeenCalledWith(
+      "http://8.166.143.156",
+    );
   });
 });

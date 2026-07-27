@@ -180,9 +180,21 @@ export class SettingsService {
     return this.httpsAgent.enable(domain.trim(), email.trim());
   }
 
-  async disableHttps(userId: string | null, httpHost: string) {
+  async disableHttps(userId: string | null, httpHost?: string) {
     await this.requireAdmin(userId);
-    return this.httpsAgent.disable(httpHost.trim());
+    return this.httpsAgent.disable(httpHost?.trim() || undefined);
+  }
+
+  async configureHttpAccess(
+    userId: string | null,
+    primaryHost: string,
+    allowedHosts: string[],
+  ) {
+    await this.requireAdmin(userId);
+    return this.httpsAgent.configureHttpAccess(
+      primaryHost.trim(),
+      allowedHosts.map((host) => host.trim()).filter(Boolean),
+    );
   }
 
   async setHttpsAutoRenew(userId: string | null, enabled: boolean) {

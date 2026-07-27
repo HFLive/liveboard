@@ -181,6 +181,8 @@ printf '%s\n' \
   'CURRENT_VERSION=v1.0.0' \
   'ACCESS_MODE=https-domain' \
   'HTTPS_DOMAIN=board.example.com' \
+  'HTTP_PRIMARY_HOST=8.166.143.156' \
+  'HTTP_ALLOWED_HOSTS=8.166.143.156,board.example.com' \
   'INSTALLED_AT=2026-07-26T00:00:00Z' \
   >"$STATE_DIR/install.conf"
 printf '%s\n' 'release=v1.0.1' >"$BUNDLE_DIR/manifest.txt"
@@ -200,6 +202,9 @@ test "$(readlink "$STATE_DIR/releases/active")" = "$STATE_DIR/releases/v1.0.1"
 grep -q '^CURRENT_VERSION=v1.0.1$' "$STATE_DIR/install.conf"
 grep -q '^ACCESS_MODE=https-domain$' "$STATE_DIR/install.conf"
 grep -q '^HTTPS_DOMAIN=board.example.com$' "$STATE_DIR/install.conf"
+grep -q '^HTTP_PRIMARY_HOST=8.166.143.156$' "$STATE_DIR/install.conf"
+grep -q '^HTTP_ALLOWED_HOSTS=8.166.143.156,board.example.com$' \
+  "$STATE_DIR/install.conf"
 if grep -q '^密码：test-random-password$' "$TEST_DIR/second-run.log"; then
   echo "重复部署不应再次显示首次管理员密码。" >&2
   exit 1

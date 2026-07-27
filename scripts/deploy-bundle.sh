@@ -539,11 +539,19 @@ INSTALLED_AT=$(awk -F= '$1 == "INSTALLED_AT" { sub(/^[^=]*=/, ""); print; exit }
 ACCESS_MODE=$(awk -F= '$1 == "ACCESS_MODE" { sub(/^[^=]*=/, ""); print; exit }' "$INSTALL_CONF" 2>/dev/null || true)
 [ -n "$ACCESS_MODE" ] || ACCESS_MODE=http-ip
 HTTPS_DOMAIN=$(awk -F= '$1 == "HTTPS_DOMAIN" { sub(/^[^=]*=/, ""); print; exit }' "$INSTALL_CONF" 2>/dev/null || true)
+HTTP_PRIMARY_HOST=$(awk -F= '$1 == "HTTP_PRIMARY_HOST" { sub(/^[^=]*=/, ""); print; exit }' "$INSTALL_CONF" 2>/dev/null || true)
+HTTP_ALLOWED_HOSTS=$(awk -F= '$1 == "HTTP_ALLOWED_HOSTS" { sub(/^[^=]*=/, ""); print; exit }' "$INSTALL_CONF" 2>/dev/null || true)
 {
   echo "CURRENT_VERSION=$VERSION"
   echo "ACCESS_MODE=$ACCESS_MODE"
   if [ -n "$HTTPS_DOMAIN" ]; then
     echo "HTTPS_DOMAIN=$HTTPS_DOMAIN"
+  fi
+  if [ -n "$HTTP_PRIMARY_HOST" ]; then
+    echo "HTTP_PRIMARY_HOST=$HTTP_PRIMARY_HOST"
+  fi
+  if [ -n "$HTTP_ALLOWED_HOSTS" ]; then
+    echo "HTTP_ALLOWED_HOSTS=$HTTP_ALLOWED_HOSTS"
   fi
   echo "INSTALLED_AT=$INSTALLED_AT"
   echo "UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"

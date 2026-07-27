@@ -486,6 +486,8 @@ export interface HttpsStatus {
   certificateProfile: "shortlived" | null;
   autoRenewEnabled: boolean;
   httpHost: string | null;
+  httpPrimaryHost: string | null;
+  httpAllowedHosts: string[];
   expiresAt: string | null;
   lastRenewedAt: string | null;
   lastRenewalCheckAt: string | null;
@@ -503,9 +505,19 @@ export function enableHttps(input: { domain: string; email: string }) {
   });
 }
 
-export function disableHttps(input: { httpHost: string }) {
+export function disableHttps(input: { httpHost?: string } = {}) {
   return request<{ https: HttpsStatus }>("/admin/settings/https/disable", {
     method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function configureHttpAccess(input: {
+  primaryHost: string;
+  allowedHosts: string[];
+}) {
+  return request<{ https: HttpsStatus }>("/admin/settings/https/http-access", {
+    method: "PATCH",
     body: JSON.stringify(input),
   });
 }

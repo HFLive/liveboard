@@ -3,6 +3,7 @@ import { API_URL } from "./client";
 import {
   AI_USAGE_CONSUMED_EVENT,
   askAiStream,
+  configureHttpAccess,
   disableHttps,
   downloadMarkdown,
   enableHttps,
@@ -168,6 +169,12 @@ describe("HTTPS settings API", () => {
         }),
       )
       .mockResolvedValueOnce(
+        new Response(JSON.stringify({ https: { enabled: true } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
         new Response(JSON.stringify({ https: { enabled: false } }), {
           status: 201,
           headers: { "Content-Type": "application/json" },
@@ -181,7 +188,11 @@ describe("HTTPS settings API", () => {
       email: "admin@example.com",
     });
     await setHttpsAutoRenew(false);
-    await disableHttps({ httpHost: "8.166.143.156" });
+    await configureHttpAccess({
+      primaryHost: "8.166.143.156",
+      allowedHosts: ["8.166.143.156", "board.example.com"],
+    });
+    await disableHttps();
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       `${API_URL}/admin/settings/https`,
@@ -204,11 +215,21 @@ describe("HTTPS settings API", () => {
       body: JSON.stringify({ enabled: false }),
     });
     expect(fetchMock.mock.calls[3]?.[0]).toBe(
-      `${API_URL}/admin/settings/https/disable`,
+      `${API_URL}/admin/settings/https/http-access`,
     );
     expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({
+      method: "PATCH",
+      body: JSON.stringify({
+        primaryHost: "8.166.143.156",
+        allowedHosts: ["8.166.143.156", "board.example.com"],
+      }),
+    });
+    expect(fetchMock.mock.calls[4]?.[0]).toBe(
+      `${API_URL}/admin/settings/https/disable`,
+    );
+    expect(fetchMock.mock.calls[4]?.[1]).toMatchObject({
       method: "POST",
-      body: JSON.stringify({ httpHost: "8.166.143.156" }),
+      body: JSON.stringify({}),
     });
   });
 });
