@@ -13,10 +13,16 @@ const apiMocks = vi.hoisted(() => ({
   uploadSystemFavicon: vi.fn(),
 }));
 
+const readinessMocks = vi.hoisted(() => ({
+  waitForWebReady: vi.fn(),
+}));
+
 vi.mock("@/lib/api", () => ({
   ...apiMocks,
   apiResourceUrl: (path: string) => path,
 }));
+
+vi.mock("@/lib/waitForWebReady", () => readinessMocks);
 
 vi.mock("@/components/app-shell/AppSettingsProvider", () => ({
   setAppFavicon: vi.fn(),
@@ -24,6 +30,7 @@ vi.mock("@/components/app-shell/AppSettingsProvider", () => ({
 
 describe("SystemSettingsClient HTTPS settings", () => {
   beforeEach(() => {
+    readinessMocks.waitForWebReady.mockReturnValue(new Promise(() => {}));
     apiMocks.getSystemSettings.mockResolvedValue({
       settings: {
         workspaceName: "LiveBoard",
@@ -120,10 +127,50 @@ describe("SystemSettingsClient HTTPS settings", () => {
         email: "admin@example.com",
       });
     });
+    await waitFor(() => {
+      expect(readinessMocks.waitForWebReady).toHaveBeenCalledWith(
+        "https://board.example.com",
+      );
+    });
     expect(await screen.findByText("HTTPS 已启用")).toBeInTheDocument();
     expect(
       screen.getByText(/续期验证时 HTTPS 可能短暂不可用/),
     ).toBeInTheDocument();
+  });
+
+  it("offers the confirmed HTTPS target when web readiness times out", async () => {
+    readinessMocks.waitForWebReady.mockResolvedValueOnce(false);
+    apiMocks.enableHttps.mockResolvedValueOnce({
+      https: {
+        available: true,
+        enabled: true,
+        domain: "8.166.143.156",
+        subjectType: "ip",
+        challengeType: "tls-alpn-01",
+        certificateProfile: "shortlived",
+        autoRenewEnabled: true,
+        httpHost: null,
+        expiresAt: "2026-08-01T00:00:00.000Z",
+        lastRenewedAt: "2026-07-26T00:00:00.000Z",
+        lastRenewalCheckAt: "2026-07-26T00:00:00.000Z",
+        lastError: null,
+      },
+    });
+    render(<SystemSettingsClient />);
+
+    const domain = await screen.findByLabelText("网站域名或公网 IPv4");
+    fireEvent.change(domain, { target: { value: "8.166.143.156" } });
+    fireEvent.change(screen.getByLabelText("证书通知邮箱"), {
+      target: { value: "admin@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "检查并启用 HTTPS" }));
+
+    expect(
+      await screen.findByText(/等待 Web 服务恢复超时/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "打开 HTTPS 管理页面" }),
+    ).toHaveAttribute("href", "https://8.166.143.156/app/admin/settings");
   });
 
   it("toggles renewal and disables HTTPS to the selected HTTP host", async () => {
