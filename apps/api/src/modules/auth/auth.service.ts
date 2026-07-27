@@ -6,17 +6,16 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import type {
   UserProfile,
   UserPublicActivity,
   UserSummary,
 } from "@liveboard/shared";
 import argon2 from "argon2";
-import { Client } from "minio";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../storage/storage.service";
 import type { ChangePasswordDto, UpdateProfileDto } from "./auth.dto";
 import { LoginRateLimitService } from "./login-rate-limit.service";
 
@@ -34,40 +33,12 @@ const PROFILE_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 @Injectable()
 export class AuthService {
   private readonly dummyPasswordHash = argon2.hash(randomUUID());
-  private readonly minio: Client;
-  private readonly bucket: string;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly loginRateLimit: LoginRateLimitService,
-    private readonly config: ConfigService,
-  ) {
-    this.bucket = this.config.get<string>("MINIO_BUCKET", "liveboard-assets");
-    const accessKey = this.config.get<string>("MINIO_ROOT_USER", "liveboard");
-    const secretKey = this.config.get<string>(
-      "MINIO_ROOT_PASSWORD",
-      "replace-with-a-strong-password",
-    );
-
-    if (
-      process.env.NODE_ENV === "production" &&
-      (!accessKey ||
-        !secretKey ||
-        secretKey === "replace-with-a-strong-password")
-    ) {
-      throw new Error(
-        "Secure MinIO credentials must be configured in production",
-      );
-    }
-
-    this.minio = new Client({
-      endPoint: this.config.get<string>("MINIO_ENDPOINT", "localhost"),
-      port: this.config.get<number>("MINIO_PORT", 9000),
-      useSSL: this.config.get<string>("MINIO_USE_SSL", "false") === "true",
-      accessKey,
-      secretKey,
-    });
-  }
+    private readonly storage: StorageService,
+  ) {}
 
   async validateLogin(
     username: string,
@@ -257,17 +228,9 @@ export class AuthService {
 
     const mimeType = normalizeProfileImageMimeType(file, "头像");
     const storageKey = `avatars/${user.id}/${randomUUID()}.${profileImageExtension(mimeType)}`;
+    const backend = await this.storage.activeBackend();
 
-    await this.ensureBucket();
-    await this.minio.putObject(
-      this.bucket,
-      storageKey,
-      file.buffer,
-      file.size,
-      {
-        "Content-Type": mimeType,
-      },
-    );
+    await backend.putObject(storageKey, file.buffer, mimeType);
 
     let updated: Awaited<ReturnType<typeof this.prisma.user.update>>;
     try {
@@ -277,19 +240,17 @@ export class AuthService {
           avatarStorageKey: storageKey,
           avatarMimeType: mimeType,
           avatarUpdatedAt: new Date(),
+          avatarStorageBackend: backend.name,
         },
       });
     } catch (caught) {
-      await this.minio
-        .removeObject(this.bucket, storageKey)
-        .catch(() => undefined);
+      await backend.removeObject(storageKey).catch(() => undefined);
       throw caught;
     }
 
     if (user.avatarStorageKey && user.avatarStorageKey !== storageKey) {
-      await this.minio
-        .removeObject(this.bucket, user.avatarStorageKey)
-        .catch(() => undefined);
+      const previous = await this.storage.backendFor(user.avatarStorageBackend);
+      await previous.removeObject(user.avatarStorageKey).catch(() => undefined);
     }
 
     return this.toProfile(updated);
@@ -311,15 +272,9 @@ export class AuthService {
 
     const mimeType = normalizeProfileImageMimeType(file, "Banner");
     const storageKey = `banners/${user.id}/${randomUUID()}.${profileImageExtension(mimeType)}`;
+    const backend = await this.storage.activeBackend();
 
-    await this.ensureBucket();
-    await this.minio.putObject(
-      this.bucket,
-      storageKey,
-      file.buffer,
-      file.size,
-      { "Content-Type": mimeType },
-    );
+    await backend.putObject(storageKey, file.buffer, mimeType);
 
     let updated: Awaited<ReturnType<typeof this.prisma.user.update>>;
     try {
@@ -329,19 +284,17 @@ export class AuthService {
           bannerStorageKey: storageKey,
           bannerMimeType: mimeType,
           bannerUpdatedAt: new Date(),
+          bannerStorageBackend: backend.name,
         },
       });
     } catch (caught) {
-      await this.minio
-        .removeObject(this.bucket, storageKey)
-        .catch(() => undefined);
+      await backend.removeObject(storageKey).catch(() => undefined);
       throw caught;
     }
 
     if (user.bannerStorageKey && user.bannerStorageKey !== storageKey) {
-      await this.minio
-        .removeObject(this.bucket, user.bannerStorageKey)
-        .catch(() => undefined);
+      const previous = await this.storage.backendFor(user.bannerStorageBackend);
+      await previous.removeObject(user.bannerStorageKey).catch(() => undefined);
     }
 
     return this.toProfile(updated);
@@ -357,6 +310,7 @@ export class AuthService {
       select: {
         avatarStorageKey: true,
         avatarMimeType: true,
+        avatarStorageBackend: true,
         status: true,
       },
     });
@@ -365,13 +319,22 @@ export class AuthService {
       throw new NotFoundException("Avatar not found");
     }
 
-    const stream = await this.minio.getObject(
-      this.bucket,
+    const mimeType = user.avatarMimeType ?? "image/webp";
+    const redirectUrl = await this.storage.presignDownload(
+      user.avatarStorageBackend,
       user.avatarStorageKey,
+      { filename: "avatar", mimeType, inline: true },
     );
+    if (redirectUrl) {
+      return { mimeType, redirectUrl, stream: null };
+    }
+
+    const backend = await this.storage.backendFor(user.avatarStorageBackend);
+    const stream = await backend.getObject(user.avatarStorageKey);
 
     return {
-      mimeType: user.avatarMimeType ?? "image/webp",
+      mimeType,
+      redirectUrl: null,
       stream: stream as Readable,
     };
   }
@@ -386,6 +349,7 @@ export class AuthService {
       select: {
         bannerStorageKey: true,
         bannerMimeType: true,
+        bannerStorageBackend: true,
         status: true,
       },
     });
@@ -394,13 +358,22 @@ export class AuthService {
       throw new NotFoundException("Banner not found");
     }
 
-    const stream = await this.minio.getObject(
-      this.bucket,
+    const mimeType = user.bannerMimeType ?? "image/webp";
+    const redirectUrl = await this.storage.presignDownload(
+      user.bannerStorageBackend,
       user.bannerStorageKey,
+      { filename: "banner", mimeType, inline: true },
     );
+    if (redirectUrl) {
+      return { mimeType, redirectUrl, stream: null };
+    }
+
+    const backend = await this.storage.backendFor(user.bannerStorageBackend);
+    const stream = await backend.getObject(user.bannerStorageKey);
 
     return {
-      mimeType: user.bannerMimeType ?? "image/webp",
+      mimeType,
+      redirectUrl: null,
       stream: stream as Readable,
     };
   }
@@ -442,13 +415,6 @@ export class AuthService {
     }
 
     return user;
-  }
-
-  private async ensureBucket() {
-    const exists = await this.minio.bucketExists(this.bucket);
-    if (!exists) {
-      await this.minio.makeBucket(this.bucket);
-    }
   }
 
   private toSummary(user: {

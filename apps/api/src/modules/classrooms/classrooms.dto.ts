@@ -3,9 +3,11 @@ import {
   ArrayUnique,
   IsArray,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
 } from "class-validator";
 import type { ClassroomMemberRole } from "@liveboard/shared";
 
@@ -42,6 +44,11 @@ export class UpdateClassroomDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  storageQuotaBytes?: number | null;
 }
 
 export class UpsertClassroomMemberDto {

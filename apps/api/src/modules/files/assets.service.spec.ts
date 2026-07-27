@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 import type { PermissionsService } from "../permissions/permissions.service";
 import type { PrismaService } from "../prisma/prisma.service";
+import type { StorageService } from "../storage/storage.service";
 import {
   AssetsService,
   normalizeAssetMimeType,
@@ -72,39 +73,59 @@ describe("WebP dimension validation", () => {
 describe("AssetsService consistency", () => {
   const prisma = {
     user: { findUnique: jest.fn() },
-    workspace: { findFirst: jest.fn() },
+    workspace: { findFirst: jest.fn(), findUnique: jest.fn() },
     forumPost: { findUnique: jest.fn(), findFirst: jest.fn() },
     file: { findUnique: jest.fn() },
     fileAsset: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
+      aggregate: jest.fn(),
+      create: jest.fn(),
       delete: jest.fn(),
       deleteMany: jest.fn(),
     },
     contentBlock: { findMany: jest.fn() },
     teachingDeckItem: { findMany: jest.fn(), findFirst: jest.fn() },
+    folder: { findUnique: jest.fn() },
     $transaction: jest.fn(),
   };
-  const minio = {
-    bucketExists: jest.fn(),
-    makeBucket: jest.fn(),
+  const permissions = {
+    getEffectiveLevelForFile: jest.fn(),
+    getEffectiveLevelForFolder: jest.fn(),
+  };
+  const backend = {
+    name: "minio" as const,
     putObject: jest.fn(),
     getObject: jest.fn(),
     removeObject: jest.fn(),
+    presignGet: jest.fn(),
+    healthCheck: jest.fn(),
+  };
+  const storage = {
+    activeBackend: jest.fn(),
+    backendFor: jest.fn(),
+    presignDownload: jest.fn(),
+    healthCheckActive: jest.fn(),
   };
   let service: AssetsService;
 
   beforeEach(() => {
     jest.resetAllMocks();
+    backend.putObject.mockResolvedValue(undefined);
+    backend.removeObject.mockResolvedValue(undefined);
+    backend.presignGet.mockResolvedValue(null);
+    storage.activeBackend.mockResolvedValue(backend);
+    storage.backendFor.mockResolvedValue(backend);
+    storage.presignDownload.mockResolvedValue(null);
     service = new AssetsService(
       { get: (_key: string, fallback?: unknown) => fallback } as ConfigService,
       prisma as unknown as PrismaService,
-      {
-        getEffectiveLevelForFile: jest.fn().mockResolvedValue("editor"),
-      } as unknown as PermissionsService,
+      permissions as unknown as PermissionsService,
+      storage as unknown as StorageService,
     );
-    Object.assign(service as unknown as { minio: unknown }, { minio });
+    permissions.getEffectiveLevelForFile.mockResolvedValue("editor");
+    permissions.getEffectiveLevelForFolder.mockResolvedValue("editor");
     prisma.workspace.findFirst.mockResolvedValue({ id: "workspace-1" });
     prisma.file.findUnique.mockResolvedValue({
       id: "file-1",
@@ -122,7 +143,7 @@ describe("AssetsService consistency", () => {
     });
     prisma.teachingDeckItem.findMany.mockResolvedValue([]);
     prisma.fileAsset.delete.mockResolvedValue({ id: "asset-1" });
-    minio.bucketExists.mockResolvedValue(true);
+    backend.healthCheck.mockResolvedValue(undefined);
   });
 
   it("ignores references from archived files", async () => {
@@ -174,7 +195,7 @@ describe("AssetsService consistency", () => {
       systemRole: "member",
     });
     prisma.teachingDeckItem.findFirst.mockResolvedValue({ id: "item-1" });
-    minio.getObject.mockResolvedValue({ pipe: jest.fn() });
+    backend.getObject.mockResolvedValue({ pipe: jest.fn() });
 
     await expect(
       service.getAssetForDownload("learner-1", "asset-1"),
@@ -216,7 +237,7 @@ describe("AssetsService consistency", () => {
     await expect(
       service.deleteLibraryAsset("user-1", "asset-1"),
     ).rejects.toBeInstanceOf(ConflictException);
-    expect(minio.removeObject).not.toHaveBeenCalled();
+    expect(backend.removeObject).not.toHaveBeenCalled();
   });
 
   it("removes the reserved database row when object upload fails", async () => {
@@ -225,6 +246,9 @@ describe("AssetsService consistency", () => {
         findUnique: jest.fn().mockResolvedValue({
           storageQuotaBytes: 1024,
         }),
+      },
+      workspace: {
+        findUnique: jest.fn().mockResolvedValue(null),
       },
       fileAsset: {
         aggregate: jest.fn().mockResolvedValue({ _sum: { sizeBytes: 0 } }),
@@ -235,7 +259,7 @@ describe("AssetsService consistency", () => {
       },
     };
     prisma.$transaction.mockImplementation((callback) => callback(tx));
-    minio.putObject.mockRejectedValue(new Error("MinIO offline"));
+    backend.putObject.mockRejectedValue(new Error("MinIO offline"));
 
     await expect(
       service.uploadAsset(
@@ -333,6 +357,106 @@ describe("AssetsService consistency", () => {
         },
       ]),
     ).rejects.toThrow("图片最长边不能超过 1600px");
+  });
+
+  function mockStandaloneUpload() {
+    prisma.folder.findUnique.mockResolvedValue({
+      id: "folder-1",
+      workspaceId: "workspace-1",
+    });
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      storageQuotaBytes: null,
+      status: "active",
+      systemRole: "member",
+    });
+    prisma.workspace.findUnique.mockResolvedValue({
+      id: "workspace-1",
+      memberAttachmentQuotaBytes: null,
+    });
+    prisma.fileAsset.aggregate.mockResolvedValue({ _sum: { sizeBytes: 0 } });
+    prisma.fileAsset.create.mockResolvedValue({
+      id: "asset-standalone-1",
+      kind: "standalone",
+    });
+  }
+
+  it("uploads standalone files into a folder for folder editors", async () => {
+    mockStandaloneUpload();
+
+    const result = await service.uploadAsset(
+      "user-1",
+      { folderId: "folder-1" },
+      {
+        originalname: "讲义.pdf",
+        mimetype: "application/pdf",
+        size: 5,
+        buffer: Buffer.from("%PDF-"),
+      },
+    );
+
+    expect(permissions.getEffectiveLevelForFolder).toHaveBeenCalledWith(
+      "user-1",
+      "folder-1",
+    );
+    expect(prisma.fileAsset.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        kind: "standalone",
+        folderId: "folder-1",
+        fileId: null,
+      }),
+    });
+    expect(backend.putObject).toHaveBeenCalled();
+    expect(result.kind).toBe("standalone");
+  });
+
+  it("rejects standalone uploads of unsupported file types", async () => {
+    mockStandaloneUpload();
+
+    await expect(
+      service.uploadAsset(
+        "user-1",
+        { folderId: "folder-1" },
+        {
+          originalname: "setup.exe",
+          mimetype: "application/octet-stream",
+          size: 5,
+          buffer: Buffer.from("MZ123"),
+        },
+      ),
+    ).rejects.toThrow("该类型不支持直接上传到文件夹");
+    expect(prisma.fileAsset.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects standalone uploads without folder edit permission", async () => {
+    mockStandaloneUpload();
+    permissions.getEffectiveLevelForFolder.mockResolvedValue("viewer");
+
+    await expect(
+      service.uploadAsset(
+        "user-1",
+        { folderId: "folder-1" },
+        {
+          originalname: "讲义.pdf",
+          mimetype: "application/pdf",
+          size: 5,
+          buffer: Buffer.from("%PDF-"),
+        },
+      ),
+    ).rejects.toThrow("没有在此文件夹上传文件的权限");
+    expect(prisma.fileAsset.create).not.toHaveBeenCalled();
+  });
+
+  it("only treats embedded assets as unreferenced cleanup candidates", async () => {
+    prisma.fileAsset.findMany.mockResolvedValue([]);
+    prisma.contentBlock.findMany.mockResolvedValue([]);
+
+    await service.cleanupUnreferencedAssets(["asset-1"]);
+
+    expect(prisma.fileAsset.findMany).toHaveBeenCalledWith({
+      where: { id: { in: ["asset-1"] }, forumPostId: null, kind: "embedded" },
+    });
   });
 });
 

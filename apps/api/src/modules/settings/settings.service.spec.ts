@@ -1,5 +1,5 @@
 import type { PrismaService } from "../prisma/prisma.service";
-import type { ConfigService } from "@nestjs/config";
+import type { StorageService } from "../storage/storage.service";
 import type { HttpsAgentClient } from "./https-agent.client";
 import { SettingsService } from "./settings.service";
 
@@ -19,14 +19,19 @@ describe("SettingsService", () => {
     workspace: { findFirst: jest.fn(), update: jest.fn() },
   };
   let service: SettingsService;
-  const minio = {
-    bucketExists: jest.fn(),
-    makeBucket: jest.fn(),
+  const backend = {
+    name: "minio" as const,
     putObject: jest.fn(),
+    getObject: jest.fn(),
     removeObject: jest.fn(),
+    presignGet: jest.fn(),
+    healthCheck: jest.fn(),
   };
-  const config = {
-    get: jest.fn((_key: string, fallback: unknown) => fallback),
+  const storage = {
+    activeBackend: jest.fn(),
+    backendFor: jest.fn(),
+    presignDownload: jest.fn(),
+    healthCheckActive: jest.fn(),
   };
   const httpsAgent = {
     status: jest.fn(),
@@ -38,18 +43,18 @@ describe("SettingsService", () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-    config.get.mockImplementation(
-      (_key: string, fallback: unknown) => fallback,
-    );
+    backend.putObject.mockResolvedValue(undefined);
+    backend.removeObject.mockResolvedValue(undefined);
+    backend.presignGet.mockResolvedValue(null);
+    storage.activeBackend.mockResolvedValue(backend);
+    storage.backendFor.mockResolvedValue(backend);
+    storage.presignDownload.mockResolvedValue(null);
     service = new SettingsService(
       prisma as unknown as PrismaService,
-      config as unknown as ConfigService,
       httpsAgent as unknown as HttpsAgentClient,
+      storage as unknown as StorageService,
     );
-    Object.assign(service as unknown as { minio: typeof minio }, { minio });
-    minio.bucketExists.mockResolvedValue(true);
-    minio.putObject.mockResolvedValue({ etag: "etag", versionId: null });
-    minio.removeObject.mockResolvedValue(undefined);
+    backend.healthCheck.mockResolvedValue(undefined);
     prisma.workspace.findFirst.mockResolvedValue(workspace);
     prisma.user.findUnique.mockResolvedValue({
       id: "admin-1",
@@ -172,12 +177,10 @@ describe("SettingsService", () => {
       buffer,
     });
 
-    expect(minio.putObject).toHaveBeenCalledWith(
-      "liveboard-assets",
+    expect(backend.putObject).toHaveBeenCalledWith(
       expect.stringMatching(/^site\/favicon\/.+\.png$/),
       buffer,
-      buffer.length,
-      { "Content-Type": "image/png" },
+      "image/png",
     );
     expect(result.faviconUrl).toBe(
       `/settings/favicon?v=${new Date("2026-07-23T15:00:00Z").getTime()}`,
@@ -206,10 +209,7 @@ describe("SettingsService", () => {
         faviconUpdatedAt: null,
       },
     });
-    expect(minio.removeObject).toHaveBeenCalledWith(
-      "liveboard-assets",
-      "site/favicon/old.png",
-    );
+    expect(backend.removeObject).toHaveBeenCalledWith("site/favicon/old.png");
     expect(result.faviconUrl).toBeNull();
   });
 

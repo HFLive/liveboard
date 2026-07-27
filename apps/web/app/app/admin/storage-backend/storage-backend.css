@@ -1,0 +1,209 @@
+.storage-backend-page {
+  min-width: 0;
+}
+
+.storage-backend-page .storage-backend-sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+  min-width: 0;
+  width: min(720px, 100%);
+}
+
+.storage-backend-page .storage-backend-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  min-width: 0;
+}
+
+.storage-backend-page .storage-backend-section + .storage-backend-section,
+.storage-backend-page form > .storage-backend-section:first-child {
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
+
+.storage-backend-page form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+  min-width: 0;
+}
+
+.storage-backend-page .storage-backend-section .panel-head {
+  padding: 0 0 13px;
+}
+
+.storage-backend-page .storage-backend-status {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  margin: 0;
+}
+
+.storage-backend-page .storage-backend-status > div {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.storage-backend-page .storage-backend-status dt {
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.storage-backend-page .storage-backend-status dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.storage-backend-page .storage-backend-ok {
+  color: var(--accent-dark);
+}
+
+.storage-backend-page .storage-backend-down {
+  color: var(--danger);
+}
+
+.storage-backend-page .storage-backend-choices {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.storage-backend-page .storage-backend-choice {
+  align-items: flex-start;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  padding: 12px 14px;
+}
+
+.storage-backend-page .storage-backend-choice:hover {
+  background: var(--fill-hover);
+}
+
+.storage-backend-page .storage-backend-choice.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.storage-backend-page .storage-backend-choice input {
+  margin-top: 3px;
+}
+
+.storage-backend-page .storage-backend-choice > svg {
+  color: var(--muted);
+  height: 18px;
+  margin-top: 1px;
+  width: 18px;
+}
+
+.storage-backend-page .storage-backend-choice.active > svg {
+  color: var(--accent-dark);
+}
+
+.storage-backend-page .storage-backend-choice > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.storage-backend-page .storage-backend-choice small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.storage-backend-page .storage-backend-form {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.storage-backend-page .storage-backend-form .label:nth-child(3),
+.storage-backend-page .storage-backend-form .label:nth-child(5),
+.storage-backend-page .storage-backend-form .label:nth-child(6),
+.storage-backend-page .storage-backend-inline-check {
+  grid-column: 1 / -1;
+}
+
+.storage-backend-page .storage-backend-inline-check {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.storage-backend-page .storage-backend-test-row {
+  margin-top: 12px;
+}
+
+.storage-backend-page .storage-backend-guide {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  padding: 10px 14px;
+}
+
+.storage-backend-page .storage-backend-guide summary {
+  color: var(--accent-dark);
+  cursor: pointer;
+  user-select: none;
+}
+
+.storage-backend-page .storage-backend-guide-body {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.storage-backend-page .storage-backend-guide-body h3 {
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+
+.storage-backend-page .storage-backend-guide-body ol {
+  display: grid;
+  gap: 6px;
+  line-height: 1.6;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.storage-backend-page .storage-backend-guide-body pre {
+  background: var(--fill-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+  overflow-x: auto;
+  padding: 10px 12px;
+}
+
+.storage-backend-page .storage-backend-guide-body pre code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.storage-backend-page .storage-download-mode {
+  justify-self: start;
+}
+
+.storage-backend-page .storage-backend-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 760px) {
+  .storage-backend-page .storage-backend-status,
+  .storage-backend-page .storage-backend-choices,
+  .storage-backend-page .storage-backend-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .storage-backend-page .storage-backend-actions .button {
+    width: 100%;
+  }
+}

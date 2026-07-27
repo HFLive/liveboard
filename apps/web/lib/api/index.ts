@@ -12,6 +12,7 @@ import type {
   ClassroomMemberSummary,
   ClassroomSummary,
   FileSummary,
+  FolderAssetSummary,
   FolderNode,
   ForumCategorySummary,
   ForumImageSummary,
@@ -396,7 +397,7 @@ export function updateUser(
     systemRole?: SystemRole;
     status?: UserSummary["status"];
     password?: string;
-    storageQuotaBytes?: number;
+    storageQuotaBytes?: number | null;
     aiCallLimit?: number | null;
   },
 ) {
@@ -409,6 +410,7 @@ export function updateUser(
 export interface UserStorageSummary {
   user: UserSummary;
   storageQuotaBytes: number;
+  storageQuotaCustom: boolean;
   storageUsedBytes: number;
   assetCount: number;
 }
@@ -419,9 +421,32 @@ export function listUserStorage() {
 
 export function updateUserStorageQuota(
   userId: string,
-  storageQuotaBytes: number,
+  storageQuotaBytes: number | null,
 ) {
   return updateUser(userId, { storageQuotaBytes });
+}
+
+export interface StorageQuotaDefaults {
+  memberAttachmentQuotaBytes: number;
+  memberAttachmentQuotaCustom: boolean;
+  classroomStorageQuotaBytes: number;
+  classroomStorageQuotaCustom: boolean;
+}
+
+export function getStorageQuotaDefaults() {
+  return request<{ defaults: StorageQuotaDefaults }>(
+    "/admin/users/storage/quota-defaults",
+  );
+}
+
+export function updateStorageQuotaDefaults(input: {
+  memberAttachmentQuotaBytes?: number | null;
+  classroomStorageQuotaBytes?: number | null;
+}) {
+  return request<{ defaults: StorageQuotaDefaults }>(
+    "/admin/users/storage/quota-defaults",
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
 }
 
 export interface SystemSettings {
@@ -526,6 +551,53 @@ export function setHttpsAutoRenew(enabled: boolean) {
   return request<{ https: HttpsStatus }>("/admin/settings/https/auto-renew", {
     method: "PATCH",
     body: JSON.stringify({ enabled }),
+  });
+}
+
+export interface StorageSettings {
+  backend: "minio" | "oss";
+  downloadMode: "proxy" | "direct";
+  minio: { endpoint: string; bucket: string };
+  oss: {
+    region: string | null;
+    bucket: string | null;
+    endpoint: string | null;
+    internal: boolean;
+    accessKeyId: string | null;
+    secretConfigured: boolean;
+  };
+  activeBackendHealthy: boolean;
+  updatedAt: string | null;
+}
+
+export interface OssSettingsInput {
+  region?: string;
+  bucket?: string;
+  endpoint?: string;
+  internal?: boolean;
+  accessKeyId?: string;
+  accessKeySecret?: string;
+}
+
+export function getStorageSettings() {
+  return request<{ storage: StorageSettings }>("/admin/settings/storage");
+}
+
+export function updateStorageSettings(input: {
+  backend?: "minio" | "oss";
+  downloadMode?: "proxy" | "direct";
+  oss?: OssSettingsInput;
+}) {
+  return request<{ storage: StorageSettings }>("/admin/settings/storage", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function testStorageConnection(input: OssSettingsInput) {
+  return request<{ ok: boolean }>("/admin/settings/storage/test", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 
@@ -1022,7 +1094,19 @@ export function listFiles(folderId?: string) {
   }
 
   const query = search.toString() ? `?${search.toString()}` : "";
-  return request<{ files: FileSummary[] }>(`/files${query}`);
+  return request<{
+    files: FileSummary[];
+    standaloneAssets: FolderAssetSummary[];
+  }>(`/files${query}`);
+}
+
+export function renameAsset(assetId: string, filename: string) {
+  return request<{
+    asset: { id: string; filename: string; updatedAt: string };
+  }>(`/assets/${assetId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ filename }),
+  });
 }
 
 export interface FileDetail extends FileSummary {
@@ -1334,11 +1418,21 @@ export function createClassroom(input: {
 
 export function updateClassroom(
   classroomId: string,
-  input: { name?: string; description?: string },
+  input: {
+    name?: string;
+    description?: string;
+    storageQuotaBytes?: number | null;
+  },
 ) {
   return request<{ classroom: ClassroomDetail }>(`/classrooms/${classroomId}`, {
     method: "PATCH",
     body: JSON.stringify(input),
+  });
+}
+
+export function deleteClassroom(classroomId: string) {
+  return request<{ ok: boolean }>(`/classrooms/${classroomId}`, {
+    method: "DELETE",
   });
 }
 

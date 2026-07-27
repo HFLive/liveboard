@@ -9,5 +9,6 @@ import { AiRateLimitService } from "./ai-rate-limit.service";
   imports: [PermissionsModule],
   controllers: [AiController],
   providers: [AiService, AiSecretService, AiRateLimitService],
+  exports: [AiSecretService],
 })
 export class AiModule {}

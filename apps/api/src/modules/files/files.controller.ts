@@ -18,9 +18,11 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from "class-validator";
 import type { FileType } from "@liveboard/shared";
@@ -175,6 +177,13 @@ class UploadAssetDto {
   fileId?: string;
 }
 
+class RenameAssetDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  filename!: string;
+}
+
 class ImportMarkdownDto {
   @IsString()
   folderId!: string;
@@ -246,11 +255,9 @@ export class FilesController {
     @CurrentUserId() userId: string | null,
     @Query("folderId") folderId?: string,
   ) {
-    return {
-      files: await this.filesService.listFiles(userId, {
-        folderId,
-      }),
-    };
+    return this.filesService.listFiles(userId, {
+      folderId,
+    });
   }
 
   @Get("files/:id")
@@ -272,6 +279,7 @@ export class FilesController {
   @Post("files/import/markdown")
   @UseInterceptors(
     FileInterceptor("file", {
+      defParamCharset: "utf8",
       limits: { fileSize: MAX_MARKDOWN_SIZE_BYTES, files: 1 },
     }),
   )
@@ -370,6 +378,7 @@ export class FilesController {
   @Post("assets/upload")
   @UseInterceptors(
     FileInterceptor("file", {
+      defParamCharset: "utf8",
       limits: { fileSize: MAX_ASSET_SIZE_BYTES, files: 1 },
     }),
   )
@@ -398,6 +407,21 @@ export class FilesController {
     return this.assetsService.deleteLibraryAsset(userId, assetId);
   }
 
+  @Patch("assets/:id")
+  async renameAsset(
+    @CurrentUserId() userId: string | null,
+    @Param("id") assetId: string,
+    @Body() body: RenameAssetDto,
+  ) {
+    return {
+      asset: await this.assetsService.renameStandaloneAsset(
+        userId,
+        assetId,
+        body.filename,
+      ),
+    };
+  }
+
   @Get("assets/:id/references")
   async listAssetReferences(
     @CurrentUserId() userId: string | null,
@@ -414,10 +438,13 @@ export class FilesController {
     @Param("id") assetId: string,
     @Res() res: Response,
   ) {
-    const { asset, stream } = await this.assetsService.getAssetForDownload(
-      userId,
-      assetId,
-    );
+    const { asset, stream, redirectUrl } =
+      await this.assetsService.getAssetForDownload(userId, assetId);
+
+    if (redirectUrl) {
+      res.redirect(302, redirectUrl);
+      return;
+    }
 
     const inline = isSafeInlineAssetMime(asset.mimeType);
     res.setHeader(
@@ -434,7 +461,7 @@ export class FilesController {
       "Content-Disposition",
       `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(asset.filename)}"`,
     );
-    stream.pipe(res);
+    stream!.pipe(res);
   }
 
   @Patch("blocks/:id")

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ChangeEvent,
   FormEvent,
@@ -37,6 +38,7 @@ import {
   ClassroomDetail,
   ClassroomFileSummary,
   createClassroomAnnouncement,
+  deleteClassroom,
   deleteClassroomAnnouncement,
   deleteClassroomFile,
   deleteTeachingDeck,
@@ -92,13 +94,19 @@ export function ClassroomDetailClient({
   const [showClassroomEditor, setShowClassroomEditor] = useState(false);
   const [classroomName, setClassroomName] = useState("");
   const [classroomDescription, setClassroomDescription] = useState("");
+  const [showClassroomDelete, setShowClassroomDelete] = useState(false);
+  const [classroomDeleteStep, setClassroomDeleteStep] = useState<1 | 2>(1);
+  const [classroomDeleteConfirmation, setClassroomDeleteConfirmation] =
+    useState("");
   const [loading, setLoading] = useState(true);
   const [savingAnnouncement, setSavingAnnouncement] = useState(false);
   const [savingClassroom, setSavingClassroom] = useState(false);
+  const [deletingClassroom, setDeletingClassroom] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   const matchingUsers = useMemo(() => {
     const memberIds = new Set(
@@ -172,6 +180,16 @@ export function ClassroomDetailClient({
     try {
       const result = await uploadClassroomFile(classroomId, file);
       setFiles((current) => [result.file, ...current]);
+      setClassroom((current) =>
+        current
+          ? {
+              ...current,
+              storageUsedBytes:
+                current.storageUsedBytes + result.file.sizeBytes,
+              fileCount: current.fileCount + 1,
+            }
+          : current,
+      );
       setMessage("课堂文件已上传");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "上传失败");
@@ -185,6 +203,18 @@ export function ClassroomDetailClient({
     try {
       await deleteClassroomFile(classroomId, file.id);
       setFiles((current) => current.filter((item) => item.id !== file.id));
+      setClassroom((current) =>
+        current
+          ? {
+              ...current,
+              storageUsedBytes: Math.max(
+                0,
+                current.storageUsedBytes - file.sizeBytes,
+              ),
+              fileCount: Math.max(0, current.fileCount - 1),
+            }
+          : current,
+      );
       setMessage("课堂文件已删除");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "删除失败");
@@ -229,6 +259,34 @@ export function ClassroomDetailClient({
       setError(caught instanceof Error ? caught.message : "更新课堂失败");
     } finally {
       setSavingClassroom(false);
+    }
+  }
+
+  function openClassroomDelete() {
+    setShowClassroomEditor(false);
+    setClassroomDeleteStep(1);
+    setClassroomDeleteConfirmation("");
+    setShowClassroomDelete(true);
+  }
+
+  function closeClassroomDelete() {
+    if (deletingClassroom) return;
+    setShowClassroomDelete(false);
+    setClassroomDeleteStep(1);
+    setClassroomDeleteConfirmation("");
+  }
+
+  async function onDeleteClassroom() {
+    if (!classroom || classroomDeleteConfirmation !== classroom.name) return;
+    setDeletingClassroom(true);
+    setError(null);
+    try {
+      await deleteClassroom(classroomId);
+      router.replace(APP_ROUTES.classrooms);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "删除课堂失败");
+      setDeletingClassroom(false);
+      setShowClassroomDelete(false);
     }
   }
 
@@ -458,11 +516,20 @@ export function ClassroomDetailClient({
               创建练习
             </Link>
           ) : null}
+          {tab === "files" ? (
+            <span className="classroom-section-caption">
+              课堂文件已用 {formatFileSize(classroom.storageUsedBytes)} / 上限{" "}
+              {formatFileSize(classroom.storageQuotaBytes)}
+            </span>
+          ) : null}
           {classroom.canEditContent && tab === "files" ? (
             <>
               <button
                 className="button classroom-upload-button"
-                disabled={uploading}
+                disabled={
+                  uploading ||
+                  classroom.storageUsedBytes >= classroom.storageQuotaBytes
+                }
                 onClick={() => fileInputRef.current?.click()}
                 type="button"
               >
@@ -799,6 +866,19 @@ export function ClassroomDetailClient({
                   value={classroomDescription}
                 />
               </label>
+              <div className="classroom-editor-danger">
+                <span className="muted">
+                  删除课堂将永久移除其中的课件、练习、文件和公告。
+                </span>
+                <button
+                  className="button danger"
+                  onClick={openClassroomDelete}
+                  type="button"
+                >
+                  <Trash2 aria-hidden="true" className="button-icon" />
+                  删除课堂
+                </button>
+              </div>
             </div>
             <div className="modal-actions">
               <button
@@ -814,6 +894,98 @@ export function ClassroomDetailClient({
               </button>
             </div>
           </form>
+        </div>
+      ) : null}
+
+      {showClassroomDelete ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="classroom-delete-title"
+            aria-modal="true"
+            className="modal-panel classroom-delete-modal"
+            role="dialog"
+          >
+            <div className="modal-head">
+              <h2 id="classroom-delete-title">
+                {classroomDeleteStep === 1 ? "删除课堂？" : "再次确认删除"}
+              </h2>
+              <button
+                className="icon-button subtle"
+                disabled={deletingClassroom}
+                onClick={closeClassroomDelete}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body">
+              {classroomDeleteStep === 1 ? (
+                <>
+                  <div className="classroom-delete-warning">
+                    <strong>此操作无法撤销</strong>
+                    <span>
+                      {`将永久删除课堂“${classroom.name}”，包括 ${decks.length} 份课件、${exercises.length} 个练习、${files.length} 份课堂文件和 ${classroom.announcements.length} 条公告，练习的提交记录一并移除。`}
+                    </span>
+                  </div>
+                  <p className="muted">
+                    课堂文件会同时从对象存储中删除并释放占用空间，全部成员将失去访问。
+                  </p>
+                </>
+              ) : (
+                <label className="label">
+                  输入课堂名称“{classroom.name}”以确认
+                  <input
+                    autoFocus
+                    className="input"
+                    disabled={deletingClassroom}
+                    onChange={(event) =>
+                      setClassroomDeleteConfirmation(event.target.value)
+                    }
+                    value={classroomDeleteConfirmation}
+                  />
+                </label>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button
+                className="button secondary"
+                disabled={deletingClassroom}
+                onClick={
+                  classroomDeleteStep === 1
+                    ? closeClassroomDelete
+                    : () => {
+                        setClassroomDeleteStep(1);
+                        setClassroomDeleteConfirmation("");
+                      }
+                }
+                type="button"
+              >
+                {classroomDeleteStep === 1 ? "取消" : "返回"}
+              </button>
+              {classroomDeleteStep === 1 ? (
+                <button
+                  className="button danger"
+                  onClick={() => setClassroomDeleteStep(2)}
+                  type="button"
+                >
+                  继续删除
+                </button>
+              ) : (
+                <button
+                  className="button danger"
+                  disabled={
+                    deletingClassroom ||
+                    classroomDeleteConfirmation !== classroom.name
+                  }
+                  onClick={() => void onDeleteClassroom()}
+                  type="button"
+                >
+                  {deletingClassroom ? "正在删除…" : "永久删除"}
+                </button>
+              )}
+            </div>
+          </section>
         </div>
       ) : null}
 

@@ -5,12 +5,11 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { isSuperAdmin } from "@liveboard/shared";
-import { Client } from "minio";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../storage/storage.service";
 import { HttpsAgentClient } from "./https-agent.client";
 
 export interface UpdateSystemSettingsInput {
@@ -28,26 +27,11 @@ export const MAX_FAVICON_SIZE_BYTES = 1024 * 1024;
 
 @Injectable()
 export class SettingsService {
-  private readonly minio: Client;
-  private readonly bucket: string;
-
   constructor(
     private readonly prisma: PrismaService,
-    config: ConfigService,
     private readonly httpsAgent: HttpsAgentClient,
-  ) {
-    this.bucket = config.get<string>("MINIO_BUCKET", "liveboard-assets");
-    this.minio = new Client({
-      endPoint: config.get<string>("MINIO_ENDPOINT", "localhost"),
-      port: config.get<number>("MINIO_PORT", 9000),
-      useSSL: config.get<string>("MINIO_USE_SSL", "false") === "true",
-      accessKey: config.get<string>("MINIO_ROOT_USER", "liveboard"),
-      secretKey: config.get<string>(
-        "MINIO_ROOT_PASSWORD",
-        "replace-with-a-strong-password",
-      ),
-    });
-  }
+    private readonly storage: StorageService,
+  ) {}
 
   async getPublicSettings() {
     const workspace = await this.getDefaultWorkspace();
@@ -107,15 +91,9 @@ export class SettingsService {
             ? "webp"
             : "jpg";
     const storageKey = `site/favicon/${randomUUID()}.${extension}`;
+    const backend = await this.storage.activeBackend();
 
-    await this.ensureBucket();
-    await this.minio.putObject(
-      this.bucket,
-      storageKey,
-      file.buffer,
-      file.size,
-      { "Content-Type": mimeType },
-    );
+    await backend.putObject(storageKey, file.buffer, mimeType);
 
     let updated: Awaited<ReturnType<typeof this.prisma.workspace.update>>;
     try {
@@ -125,12 +103,11 @@ export class SettingsService {
           faviconStorageKey: storageKey,
           faviconMimeType: mimeType,
           faviconUpdatedAt: new Date(),
+          faviconStorageBackend: backend.name,
         },
       });
     } catch (caught) {
-      await this.minio
-        .removeObject(this.bucket, storageKey)
-        .catch(() => undefined);
+      await backend.removeObject(storageKey).catch(() => undefined);
       throw caught;
     }
 
@@ -138,8 +115,11 @@ export class SettingsService {
       workspace.faviconStorageKey &&
       workspace.faviconStorageKey !== storageKey
     ) {
-      await this.minio
-        .removeObject(this.bucket, workspace.faviconStorageKey)
+      const previous = await this.storage.backendFor(
+        workspace.faviconStorageBackend,
+      );
+      await previous
+        .removeObject(workspace.faviconStorageKey)
         .catch(() => undefined);
     }
 
@@ -163,8 +143,11 @@ export class SettingsService {
       },
     });
 
-    await this.minio
-      .removeObject(this.bucket, workspace.faviconStorageKey)
+    const previous = await this.storage.backendFor(
+      workspace.faviconStorageBackend,
+    );
+    await previous
+      .removeObject(workspace.faviconStorageKey)
       .catch(() => undefined);
 
     return this.toPublicSettings(updated);
@@ -208,11 +191,23 @@ export class SettingsService {
       throw new NotFoundException("Website icon not found");
     }
 
+    const mimeType = workspace.faviconMimeType ?? "image/png";
+    const redirectUrl = await this.storage.presignDownload(
+      workspace.faviconStorageBackend,
+      workspace.faviconStorageKey,
+      { filename: "favicon", mimeType, inline: true },
+    );
+    if (redirectUrl) {
+      return { mimeType, redirectUrl, stream: null };
+    }
+
+    const backend = await this.storage.backendFor(
+      workspace.faviconStorageBackend,
+    );
     return {
-      mimeType: workspace.faviconMimeType ?? "image/png",
-      updatedAt: workspace.faviconUpdatedAt,
-      stream: (await this.minio.getObject(
-        this.bucket,
+      mimeType,
+      redirectUrl: null,
+      stream: (await backend.getObject(
         workspace.faviconStorageKey,
       )) as Readable,
     };
@@ -244,12 +239,6 @@ export class SettingsService {
     }
 
     return workspace;
-  }
-
-  private async ensureBucket() {
-    if (!(await this.minio.bucketExists(this.bucket))) {
-      await this.minio.makeBucket(this.bucket);
-    }
   }
 
   private toPublicSettings(workspace: {

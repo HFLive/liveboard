@@ -163,6 +163,7 @@ export class ClassroomsController {
   @Post(":id/files")
   @UseInterceptors(
     FileInterceptor("file", {
+      defParamCharset: "utf8",
       limits: { fileSize: MAX_CLASSROOM_FILE_SIZE_BYTES, files: 1 },
     }),
   )
@@ -183,11 +184,12 @@ export class ClassroomsController {
     @Param("fileId") fileId: string,
     @Res() response: Response,
   ) {
-    const { file, stream } = await this.classroomsService.downloadFile(
-      userId,
-      classroomId,
-      fileId,
-    );
+    const { file, stream, redirectUrl } =
+      await this.classroomsService.downloadFile(userId, classroomId, fileId);
+    if (redirectUrl) {
+      response.redirect(302, redirectUrl);
+      return;
+    }
     response.setHeader("Content-Type", "application/octet-stream");
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
@@ -196,7 +198,7 @@ export class ClassroomsController {
       "Content-Disposition",
       `attachment; filename="${encodeURIComponent(file.filename)}"`,
     );
-    stream.pipe(response);
+    stream!.pipe(response);
   }
 
   @Delete(":id/files/:fileId")

@@ -4,44 +4,34 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Client as MinioClient } from "minio";
 import { createClient, type RedisClientType } from "redis";
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../storage/storage.service";
 
 @Injectable()
 export class HealthService implements OnModuleDestroy {
   private readonly redis: RedisClientType;
-  private readonly minio: MinioClient;
   private redisConnectPromise: Promise<unknown> | null = null;
 
   constructor(
     config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
   ) {
     this.redis = createClient({
       url: config.get<string>("REDIS_URL", "redis://localhost:6379"),
       socket: { connectTimeout: 1_500, reconnectStrategy: false },
     });
     this.redis.on("error", () => undefined);
-    this.minio = new MinioClient({
-      endPoint: config.get<string>("MINIO_ENDPOINT", "localhost"),
-      port: config.get<number>("MINIO_PORT", 9000),
-      useSSL: config.get<string>("MINIO_USE_SSL", "false") === "true",
-      accessKey: config.get<string>("MINIO_ROOT_USER", "liveboard"),
-      secretKey: config.get<string>(
-        "MINIO_ROOT_PASSWORD",
-        "replace-with-a-strong-password",
-      ),
-    });
   }
 
   async check() {
     const checks = await Promise.allSettled([
       withTimeout(this.prisma.$queryRaw`SELECT 1`, 2_000),
       withTimeout(this.pingRedis(), 2_000),
-      withTimeout(this.minio.listBuckets(), 2_000),
+      withTimeout(this.storage.healthCheckActive(), 2_000),
     ]);
-    const names = ["postgres", "redis", "minio"];
+    const names = ["postgres", "redis", "storage"];
     const dependencies = Object.fromEntries(
       checks.map((result, index) => [
         names[index],

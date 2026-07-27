@@ -6,14 +6,14 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { isSystemAdmin, type ClassroomMemberRole } from "@liveboard/shared";
 import type { Prisma } from "@prisma/client";
-import { Client } from "minio";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../storage/storage.service";
 import { requireResourceName } from "../../common/resource-name";
+import { DEFAULT_CLASSROOM_STORAGE_QUOTA_BYTES } from "../../common/storage-quota";
 import type {
   CreateClassroomAnnouncementDto,
   CreateClassroomDto,
@@ -32,25 +32,10 @@ export const MAX_CLASSROOM_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 
 @Injectable()
 export class ClassroomsService {
-  private readonly minio: Client;
-  private readonly bucket: string;
-
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
-  ) {
-    this.bucket = this.config.get<string>("MINIO_BUCKET", "liveboard-assets");
-    this.minio = new Client({
-      endPoint: this.config.get<string>("MINIO_ENDPOINT", "localhost"),
-      port: this.config.get<number>("MINIO_PORT", 9000),
-      useSSL: this.config.get<string>("MINIO_USE_SSL", "false") === "true",
-      accessKey: this.config.get<string>("MINIO_ROOT_USER", "liveboard"),
-      secretKey: this.config.get<string>(
-        "MINIO_ROOT_PASSWORD",
-        "replace-with-a-strong-password",
-      ),
-    });
-  }
+    private readonly storage: StorageService,
+  ) {}
 
   async list(userId: string | null) {
     const user = await this.requireUser(userId);
@@ -64,6 +49,17 @@ export class ClassroomsService {
       },
       orderBy: { updatedAt: "desc" },
     });
+    const usageRows = await this.prisma.classroomFile.groupBy({
+      by: ["classroomId"],
+      where: { classroomId: { in: classrooms.map((item) => item.id) } },
+      _sum: { sizeBytes: true },
+    });
+    const usageByClassroom = new Map(
+      usageRows.map((row) => [row.classroomId, row._sum.sizeBytes ?? 0]),
+    );
+    const defaultQuotaBytes = classrooms[0]
+      ? await this.getWorkspaceClassroomQuota(classrooms[0].workspaceId)
+      : DEFAULT_CLASSROOM_STORAGE_QUOTA_BYTES;
 
     return classrooms.map((classroom) => {
       const membership = classroom.members.find(
@@ -83,6 +79,9 @@ export class ClassroomsService {
         deckCount: classroom._count.decks,
         exerciseCount: classroom._count.exercises,
         fileCount: classroom._count.files,
+        storageQuotaBytes: classroom.storageQuotaBytes ?? defaultQuotaBytes,
+        storageQuotaCustom: classroom.storageQuotaBytes !== null,
+        storageUsedBytes: usageByClassroom.get(classroom.id) ?? 0,
         createdAt: classroom.createdAt.toISOString(),
         updatedAt: classroom.updatedAt.toISOString(),
       };
@@ -129,6 +128,14 @@ export class ClassroomsService {
     });
     if (!classroom) throw new NotFoundException("课堂不存在");
 
+    const usage = await this.prisma.classroomFile.aggregate({
+      where: { classroomId },
+      _sum: { sizeBytes: true },
+    });
+    const defaultQuotaBytes = await this.getWorkspaceClassroomQuota(
+      classroom.workspaceId,
+    );
+
     const membership = classroom.members.find(
       (member) => member.userId === user.id,
     );
@@ -155,6 +162,9 @@ export class ClassroomsService {
       deckCount: classroom._count.decks,
       exerciseCount: classroom._count.exercises,
       fileCount: classroom._count.files,
+      storageQuotaBytes: classroom.storageQuotaBytes ?? defaultQuotaBytes,
+      storageQuotaCustom: classroom.storageQuotaBytes !== null,
+      storageUsedBytes: usage._sum.sizeBytes ?? 0,
       members: canManageMembers
         ? classroom.members.map((member) => ({
             role: member.role,
@@ -301,10 +311,41 @@ export class ClassroomsService {
     input: UpdateClassroomDto,
   ) {
     const user = await this.requireSystemAdmin(userId);
-    if (input.name === undefined && input.description === undefined) {
+    if (
+      input.name === undefined &&
+      input.description === undefined &&
+      input.storageQuotaBytes === undefined
+    ) {
       throw new BadRequestException("没有需要更新的内容");
     }
     await this.requireClassroom(classroomId);
+    if (input.storageQuotaBytes !== undefined) {
+      if (
+        input.storageQuotaBytes !== null &&
+        (!Number.isInteger(input.storageQuotaBytes) ||
+          input.storageQuotaBytes < 0)
+      ) {
+        throw new BadRequestException("容量上限必须是非负整数");
+      }
+      const [workspace, usage] = await Promise.all([
+        this.prisma.workspace.findFirst({
+          select: { classroomStorageQuotaBytes: true },
+        }),
+        this.prisma.classroomFile.aggregate({
+          where: { classroomId },
+          _sum: { sizeBytes: true },
+        }),
+      ]);
+      const effectiveQuota =
+        input.storageQuotaBytes ??
+        workspace?.classroomStorageQuotaBytes ??
+        DEFAULT_CLASSROOM_STORAGE_QUOTA_BYTES;
+      if (effectiveQuota < (usage._sum.sizeBytes ?? 0)) {
+        throw new BadRequestException(
+          `容量上限不能低于课堂当前已用空间 ${formatStorageSize(usage._sum.sizeBytes ?? 0)}`,
+        );
+      }
+    }
     await this.prisma.classroom.update({
       where: { id: classroomId },
       data: {
@@ -313,6 +354,9 @@ export class ClassroomsService {
           : {}),
         ...(input.description !== undefined
           ? { description: input.description.trim() || null }
+          : {}),
+        ...(input.storageQuotaBytes !== undefined
+          ? { storageQuotaBytes: input.storageQuotaBytes }
           : {}),
       },
     });
@@ -324,14 +368,15 @@ export class ClassroomsService {
     const classroom = await this.prisma.classroom.findUnique({
       where: { id: classroomId },
       include: {
-        files: { select: { storageKey: true } },
+        files: { select: { storageKey: true, storageBackend: true } },
       },
     });
     if (!classroom) throw new NotFoundException("课堂不存在");
     await Promise.all(
-      classroom.files.map((file) =>
-        this.minio.removeObject(this.bucket, file.storageKey),
-      ),
+      classroom.files.map(async (file) => {
+        const backend = await this.storage.backendFor(file.storageBackend);
+        await backend.removeObject(file.storageKey);
+      }),
     );
     await this.prisma.classroom.delete({ where: { id: classroomId } });
     return { ok: true };
@@ -427,24 +472,19 @@ export class ClassroomsService {
     const classroom = await this.requireClassroom(classroomId);
     const filename = sanitizeFilename(file.originalname);
     const storageKey = `${classroom.workspaceId}/classrooms/${classroomId}/${randomUUID()}-${filename}`;
-    await this.ensureBucket();
+    const backend = await this.storage.activeBackend();
 
-    const record = await this.reserveClassroomFile(user.id, file.size, {
+    const record = await this.reserveClassroomFile(classroom, file.size, {
       classroomId,
       storageKey,
+      storageBackend: backend.name,
       filename,
       mimeType: normalizeMimeType(file.mimetype),
       sizeBytes: file.size,
       uploadedBy: user.id,
     });
     try {
-      await this.minio.putObject(
-        this.bucket,
-        storageKey,
-        file.buffer,
-        file.size,
-        { "Content-Type": record.mimeType },
-      );
+      await backend.putObject(storageKey, file.buffer, record.mimeType);
     } catch (caught) {
       await this.prisma.classroomFile
         .delete({ where: { id: record.id } })
@@ -469,12 +509,19 @@ export class ClassroomsService {
       where: { id: fileId, classroomId },
     });
     if (!file) throw new NotFoundException("课堂文件不存在");
+    const redirectUrl = await this.storage.presignDownload(
+      file.storageBackend,
+      file.storageKey,
+      { filename: file.filename, mimeType: file.mimeType, inline: false },
+    );
+    if (redirectUrl) {
+      return { file, redirectUrl, stream: null };
+    }
+    const backend = await this.storage.backendFor(file.storageBackend);
     return {
       file,
-      stream: (await this.minio.getObject(
-        this.bucket,
-        file.storageKey,
-      )) as Readable,
+      redirectUrl: null,
+      stream: (await backend.getObject(file.storageKey)) as Readable,
     };
   }
 
@@ -485,7 +532,8 @@ export class ClassroomsService {
       where: { id: fileId, classroomId },
     });
     if (!file) throw new NotFoundException("课堂文件不存在");
-    await this.minio.removeObject(this.bucket, file.storageKey);
+    const backend = await this.storage.backendFor(file.storageBackend);
+    await backend.removeObject(file.storageKey);
     await this.prisma.classroomFile.delete({ where: { id: file.id } });
     return { ok: true };
   }
@@ -553,6 +601,17 @@ export class ClassroomsService {
       });
   }
 
+  private async getWorkspaceClassroomQuota(workspaceId: string) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { classroomStorageQuotaBytes: true },
+    });
+    return (
+      workspace?.classroomStorageQuotaBytes ??
+      DEFAULT_CLASSROOM_STORAGE_QUOTA_BYTES
+    );
+  }
+
   private async assertActiveUsers(userIds: string[]) {
     const uniqueIds = [...new Set(userIds)];
     const count = await this.prisma.user.count({
@@ -563,39 +622,35 @@ export class ClassroomsService {
     }
   }
 
-  private async ensureBucket() {
-    if (!(await this.minio.bucketExists(this.bucket).catch(() => false))) {
-      await this.minio.makeBucket(this.bucket);
-    }
-  }
-
   private async reserveClassroomFile(
-    userId: string,
+    classroom: {
+      id: string;
+      workspaceId: string;
+      storageQuotaBytes: number | null;
+    },
     incomingBytes: number,
     data: Prisma.ClassroomFileUncheckedCreateInput,
   ) {
     return this.prisma.$transaction(
       async (transaction) => {
-        const [user, documentUsage, classroomUsage] = await Promise.all([
-          transaction.user.findUnique({
-            where: { id: userId },
-            select: { storageQuotaBytes: true },
-          }),
-          transaction.fileAsset.aggregate({
-            where: { uploadedBy: userId },
-            _sum: { sizeBytes: true },
+        const [workspace, usage] = await Promise.all([
+          transaction.workspace.findUnique({
+            where: { id: classroom.workspaceId },
+            select: { classroomStorageQuotaBytes: true },
           }),
           transaction.classroomFile.aggregate({
-            where: { uploadedBy: userId },
+            where: { classroomId: classroom.id },
             _sum: { sizeBytes: true },
           }),
         ]);
-        if (!user) throw new UnauthorizedException("Missing session");
-        const usage =
-          (documentUsage._sum.sizeBytes ?? 0) +
-          (classroomUsage._sum.sizeBytes ?? 0);
-        if (usage + incomingBytes > user.storageQuotaBytes) {
-          throw new BadRequestException("存储容量不足");
+        const quotaBytes =
+          classroom.storageQuotaBytes ??
+          workspace?.classroomStorageQuotaBytes ??
+          DEFAULT_CLASSROOM_STORAGE_QUOTA_BYTES;
+        if ((usage._sum.sizeBytes ?? 0) + incomingBytes > quotaBytes) {
+          throw new BadRequestException(
+            `课堂文件容量不足，当前上限为 ${formatStorageSize(quotaBytes)}`,
+          );
         }
         return transaction.classroomFile.create({ data });
       },
@@ -686,4 +741,13 @@ function looksLikeSvg(file: UploadedClassroomFile) {
     declaredMime === "image/svg+xml" ||
     /^(?:<\?xml[^>]*>\s*)?<svg[\s>]/i.test(prefix)
   );
+}
+
+function formatStorageSize(bytes: number) {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.floor(bytes / 1024)}KB`;
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${Math.floor(bytes / (1024 * 1024))}MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`;
 }

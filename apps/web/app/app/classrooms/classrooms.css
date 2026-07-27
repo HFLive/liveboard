@@ -199,6 +199,42 @@
   gap: 14px;
 }
 
+.classroom-editor-danger {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding-top: 14px;
+}
+
+.classroom-editor-danger .muted {
+  line-height: 1.5;
+}
+
+.classroom-delete-modal {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.classroom-delete-warning {
+  display: grid;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--danger) 24%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  padding: 14px 16px;
+  color: var(--danger);
+}
+
+.classroom-delete-warning span {
+  line-height: 1.55;
+}
+
+.classroom-delete-modal .modal-body > .muted {
+  margin: 0;
+  line-height: 1.55;
+}
+
 .classroom-empty {
   grid-column: 1 / -1;
   margin: 18px 0;
@@ -476,6 +512,11 @@
   }
 
   .classroom-member-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .classroom-editor-danger {
     align-items: stretch;
     flex-direction: column;
   }

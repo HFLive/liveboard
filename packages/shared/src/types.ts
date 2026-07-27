@@ -202,6 +202,16 @@ export interface FileSummary {
   updatedAt: string;
 }
 
+export interface FolderAssetSummary {
+  id: string;
+  folderId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  canManage: boolean;
+  updatedAt: string;
+}
+
 export type ContentPinTargetType = "folder" | "file";
 
 export interface ContentPinTarget {
@@ -223,6 +233,9 @@ export interface ClassroomSummary {
   deckCount: number;
   exerciseCount: number;
   fileCount: number;
+  storageQuotaBytes: number;
+  storageQuotaCustom: boolean;
+  storageUsedBytes: number;
   createdAt: string;
   updatedAt: string;
 }

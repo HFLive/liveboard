@@ -75,6 +75,21 @@ enum ForumThreadStatus {
   locked
 }
 
+enum StorageBackend {
+  minio
+  oss
+}
+
+enum StorageDownloadMode {
+  proxy
+  direct
+}
+
+enum FileAssetKind {
+  embedded
+  standalone
+}
+
 model User {
   id                String     @id @default(cuid())
   username          String     @unique
@@ -83,14 +98,16 @@ model User {
   avatarStorageKey  String?
   avatarMimeType    String?
   avatarUpdatedAt   DateTime?
+  avatarStorageBackend StorageBackend @default(minio)
   bio               String?
   bannerStorageKey  String?
   bannerMimeType    String?
   bannerUpdatedAt   DateTime?
+  bannerStorageBackend StorageBackend @default(minio)
   sessionVersion    Int        @default(0)
   systemRole        SystemRole
   status            UserStatus @default(active)
-  storageQuotaBytes Int        @default(536870912)
+  storageQuotaBytes Int?
   aiCallCount       Int        @default(0)
   aiCallLimit       Int?
   aiCallDateKey     String?
@@ -151,6 +168,9 @@ model Workspace {
   faviconStorageKey String?
   faviconMimeType   String?
   faviconUpdatedAt  DateTime?
+  faviconStorageBackend StorageBackend @default(minio)
+  memberAttachmentQuotaBytes Int?
+  classroomStorageQuotaBytes Int?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -167,6 +187,7 @@ model Workspace {
   forumThreads      ForumThread[]
   teachingDecks     TeachingDeck[]
   classrooms        Classroom[]
+  storageSettings   StorageSettings?
 }
 
 model ForumCategory {
@@ -492,6 +513,7 @@ model Classroom {
   name        String
   description String?
   createdById String
+  storageQuotaBytes Int?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -525,6 +547,7 @@ model ClassroomFile {
   id          String   @id @default(cuid())
   classroomId String
   storageKey  String   @unique
+  storageBackend StorageBackend @default(minio)
   filename    String
   mimeType    String
   sizeBytes   Int
@@ -614,6 +637,8 @@ model FileAsset {
   fileId      String?
   forumPostId String?
   storageKey  String   @unique
+  storageBackend StorageBackend @default(minio)
+  kind        FileAssetKind @default(embedded)
   filename    String
   mimeType    String
   sizeBytes   Int
@@ -622,6 +647,7 @@ model FileAsset {
   sortOrder   Int?
   uploadedBy  String
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   workspace         Workspace          @relation(fields: [workspaceId], references: [id])
   folder            Folder?            @relation(fields: [folderId], references: [id])
@@ -630,8 +656,27 @@ model FileAsset {
   teachingDeckItems TeachingDeckItem[]
   uploader          User               @relation("FileAssetUploader", fields: [uploadedBy], references: [id])
 
+  @@index([folderId, kind, createdAt])
   @@index([forumPostId, sortOrder])
   @@index([uploadedBy, createdAt])
+}
+
+model StorageSettings {
+  id                 String              @id @default(cuid())
+  workspaceId        String              @unique
+  backend            StorageBackend      @default(minio)
+  downloadMode       StorageDownloadMode @default(proxy)
+  ossRegion          String?
+  ossBucket          String?
+  ossEndpoint        String?
+  ossAccessKeyId     String?
+  ossAccessKeySecret String?
+  ossInternal        Boolean             @default(false)
+  updatedById        String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
 
 model AiSettings {

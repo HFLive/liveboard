@@ -85,11 +85,15 @@ export class SettingsController {
   @Public()
   async favicon(@Res() response: Response) {
     const favicon = await this.settingsService.getFavicon();
+    if (favicon.redirectUrl) {
+      response.redirect(302, favicon.redirectUrl);
+      return;
+    }
     response.setHeader("Content-Type", favicon.mimeType);
     response.setHeader("Cache-Control", "public, max-age=3600");
     response.setHeader("Cross-Origin-Resource-Policy", "same-site");
     response.setHeader("X-Content-Type-Options", "nosniff");
-    favicon.stream.pipe(response);
+    favicon.stream!.pipe(response);
   }
 
   @Get("admin/settings")
