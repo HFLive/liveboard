@@ -4,307 +4,135 @@
   min-width: 0;
 }
 
-.classrooms-toolbar,
-.classroom-content-toolbar {
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 12px;
+.classroom-detail-workspace {
+  width: min(960px, 100%);
+}
+
+/* 工具栏贴齐工作区边缘（需覆盖 .workspace .list-toolbar 的 10px 横向内边距，
+   该全局选择器优先级为 (0,2,0)，这里用同等优先级 + 后置加载取胜）。
+   不画底线：页头下的强线是页面唯一的主分隔线，工具栏与列表之间用留白分层。 */
+.workspace .classrooms-toolbar,
+.workspace .classroom-content-toolbar {
+  padding: 4px 0 12px;
+}
+
+.classroom-count {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12.5px;
 }
 
 .classroom-resource-list,
 .classroom-member-list {
   display: flex;
   flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
+.classroom-resource-list {
+  margin-top: 8px;
+}
+
+/* —— 课堂卡片 —— */
+
 .classroom-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
   min-width: 0;
   padding-top: 14px;
 }
 
 .classroom-row {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
-  align-content: start;
-  align-items: start;
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
   min-width: 0;
-  min-height: 158px;
-  padding: 17px;
+  padding: 15px 18px 14px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--fill-subtle) 34%, transparent);
   color: var(--text);
   text-decoration: none;
   transition:
     border-color 160ms ease,
-    background 160ms ease,
-    transform 160ms ease;
+    background 160ms ease;
 }
 
 .classroom-row:hover {
   border-color: var(--line-strong);
   background: var(--fill-hover);
-  transform: translateY(-1px);
 }
 
-.classroom-resource-row:hover {
-  background: var(--fill-hover);
-}
-
-.classroom-row-icon {
-  width: 20px;
-  color: var(--accent-dark);
-}
-
-.classroom-row-main,
-.classroom-resource-row > span {
+.classroom-row-head {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
   min-width: 0;
 }
 
-.classroom-row-main {
-  padding-top: 1px;
-}
-
-.classroom-row-main strong {
-  font-size: 15px;
-}
-
-.classroom-row-main strong,
-.classroom-row-main small,
-.classroom-resource-row strong,
-.classroom-resource-row a {
+.classroom-row-head strong {
   overflow: hidden;
+  font-size: 15px;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.classroom-row-main small,
-.classroom-resource-row small,
-.classroom-row-stats,
-.classroom-row em {
-  color: var(--muted);
-  font-size: 12px;
+.classroom-row-head em {
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--fill-active);
+  color: var(--text-soft);
+  font-size: 11px;
   font-style: normal;
+  padding: 2px 8px;
+}
+
+.classroom-row-desc {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .classroom-row-stats {
-  grid-column: 1 / -1;
   display: flex;
-  flex-direction: row;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  gap: 2px 12px;
   margin-top: auto;
-  padding-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
-}
-
-.classroom-row-stats span:first-child {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.classroom-row-stats svg {
-  width: 13px;
-}
-
-.classroom-row em {
-  min-width: 45px;
-  padding: 4px 7px;
-  border-radius: 6px;
-  background: var(--fill-subtle);
-  text-align: center;
-}
-
-.classroom-section-caption {
   color: var(--muted);
   font-size: 12px;
 }
 
-.classroom-announcement-list {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.classroom-announcement {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 12px;
-  padding: 16px 4px;
-  border-bottom: 1px solid var(--line);
-}
-
-.classroom-announcement > svg {
-  width: 18px;
-  color: var(--accent-dark);
-}
-
-.classroom-announcement > div,
-.classroom-announcement header > div:first-child {
-  min-width: 0;
-}
-
-.classroom-announcement header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.classroom-announcement h2 {
-  margin: 0;
-  font-size: 15px;
-}
-
-.classroom-announcement small {
-  display: block;
-  margin-top: 4px;
-  color: var(--muted);
-}
-
-.classroom-announcement p {
-  margin: 11px 0 0;
-  color: var(--text-soft);
-  line-height: 1.7;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.classroom-announcement-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 2px;
-}
-
-.classroom-announcement-modal {
-  width: min(600px, calc(100vw - 32px));
-}
-
-.classroom-editor-modal {
-  width: min(520px, calc(100vw - 32px));
-}
-
-.classroom-announcement-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
-}
-
-.classroom-editor-danger {
-  align-items: center;
-  border-top: 1px solid var(--line);
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  padding-top: 14px;
-}
-
-.classroom-editor-danger .muted {
-  line-height: 1.5;
-}
-
-.classroom-delete-modal {
-  width: min(520px, calc(100vw - 32px));
-}
-
-.classroom-delete-warning {
-  display: grid;
-  gap: 6px;
-  border: 1px solid color-mix(in srgb, var(--danger) 24%, transparent);
-  border-radius: var(--radius-md);
-  background: var(--danger-soft);
-  padding: 14px 16px;
-  color: var(--danger);
-}
-
-.classroom-delete-warning span {
-  line-height: 1.55;
-}
-
-.classroom-delete-modal .modal-body > .muted {
-  margin: 0;
-  line-height: 1.55;
-}
-
-.classroom-empty {
-  grid-column: 1 / -1;
-  margin: 18px 0;
-}
-
-.classroom-create-modal {
-  width: min(720px, calc(100vw - 32px));
-}
-
-.classroom-create-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-}
-
-.classroom-member-assignment {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-}
-
-.classroom-member-assignment > div:first-child {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.classroom-member-assignment span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.classroom-member-options {
-  max-height: 280px;
-  overflow: auto;
-  border-top: 1px solid var(--line);
-}
-
-.classroom-tag-filter {
-  margin-bottom: 8px;
-  width: min(220px, 100%);
-}
-
-.classroom-member-options label {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--line);
-}
+/* —— 课堂详情头 —— */
 
 .classroom-detail-head {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 18px;
-  padding: 6px 0 16px;
+  padding: 4px 0 18px;
   border-bottom: 1px solid var(--line-strong);
 }
 
 .classroom-detail-head h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 26px;
+  font-weight: 700;
 }
 
 .classroom-detail-head p {
-  margin: 5px 0 0;
+  margin: 6px 0 0;
   color: var(--muted);
+  font-size: 13.5px;
 }
 
 .classroom-detail-head dl {
@@ -335,33 +163,157 @@
   font-weight: 700;
 }
 
+/* —— 详情标签页：收缩为内容宽度，不再拉满 —— */
+
 .classroom-tabs {
+  align-self: start;
+  width: fit-content;
+  max-width: 100%;
   margin: 15px 0 12px;
+  overflow-x: auto;
 }
 
-.classroom-resource-row {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
+.classroom-tab-count {
+  margin-left: 5px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.classroom-section-caption {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* —— 公告 —— */
+
+.classroom-announcement-list {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  padding: 13px 4px;
+}
+
+.classroom-announcement {
+  display: block;
+  min-width: 0;
+  padding: 18px 10px;
   border-bottom: 1px solid var(--line);
 }
 
-.classroom-resource-row > svg {
-  width: 18px;
-  color: var(--text-soft);
+.classroom-announcement header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.classroom-resource-row a {
-  color: var(--text);
+.classroom-announcement header > div:first-child {
+  min-width: 0;
+}
+
+.classroom-announcement h2 {
+  margin: 0;
+  font-size: 15px;
   font-weight: 650;
+}
+
+.classroom-announcement small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.classroom-announcement p {
+  margin: 10px 0 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.classroom-announcement-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+/* —— 资源行（课件 / 练习 / 文件）：整行可点，圆角内缩 hover —— */
+
+.classroom-resource-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border-radius: 10px;
+  padding: 10px;
+  transition: background-color 140ms ease;
+}
+
+.classroom-resource-row:hover {
+  background: var(--fill-hover);
+}
+
+.classroom-resource-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.classroom-resource-link {
+  align-self: flex-start;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
   text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.classroom-resource-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+}
+
+.classroom-resource-link:focus-visible {
+  outline: none;
+}
+
+.classroom-resource-link:focus-visible::after {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.classroom-resource-row small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.classroom-resource-row small a {
+  position: relative;
+  z-index: 1;
+}
+
+.classroom-resource-row > .classroom-row-actions,
+.classroom-resource-row > details,
+.classroom-resource-row > .icon-button {
+  position: relative;
+  z-index: 1;
 }
 
 .classroom-resource-row > .classroom-row-actions {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: row;
   align-items: center;
   gap: 2px;
@@ -383,6 +335,28 @@
   color: var(--text);
 }
 
+/* 行内图标按钮统一默认色：subtle 与 danger 默认同为 muted，
+   hover 时普通按钮显 text、danger 按钮显红（全局没有 .icon-button.danger 规则）。 */
+.classroom-resource-row .icon-button,
+.classroom-announcement-actions .icon-button,
+.classroom-member-row .icon-button {
+  color: var(--muted);
+}
+
+.classroom-resource-row .icon-button:hover,
+.classroom-announcement-actions .icon-button:hover,
+.classroom-member-row .icon-button:hover {
+  color: var(--text);
+}
+
+.classroom-resource-row .icon-button.danger:hover,
+.classroom-announcement-actions .icon-button.danger:hover,
+.classroom-member-row .icon-button.danger:hover {
+  border-color: transparent;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .classroom-upload-button {
   cursor: pointer;
 }
@@ -391,33 +365,43 @@
   display: none;
 }
 
+/* —— 成员 —— */
+
 .classroom-members-panel {
   min-width: 0;
 }
 
-.classroom-member-row {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 11px 4px;
-  border-bottom: 1px solid var(--line);
+.classroom-add-members-empty {
+  margin: 0;
+  padding: 14px 0;
+  color: var(--muted);
+  font-size: 13px;
 }
 
-.classroom-member-row > svg {
-  width: 17px;
-  color: var(--muted);
+.classroom-member-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border-radius: 10px;
+  padding: 10px;
+  transition: background-color 140ms ease;
+}
+
+.classroom-member-row:hover {
+  background: var(--fill-hover);
 }
 
 .classroom-member-row > span {
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-width: 0;
 }
 
 .classroom-member-row small {
   color: var(--muted);
+  font-size: 12px;
 }
 
 .classroom-member-row > div {
@@ -428,7 +412,7 @@
 .classroom-add-members {
   margin-top: 22px;
   padding-top: 12px;
-  border-top: 1px solid var(--line-strong);
+  border-top: 1px solid var(--line);
 }
 
 .classroom-add-members h3 {
@@ -445,24 +429,183 @@
 
 .classroom-member-filters .search-field {
   max-width: 320px;
+  min-width: 0;
+}
+
+/* —— 弹窗 —— */
+
+/* 弹窗宽度需覆盖 redesign.css 的 .workspace .modal-panel { width: min(430px, 100%) }，
+   用同等优先级 (0,2,0) + 后置加载取胜。 */
+.workspace .classroom-announcement-modal {
+  width: min(600px, calc(100vw - 32px));
+}
+
+.workspace .classroom-editor-modal {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.classroom-announcement-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.classroom-editor-danger {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding-top: 14px;
+}
+
+.classroom-editor-danger .muted {
+  line-height: 1.5;
+}
+
+.workspace .classroom-delete-modal {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.classroom-delete-warning {
+  display: grid;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--danger) 24%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  padding: 14px 16px;
+  color: var(--danger);
+}
+
+.classroom-delete-warning span {
+  line-height: 1.55;
+}
+
+.classroom-delete-modal .modal-body > .muted {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.classroom-empty {
+  grid-column: 1 / -1;
+  margin: 18px 0;
+}
+
+.workspace .classroom-create-modal {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.classroom-create-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.classroom-member-assignment {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.classroom-member-assignment-head {
+  align-items: flex-end;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.classroom-member-assignment-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.classroom-member-assignment-head > div > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.classroom-member-assignment-count {
+  color: var(--accent-dark);
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 可选成员列表：一个带边界的滚动面板，内部行用留白与 hover 分层。 */
+.classroom-member-options {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.classroom-member-option {
+  align-items: center;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 10px;
+  transition: background-color 140ms ease;
+}
+
+.classroom-member-option:hover {
+  background: var(--fill-hover);
+}
+
+.classroom-member-option-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.classroom-member-option-main strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.classroom-member-option-main small {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.classroom-member-option select {
+  flex: 0 0 auto;
+}
+
+.classroom-member-options .classroom-add-members-empty {
+  padding: 16px 10px;
+}
+
+.classroom-tag-filter {
+  flex: 0 0 auto;
+}
+
+.classroom-create-body .classroom-member-filters {
+  padding: 0;
+}
+
+.classroom-create-body .classroom-member-filters .search-field {
+  flex: 1;
+  max-width: none;
 }
 
 @media (max-width: 760px) {
   .classroom-list {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
-  }
-
-  .classroom-row {
-    grid-template-columns: 26px minmax(0, 1fr) auto;
-    min-height: 142px;
-    padding: 14px;
-  }
-
-  .classroom-row-stats {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
   }
 
   .classroom-detail-head {
@@ -489,25 +632,16 @@
     width: 100%;
   }
 
-  .classroom-announcement {
-    grid-template-columns: 24px minmax(0, 1fr);
-  }
-
-  .classroom-resource-row {
-    grid-template-columns: 24px minmax(0, 1fr) auto;
-  }
-
-  .classroom-resource-row > :nth-last-child(2):not(span) {
-    grid-column: 3;
-  }
-
   .classroom-member-row {
-    grid-template-columns: 24px minmax(0, 1fr);
+    flex-wrap: wrap;
+  }
+
+  .classroom-member-row > span {
+    flex-basis: 100%;
   }
 
   .classroom-member-row > select,
   .classroom-member-row > div {
-    grid-column: 2;
     width: 100%;
   }
 

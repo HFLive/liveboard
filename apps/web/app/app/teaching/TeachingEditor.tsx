@@ -265,7 +265,7 @@ export function TeachingEditor({
     <div className="workspace teaching-editor-workspace">
       <Link
         className="page-back-link"
-        href={classroomDetail(activeClassroomId)}
+        href={classroomDetail(activeClassroomId, "teaching")}
       >
         <ArrowLeft aria-hidden="true" />
         <span>返回课件</span>

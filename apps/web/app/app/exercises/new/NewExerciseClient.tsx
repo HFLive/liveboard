@@ -615,7 +615,7 @@ export function NewExerciseClient({
         });
         window.localStorage.removeItem(draftKey);
       }
-      router.push(classroomDetail(activeClassroomId));
+      router.push(classroomDetail(activeClassroomId, "exercises"));
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -633,7 +633,7 @@ export function NewExerciseClient({
     <div className="workspace quiz-builder">
       <Link
         className="page-back-link"
-        href={classroomDetail(activeClassroomId ?? "")}
+        href={classroomDetail(activeClassroomId ?? "", "exercises")}
       >
         <ArrowLeft aria-hidden="true" />
         返回练习列表

@@ -203,7 +203,7 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
           <Link
             aria-label="返回课件"
             className="button secondary"
-            href={classroomDetail(deck?.classroomId ?? "")}
+            href={classroomDetail(deck?.classroomId ?? "", "teaching")}
             title="返回课件"
           >
             <ArrowLeft aria-hidden="true" className="button-icon" />
@@ -400,7 +400,7 @@ function TeachingManuscript({
       <header className="teaching-manuscript-topbar">
         <Link
           aria-label="返回课堂"
-          href={classroomDetail(deck?.classroomId ?? "")}
+          href={classroomDetail(deck?.classroomId ?? "", "teaching")}
           title="返回课堂"
         >
           <ArrowLeft aria-hidden="true" />

@@ -49,8 +49,18 @@ export function exerciseEdit(exerciseSetId: string): Route {
   return `/app/exercises/${routeSegment(exerciseSetId)}/edit` as Route;
 }
 
-export function classroomDetail(classroomId: string): Route {
-  return `/app/classrooms/${routeSegment(classroomId)}` as Route;
+export type ClassroomDetailTab =
+  "announcements" | "teaching" | "exercises" | "files" | "members";
+
+export function classroomDetail(
+  classroomId: string,
+  tab?: ClassroomDetailTab,
+): Route {
+  const base = `/app/classrooms/${routeSegment(classroomId)}`;
+  // 默认标签（公告）不带参数，保持 URL 干净。
+  return (
+    tab && tab !== "announcements" ? `${base}?tab=${tab}` : base
+  ) as Route;
 }
 
 export function classroomTeachingNew(classroomId: string): Route {

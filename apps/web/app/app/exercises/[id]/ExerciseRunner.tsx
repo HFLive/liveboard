@@ -244,7 +244,7 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
     <div className="workspace exercise-runner">
       <Link
         className="page-back-link"
-        href={classroomDetail(exerciseSet?.classroomId ?? "")}
+        href={classroomDetail(exerciseSet?.classroomId ?? "", "exercises")}
       >
         <ArrowLeft aria-hidden="true" />
         返回练习列表

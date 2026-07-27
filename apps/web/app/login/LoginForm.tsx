@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, LogIn } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { login } from "@/lib/api";
 import { APP_ROUTES } from "@/lib/routes";
 
@@ -50,6 +50,7 @@ export function LoginForm() {
         <input
           aria-describedby={error ? "login-error" : undefined}
           aria-invalid={Boolean(error)}
+          autoFocus
           className="input"
           name="username"
           autoComplete="username"
@@ -99,7 +100,6 @@ export function LoginForm() {
         </p>
       ) : null}
       <button className="button login-submit" disabled={loading} type="submit">
-        <LogIn aria-hidden="true" className="button-icon" />
         {loading ? "正在登录…" : "登录"}
       </button>
 
