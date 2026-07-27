@@ -14,6 +14,7 @@ import {
 import type {
   ContentPinTarget,
   FileSummary,
+  FolderAssetSummary,
   FolderNode,
 } from "@liveboard/shared";
 import type { FileStatus, FileType } from "@liveboard/shared";
@@ -281,18 +282,29 @@ export class FilesService {
   async listFiles(
     userId: string | null,
     input: ListFilesInput = {},
-  ): Promise<FileSummary[]> {
+  ): Promise<{
+    files: FileSummary[];
+    standaloneAssets: FolderAssetSummary[];
+  }> {
     if (!userId) {
       throw new UnauthorizedException("Missing session");
     }
 
-    const files = await this.prisma.file.findMany({
-      where: {
-        ...(input.folderId ? { folderId: input.folderId } : {}),
-        status: { not: "archived" },
-      },
-      orderBy: [{ updatedAt: "desc" }],
-    });
+    const [files, standaloneAssets] = await Promise.all([
+      this.prisma.file.findMany({
+        where: {
+          ...(input.folderId ? { folderId: input.folderId } : {}),
+          status: { not: "archived" },
+        },
+        orderBy: [{ updatedAt: "desc" }],
+      }),
+      input.folderId
+        ? this.prisma.fileAsset.findMany({
+            where: { folderId: input.folderId, kind: "standalone" },
+            orderBy: [{ updatedAt: "desc" }],
+          })
+        : Promise.resolve([]),
+    ]);
 
     const visibleFiles: FileSummary[] = [];
     const permissions = await this.permissions.getEffectiveLevelsForFiles(
@@ -314,7 +326,28 @@ export class FilesService {
       visibleFiles.push(this.toSummary(file));
     }
 
-    return visibleFiles;
+    let visibleAssets: FolderAssetSummary[] = [];
+    if (input.folderId && standaloneAssets.length > 0) {
+      const folderLevel = await this.permissions.getEffectiveLevelForFolder(
+        userId,
+        input.folderId,
+      );
+      if (canView(folderLevel)) {
+        const canManageFolder =
+          canEdit(folderLevel) || folderLevel === "lecturer";
+        visibleAssets = standaloneAssets.map((asset) => ({
+          id: asset.id,
+          folderId: asset.folderId ?? input.folderId!,
+          filename: asset.filename,
+          mimeType: asset.mimeType,
+          sizeBytes: asset.sizeBytes,
+          canManage: canManageFolder || asset.uploadedBy === userId,
+          updatedAt: asset.updatedAt.toISOString(),
+        }));
+      }
+    }
+
+    return { files: visibleFiles, standaloneAssets: visibleAssets };
   }
 
   async createFolder(userId: string | null, input: CreateFolderInput) {

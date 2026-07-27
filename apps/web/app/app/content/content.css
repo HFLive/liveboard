@@ -431,3 +431,21 @@
     width: 100%;
   }
 }
+
+.content-asset-row .content-file-link > small {
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.content-asset-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.content-asset-actions .editor-more-menu {
+  position: relative;
+}
+
+.content-asset-actions .context-menu {
+  right: 0;
+}

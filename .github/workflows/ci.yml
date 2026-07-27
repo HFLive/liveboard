@@ -113,7 +113,7 @@ jobs:
           api_pid=$!
           trap 'kill "$api_pid" 2>/dev/null || true' EXIT
           for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:4000/health | grep -q '"minio":"ok"'; then
+            if curl --fail --silent http://127.0.0.1:4000/health | grep -q '"storage":"ok"'; then
               exit 0
             fi
             sleep 2

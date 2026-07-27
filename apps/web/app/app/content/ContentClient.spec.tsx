@@ -11,29 +11,34 @@ import type { FolderNode } from "@liveboard/shared";
 import { ContentClient } from "./ContentClient";
 import {
   deleteFolder,
+  deleteLibraryAsset,
   getFolderTree,
   listFiles,
   updateContentPins,
 } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
+  apiResourceUrl: vi.fn((path: string) => path),
   createFile: vi.fn(),
   createFolder: vi.fn(),
   deleteFile: vi.fn(),
   deleteFolder: vi.fn(),
+  deleteLibraryAsset: vi.fn().mockResolvedValue({ ok: true }),
   deletePermissionGrant: vi.fn(),
   getFolderTree: vi.fn(),
   importMarkdown: vi.fn(),
   listAssignablePermissionUsers: vi
     .fn()
     .mockResolvedValue({ users: [], tags: [] }),
-  listFiles: vi.fn().mockResolvedValue({ files: [] }),
+  listFiles: vi.fn().mockResolvedValue({ files: [], standaloneAssets: [] }),
   listPermissionGrants: vi
     .fn()
     .mockResolvedValue({ grants: [], inheritedGrants: [] }),
+  renameAsset: vi.fn(),
   updateFile: vi.fn(),
   updateFolder: vi.fn(),
   updateContentPins: vi.fn(),
+  uploadAsset: vi.fn(),
   upsertPermissionGrant: vi.fn(),
 }));
 
@@ -128,6 +133,39 @@ describe("ContentClient folder deletion", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders standalone files with download and delete actions", async () => {
+    vi.mocked(listFiles).mockResolvedValue({
+      files: [],
+      standaloneAssets: [
+        {
+          id: "asset-1",
+          folderId: "folder-1",
+          filename: "讲义.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 2048,
+          canManage: true,
+          updatedAt: "2026-07-20T08:00:00.000Z",
+        },
+      ],
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<ContentClient />);
+    await enterFolderFromTree("课程资料");
+
+    const downloadLinks = await screen.findAllByRole("link", {
+      name: /讲义\.pdf/,
+    });
+    expect(downloadLinks[0]).toHaveAttribute("href", "/assets/asset-1");
+
+    fireEvent.click(screen.getByTitle("文件操作"));
+    fireEvent.click(await screen.findByRole("button", { name: "删除" }));
+
+    await waitFor(() =>
+      expect(deleteLibraryAsset).toHaveBeenCalledWith("asset-1"),
+    );
+  });
+
   it("opens member-level permissions from the folder menu", async () => {
     vi.mocked(getFolderTree).mockReset().mockResolvedValue({
       folders: folderTree,
@@ -167,7 +205,10 @@ describe("ContentClient folder deletion", () => {
       folders: pinnedTree,
       canManagePins: true,
     });
-    vi.mocked(listFiles).mockResolvedValueOnce({ files: [rootFile] });
+    vi.mocked(listFiles).mockResolvedValueOnce({
+      files: [rootFile],
+      standaloneAssets: [],
+    });
     vi.mocked(updateContentPins).mockResolvedValue({
       folders: pinnedTree,
       canManagePins: true,
@@ -266,6 +307,7 @@ describe("ContentClient folder deletion", () => {
   it("shows an icon before document names in the document table", async () => {
     vi.mocked(listFiles).mockResolvedValueOnce({
       files: [{ ...folderTree[0]!.files[0]!, status: "draft" }],
+      standaloneAssets: [],
     });
 
     render(<ContentClient />);
@@ -300,6 +342,7 @@ describe("ContentClient folder deletion", () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
     vi.mocked(listFiles).mockResolvedValueOnce({
       files: folderTree[0]!.files,
+      standaloneAssets: [],
     });
 
     render(<ContentClient />);

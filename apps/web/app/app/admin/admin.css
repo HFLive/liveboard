@@ -290,8 +290,44 @@
   line-height: 1.45;
 }
 
+.admin-storage-page .quota-form {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  min-width: 150px;
+}
+
+.admin-storage-page .quota-form .table-input {
+  width: 84px;
+}
+
+.admin-storage-page .quota-defaults {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-storage-page .quota-default-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.admin-storage-page .quota-default-row .table-input {
+  width: 96px;
+}
+
+.admin-storage-page .quota-default-row > span:last-of-type {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.admin-storage-page .quota-default-label {
+  min-width: 220px;
+}
+
 .admin-storage-page .metric-strip {
-  width: min(640px, 100%);
+  width: min(760px, 100%);
   gap: 6px;
 }
 
@@ -309,6 +345,12 @@
 
 .admin-storage-page > .workbench-main {
   width: 100%;
+}
+
+.admin-storage-page > .workbench-main + .workbench-main {
+  border-top: 1px solid var(--line);
+  margin-top: 24px;
+  padding-top: 20px;
 }
 
 .admin-storage-page .quota-form {

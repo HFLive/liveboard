@@ -8,12 +8,14 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { canEdit, isSuperAdmin, isSystemAdmin } from "@liveboard/shared";
-import { Client } from "minio";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { Prisma } from "@prisma/client";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../storage/storage.service";
+import { DEFAULT_MEMBER_ATTACHMENT_QUOTA_BYTES } from "../../common/storage-quota";
+import { requireResourceName } from "../../common/resource-name";
 
 export interface UploadedAssetFile {
   originalname: string;
@@ -44,40 +46,12 @@ export function isSafeInlineAssetMime(mimeType: string) {
 
 @Injectable()
 export class AssetsService {
-  private readonly minio: Client;
-  private readonly bucket: string;
-
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly permissions: PermissionsService,
-  ) {
-    this.bucket = this.config.get<string>("MINIO_BUCKET", "liveboard-assets");
-    const accessKey = this.config.get<string>("MINIO_ROOT_USER", "liveboard");
-    const secretKey = this.config.get<string>(
-      "MINIO_ROOT_PASSWORD",
-      "replace-with-a-strong-password",
-    );
-
-    if (
-      process.env.NODE_ENV === "production" &&
-      (!accessKey ||
-        !secretKey ||
-        secretKey === "replace-with-a-strong-password")
-    ) {
-      throw new Error(
-        "Secure MinIO credentials must be configured in production",
-      );
-    }
-
-    this.minio = new Client({
-      endPoint: this.config.get<string>("MINIO_ENDPOINT", "localhost"),
-      port: this.config.get<number>("MINIO_PORT", 9000),
-      useSSL: this.config.get<string>("MINIO_USE_SSL", "false") === "true",
-      accessKey,
-      secretKey,
-    });
-  }
+    private readonly storage: StorageService,
+  ) {}
 
   async uploadAsset(
     userId: string | null,
@@ -99,7 +73,10 @@ export class AssetsService {
     const mimeType = normalizeAssetMimeType(file);
 
     const context = await this.resolveUploadContext(userId, input);
-    await this.ensureBucket();
+    if (context.kind === "standalone") {
+      assertStandaloneTypeAllowed(file.originalname, mimeType);
+    }
+    const backend = await this.storage.activeBackend();
 
     const safeName = sanitizeFilename(file.originalname);
     const storageKey = `${context.workspaceId}/${new Date()
@@ -111,6 +88,8 @@ export class AssetsService {
       folderId: context.folderId,
       fileId: context.fileId,
       storageKey,
+      storageBackend: backend.name,
+      kind: context.kind,
       filename: safeName,
       mimeType,
       sizeBytes: file.size,
@@ -118,13 +97,7 @@ export class AssetsService {
     });
 
     try {
-      await this.minio.putObject(
-        this.bucket,
-        storageKey,
-        file.buffer,
-        file.size,
-        { "Content-Type": mimeType },
-      );
+      await backend.putObject(storageKey, file.buffer, mimeType);
     } catch (caught) {
       await this.prisma.fileAsset
         .delete({ where: { id: asset.id } })
@@ -153,10 +126,22 @@ export class AssetsService {
 
     await this.assertCanViewAsset(userId, asset);
 
-    const stream = await this.minio.getObject(this.bucket, asset.storageKey);
+    const inline = isSafeInlineAssetMime(asset.mimeType);
+    const redirectUrl = await this.storage.presignDownload(
+      asset.storageBackend,
+      asset.storageKey,
+      { filename: asset.filename, mimeType: asset.mimeType, inline },
+    );
+    if (redirectUrl) {
+      return { asset, redirectUrl, stream: null };
+    }
+
+    const backend = await this.storage.backendFor(asset.storageBackend);
+    const stream = await backend.getObject(asset.storageKey);
 
     return {
       asset,
+      redirectUrl: null,
       stream: stream as Readable,
     };
   }
@@ -207,7 +192,7 @@ export class AssetsService {
       throw new BadRequestException(`最多附带 ${maxImages} 张图片`);
     }
 
-    await this.ensureBucket();
+    const backend = await this.storage.activeBackend();
     const uploaded: Array<{
       id: string;
       storageKey: string;
@@ -243,6 +228,7 @@ export class AssetsService {
           fileId: null,
           forumPostId: post.id,
           storageKey,
+          storageBackend: backend.name,
           filename: `forum-image-${existingCount + index + 1}.webp`,
           mimeType,
           sizeBytes: file.size,
@@ -253,13 +239,7 @@ export class AssetsService {
         });
 
         try {
-          await this.minio.putObject(
-            this.bucket,
-            storageKey,
-            file.buffer,
-            file.size,
-            { "Content-Type": mimeType },
-          );
+          await backend.putObject(storageKey, file.buffer, mimeType);
         } catch (caught) {
           await this.prisma.fileAsset
             .delete({ where: { id: asset.id } })
@@ -278,9 +258,7 @@ export class AssetsService {
     } catch (caught) {
       await Promise.all(
         uploaded.map((asset) =>
-          this.minio
-            .removeObject(this.bucket, asset.storageKey)
-            .catch(() => undefined),
+          backend.removeObject(asset.storageKey).catch(() => undefined),
         ),
       );
       if (uploaded.length > 0) {
@@ -301,12 +279,13 @@ export class AssetsService {
     if (postIds.length === 0) return;
     const assets = await this.prisma.fileAsset.findMany({
       where: { forumPostId: { in: postIds } },
-      select: { storageKey: true },
+      select: { storageKey: true, storageBackend: true },
     });
     await Promise.all(
-      assets.map((asset) =>
-        this.minio.removeObject(this.bucket, asset.storageKey),
-      ),
+      assets.map(async (asset) => {
+        const backend = await this.storage.backendFor(asset.storageBackend);
+        await backend.removeObject(asset.storageKey);
+      }),
     );
   }
 
@@ -375,7 +354,7 @@ export class AssetsService {
     if (uniqueIds.length === 0) return;
     const [assets, references] = await Promise.all([
       this.prisma.fileAsset.findMany({
-        where: { id: { in: uniqueIds }, forumPostId: null },
+        where: { id: { in: uniqueIds }, forumPostId: null, kind: "embedded" },
       }),
       this.getAssetReferences(uniqueIds),
     ]);
@@ -386,7 +365,8 @@ export class AssetsService {
       assets
         .filter((asset) => !referencedIds.has(asset.id))
         .map(async (asset) => {
-          await this.minio.removeObject(this.bucket, asset.storageKey);
+          const backend = await this.storage.backendFor(asset.storageBackend);
+          await backend.removeObject(asset.storageKey);
           await this.prisma.fileAsset.delete({ where: { id: asset.id } });
         }),
     );
@@ -420,11 +400,21 @@ export class AssetsService {
       throw new NotFoundException("Asset not found");
     }
 
-    if (
-      asset.uploadedBy !== userId &&
-      (!user || !isSystemAdmin(user.systemRole))
-    ) {
-      throw new ForbiddenException("No permission to delete asset");
+    const isUploader = asset.uploadedBy === userId;
+    if (!isUploader && (!user || !isSystemAdmin(user.systemRole))) {
+      const canManageFolder =
+        asset.kind === "standalone" &&
+        asset.folderId &&
+        user?.status === "active" &&
+        canEdit(
+          await this.permissions.getEffectiveLevelForFolder(
+            userId,
+            asset.folderId,
+          ),
+        );
+      if (!canManageFolder) {
+        throw new ForbiddenException("No permission to delete asset");
+      }
     }
 
     if (asset.forumPostId) {
@@ -443,7 +433,8 @@ export class AssetsService {
       });
     }
 
-    await this.minio.removeObject(this.bucket, asset.storageKey);
+    const backend = await this.storage.backendFor(asset.storageBackend);
+    await backend.removeObject(asset.storageKey);
     await this.prisma.fileAsset.delete({
       where: { id: asset.id },
     });
@@ -451,31 +442,103 @@ export class AssetsService {
     return { ok: true };
   }
 
-  private async resolveUploadContext(userId: string, input: UploadAssetInput) {
-    if (!input.fileId) {
-      throw new BadRequestException("文件只能在编辑文档时上传");
+  async renameStandaloneAsset(
+    userId: string | null,
+    assetId: string,
+    filename: string,
+  ) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
     }
-    const file = await this.prisma.file.findUnique({
-      where: { id: input.fileId },
+
+    const [asset, user] = await Promise.all([
+      this.prisma.fileAsset.findUnique({ where: { id: assetId } }),
+      this.prisma.user.findUnique({ where: { id: userId } }),
+    ]);
+
+    if (!asset || asset.kind !== "standalone") {
+      throw new NotFoundException("文件不存在");
+    }
+
+    const isUploader = asset.uploadedBy === userId;
+    if (!isUploader && (!user || !isSystemAdmin(user.systemRole))) {
+      const canManageFolder =
+        asset.folderId &&
+        user?.status === "active" &&
+        canEdit(
+          await this.permissions.getEffectiveLevelForFolder(
+            userId,
+            asset.folderId,
+          ),
+        );
+      if (!canManageFolder) {
+        throw new ForbiddenException("No permission to rename asset");
+      }
+    }
+
+    const name = requireResourceName(filename, "文件名称");
+    const updated = await this.prisma.fileAsset.update({
+      where: { id: asset.id },
+      data: { filename: name },
     });
+    return {
+      id: updated.id,
+      filename: updated.filename,
+      updatedAt: updated.updatedAt.toISOString(),
+    };
+  }
 
-    if (!file || file.status === "archived") {
-      throw new NotFoundException("File not found");
+  private async resolveUploadContext(userId: string, input: UploadAssetInput) {
+    if (input.fileId) {
+      const file = await this.prisma.file.findUnique({
+        where: { id: input.fileId },
+      });
+
+      if (!file || file.status === "archived") {
+        throw new NotFoundException("File not found");
+      }
+
+      const level = await this.permissions.getEffectiveLevelForFile(
+        userId,
+        file.id,
+      );
+
+      if (!canEdit(level) && level !== "lecturer") {
+        throw new ForbiddenException("No permission to upload asset");
+      }
+
+      return {
+        workspaceId: file.workspaceId,
+        folderId: file.folderId,
+        fileId: file.id,
+        kind: "embedded" as const,
+      };
     }
 
-    const level = await this.permissions.getEffectiveLevelForFile(
-      userId,
-      file.id,
-    );
+    if (!input.folderId) {
+      throw new BadRequestException("文档附件只能在编辑文档时上传");
+    }
 
+    const folder = await this.prisma.folder.findUnique({
+      where: { id: input.folderId },
+    });
+    if (!folder) {
+      throw new NotFoundException("Folder not found");
+    }
+
+    const level = await this.permissions.getEffectiveLevelForFolder(
+      userId,
+      folder.id,
+    );
     if (!canEdit(level) && level !== "lecturer") {
-      throw new ForbiddenException("No permission to upload asset");
+      throw new ForbiddenException("没有在此文件夹上传文件的权限");
     }
 
     return {
-      workspaceId: file.workspaceId,
-      folderId: file.folderId,
-      fileId: file.id,
+      workspaceId: folder.workspaceId,
+      folderId: folder.id,
+      fileId: null,
+      kind: "standalone" as const,
     };
   }
 
@@ -646,16 +709,6 @@ export class AssetsService {
     return references;
   }
 
-  private async ensureBucket() {
-    const exists = await this.minio
-      .bucketExists(this.bucket)
-      .catch(() => false);
-
-    if (!exists) {
-      await this.minio.makeBucket(this.bucket);
-    }
-  }
-
   private async reserveAssetWithinQuota(
     userId: string,
     incomingBytes: number,
@@ -665,30 +718,29 @@ export class AssetsService {
       try {
         return await this.prisma.$transaction(
           async (tx) => {
-            const user = await tx.user.findUnique({
-              where: { id: userId },
-              select: { storageQuotaBytes: true },
-            });
-            if (!user) throw new UnauthorizedException("Missing session");
-
-            const [documentUsage, classroomUsage] = await Promise.all([
-              tx.fileAsset.aggregate({
-                where: { uploadedBy: userId },
-                _sum: { sizeBytes: true },
+            const [user, workspace] = await Promise.all([
+              tx.user.findUnique({
+                where: { id: userId },
+                select: { storageQuotaBytes: true },
               }),
-              tx.classroomFile.aggregate({
-                where: { uploadedBy: userId },
-                _sum: { sizeBytes: true },
+              tx.workspace.findUnique({
+                where: { id: data.workspaceId },
+                select: { memberAttachmentQuotaBytes: true },
               }),
             ]);
-            if (
-              (documentUsage._sum.sizeBytes ?? 0) +
-                (classroomUsage._sum.sizeBytes ?? 0) +
-                incomingBytes >
-              user.storageQuotaBytes
-            ) {
+            if (!user) throw new UnauthorizedException("Missing session");
+
+            const quotaBytes =
+              user.storageQuotaBytes ??
+              workspace?.memberAttachmentQuotaBytes ??
+              DEFAULT_MEMBER_ATTACHMENT_QUOTA_BYTES;
+            const usage = await tx.fileAsset.aggregate({
+              where: { uploadedBy: userId },
+              _sum: { sizeBytes: true },
+            });
+            if ((usage._sum.sizeBytes ?? 0) + incomingBytes > quotaBytes) {
               throw new BadRequestException(
-                `网盘容量不足，当前上限为 ${formatStorageSize(user.storageQuotaBytes)}`,
+                `文档附件容量不足，当前上限为 ${formatStorageSize(quotaBytes)}`,
               );
             }
             return tx.fileAsset.create({ data });
@@ -722,6 +774,56 @@ function sanitizeFilename(filename: string) {
   return (filename || "asset")
     .replace(/[^\w.\-\u4e00-\u9fa5]+/g, "_")
     .slice(0, 120);
+}
+
+/** 允许直接上传到文件夹的独立文件类型（按扩展名与 MIME 双重判断）。 */
+const STANDALONE_EXTENSION_MIMES = new Map<string, string[]>([
+  [".pdf", ["application/pdf"]],
+  [".doc", ["application/msword", "application/octet-stream"]],
+  [
+    ".docx",
+    [
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/octet-stream",
+    ],
+  ],
+  [".xls", ["application/vnd.ms-excel", "application/octet-stream"]],
+  [
+    ".xlsx",
+    [
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/octet-stream",
+    ],
+  ],
+  [".ppt", ["application/vnd.ms-powerpoint", "application/octet-stream"]],
+  [
+    ".pptx",
+    [
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "application/octet-stream",
+    ],
+  ],
+  [".txt", ["text/plain", "application/octet-stream"]],
+  [".md", ["text/markdown", "text/plain", "application/octet-stream"]],
+  [".csv", ["text/csv", "text/plain", "application/octet-stream"]],
+]);
+
+const STANDALONE_IMAGE_MIMES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
+
+function assertStandaloneTypeAllowed(filename: string, mimeType: string) {
+  if (STANDALONE_IMAGE_MIMES.has(mimeType)) return;
+  const lower = filename.toLowerCase();
+  for (const [extension, mimes] of STANDALONE_EXTENSION_MIMES) {
+    if (lower.endsWith(extension) && mimes.includes(mimeType)) return;
+  }
+  throw new BadRequestException(
+    "该类型不支持直接上传到文件夹，支持 PDF、Office 文档、文本和图片",
+  );
 }
 
 export function normalizeAssetMimeType(file: UploadedAssetFile) {

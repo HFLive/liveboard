@@ -1,7 +1,7 @@
 import { HttpException, UnauthorizedException } from "@nestjs/common";
-import type { ConfigService } from "@nestjs/config";
 import argon2 from "argon2";
 import type { PrismaService } from "../prisma/prisma.service";
+import type { StorageService } from "../storage/storage.service";
 import type { LoginRateLimitService } from "./login-rate-limit.service";
 import { AuthService } from "./auth.service";
 
@@ -14,20 +14,20 @@ describe("AuthService", () => {
     recordFailure: jest.fn(),
     clear: jest.fn(),
   };
-  const config = {
-    get: jest.fn((key: string, fallback?: unknown) => fallback),
+  const storage = {
+    activeBackend: jest.fn(),
+    backendFor: jest.fn(),
+    presignDownload: jest.fn(),
+    healthCheckActive: jest.fn(),
   };
   let service: AuthService;
 
   beforeEach(() => {
     jest.resetAllMocks();
-    config.get.mockImplementation(
-      (key: string, fallback?: unknown) => fallback,
-    );
     service = new AuthService(
       prisma as unknown as PrismaService,
       limiter as unknown as LoginRateLimitService,
-      config as unknown as ConfigService,
+      storage as unknown as StorageService,
     );
     limiter.isBlocked.mockResolvedValue(false);
   });

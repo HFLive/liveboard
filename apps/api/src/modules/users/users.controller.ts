@@ -62,12 +62,24 @@ class UpdateUserDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  storageQuotaBytes?: number;
+  storageQuotaBytes?: number | null;
 
   @IsOptional()
   @IsInt()
   @Min(0)
   aiCallLimit?: number | null;
+}
+
+class UpdateStorageQuotaDefaultsDto {
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  memberAttachmentQuotaBytes?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  classroomStorageQuotaBytes?: number | null;
 }
 
 class ImportUserRowDto extends CreateUserDto {}
@@ -123,6 +135,26 @@ export class UsersController {
   @Get("storage")
   async storage(@CurrentUserId() actorUserId: string | null) {
     return { users: await this.usersService.listUserStorage(actorUserId) };
+  }
+
+  @Get("storage/quota-defaults")
+  async storageQuotaDefaults(@CurrentUserId() actorUserId: string | null) {
+    return {
+      defaults: await this.usersService.getStorageQuotaDefaults(actorUserId),
+    };
+  }
+
+  @Patch("storage/quota-defaults")
+  async updateStorageQuotaDefaults(
+    @CurrentUserId() actorUserId: string | null,
+    @Body() body: UpdateStorageQuotaDefaultsDto,
+  ) {
+    return {
+      defaults: await this.usersService.updateStorageQuotaDefaults(
+        actorUserId,
+        body,
+      ),
+    };
   }
 
   @Patch(":id")

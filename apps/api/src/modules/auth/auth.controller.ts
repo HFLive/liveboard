@@ -145,16 +145,20 @@ export class AuthController {
     @Param("id") targetUserId: string,
     @Res() res: Response,
   ) {
-    const { mimeType, stream } = await this.authService.getAvatar(
+    const { mimeType, stream, redirectUrl } = await this.authService.getAvatar(
       userId,
       targetUserId,
     );
 
+    if (redirectUrl) {
+      res.redirect(302, redirectUrl);
+      return;
+    }
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cross-Origin-Resource-Policy", "same-site");
-    stream.pipe(res);
+    stream!.pipe(res);
   }
 
   @Get("banner/:id")
@@ -163,16 +167,20 @@ export class AuthController {
     @Param("id") targetUserId: string,
     @Res() res: Response,
   ) {
-    const { mimeType, stream } = await this.authService.getBanner(
+    const { mimeType, stream, redirectUrl } = await this.authService.getBanner(
       userId,
       targetUserId,
     );
 
+    if (redirectUrl) {
+      res.redirect(302, redirectUrl);
+      return;
+    }
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cross-Origin-Resource-Policy", "same-site");
-    stream.pipe(res);
+    stream!.pipe(res);
   }
 
   @Patch("password")

@@ -7,24 +7,26 @@ describe("HealthService", () => {
       check: HealthService["check"];
       prisma: { $queryRaw: jest.Mock };
       pingRedis: jest.Mock;
-      minio: { listBuckets: jest.Mock };
+      storage: { healthCheckActive: jest.Mock };
     };
     service.prisma = { $queryRaw: jest.fn().mockResolvedValue([{ one: 1 }]) };
     service.pingRedis = jest.fn().mockResolvedValue("PONG");
-    service.minio = { listBuckets: jest.fn().mockResolvedValue([]) };
+    service.storage = {
+      healthCheckActive: jest.fn().mockResolvedValue(undefined),
+    };
     return service;
   }
 
   it("reports all required dependencies", async () => {
     await expect(createService().check()).resolves.toMatchObject({
       ok: true,
-      dependencies: { postgres: "ok", redis: "ok", minio: "ok" },
+      dependencies: { postgres: "ok", redis: "ok", storage: "ok" },
     });
   });
 
   it("returns 503 when a required dependency is unavailable", async () => {
     const service = createService();
-    service.minio.listBuckets.mockRejectedValue(new Error("offline"));
+    service.storage.healthCheckActive.mockRejectedValue(new Error("offline"));
 
     await expect(service.check()).rejects.toBeInstanceOf(
       ServiceUnavailableException,

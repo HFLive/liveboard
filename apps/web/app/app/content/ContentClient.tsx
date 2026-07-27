@@ -2,10 +2,12 @@
 
 import {
   Fragment,
+  ChangeEvent,
   FormEvent,
   MouseEvent as ReactMouseEvent,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type { CSSProperties } from "react";
@@ -17,7 +19,9 @@ import {
   Bot,
   ChevronDown,
   ChevronRight,
+  Download,
   X,
+  File as FileIcon,
   FileText,
   Folder,
   MoreHorizontal,
@@ -29,11 +33,13 @@ import {
   Plus,
   RotateCcw,
   Trash2,
+  Upload,
   Users,
 } from "lucide-react";
 import type {
   ContentPinTarget,
   FileSummary,
+  FolderAssetSummary,
   FolderNode,
   PermissionLevel,
   UserSummary,
@@ -46,8 +52,10 @@ import {
 import {
   createFile,
   createFolder,
+  apiResourceUrl,
   deleteFile,
   deleteFolder,
+  deleteLibraryAsset,
   deletePermissionGrant,
   getFolderTree,
   importMarkdown,
@@ -56,9 +64,11 @@ import {
   listPermissionGrants,
   InheritedPermissionGrantSummary,
   PermissionGrantSummary,
+  renameAsset,
   updateFile,
   updateFolder,
   updateContentPins,
+  uploadAsset,
   upsertPermissionGrant,
 } from "@/lib/api";
 import { formatRelativeTime, permissionLabel } from "@/lib/labels";
@@ -192,6 +202,15 @@ export function ContentClient() {
   const [folders, setFolders] = useState<FolderNode[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [files, setFiles] = useState<FileSummary[]>([]);
+  const [standaloneAssets, setStandaloneAssets] = useState<
+    FolderAssetSummary[]
+  >([]);
+  const [uploadingAsset, setUploadingAsset] = useState(false);
+  const [renamingAsset, setRenamingAsset] = useState<FolderAssetSummary | null>(
+    null,
+  );
+  const [assetRename, setAssetRename] = useState("");
+  const assetInputRef = useRef<HTMLInputElement>(null);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
@@ -297,6 +316,20 @@ export function ContentClient() {
       return left.title.localeCompare(right.title, "zh-CN");
     });
   }, [contentSortMode, files]);
+  const sortedAssets = useMemo(() => {
+    const nextAssets = [...standaloneAssets];
+
+    return nextAssets.sort((left, right) => {
+      if (contentSortMode === "updated") {
+        return (
+          new Date(right.updatedAt).getTime() -
+          new Date(left.updatedAt).getTime()
+        );
+      }
+
+      return left.filename.localeCompare(right.filename, "zh-CN");
+    });
+  }, [contentSortMode, standaloneAssets]);
   const unpinnedChildFolders = useMemo(
     () =>
       sortedChildFolders.filter(
@@ -364,10 +397,10 @@ export function ContentClient() {
     setLoadingTree(false);
 
     if (selectedFolderId) {
-      const fileResult = await listFiles(selectedFolderId);
-      setFiles(fileResult.files);
+      await refreshFolderContents(selectedFolderId);
     } else {
       setFiles([]);
+      setStandaloneAssets([]);
       setGrants([]);
       setInheritedGrants([]);
       setPermissionUsers([]);
@@ -376,6 +409,12 @@ export function ContentClient() {
       setCanManageGrants(false);
     }
     setLoadingItems(false);
+  }
+
+  async function refreshFolderContents(folderId: string) {
+    const fileResult = await listFiles(folderId);
+    setFiles(fileResult.files);
+    setStandaloneAssets(fileResult.standaloneAssets);
   }
 
   async function refreshTree() {
@@ -535,8 +574,7 @@ export function ContentClient() {
     persistActiveFolder(folderId);
     setShowCreateMenu(false);
     setError(null);
-    const fileResult = await listFiles(folderId);
-    setFiles(fileResult.files);
+    await refreshFolderContents(folderId);
     setMobilePane("contents");
   }
 
@@ -644,6 +682,64 @@ export function ContentClient() {
     }
   }
 
+  async function onUploadAsset(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !activeFolderId) return;
+    setUploadingAsset(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await uploadAsset({ file, folderId: activeFolderId });
+      setMessage(`“${file.name}”已上传`);
+      await refreshFolderContents(activeFolderId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "上传文件失败");
+    } finally {
+      setUploadingAsset(false);
+    }
+  }
+
+  async function onRenameAssetSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!renamingAsset) return;
+    const nameError = getResourceNameError(assetRename, "文件名称");
+    if (nameError) {
+      setError(nameError);
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    try {
+      await renameAsset(renamingAsset.id, normalizeResourceName(assetRename));
+      setMessage("文件已重命名");
+      setRenamingAsset(null);
+      setAssetRename("");
+      if (activeFolderId) {
+        await refreshFolderContents(activeFolderId);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "重命名文件失败");
+    }
+  }
+
+  async function onDeleteAsset(asset: FolderAssetSummary) {
+    setError(null);
+    setMessage(null);
+    if (!window.confirm(`永久删除“${asset.filename}”？此操作无法撤销。`)) {
+      return;
+    }
+    try {
+      await deleteLibraryAsset(asset.id);
+      setMessage("文件已删除");
+      if (activeFolderId) {
+        await refreshFolderContents(activeFolderId);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "删除文件失败");
+    }
+  }
+
   async function onDeleteFile(file: FileSummary) {
     setError(null);
     setMessage(null);
@@ -657,8 +753,7 @@ export function ContentClient() {
       setMessage("文档已删除");
 
       if (activeFolderId) {
-        const fileResult = await listFiles(activeFolderId);
-        setFiles(fileResult.files);
+        await refreshFolderContents(activeFolderId);
       }
       await refreshTree();
     } catch (caught) {
@@ -841,8 +936,7 @@ export function ContentClient() {
       setMessage("文档已移动");
 
       if (activeFolderId) {
-        const fileResult = await listFiles(activeFolderId);
-        setFiles(fileResult.files);
+        await refreshFolderContents(activeFolderId);
       }
       await refreshTree();
     } catch (caught) {
@@ -878,8 +972,7 @@ export function ContentClient() {
       setMessage("文档已重命名");
 
       if (activeFolderId) {
-        const fileResult = await listFiles(activeFolderId);
-        setFiles(fileResult.files);
+        await refreshFolderContents(activeFolderId);
       }
       await refreshTree();
     } catch (caught) {
@@ -1576,6 +1669,27 @@ export function ContentClient() {
             options={SORT_OPTIONS}
             value={contentSortMode}
           />
+          {activeFolderId && canCreateFileHere ? (
+            <>
+              <button
+                className="button secondary"
+                disabled={uploadingAsset}
+                onClick={() => assetInputRef.current?.click()}
+                type="button"
+              >
+                <Upload aria-hidden="true" className="button-icon" />
+                {uploadingAsset ? "上传中" : "上传文件"}
+              </button>
+              <input
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,image/png,image/jpeg,image/gif,image/webp"
+                aria-label="上传文件到当前文件夹"
+                hidden
+                onChange={(event) => void onUploadAsset(event)}
+                ref={assetInputRef}
+                type="file"
+              />
+            </>
+          ) : null}
           {canCreateFolderHere || canCreateFileHere ? (
             <div className="new-content-menu" data-menu-root="true">
               <button
@@ -1799,10 +1913,78 @@ export function ContentClient() {
                     {renderFileInlineRows(file)}
                   </Fragment>
                 ))}
+                {sortedAssets.map((asset) => (
+                  <tr className="content-asset-row" key={asset.id}>
+                    <td data-label="文件名">
+                      <a
+                        className="content-file-link"
+                        href={apiResourceUrl(`/assets/${asset.id}`)}
+                      >
+                        <FileIcon aria-hidden="true" />
+                        {asset.filename}
+                        <small className="muted">
+                          {formatFileSize(asset.sizeBytes)}
+                        </small>
+                      </a>
+                    </td>
+                    <td data-label="最近更新">
+                      {formatRelativeTime(asset.updatedAt)}
+                    </td>
+                    <td data-label="操作">
+                      <div className="content-asset-actions">
+                        {asset.canManage ? (
+                          <details className="editor-more-menu">
+                            <summary
+                              aria-label={`“${asset.filename}”文件操作`}
+                              className="icon-button subtle"
+                              title="文件操作"
+                            >
+                              <MoreHorizontal aria-hidden="true" />
+                            </summary>
+                            <div className="context-menu">
+                              <a href={apiResourceUrl(`/assets/${asset.id}`)}>
+                                <Download aria-hidden="true" />
+                                下载
+                              </a>
+                              <button
+                                onClick={() => {
+                                  setRenamingAsset(asset);
+                                  setAssetRename(asset.filename);
+                                }}
+                                type="button"
+                              >
+                                <Pencil aria-hidden="true" />
+                                重命名
+                              </button>
+                              <button
+                                className="danger"
+                                onClick={() => void onDeleteAsset(asset)}
+                                type="button"
+                              >
+                                <Trash2 aria-hidden="true" />
+                                删除
+                              </button>
+                            </div>
+                          </details>
+                        ) : (
+                          <a
+                            aria-label={`下载“${asset.filename}”`}
+                            className="icon-button subtle"
+                            href={apiResourceUrl(`/assets/${asset.id}`)}
+                            title="下载"
+                          >
+                            <Download aria-hidden="true" />
+                          </a>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
                 {!loadingItems &&
                 pinnedItems.length === 0 &&
                 unpinnedChildFolders.length === 0 &&
-                unpinnedFiles.length === 0 ? (
+                unpinnedFiles.length === 0 &&
+                sortedAssets.length === 0 ? (
                   <tr className="content-empty-row">
                     <td className="empty-cell" colSpan={3}>
                       {isRootView ? (
@@ -2130,6 +2312,60 @@ export function ContentClient() {
         </div>
       ) : null}
 
+      {renamingAsset ? (
+        <div className="modal-backdrop" role="presentation">
+          <form
+            aria-labelledby="rename-asset-title"
+            className="modal-panel"
+            onSubmit={(event) => void onRenameAssetSubmit(event)}
+          >
+            <div className="modal-head">
+              <h2 id="rename-asset-title">重命名文件</h2>
+              <button
+                className="icon-button subtle"
+                onClick={() => {
+                  setRenamingAsset(null);
+                  setAssetRename("");
+                }}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <label className="label">
+                文件名称
+                <input
+                  autoFocus
+                  className="input"
+                  maxLength={120}
+                  onChange={(event) => setAssetRename(event.target.value)}
+                  value={assetRename}
+                />
+              </label>
+            </div>
+            <div className="modal-foot">
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  onClick={() => {
+                    setRenamingAsset(null);
+                    setAssetRename("");
+                  }}
+                  type="button"
+                >
+                  取消
+                </button>
+                <button className="button" type="submit">
+                  保存名称
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
       {showCreateFolder ? (
         <div className="modal-backdrop" role="presentation">
           <form className="modal-panel" onSubmit={onCreateFolder}>
@@ -2248,4 +2484,10 @@ export function ContentClient() {
       ) : null}
     </div>
   );
+}
+
+function formatFileSize(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }

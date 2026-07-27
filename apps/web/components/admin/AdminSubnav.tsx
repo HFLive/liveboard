@@ -7,6 +7,7 @@ import type { SystemRole } from "@liveboard/shared";
 import {
   Bot,
   BadgeCheck,
+  CloudCog,
   Database,
   MessageSquare,
   MonitorCog,
@@ -61,6 +62,12 @@ const adminNavGroups = [
         href: APP_ROUTES.adminAi,
         label: "AI 服务",
         icon: Bot,
+        superAdminOnly: true,
+      },
+      {
+        href: APP_ROUTES.adminStorageBackend,
+        label: "存储后端",
+        icon: CloudCog,
         superAdminOnly: true,
       },
       {

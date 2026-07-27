@@ -13,6 +13,7 @@ import { PermissionsModule } from "./modules/permissions/permissions.module";
 import { PrismaModule } from "./modules/prisma/prisma.module";
 import { SettingsModule } from "./modules/settings/settings.module";
 import { ServerStatusModule } from "./modules/server-status/server-status.module";
+import { StorageModule } from "./modules/storage/storage.module";
 import { UsersModule } from "./modules/users/users.module";
 import { TeachingModule } from "./modules/teaching/teaching.module";
 import { ClassroomsModule } from "./modules/classrooms/classrooms.module";
@@ -31,6 +32,7 @@ import { BadgesModule } from "./modules/badges/badges.module";
     ForumModule,
     SettingsModule,
     ServerStatusModule,
+    StorageModule,
     AiModule,
     ActivityModule,
     ClassroomsModule,

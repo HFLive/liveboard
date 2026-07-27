@@ -17,6 +17,10 @@ import {
 import argon2 from "argon2";
 import { Prisma } from "@prisma/client";
 import { formatDateKey } from "../../common/date-key";
+import {
+  DEFAULT_CLASSROOM_STORAGE_QUOTA_BYTES,
+  DEFAULT_MEMBER_ATTACHMENT_QUOTA_BYTES,
+} from "../../common/storage-quota";
 import { PrismaService } from "../prisma/prisma.service";
 
 export interface CreateUserInput {
@@ -39,15 +43,23 @@ export interface UpdateUserInput {
   systemRole?: SystemRole;
   status?: UserSummary["status"];
   password?: string;
-  storageQuotaBytes?: number;
+  storageQuotaBytes?: number | null;
   aiCallLimit?: number | null;
 }
 
 export interface UserStorageSummary {
   user: UserSummary;
   storageQuotaBytes: number;
+  storageQuotaCustom: boolean;
   storageUsedBytes: number;
   assetCount: number;
+}
+
+export interface StorageQuotaDefaults {
+  memberAttachmentQuotaBytes: number;
+  memberAttachmentQuotaCustom: boolean;
+  classroomStorageQuotaBytes: number;
+  classroomStorageQuotaCustom: boolean;
 }
 
 export interface CreateUserTagInput {
@@ -132,7 +144,7 @@ export class UsersService {
   ): Promise<UserStorageSummary[]> {
     await this.requireAdmin(actorUserId);
 
-    const [users, groupedAssets, groupedClassroomFiles] = await Promise.all([
+    const [users, groupedAssets, workspace] = await Promise.all([
       this.prisma.user.findMany({
         orderBy: [{ createdAt: "asc" }],
         include: {
@@ -149,22 +161,21 @@ export class UsersService {
         _sum: { sizeBytes: true },
         _count: { id: true },
       }),
-      this.prisma.classroomFile.groupBy({
-        by: ["uploadedBy"],
-        _sum: { sizeBytes: true },
-        _count: { id: true },
+      this.prisma.workspace.findFirst({
+        select: { memberAttachmentQuotaBytes: true },
       }),
     ]);
+    const defaultQuotaBytes =
+      workspace?.memberAttachmentQuotaBytes ??
+      DEFAULT_MEMBER_ATTACHMENT_QUOTA_BYTES;
     const usageByUserId = new Map<
       string,
       { storageUsedBytes: number; assetCount: number }
     >();
-    for (const item of [...groupedAssets, ...groupedClassroomFiles]) {
-      const current = usageByUserId.get(item.uploadedBy);
+    for (const item of groupedAssets) {
       usageByUserId.set(item.uploadedBy, {
-        storageUsedBytes:
-          (current?.storageUsedBytes ?? 0) + (item._sum.sizeBytes ?? 0),
-        assetCount: (current?.assetCount ?? 0) + item._count.id,
+        storageUsedBytes: item._sum.sizeBytes ?? 0,
+        assetCount: item._count.id,
       });
     }
 
@@ -173,11 +184,64 @@ export class UsersService {
 
       return {
         user: this.toSummary(user),
-        storageQuotaBytes: user.storageQuotaBytes,
+        storageQuotaBytes: user.storageQuotaBytes ?? defaultQuotaBytes,
+        storageQuotaCustom: user.storageQuotaBytes !== null,
         storageUsedBytes: usage?.storageUsedBytes ?? 0,
         assetCount: usage?.assetCount ?? 0,
       };
     });
+  }
+
+  async getStorageQuotaDefaults(
+    actorUserId: string | null,
+  ): Promise<StorageQuotaDefaults> {
+    await this.requireAdmin(actorUserId);
+    const workspace = await this.prisma.workspace.findFirst();
+    return {
+      memberAttachmentQuotaBytes:
+        workspace?.memberAttachmentQuotaBytes ??
+        DEFAULT_MEMBER_ATTACHMENT_QUOTA_BYTES,
+      memberAttachmentQuotaCustom:
+        workspace?.memberAttachmentQuotaBytes != null,
+      classroomStorageQuotaBytes:
+        workspace?.classroomStorageQuotaBytes ??
+        DEFAULT_CLASSROOM_STORAGE_QUOTA_BYTES,
+      classroomStorageQuotaCustom:
+        workspace?.classroomStorageQuotaBytes != null,
+    };
+  }
+
+  async updateStorageQuotaDefaults(
+    actorUserId: string | null,
+    input: {
+      memberAttachmentQuotaBytes?: number | null;
+      classroomStorageQuotaBytes?: number | null;
+    },
+  ): Promise<StorageQuotaDefaults> {
+    await this.requireAdmin(actorUserId);
+    for (const [key, value] of Object.entries(input)) {
+      if (
+        value !== undefined &&
+        value !== null &&
+        (!Number.isInteger(value) || value < 0)
+      ) {
+        throw new BadRequestException(`默认容量必须是非负整数：${key}`);
+      }
+    }
+    const workspace = await this.prisma.workspace.findFirst();
+    if (!workspace) throw new NotFoundException("Workspace not found");
+    await this.prisma.workspace.update({
+      where: { id: workspace.id },
+      data: {
+        ...(input.memberAttachmentQuotaBytes !== undefined
+          ? { memberAttachmentQuotaBytes: input.memberAttachmentQuotaBytes }
+          : {}),
+        ...(input.classroomStorageQuotaBytes !== undefined
+          ? { classroomStorageQuotaBytes: input.classroomStorageQuotaBytes }
+          : {}),
+      },
+    });
+    return this.getStorageQuotaDefaults(actorUserId);
   }
 
   async listVisibleUserTags(actorUserId: string | null) {
@@ -663,7 +727,7 @@ export class UsersService {
       systemRole?: SystemRole;
       status?: UserSummary["status"];
       passwordHash?: string;
-      storageQuotaBytes?: number;
+      storageQuotaBytes?: number | null;
       aiCallLimit?: number | null;
       sessionVersion?: { increment: number };
     } = {};
@@ -707,8 +771,9 @@ export class UsersService {
 
     if (input.storageQuotaBytes !== undefined) {
       if (
-        !Number.isInteger(input.storageQuotaBytes) ||
-        input.storageQuotaBytes < 0
+        input.storageQuotaBytes !== null &&
+        (!Number.isInteger(input.storageQuotaBytes) ||
+          input.storageQuotaBytes < 0)
       ) {
         throw new BadRequestException("容量上限必须是非负整数");
       }
