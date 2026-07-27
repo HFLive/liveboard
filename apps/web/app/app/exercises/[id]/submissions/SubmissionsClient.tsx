@@ -149,7 +149,10 @@ export function SubmissionsClient({
 
   return (
     <div className="workspace review-page">
-      <Link className="page-back-link" href={classroomDetail(classroomId)}>
+      <Link
+        className="page-back-link"
+        href={classroomDetail(classroomId, "exercises")}
+      >
         <ArrowLeft aria-hidden="true" />
         返回练习列表
       </Link>

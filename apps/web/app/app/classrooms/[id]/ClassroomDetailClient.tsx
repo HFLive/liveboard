@@ -12,18 +12,13 @@ import {
 } from "react";
 import {
   ArrowLeft,
-  ClipboardList,
   Download,
-  File,
-  Megaphone,
   MoreHorizontal,
   Pencil,
   Plus,
-  Presentation,
   Search,
   Trash2,
   Upload,
-  Users,
   X,
 } from "lucide-react";
 import type {
@@ -56,6 +51,7 @@ import {
 } from "@/lib/api";
 import {
   APP_ROUTES,
+  classroomDetail,
   classroomExerciseNew,
   classroomTeachingNew,
   exerciseDetail,
@@ -68,13 +64,15 @@ import { formatDateTime, formatRelativeTime } from "@/lib/labels";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
-type ClassroomTab =
+export type ClassroomTab =
   "announcements" | "teaching" | "exercises" | "files" | "members";
 
 export function ClassroomDetailClient({
   classroomId,
+  initialTab,
 }: {
   classroomId: string;
+  initialTab?: ClassroomTab;
 }) {
   const [classroom, setClassroom] = useState<ClassroomDetail | null>(null);
   const [decks, setDecks] = useState<TeachingDeckSummary[]>([]);
@@ -84,7 +82,7 @@ export function ClassroomDetailClient({
   const [tags, setTags] = useState<UserTagSummary[]>([]);
   const [memberTagFilter, setMemberTagFilter] = useState("all");
   const [memberQuery, setMemberQuery] = useState("");
-  const [tab, setTab] = useState<ClassroomTab>("announcements");
+  const [tab, setTab] = useState<ClassroomTab>(initialTab ?? "announcements");
   const [query, setQuery] = useState("");
   const [editingAnnouncement, setEditingAnnouncement] =
     useState<ClassroomAnnouncementSummary | null>(null);
@@ -108,14 +106,16 @@ export function ClassroomDetailClient({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  const matchingUsers = useMemo(() => {
+  const addableUsers = useMemo(() => {
     const memberIds = new Set(
       classroom?.members?.map((member) => member.user.id) ?? [],
     );
+    return users.filter((user) => !memberIds.has(user.id));
+  }, [classroom?.members, users]);
+  const matchingUsers = useMemo(() => {
     const normalizedMemberQuery = memberQuery.trim().toLowerCase();
-    return users.filter(
+    return addableUsers.filter(
       (user) =>
-        !memberIds.has(user.id) &&
         (memberTagFilter === "all" ||
           user.tags?.some((tag) => tag.id === memberTagFilter)) &&
         (!normalizedMemberQuery ||
@@ -123,7 +123,7 @@ export function ClassroomDetailClient({
             .toLowerCase()
             .includes(normalizedMemberQuery)),
     );
-  }, [classroom?.members, memberQuery, memberTagFilter, users]);
+  }, [addableUsers, memberQuery, memberTagFilter]);
   const normalizedQuery = query.trim().toLowerCase();
 
   async function load() {
@@ -153,6 +153,25 @@ export function ClassroomDetailClient({
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classroomId]);
+
+  // 浏览器前进/后退或从子页面带 ?tab= 返回时，同步 URL 中的标签。
+  useEffect(() => {
+    const next = initialTab ?? "announcements";
+    setTab((current) => (current === next ? current : next));
+  }, [initialTab]);
+
+  // 无权管理成员的用户不应停在成员标签（手动输入 ?tab=members 的情况）。
+  useEffect(() => {
+    if (classroom && tab === "members" && !classroom.canManageMembers) {
+      selectTab("announcements");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classroom, tab]);
+
+  function selectTab(next: ClassroomTab) {
+    setTab(next);
+    router.replace(classroomDetail(classroomId, next), { scroll: false });
+  }
 
   async function changeMember(
     userId: string,
@@ -400,6 +419,13 @@ export function ClassroomDetailClient({
       ? file.filename.toLowerCase().includes(normalizedQuery)
       : true,
   );
+  const filteredAnnouncements = classroom.announcements.filter((announcement) =>
+    normalizedQuery
+      ? `${announcement.title} ${announcement.content}`
+          .toLowerCase()
+          .includes(normalizedQuery)
+      : true,
+  );
 
   return (
     <div className="workspace classroom-detail-workspace">
@@ -441,59 +467,62 @@ export function ClassroomDetailClient({
       <div className="segmented-control classroom-tabs" aria-label="课堂内容">
         <button
           className={tab === "announcements" ? "active" : ""}
-          onClick={() => setTab("announcements")}
+          onClick={() => selectTab("announcements")}
           type="button"
         >
           公告
+          <span className="classroom-tab-count">
+            {classroom.announcements.length}
+          </span>
         </button>
         <button
           className={tab === "teaching" ? "active" : ""}
-          onClick={() => setTab("teaching")}
+          onClick={() => selectTab("teaching")}
           type="button"
         >
           课件
+          <span className="classroom-tab-count">{decks.length}</span>
         </button>
         <button
           className={tab === "exercises" ? "active" : ""}
-          onClick={() => setTab("exercises")}
+          onClick={() => selectTab("exercises")}
           type="button"
         >
           练习
+          <span className="classroom-tab-count">{exercises.length}</span>
         </button>
         <button
           className={tab === "files" ? "active" : ""}
-          onClick={() => setTab("files")}
+          onClick={() => selectTab("files")}
           type="button"
         >
           文件
+          <span className="classroom-tab-count">{files.length}</span>
         </button>
         {classroom.canManageMembers ? (
           <button
             className={tab === "members" ? "active" : ""}
-            onClick={() => setTab("members")}
+            onClick={() => selectTab("members")}
             type="button"
           >
             成员
+            <span className="classroom-tab-count">
+              {classroom.members?.length ?? 0}
+            </span>
           </button>
         ) : null}
       </div>
 
       {tab !== "members" ? (
         <div className="list-toolbar classroom-content-toolbar">
-          {tab !== "announcements" ? (
-            <label className="search-field">
-              <Search aria-hidden="true" />
-              <input
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={`搜索${tab === "teaching" ? "课件" : tab === "exercises" ? "练习" : "文件"}`}
-                value={query}
-              />
-            </label>
-          ) : (
-            <span className="classroom-section-caption">
-              教师发布的课堂通知
-            </span>
-          )}
+          <label className="search-field">
+            <Search aria-hidden="true" />
+            <input
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={`搜索${tab === "announcements" ? "公告" : tab === "teaching" ? "课件" : tab === "exercises" ? "练习" : "文件"}`}
+              value={query}
+            />
+          </label>
           {classroom.canEditContent && tab === "announcements" ? (
             <button
               className="button"
@@ -550,55 +579,56 @@ export function ClassroomDetailClient({
 
       {tab === "announcements" ? (
         <section aria-label="课堂公告" className="classroom-announcement-list">
-          {classroom.announcements.map((announcement) => (
+          {filteredAnnouncements.map((announcement) => (
             <article className="classroom-announcement" key={announcement.id}>
-              <Megaphone aria-hidden="true" />
-              <div>
-                <header>
-                  <div>
-                    <h2>{announcement.title}</h2>
-                    <small>
-                      <UserProfileLink user={announcement.author} /> ·{" "}
-                      {formatDateTime(announcement.createdAt)}
-                      {announcement.updatedAt !== announcement.createdAt
-                        ? " · 已编辑"
-                        : ""}
-                    </small>
+              <header>
+                <div>
+                  <h2>{announcement.title}</h2>
+                  <small>
+                    <UserProfileLink user={announcement.author} /> ·{" "}
+                    {formatDateTime(announcement.createdAt)}
+                    {announcement.updatedAt !== announcement.createdAt
+                      ? " · 已编辑"
+                      : ""}
+                  </small>
+                </div>
+                {classroom.canEditContent ? (
+                  <div className="classroom-announcement-actions">
+                    <button
+                      className="icon-button subtle"
+                      onClick={() => openAnnouncementEditor(announcement)}
+                      title="编辑公告"
+                      type="button"
+                    >
+                      <Pencil aria-hidden="true" />
+                    </button>
+                    <button
+                      className="icon-button danger"
+                      onClick={() => void onDeleteAnnouncement(announcement)}
+                      title="删除公告"
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </button>
                   </div>
-                  {classroom.canEditContent ? (
-                    <div className="classroom-announcement-actions">
-                      <button
-                        className="icon-button subtle"
-                        onClick={() => openAnnouncementEditor(announcement)}
-                        title="编辑公告"
-                        type="button"
-                      >
-                        <Pencil aria-hidden="true" />
-                      </button>
-                      <button
-                        className="icon-button danger"
-                        onClick={() => void onDeleteAnnouncement(announcement)}
-                        title="删除公告"
-                        type="button"
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </button>
-                    </div>
-                  ) : null}
-                </header>
-                <p>{announcement.content}</p>
-              </div>
+                ) : null}
+              </header>
+              <p>{announcement.content}</p>
             </article>
           ))}
-          {classroom.announcements.length === 0 ? (
-            <ClassroomEmpty
-              detail={
-                classroom.canEditContent
-                  ? "发布第一条课堂通知。"
-                  : "教师尚未发布课堂通知。"
-              }
-              title="暂无公告"
-            />
+          {filteredAnnouncements.length === 0 ? (
+            normalizedQuery ? (
+              <ClassroomEmpty detail="换个关键词试试。" title="没有匹配的公告" />
+            ) : (
+              <ClassroomEmpty
+                detail={
+                  classroom.canEditContent
+                    ? "发布第一条课堂通知。"
+                    : "教师尚未发布课堂通知。"
+                }
+                title="暂无公告"
+              />
+            )
           ) : null}
         </section>
       ) : null}
@@ -607,9 +637,13 @@ export function ClassroomDetailClient({
         <section className="classroom-resource-list">
           {filteredDecks.map((deck) => (
             <article className="classroom-resource-row" key={deck.id}>
-              <Presentation aria-hidden="true" />
-              <span>
-                <Link href={teachingPresent(deck.id)}>{deck.title}</Link>
+              <span className="classroom-resource-main">
+                <Link
+                  className="classroom-resource-link"
+                  href={teachingPresent(deck.id)}
+                >
+                  {deck.title}
+                </Link>
                 <small>
                   <UserProfileLink user={deck.createdBy} /> ·{" "}
                   {formatRelativeTime(deck.updatedAt)}
@@ -636,14 +670,18 @@ export function ClassroomDetailClient({
             </article>
           ))}
           {filteredDecks.length === 0 ? (
-            <ClassroomEmpty
-              detail={
-                classroom.canEditContent
-                  ? "创建第一份课件，课堂学生即可查看。"
-                  : "教师尚未发布课件。"
-              }
-              title="暂无课件"
-            />
+            normalizedQuery ? (
+              <ClassroomEmpty detail="换个关键词试试。" title="没有匹配的课件" />
+            ) : (
+              <ClassroomEmpty
+                detail={
+                  classroom.canEditContent
+                    ? "创建第一份课件，课堂学生即可查看。"
+                    : "教师尚未发布课件。"
+                }
+                title="暂无课件"
+              />
+            )
           ) : null}
         </section>
       ) : null}
@@ -652,9 +690,13 @@ export function ClassroomDetailClient({
         <section className="classroom-resource-list">
           {filteredExercises.map((exercise) => (
             <article className="classroom-resource-row" key={exercise.id}>
-              <ClipboardList aria-hidden="true" />
-              <span>
-                <Link href={exerciseDetail(exercise.id)}>{exercise.title}</Link>
+              <span className="classroom-resource-main">
+                <Link
+                  className="classroom-resource-link"
+                  href={exerciseDetail(exercise.id)}
+                >
+                  {exercise.title}
+                </Link>
                 <small>
                   {exercise.questionCount} 题 ·{" "}
                   {formatRelativeTime(exercise.updatedAt)}
@@ -679,14 +721,18 @@ export function ClassroomDetailClient({
             </article>
           ))}
           {filteredExercises.length === 0 ? (
-            <ClassroomEmpty
-              detail={
-                classroom.canEditContent
-                  ? "创建练习后，只有本课堂学生可以作答。"
-                  : "教师尚未发布练习。"
-              }
-              title="暂无练习"
-            />
+            normalizedQuery ? (
+              <ClassroomEmpty detail="换个关键词试试。" title="没有匹配的练习" />
+            ) : (
+              <ClassroomEmpty
+                detail={
+                  classroom.canEditContent
+                    ? "创建练习后，只有本课堂学生可以作答。"
+                    : "教师尚未发布练习。"
+                }
+                title="暂无练习"
+              />
+            )
           ) : null}
         </section>
       ) : null}
@@ -695,9 +741,13 @@ export function ClassroomDetailClient({
         <section className="classroom-resource-list">
           {filteredFiles.map((file) => (
             <article className="classroom-resource-row" key={file.id}>
-              <File aria-hidden="true" />
-              <span>
-                <strong>{file.filename}</strong>
+              <span className="classroom-resource-main">
+                <a
+                  className="classroom-resource-link"
+                  href={apiResourceUrl(file.url)}
+                >
+                  {file.filename}
+                </a>
                 <small>
                   {formatFileSize(file.sizeBytes)} ·{" "}
                   {formatDateTime(file.createdAt)}
@@ -723,30 +773,27 @@ export function ClassroomDetailClient({
             </article>
           ))}
           {filteredFiles.length === 0 ? (
-            <ClassroomEmpty
-              detail={
-                classroom.canEditContent
-                  ? "上传 PDF、PPT 或其他课堂资料供学生下载。"
-                  : "教师尚未上传课堂文件。"
-              }
-              title="暂无文件"
-            />
+            normalizedQuery ? (
+              <ClassroomEmpty detail="换个关键词试试。" title="没有匹配的文件" />
+            ) : (
+              <ClassroomEmpty
+                detail={
+                  classroom.canEditContent
+                    ? "上传 PDF、PPT 或其他课堂资料供学生下载。"
+                    : "教师尚未上传课堂文件。"
+                }
+                title="暂无文件"
+              />
+            )
           ) : null}
         </section>
       ) : null}
 
       {tab === "members" && classroom.canManageMembers ? (
         <section className="classroom-members-panel">
-          <div className="panel-head">
-            <div>
-              <h2>课堂成员</h2>
-              <span>教师可维护成员；课堂必须至少保留一名教师。</span>
-            </div>
-          </div>
           <div className="classroom-member-list">
             {classroom.members?.map((member) => (
               <div className="classroom-member-row" key={member.user.id}>
-                <Users aria-hidden="true" />
                 <span>
                   <UserProfileLink user={member.user} />
                   <small>@{member.user.username}</small>
@@ -769,7 +816,7 @@ export function ClassroomDetailClient({
               </div>
             ))}
           </div>
-          {matchingUsers.length ? (
+          {addableUsers.length ? (
             <div className="classroom-add-members">
               <h3>添加成员</h3>
               <div className="classroom-member-filters">
@@ -798,28 +845,33 @@ export function ClassroomDetailClient({
                   </select>
                 ) : null}
               </div>
-              {matchingUsers.map((user) => (
-                <div className="classroom-member-row" key={user.id}>
-                  <Users aria-hidden="true" />
-                  <span>{user.displayName}</span>
-                  <div>
-                    <button
-                      className="classroom-text-action"
-                      onClick={() => void changeMember(user.id, "student")}
-                      type="button"
-                    >
-                      添加为学生
-                    </button>
-                    <button
-                      className="classroom-text-action"
-                      onClick={() => void changeMember(user.id, "teacher")}
-                      type="button"
-                    >
-                      添加为教师
-                    </button>
+              {matchingUsers.length ? (
+                matchingUsers.map((user) => (
+                  <div className="classroom-member-row" key={user.id}>
+                    <span>{user.displayName}</span>
+                    <div>
+                      <button
+                        className="classroom-text-action"
+                        onClick={() => void changeMember(user.id, "student")}
+                        type="button"
+                      >
+                        添加为学生
+                      </button>
+                      <button
+                        className="classroom-text-action"
+                        onClick={() => void changeMember(user.id, "teacher")}
+                        type="button"
+                      >
+                        添加为教师
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="classroom-add-members-empty">
+                  没有匹配的成员，调整标签或搜索词试试。
+                </p>
+              )}
             </div>
           ) : null}
         </section>
@@ -880,18 +932,20 @@ export function ClassroomDetailClient({
                 </button>
               </div>
             </div>
-            <div className="modal-actions">
-              <button
-                className="button secondary"
-                disabled={savingClassroom}
-                onClick={() => setShowClassroomEditor(false)}
-                type="button"
-              >
-                取消
-              </button>
-              <button className="button" disabled={savingClassroom}>
-                {savingClassroom ? "保存中" : "保存课堂"}
-              </button>
+            <div className="modal-foot">
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  disabled={savingClassroom}
+                  onClick={() => setShowClassroomEditor(false)}
+                  type="button"
+                >
+                  取消
+                </button>
+                <button className="button" disabled={savingClassroom}>
+                  {savingClassroom ? "保存中" : "保存课堂"}
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -947,43 +1001,45 @@ export function ClassroomDetailClient({
                 </label>
               )}
             </div>
-            <div className="modal-actions">
-              <button
-                className="button secondary"
-                disabled={deletingClassroom}
-                onClick={
-                  classroomDeleteStep === 1
-                    ? closeClassroomDelete
-                    : () => {
-                        setClassroomDeleteStep(1);
-                        setClassroomDeleteConfirmation("");
-                      }
-                }
-                type="button"
-              >
-                {classroomDeleteStep === 1 ? "取消" : "返回"}
-              </button>
-              {classroomDeleteStep === 1 ? (
+            <div className="modal-foot">
+              <div className="button-row">
                 <button
-                  className="button danger"
-                  onClick={() => setClassroomDeleteStep(2)}
-                  type="button"
-                >
-                  继续删除
-                </button>
-              ) : (
-                <button
-                  className="button danger"
-                  disabled={
-                    deletingClassroom ||
-                    classroomDeleteConfirmation !== classroom.name
+                  className="button secondary"
+                  disabled={deletingClassroom}
+                  onClick={
+                    classroomDeleteStep === 1
+                      ? closeClassroomDelete
+                      : () => {
+                          setClassroomDeleteStep(1);
+                          setClassroomDeleteConfirmation("");
+                        }
                   }
-                  onClick={() => void onDeleteClassroom()}
                   type="button"
                 >
-                  {deletingClassroom ? "正在删除…" : "永久删除"}
+                  {classroomDeleteStep === 1 ? "取消" : "返回"}
                 </button>
-              )}
+                {classroomDeleteStep === 1 ? (
+                  <button
+                    className="button danger"
+                    onClick={() => setClassroomDeleteStep(2)}
+                    type="button"
+                  >
+                    继续删除
+                  </button>
+                ) : (
+                  <button
+                    className="button danger"
+                    disabled={
+                      deletingClassroom ||
+                      classroomDeleteConfirmation !== classroom.name
+                    }
+                    onClick={() => void onDeleteClassroom()}
+                    type="button"
+                  >
+                    {deletingClassroom ? "正在删除…" : "永久删除"}
+                  </button>
+                )}
+              </div>
             </div>
           </section>
         </div>
@@ -1033,22 +1089,24 @@ export function ClassroomDetailClient({
                 />
               </label>
             </div>
-            <div className="modal-actions">
-              <button
-                className="button secondary"
-                disabled={savingAnnouncement}
-                onClick={closeAnnouncementEditor}
-                type="button"
-              >
-                取消
-              </button>
-              <button className="button" disabled={savingAnnouncement}>
-                {savingAnnouncement
-                  ? "保存中"
-                  : editingAnnouncement
-                    ? "保存公告"
-                    : "发布公告"}
-              </button>
+            <div className="modal-foot">
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  disabled={savingAnnouncement}
+                  onClick={closeAnnouncementEditor}
+                  type="button"
+                >
+                  取消
+                </button>
+                <button className="button" disabled={savingAnnouncement}>
+                  {savingAnnouncement
+                    ? "保存中"
+                    : editingAnnouncement
+                      ? "保存公告"
+                      : "发布公告"}
+                </button>
+              </div>
             </div>
           </form>
         </div>

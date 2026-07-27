@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { BookOpen, Plus, Search, Users, X } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
 import type {
   ClassroomMemberRole,
   ClassroomSummary,
@@ -26,6 +26,7 @@ export function ClassroomsClient() {
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [tags, setTags] = useState<UserTagSummary[]>([]);
   const [memberTagFilter, setMemberTagFilter] = useState("all");
+  const [memberQuery, setMemberQuery] = useState("");
   const [roles, setRoles] = useState<Record<string, DraftRole>>({});
   const [query, setQuery] = useState("");
   const [name, setName] = useState("");
@@ -46,6 +47,31 @@ export function ClassroomsClient() {
         )
       : classrooms;
   }, [classrooms, query]);
+
+  const filteredUsers = useMemo(() => {
+    const value = memberQuery.trim().toLowerCase();
+    return users.filter((user) => {
+      if (
+        memberTagFilter !== "all" &&
+        !user.tags?.some((tag) => tag.id === memberTagFilter)
+      ) {
+        return false;
+      }
+      return value
+        ? `${user.displayName} ${user.username}`.toLowerCase().includes(value)
+        : true;
+    });
+  }, [users, memberTagFilter, memberQuery]);
+
+  const selectedCounts = useMemo(() => {
+    let teacher = 0;
+    let student = 0;
+    for (const role of Object.values(roles)) {
+      if (role === "teacher") teacher += 1;
+      if (role === "student") student += 1;
+    }
+    return { teacher, student, total: teacher + student };
+  }, [roles]);
 
   useEffect(() => {
     Promise.all([listClassrooms(), getMe()])
@@ -122,6 +148,9 @@ export function ClassroomsClient() {
             value={query}
           />
         </label>
+        {!loading ? (
+          <span className="classroom-count">共 {classrooms.length} 个课堂</span>
+        ) : null}
         {canCreate ? (
           <button
             className="button"
@@ -142,31 +171,28 @@ export function ClassroomsClient() {
             href={classroomDetail(classroom.id)}
             key={classroom.id}
           >
-            <BookOpen aria-hidden="true" className="classroom-row-icon" />
-            <span className="classroom-row-main">
+            <span className="classroom-row-head">
               <strong>{classroom.name}</strong>
-              <small>
-                {classroom.description || "暂无课堂说明"} · 更新于{" "}
-                {formatRelativeTime(classroom.updatedAt)}
-              </small>
+              <em>
+                {classroom.role === "teacher"
+                  ? "教师"
+                  : classroom.role === "student"
+                    ? "学生"
+                    : "管理员"}
+              </em>
             </span>
+            {classroom.description ? (
+              <small className="classroom-row-desc">
+                {classroom.description}
+              </small>
+            ) : null}
             <span className="classroom-row-stats">
               <span>
-                <Users aria-hidden="true" />
-                {classroom.teacherCount} 位教师 · {classroom.studentCount}{" "}
-                位学生
+                教师 {classroom.teacherCount} · 学生 {classroom.studentCount} ·
+                课件 {classroom.deckCount} · 练习 {classroom.exerciseCount}
               </span>
-              <span>
-                {classroom.deckCount} 份课件 · {classroom.exerciseCount} 个练习
-              </span>
+              <span>更新于 {formatRelativeTime(classroom.updatedAt)}</span>
             </span>
-            <em>
-              {classroom.role === "teacher"
-                ? "教师"
-                : classroom.role === "student"
-                  ? "学生"
-                  : "管理员"}
-            </em>
           </Link>
         ))}
         {!loading && filtered.length === 0 ? (
@@ -220,11 +246,28 @@ export function ClassroomsClient() {
                 />
               </label>
               <div className="classroom-member-assignment">
-                <div>
-                  <strong>指派教师和学生</strong>
-                  <span>至少选择一名教师，成员角色之后仍可调整。</span>
+                <div className="classroom-member-assignment-head">
+                  <div>
+                    <strong>指派教师和学生</strong>
+                    <span>至少选择一名教师，成员角色之后仍可调整。</span>
+                  </div>
+                  {selectedCounts.total ? (
+                    <span className="classroom-member-assignment-count">
+                      已选教师 {selectedCounts.teacher} · 学生{" "}
+                      {selectedCounts.student}
+                    </span>
+                  ) : null}
                 </div>
-                <div className="classroom-member-options">
+                <div className="classroom-member-filters">
+                  <label className="search-field">
+                    <Search aria-hidden="true" />
+                    <input
+                      aria-label="搜索成员"
+                      onChange={(event) => setMemberQuery(event.target.value)}
+                      placeholder="搜索成员"
+                      value={memberQuery}
+                    />
+                  </label>
                   {tags.length ? (
                     <select
                       aria-label="按成员标签筛选"
@@ -242,15 +285,20 @@ export function ClassroomsClient() {
                       ))}
                     </select>
                   ) : null}
-                  {users
-                    .filter(
-                      (user) =>
-                        memberTagFilter === "all" ||
-                        user.tags?.some((tag) => tag.id === memberTagFilter),
-                    )
-                    .map((user) => (
-                      <label key={user.id}>
-                        <span>{user.displayName}</span>
+                </div>
+                <div className="classroom-member-options">
+                  {filteredUsers.length ? (
+                    filteredUsers.map((user) => (
+                      <label className="classroom-member-option" key={user.id}>
+                        <span className="classroom-member-option-main">
+                          <strong>{user.displayName}</strong>
+                          <small>
+                            @{user.username}
+                            {user.tags?.length
+                              ? ` · ${user.tags.map((tag) => tag.name).join("、")}`
+                              : ""}
+                          </small>
+                        </span>
                         <select
                           className="select compact-select"
                           onChange={(event) =>
@@ -266,21 +314,28 @@ export function ClassroomsClient() {
                           <option value="student">学生</option>
                         </select>
                       </label>
-                    ))}
+                    ))
+                  ) : (
+                    <p className="classroom-add-members-empty">
+                      没有匹配的成员，调整标签或搜索词试试。
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
-            <div className="modal-actions">
-              <button
-                className="button secondary"
-                onClick={() => setShowCreate(false)}
-                type="button"
-              >
-                取消
-              </button>
-              <button className="button" disabled={saving} type="submit">
-                {saving ? "创建中" : "创建课堂"}
-              </button>
+            <div className="modal-foot">
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  onClick={() => setShowCreate(false)}
+                  type="button"
+                >
+                  取消
+                </button>
+                <button className="button" disabled={saving} type="submit">
+                  {saving ? "创建中" : "创建课堂"}
+                </button>
+              </div>
             </div>
           </form>
         </div>

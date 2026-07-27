@@ -1828,7 +1828,8 @@ p.muted {
 }
 
 .modal-panel {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0;
   width: min(560px, 100%);
   max-height: min(720px, calc(100vh - 48px));
@@ -1860,6 +1861,9 @@ p.muted {
 
 .modal-body {
   display: grid;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   gap: 14px;
   padding: 18px;
 }
@@ -5235,5 +5239,13 @@ p.muted {
   .button.secondary,
   .button.danger {
     width: 100%;
+  }
+
+  /* 弹窗底部操作行例外：保持按钮内容宽度、右对齐并排，
+     否则页脚按钮会被 100% 宽规则挤压换行错位。 */
+  .modal-foot .button-row .button,
+  .modal-foot .button-row .button.secondary,
+  .modal-foot .button-row .button.danger {
+    width: auto;
   }
 }

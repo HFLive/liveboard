@@ -1,12 +1,29 @@
 import Link from "next/link";
-import {
-  ArrowRight,
-  BookOpen,
-  ClipboardCheck,
-  Presentation,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 import "./home.css";
+
+const FEATURES = [
+  {
+    index: "01",
+    title: "资料",
+    description: "课程文档与附件资料。",
+  },
+  {
+    index: "02",
+    title: "课件",
+    description: "跟随课堂进度翻页展示。",
+  },
+  {
+    index: "03",
+    title: "练习",
+    description: "在线作答，客观题自动评分。",
+  },
+  {
+    index: "04",
+    title: "论坛",
+    description: "课程相关的提问与讨论。",
+  },
+] as const;
 
 export default function HomePage() {
   return (
@@ -22,40 +39,44 @@ export default function HomePage() {
       </nav>
 
       <section className="marketing-hero">
-        <div className="marketing-copy">
-          <h1>团队共用的教学工作台</h1>
-          <p>整理资料、准备课程、发布练习、管理成员，都在一个地方。</p>
-          <div className="marketing-actions">
-            <Link className="home-primary-button" href="/login">
-              登录
-              <ArrowRight aria-hidden="true" className="button-icon right" />
-            </Link>
-          </div>
+        <h1>
+          这里是 HFLive 的
+          <span className="marketing-keep">
+            教学平台<span className="marketing-period">。</span>
+          </span>
+        </h1>
+        <p className="marketing-lede">
+          课程资料、课堂课件与在线练习，使用课程团队提供的账号登录。
+        </p>
+        <div className="marketing-actions">
+          <Link className="home-primary-button" href="/login">
+            登录
+            <ArrowRight aria-hidden="true" className="button-icon right" />
+          </Link>
         </div>
 
-        <div className="marketing-feature-grid">
-          <article>
-            <BookOpen aria-hidden="true" />
-            <h3>整理资料</h3>
-            <p>用文件夹和块编辑器编写、查找和引用教学文档。</p>
-          </article>
-          <article>
-            <Presentation aria-hidden="true" />
-            <h3>课件展示</h3>
-            <p>把已有文档组合成课件，并直接用于课堂展示。</p>
-          </article>
-          <article>
-            <ClipboardCheck aria-hidden="true" />
-            <h3>练习与批改</h3>
-            <p>发布练习，自动批改客观题，集中处理人工批改。</p>
-          </article>
-          <article>
-            <ShieldCheck aria-hidden="true" />
-            <h3>成员与课堂</h3>
-            <p>用成员标签快速组织师生，并按课堂管理教学范围。</p>
-          </article>
+        <div className="marketing-index">
+          {FEATURES.map((feature) => (
+            <article key={feature.index}>
+              <span aria-hidden="true">{feature.index}</span>
+              <h3>{feature.title}</h3>
+              <p>{feature.description}</p>
+            </article>
+          ))}
         </div>
       </section>
+
+      <footer className="marketing-footer">
+        <span>HFLive</span>
+        <a
+          href="https://github.com/HFLive/liveboard"
+          target="_blank"
+          rel="noreferrer"
+        >
+          GitHub
+          <ArrowUpRight aria-hidden="true" />
+        </a>
+      </footer>
     </main>
   );
 }

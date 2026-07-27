@@ -1,26 +1,31 @@
-/* 登录页：安静居中的扁平卡片。 */
+/* 登录页：左侧深色品牌面版 + 右侧表单栏；窄屏时面版收成品牌条，表单整宽铺开。 */
 
 .login-wrap {
   display: grid;
+  grid-template-columns: minmax(360px, 5fr) minmax(0, 7fr);
+  place-items: stretch;
   min-height: 100dvh;
-  place-items: center;
   background: var(--bg);
-  padding: 24px;
+  padding: 0;
 }
 
-.login-card {
-  width: min(400px, 100%);
-  border: 1px solid var(--line-strong);
-  border-radius: 14px;
-  background: var(--surface-raised);
-  padding: 30px 28px;
+/* —— 品牌面版（深色，取自应用侧边栏的墨色） —— */
+
+.login-aside {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 32px;
+  background: var(--rail);
+  color: var(--rail-ink);
+  padding: 28px 44px 30px;
 }
 
 .login-brand-link {
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  color: var(--text);
+  justify-self: start;
+  color: var(--rail-ink);
   text-decoration: none;
 }
 
@@ -30,8 +35,8 @@
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: var(--rail);
-  color: var(--rail-ink);
+  background: var(--rail-ink);
+  color: var(--rail);
   font-size: 12px;
   font-weight: 750;
 }
@@ -41,50 +46,206 @@
   font-weight: 700;
 }
 
+.login-aside-copy {
+  align-self: center;
+  max-width: 420px;
+}
+
+.login-aside-statement {
+  margin: 0;
+  font-size: clamp(22px, 2.4vw, 30px);
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.login-aside-statement span {
+  color: var(--accent);
+}
+
+.login-aside-sub {
+  margin: 14px 0 0;
+  color: var(--rail-muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.login-aside-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--rail-muted);
+  font-size: 13px;
+}
+
+.login-aside-foot a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--rail-muted);
+  text-decoration: none;
+}
+
+.login-aside-foot a:hover {
+  color: var(--rail-ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.login-aside-foot svg {
+  width: 13px;
+  height: 13px;
+}
+
+.login-aside a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: var(--radius-xs);
+}
+
+/* —— 表单区 —— */
+
+.login-main {
+  display: grid;
+  place-items: center;
+  padding: 48px 32px;
+}
+
+.login-column {
+  width: min(360px, 100%);
+}
+
 .login-card-head {
-  margin: 22px 0 18px;
+  margin: 0 0 22px;
 }
 
 .login-card-head h1 {
   margin: 0;
-  font-size: 22px;
-  font-weight: 680;
-  letter-spacing: -0.02em;
+  font-size: 26px;
+  font-weight: 700;
 }
 
 .login-card-head p {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   color: var(--muted);
   font-size: 13px;
 }
 
 .login-support {
-  margin: 16px 0 0;
+  margin: 18px 0 0;
   color: var(--muted);
   font-size: 12px;
   text-align: center;
 }
 
-.login-card .login-form .input,
-.login-card .login-submit {
-  min-height: 42px;
+.login-column .login-form .input,
+.login-column .login-submit {
+  min-height: 44px;
 }
 
-/* 与全站主操作一致：深色实心按钮，而不是旧版琥珀色。 */
-.login-card .login-submit {
+.login-column .login-submit {
+  width: 100%;
+  margin-top: 4px;
   border-color: var(--text);
   background: var(--text);
   box-shadow: none;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease;
 }
 
-.login-card .login-submit:hover {
-  border-color: var(--text);
-  background: var(--text);
+.login-column .login-submit:hover:not(:disabled) {
+  border-color: var(--accent-dark);
+  background: var(--accent-dark);
+}
+
+/* 开发环境快捷登录：扁平目录行，取代迷你卡片。 */
+
+.login-column .demo-accounts {
+  gap: 6px;
+  margin-top: 24px;
+  padding-top: 16px;
+}
+
+.login-column .demo-account-list {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+}
+
+.login-column .demo-account {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 9px 10px;
+  transition: background-color 0.14s ease;
+}
+
+.login-column .demo-account:hover {
+  background: var(--fill-hover);
+}
+
+.login-column .demo-account.active {
+  background: var(--accent-soft);
+}
+
+.login-column .demo-account > span:first-child {
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.login-column .demo-account-credentials {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.login-column .demo-account-credentials strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.login-column .demo-account-credentials code {
+  font-size: 11px;
+}
+
+/* —— 窄屏：品牌条 + 整宽表单，无卡片 —— */
+
+@media (max-width: 900px) {
+  .login-wrap {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .login-aside {
+    display: flex;
+    padding: 16px 20px;
+  }
+
+  .login-aside-copy,
+  .login-aside-foot {
+    display: none;
+  }
+
+  .login-main {
+    display: block;
+    padding: 40px 24px 48px;
+  }
+
+  .login-column {
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+  }
 }
 
 @media (max-width: 460px) {
-  .login-wrap {
-    align-items: start;
-    padding: 20px 14px;
+  .login-main {
+    padding: 32px 20px 40px;
   }
 }
