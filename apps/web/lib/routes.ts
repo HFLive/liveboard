@@ -50,11 +50,7 @@ export function exerciseEdit(exerciseSetId: string): Route {
 }
 
 export type ClassroomDetailTab =
-  | "announcements"
-  | "teaching"
-  | "exercises"
-  | "files"
-  | "members";
+  "announcements" | "teaching" | "exercises" | "files" | "members";
 
 export function classroomDetail(
   classroomId: string,
@@ -62,7 +58,9 @@ export function classroomDetail(
 ): Route {
   const base = `/app/classrooms/${routeSegment(classroomId)}`;
   // 默认标签（公告）不带参数，保持 URL 干净。
-  return (tab && tab !== "announcements" ? `${base}?tab=${tab}` : base) as Route;
+  return (
+    tab && tab !== "announcements" ? `${base}?tab=${tab}` : base
+  ) as Route;
 }
 
 export function classroomTeachingNew(classroomId: string): Route {

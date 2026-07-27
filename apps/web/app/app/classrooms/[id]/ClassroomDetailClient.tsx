@@ -419,12 +419,13 @@ export function ClassroomDetailClient({
       ? file.filename.toLowerCase().includes(normalizedQuery)
       : true,
   );
-  const filteredAnnouncements = classroom.announcements.filter((announcement) =>
-    normalizedQuery
-      ? `${announcement.title} ${announcement.content}`
-          .toLowerCase()
-          .includes(normalizedQuery)
-      : true,
+  const filteredAnnouncements = classroom.announcements.filter(
+    (announcement) =>
+      normalizedQuery
+        ? `${announcement.title} ${announcement.content}`
+            .toLowerCase()
+            .includes(normalizedQuery)
+        : true,
   );
 
   return (
@@ -618,7 +619,10 @@ export function ClassroomDetailClient({
           ))}
           {filteredAnnouncements.length === 0 ? (
             normalizedQuery ? (
-              <ClassroomEmpty detail="换个关键词试试。" title="没有匹配的公告" />
+              <ClassroomEmpty
+                detail="换个关键词试试。"
+                title="没有匹配的公告"
+              />
             ) : (
               <ClassroomEmpty
                 detail={
@@ -671,7 +675,10 @@ export function ClassroomDetailClient({
           ))}
           {filteredDecks.length === 0 ? (
             normalizedQuery ? (
-              <ClassroomEmpty detail="换个关键词试试。" title="没有匹配的课件" />
+              <ClassroomEmpty
+                detail="换个关键词试试。"
+                title="没有匹配的课件"
+              />
             ) : (
               <ClassroomEmpty
                 detail={
@@ -722,7 +729,10 @@ export function ClassroomDetailClient({
           ))}
           {filteredExercises.length === 0 ? (
             normalizedQuery ? (
-              <ClassroomEmpty detail="换个关键词试试。" title="没有匹配的练习" />
+              <ClassroomEmpty
+                detail="换个关键词试试。"
+                title="没有匹配的练习"
+              />
             ) : (
               <ClassroomEmpty
                 detail={
@@ -774,7 +784,10 @@ export function ClassroomDetailClient({
           ))}
           {filteredFiles.length === 0 ? (
             normalizedQuery ? (
-              <ClassroomEmpty detail="换个关键词试试。" title="没有匹配的文件" />
+              <ClassroomEmpty
+                detail="换个关键词试试。"
+                title="没有匹配的文件"
+              />
             ) : (
               <ClassroomEmpty
                 detail={

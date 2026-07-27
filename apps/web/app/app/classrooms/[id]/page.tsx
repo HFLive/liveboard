@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
-import { ClassroomDetailClient, type ClassroomTab } from "./ClassroomDetailClient";
+import {
+  ClassroomDetailClient,
+  type ClassroomTab,
+} from "./ClassroomDetailClient";
 import "../classrooms.css";
 
 export const metadata: Metadata = { title: "课堂" };
