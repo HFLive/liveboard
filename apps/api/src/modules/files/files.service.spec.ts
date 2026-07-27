@@ -13,8 +13,10 @@ describe("FilesService", () => {
   const tx = {
     contentBlock: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
       create: jest.fn(),
       createMany: jest.fn(),
+      update: jest.fn(),
     },
     file: {
       create: jest.fn(),
@@ -204,6 +206,50 @@ describe("FilesService", () => {
       where: { id: "target-file" },
       data: { version: { increment: 1 }, updatedById: "owner-1" },
     });
+  });
+
+  it("inserts the block after the anchor and renumbers sort order", async () => {
+    tx.contentBlock.findMany.mockResolvedValue([
+      { id: "block-a" },
+      { id: "block-b" },
+      { id: "block-c" },
+    ]);
+    tx.contentBlock.create.mockResolvedValue({ id: "block-new" });
+
+    const created = await service.createBlock("owner-1", "target-file", {
+      type: "paragraph",
+      dataJson: { text: "插入到中间" },
+      afterBlockId: "block-a",
+    });
+
+    expect(tx.contentBlock.update).toHaveBeenCalledTimes(4);
+    const renumbered = tx.contentBlock.update.mock.calls.map(
+      ([call]) => [call.where.id, call.data.sortOrder] as const,
+    );
+    expect(renumbered).toEqual([
+      ["block-a", 10],
+      ["block-new", 20],
+      ["block-b", 30],
+      ["block-c", 40],
+    ]);
+    expect(created.sortOrder).toBe(20);
+    expect(tx.file.update).toHaveBeenCalledWith({
+      where: { id: "target-file" },
+      data: { version: { increment: 1 }, updatedById: "owner-1" },
+    });
+  });
+
+  it("rejects a positioned insert when the anchor block is missing", async () => {
+    tx.contentBlock.findMany.mockResolvedValue([{ id: "block-a" }]);
+
+    await expect(
+      service.createBlock("owner-1", "target-file", {
+        type: "paragraph",
+        dataJson: { text: "插入" },
+        afterBlockId: "missing-block",
+      }),
+    ).rejects.toThrow("Invalid afterBlockId");
+    expect(tx.contentBlock.create).not.toHaveBeenCalled();
   });
 
   it("validates table dimensions and math payloads before writing", async () => {

@@ -1873,6 +1873,51 @@ p.muted {
   margin-left: auto;
 }
 
+.asset-preview-dialog {
+  width: min(880px, 100%);
+}
+
+.asset-preview-dialog .modal-head h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-preview-body {
+  place-items: center;
+  min-height: 160px;
+  background: var(--panel-soft);
+}
+
+.asset-preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: min(62vh, 560px);
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.asset-preview-fallback {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 36px 12px;
+  text-align: center;
+}
+
+.asset-preview-fallback svg {
+  width: 40px;
+  height: 40px;
+  color: var(--muted);
+}
+
+.asset-preview-fallback strong {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .panel-head {
   display: flex;
   align-items: flex-start;
@@ -3141,7 +3186,7 @@ p.muted {
 .doc-block {
   position: relative;
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr);
+  grid-template-columns: 80px minmax(0, 1fr);
   align-items: start;
   min-height: 42px;
   border: 1px solid transparent;
@@ -3167,10 +3212,15 @@ p.muted {
   z-index: 2;
   top: -5px;
   right: 0;
-  left: 54px;
+  left: 80px;
   height: 2px;
   background: var(--focus);
   content: "";
+}
+
+.doc-block.drop-target.drop-after::before {
+  top: auto;
+  bottom: -5px;
 }
 
 .doc-block-controls {
@@ -3235,6 +3285,24 @@ p.muted {
   height: 28px;
   border-radius: var(--radius-sm);
   cursor: grab;
+}
+
+/* 块槽位按钮（插入、更多）与拖拽把手保持同一紧凑尺寸。 */
+.doc-block-controls :is(.block-insert-button, .row-more-button),
+.doc-block-controls
+  :is(.block-insert-button, .row-more-button).icon-button.subtle {
+  width: 24px;
+  height: 28px;
+  min-height: 28px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+}
+
+.doc-block-controls :is(.block-insert-button, .row-more-button):hover {
+  background: #fff;
+  color: var(--text);
 }
 
 .drag-handle:hover {
@@ -3343,6 +3411,17 @@ p.muted {
 
 .doc-add-block .button {
   justify-self: start;
+}
+
+.doc-add-block-actions {
+  display: flex;
+  justify-self: start;
+  gap: 8px;
+}
+
+/* 块间内联插入表单与块体左对齐，弱化上下间距。 */
+.doc-inline-inserter {
+  margin: 2px 0 8px 80px;
 }
 
 .media-block-editor {
@@ -5027,12 +5106,12 @@ p.muted {
   }
 
   .doc-block {
-    grid-template-columns: 58px minmax(0, 1fr);
+    grid-template-columns: 80px minmax(0, 1fr);
     gap: 4px;
   }
 
   .doc-block.drop-target::before {
-    left: 58px;
+    left: 80px;
   }
 
   .doc-block-controls {

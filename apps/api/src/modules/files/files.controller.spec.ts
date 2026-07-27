@@ -49,6 +49,40 @@ describe("FilesController Markdown endpoints", () => {
     expect(stream.pipe).toHaveBeenCalledWith(response);
   });
 
+  it("forces attachment download for images when download is requested", async () => {
+    const stream = { pipe: jest.fn() };
+    assetsService.getAssetForDownload.mockResolvedValue({
+      asset: { filename: "preview.png", mimeType: "image/png" },
+      stream,
+    });
+
+    await controller.getAsset(
+      "user-1",
+      "asset-1",
+      response as unknown as Response,
+      "1",
+    );
+
+    expect(assetsService.getAssetForDownload).toHaveBeenCalledWith(
+      "user-1",
+      "asset-1",
+      true,
+    );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Content-Type",
+      "application/octet-stream",
+    );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Content-Disposition",
+      'attachment; filename="preview.png"',
+    );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Cross-Origin-Resource-Policy",
+      "same-origin",
+    );
+    expect(stream.pipe).toHaveBeenCalledWith(response);
+  });
+
   it("keeps download-only attachments restricted to the same origin", async () => {
     const stream = { pipe: jest.fn() };
     assetsService.getAssetForDownload.mockResolvedValue({

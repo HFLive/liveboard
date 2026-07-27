@@ -23,6 +23,7 @@ vi.mock("@/lib/api", () => ({
       super(message);
     }
   },
+  assetDownloadUrl: vi.fn((assetId: string) => `/assets/${assetId}?download=1`),
   deleteLibraryAsset: vi.fn(),
   listLibraryAssets: vi.fn(),
   listAssetReferences: vi.fn(),

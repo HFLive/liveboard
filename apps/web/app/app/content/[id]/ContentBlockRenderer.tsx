@@ -1,6 +1,6 @@
 import type { ContentBlockType } from "@liveboard/shared";
 import { normalizeBilibiliEmbedUrl } from "@liveboard/shared/bilibili";
-import type { ContentBlock } from "@/lib/api";
+import { attachmentDownloadUrl, type ContentBlock } from "@/lib/api";
 import { MathFormula, RichText } from "./RichText";
 
 export const blockTypeOptions: Array<{
@@ -272,7 +272,7 @@ export function RenderBlockContent({ block }: { block: ContentBlock }) {
     return url ? (
       <a
         className="render-attachment"
-        href={url}
+        href={attachmentDownloadUrl(url)}
         rel="noreferrer"
         target="_blank"
       >

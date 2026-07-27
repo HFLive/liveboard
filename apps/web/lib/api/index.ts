@@ -47,6 +47,23 @@ export function apiResourceUrl(path: string) {
   return path.startsWith("http") ? path : `${API_URL}${path}`;
 }
 
+// 附件资源默认按 Content-Disposition: inline 返回安全图片，便于 <img> 引用；
+// 下载场景需要显式带上 download=1，让 API 强制改为 attachment，避免浏览器
+// 直接打开裸文件页。
+export function assetDownloadUrl(assetId: string) {
+  return apiResourceUrl(`/assets/${assetId}?download=1`);
+}
+
+// 内容块里的附件链接指向 /assets/:id，点击图片类附件会打开裸图页；
+// 统一补 download=1 强制下载，外部链接原样返回。
+export function attachmentDownloadUrl(url: string) {
+  const isAssetUrl =
+    url.startsWith("/assets/") || url.startsWith(`${API_URL}/assets/`);
+  if (!isAssetUrl) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}download=1`;
+}
+
 let currentUserRequest: Promise<{ user: UserProfile }> | null = null;
 let currentUserCache:
   { value: { user: UserProfile }; expiresAt: number } | undefined;
@@ -1135,12 +1152,14 @@ export function createBlock(input: {
   fileId: string;
   type: ContentBlockType;
   dataJson: unknown;
+  afterBlockId?: string;
 }) {
   return request<{ block: ContentBlock }>(`/files/${input.fileId}/blocks`, {
     method: "POST",
     body: JSON.stringify({
       type: input.type,
       dataJson: input.dataJson,
+      ...(input.afterBlockId ? { afterBlockId: input.afterBlockId } : {}),
     }),
   });
 }
