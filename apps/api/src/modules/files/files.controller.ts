@@ -112,6 +112,11 @@ class CreateBlockDto {
 
   @IsObject()
   dataJson!: Record<string, unknown>;
+
+  // 指定后把新块插入到该块之后；缺省追加到文末。
+  @IsOptional()
+  @IsString()
+  afterBlockId?: string;
 }
 
 class UpdateBlockDto {
@@ -437,16 +442,22 @@ export class FilesController {
     @CurrentUserId() userId: string | null,
     @Param("id") assetId: string,
     @Res() res: Response,
+    @Query("download") download?: string,
   ) {
+    const forceDownload = download === "1" || download === "true";
     const { asset, stream, redirectUrl } =
-      await this.assetsService.getAssetForDownload(userId, assetId);
+      await this.assetsService.getAssetForDownload(
+        userId,
+        assetId,
+        forceDownload,
+      );
 
     if (redirectUrl) {
       res.redirect(302, redirectUrl);
       return;
     }
 
-    const inline = isSafeInlineAssetMime(asset.mimeType);
+    const inline = !forceDownload && isSafeInlineAssetMime(asset.mimeType);
     res.setHeader(
       "Content-Type",
       inline ? asset.mimeType : "application/octet-stream",

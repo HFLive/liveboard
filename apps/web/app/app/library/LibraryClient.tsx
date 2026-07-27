@@ -16,6 +16,7 @@ import {
 import {
   AssetInUseError,
   AssetReferenceSummary,
+  assetDownloadUrl,
   deleteLibraryAsset,
   FileAssetSummary,
   listLibraryAssets,
@@ -192,9 +193,8 @@ export function LibraryClient() {
     selected.forEach((asset, index) => {
       window.setTimeout(() => {
         const anchor = document.createElement("a");
-        anchor.href = asset.url;
+        anchor.href = assetDownloadUrl(asset.id);
         anchor.download = asset.filename;
-        anchor.target = "_blank";
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
@@ -530,7 +530,7 @@ export function LibraryClient() {
                     文件操作
                   </summary>
                   <div className="context-menu">
-                    <a href={selectedAsset.url} target="_blank">
+                    <a href={assetDownloadUrl(selectedAsset.id)}>
                       <Download aria-hidden="true" /> 下载
                     </a>
                     <button

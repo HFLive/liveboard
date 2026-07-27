@@ -111,7 +111,11 @@ export class AssetsService {
     };
   }
 
-  async getAssetForDownload(userId: string | null, assetId: string) {
+  async getAssetForDownload(
+    userId: string | null,
+    assetId: string,
+    forceDownload = false,
+  ) {
     if (!userId) {
       throw new UnauthorizedException("Missing session");
     }
@@ -126,7 +130,7 @@ export class AssetsService {
 
     await this.assertCanViewAsset(userId, asset);
 
-    const inline = isSafeInlineAssetMime(asset.mimeType);
+    const inline = !forceDownload && isSafeInlineAssetMime(asset.mimeType);
     const redirectUrl = await this.storage.presignDownload(
       asset.storageBackend,
       asset.storageKey,

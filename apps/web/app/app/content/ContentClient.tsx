@@ -53,6 +53,7 @@ import {
   createFile,
   createFolder,
   apiResourceUrl,
+  assetDownloadUrl,
   deleteFile,
   deleteFolder,
   deleteLibraryAsset,
@@ -76,6 +77,7 @@ import { APP_ROUTES, contentDetail } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { SortIconSelect } from "@/components/SortIconSelect";
 import { PermissionUserPicker } from "@/components/PermissionUserPicker";
+import { AssetPreviewDialog } from "@/components/asset-preview/AssetPreviewDialog";
 import { MarkdownImportButton } from "./MarkdownImportButton";
 import {
   SkeletonRows,
@@ -94,7 +96,7 @@ type FloatingMenuState = {
   y: number;
 };
 type ContentRowMenuState = FloatingMenuState & {
-  targetType: "folder" | "file";
+  targetType: "folder" | "file" | "asset";
   surface: "tree" | "table";
 };
 type TreeDepthStyle = CSSProperties & {
@@ -207,6 +209,9 @@ export function ContentClient() {
   >([]);
   const [uploadingAsset, setUploadingAsset] = useState(false);
   const [renamingAsset, setRenamingAsset] = useState<FolderAssetSummary | null>(
+    null,
+  );
+  const [previewAsset, setPreviewAsset] = useState<FolderAssetSummary | null>(
     null,
   );
   const [assetRename, setAssetRename] = useState("");
@@ -798,11 +803,16 @@ export function ContentClient() {
     return { x, y };
   }
 
+  function getContentRowMenuItemCount() {
+    return canManagePins && activeFolderId !== null ? 6 : 5;
+  }
+
   function toggleContentRowMenu(
-    targetType: "folder" | "file",
+    targetType: ContentRowMenuState["targetType"],
     id: string,
     button: HTMLButtonElement,
     surface: ContentRowMenuState["surface"],
+    itemCount: number,
   ) {
     setOpenContentRowMenu((current) => {
       if (
@@ -817,10 +827,7 @@ export function ContentClient() {
         id,
         targetType,
         surface,
-        ...getFloatingMenuPosition(
-          button,
-          canManagePins && activeFolderId !== null ? 6 : 5,
-        ),
+        ...getFloatingMenuPosition(button, itemCount),
       };
     });
   }
@@ -1223,6 +1230,56 @@ export function ContentClient() {
     );
   }
 
+  function renderAssetContextMenu(asset: FolderAssetSummary) {
+    if (
+      openContentRowMenu?.targetType !== "asset" ||
+      openContentRowMenu.id !== asset.id
+    ) {
+      return null;
+    }
+
+    return (
+      <div
+        className="context-menu floating-context-menu content-row-context-menu"
+        data-menu-root="true"
+        style={{
+          left: openContentRowMenu.x,
+          top: openContentRowMenu.y,
+        }}
+      >
+        <a
+          href={assetDownloadUrl(asset.id)}
+          onClick={() => setOpenContentRowMenu(null)}
+        >
+          <Download aria-hidden="true" />
+          下载
+        </a>
+        <button
+          onClick={() => {
+            setOpenContentRowMenu(null);
+            setRenamingAsset(asset);
+            setAssetRename(asset.filename);
+          }}
+          type="button"
+        >
+          <Pencil aria-hidden="true" />
+          重命名
+        </button>
+        <button
+          className="danger"
+          onClick={() => {
+            setOpenContentRowMenu(null);
+            void onDeleteAsset(asset);
+          }}
+          type="button"
+        >
+          <Trash2 aria-hidden="true" />
+          删除
+        </button>
+      </div>
+    );
+  }
+
   function renderFileInlineRows(file: FileSummary) {
     return (
       <>
@@ -1379,6 +1436,7 @@ export function ContentClient() {
                     id,
                     event.currentTarget,
                     "table",
+                    getContentRowMenuItemCount(),
                   );
                 }}
                 title={isFolder ? "文件夹操作" : "文档操作"}
@@ -1471,6 +1529,7 @@ export function ContentClient() {
                   folder.id,
                   event.currentTarget,
                   "tree",
+                  getContentRowMenuItemCount(),
                 );
               }}
               title="文件夹操作"
@@ -1835,6 +1894,7 @@ export function ContentClient() {
                               folder.id,
                               event.currentTarget,
                               "table",
+                              getContentRowMenuItemCount(),
                             );
                           }}
                           title="文件夹操作"
@@ -1896,6 +1956,7 @@ export function ContentClient() {
                                 file.id,
                                 event.currentTarget,
                                 "table",
+                                getContentRowMenuItemCount(),
                               );
                             }}
                             title="文档操作"
@@ -1919,6 +1980,10 @@ export function ContentClient() {
                       <a
                         className="content-file-link"
                         href={apiResourceUrl(`/assets/${asset.id}`)}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          setPreviewAsset(asset);
+                        }}
                       >
                         <FileIcon aria-hidden="true" />
                         {asset.filename}
@@ -1933,44 +1998,32 @@ export function ContentClient() {
                     <td data-label="操作">
                       <div className="content-asset-actions">
                         {asset.canManage ? (
-                          <details className="editor-more-menu">
-                            <summary
+                          <div className="row-menu-wrap" data-menu-root="true">
+                            <button
                               aria-label={`“${asset.filename}”文件操作`}
-                              className="icon-button subtle"
+                              className="icon-button subtle content-row-menu-button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                toggleContentRowMenu(
+                                  "asset",
+                                  asset.id,
+                                  event.currentTarget,
+                                  "table",
+                                  3,
+                                );
+                              }}
                               title="文件操作"
+                              type="button"
                             >
                               <MoreHorizontal aria-hidden="true" />
-                            </summary>
-                            <div className="context-menu">
-                              <a href={apiResourceUrl(`/assets/${asset.id}`)}>
-                                <Download aria-hidden="true" />
-                                下载
-                              </a>
-                              <button
-                                onClick={() => {
-                                  setRenamingAsset(asset);
-                                  setAssetRename(asset.filename);
-                                }}
-                                type="button"
-                              >
-                                <Pencil aria-hidden="true" />
-                                重命名
-                              </button>
-                              <button
-                                className="danger"
-                                onClick={() => void onDeleteAsset(asset)}
-                                type="button"
-                              >
-                                <Trash2 aria-hidden="true" />
-                                删除
-                              </button>
-                            </div>
-                          </details>
+                            </button>
+                            {renderAssetContextMenu(asset)}
+                          </div>
                         ) : (
                           <a
                             aria-label={`下载“${asset.filename}”`}
                             className="icon-button subtle"
-                            href={apiResourceUrl(`/assets/${asset.id}`)}
+                            href={assetDownloadUrl(asset.id)}
                             title="下载"
                           >
                             <Download aria-hidden="true" />
@@ -2311,6 +2364,11 @@ export function ContentClient() {
           </section>
         </div>
       ) : null}
+
+      <AssetPreviewDialog
+        asset={previewAsset}
+        onClose={() => setPreviewAsset(null)}
+      />
 
       {renamingAsset ? (
         <div className="modal-backdrop" role="presentation">

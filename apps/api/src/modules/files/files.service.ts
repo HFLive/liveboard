@@ -72,6 +72,7 @@ export interface UpdateContentPinsInput {
 export interface CreateBlockInput {
   type: ContentBlockType;
   dataJson: unknown;
+  afterBlockId?: string;
 }
 
 export interface UpdateBlockInput {
@@ -818,6 +819,10 @@ export class FilesService {
       input.dataJson,
     );
 
+    if (input.afterBlockId) {
+      return this.createBlockAfter(userId, fileId, input, input.afterBlockId);
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const maxBlock = await tx.contentBlock.findFirst({
         where: { fileId },
@@ -839,6 +844,62 @@ export class FilesService {
         data: { version: { increment: 1 }, updatedById: userId },
       });
       return block;
+    });
+  }
+
+  // 在指定块之后插入：创建后按目标顺序整体重排 sortOrder（步进 10），
+  // 与 reorderBlocks 的编号保持一致，避免分数排序在 Int 字段上耗尽间隙。
+  private async createBlockAfter(
+    userId: string,
+    fileId: string,
+    input: CreateBlockInput,
+    afterBlockId: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.contentBlock.findMany({
+        where: { fileId },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        select: { id: true },
+      });
+      const anchorIndex = existing.findIndex(
+        (block) => block.id === afterBlockId,
+      );
+
+      if (anchorIndex < 0) {
+        throw new BadRequestException("Invalid afterBlockId");
+      }
+
+      const block = await tx.contentBlock.create({
+        data: {
+          fileId,
+          type: input.type,
+          dataJson: input.dataJson as Prisma.InputJsonValue,
+          sortOrder: 0,
+          createdById: userId,
+          updatedById: userId,
+        },
+      });
+
+      const orderedIds = [
+        ...existing.slice(0, anchorIndex + 1).map((item) => item.id),
+        block.id,
+        ...existing.slice(anchorIndex + 1).map((item) => item.id),
+      ];
+
+      await Promise.all(
+        orderedIds.map((blockId, index) =>
+          tx.contentBlock.update({
+            where: { id: blockId },
+            data: { sortOrder: (index + 1) * 10, updatedById: userId },
+          }),
+        ),
+      );
+      await tx.file.update({
+        where: { id: fileId },
+        data: { version: { increment: 1 }, updatedById: userId },
+      });
+
+      return { ...block, sortOrder: (anchorIndex + 2) * 10 };
     });
   }
 

@@ -441,11 +441,3 @@
   display: flex;
   justify-content: flex-end;
 }
-
-.content-asset-actions .editor-more-menu {
-  position: relative;
-}
-
-.content-asset-actions .context-menu {
-  right: 0;
-}

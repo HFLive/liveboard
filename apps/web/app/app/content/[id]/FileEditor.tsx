@@ -3,6 +3,7 @@
 import {
   type CSSProperties,
   FormEvent,
+  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -34,6 +35,7 @@ import {
 } from "lucide-react";
 import {
   ContentBlock,
+  attachmentDownloadUrl,
   createBlock,
   deletePermissionGrant,
   deleteBlock,
@@ -88,6 +90,113 @@ const blockShortcuts: Array<{ command: string; type: ContentBlockType }> = [
   { command: "/math", type: "math" },
   { command: "/bilibili", type: "bilibili" },
 ];
+
+// 添加块的表单：底部追加和块间内联插入共用，各自持有输入状态互不干扰。
+function AddBlockForm({
+  autoFocus = false,
+  className,
+  onCancel,
+  onSubmit,
+  submitLabel = "添加块",
+}: {
+  autoFocus?: boolean;
+  className?: string;
+  onCancel?: () => void;
+  onSubmit: (type: ContentBlockType, text: string) => Promise<void>;
+  submitLabel?: string;
+}) {
+  const [newType, setNewType] = useState<ContentBlockType>("paragraph");
+  const [newText, setNewText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  function onNewTextChange(value: string) {
+    const shortcut = blockShortcuts.find((item) =>
+      value.startsWith(`${item.command} `),
+    );
+
+    if (shortcut) {
+      setNewType(shortcut.type);
+      setNewText(value.slice(shortcut.command.length + 1));
+      return;
+    }
+
+    if (value === "/hr") {
+      setNewType("divider");
+      setNewText("");
+      return;
+    }
+
+    setNewText(value);
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+
+    try {
+      await onSubmit(newType, newText);
+      setNewText("");
+      onCancel?.();
+    } catch {
+      // 错误提示由父组件统一展示，表单保留输入内容。
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form className={className} onSubmit={(event) => void handleSubmit(event)}>
+      <select
+        aria-label="内容块类型"
+        className="select"
+        value={newType}
+        onChange={(event) => setNewType(event.target.value as ContentBlockType)}
+      >
+        {blockTypeOptions
+          .filter((option) => option.value !== "attachment")
+          .map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+      </select>
+      {["divider", "table", "image"].includes(newType) ? null : (
+        <AutoTextarea
+          autoFocus={autoFocus}
+          className="doc-new-block-input"
+          onChange={(event) => onNewTextChange(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+              event.currentTarget.form?.requestSubmit();
+            }
+
+            if (event.key === "Escape") {
+              onCancel?.();
+            }
+          }}
+          placeholder="输入新内容，试试 /h1…/h6 /table /math /bilibili /code /quote /todo /hr"
+          rows={3}
+          value={newText}
+        />
+      )}
+      <div className="doc-add-block-actions">
+        {onCancel ? (
+          <button className="button secondary" onClick={onCancel} type="button">
+            取消
+          </button>
+        ) : null}
+        <button
+          className="button secondary"
+          disabled={submitting}
+          type="submit"
+        >
+          <Plus aria-hidden="true" className="button-icon" />
+          {submitting ? "添加中…" : submitLabel}
+        </button>
+      </div>
+    </form>
+  );
+}
 
 function getImageWidth(block: ContentBlock) {
   const value = asBlockData(block.dataJson).widthPercent;
@@ -345,8 +454,9 @@ export function FileEditor({ fileId }: { fileId: string }) {
   const [assetTargetBlockId, setAssetTargetBlockId] = useState<string | null>(
     null,
   );
-  const [newType, setNewType] = useState<ContentBlockType>("paragraph");
-  const [newText, setNewText] = useState("");
+  const [insertAfterBlockId, setInsertAfterBlockId] = useState<string | null>(
+    null,
+  );
   const [titleInput, setTitleInput] = useState("");
   const [openBlockMenu, setOpenBlockMenu] = useState<{
     id: string;
@@ -365,7 +475,10 @@ export function FileEditor({ fileId }: { fileId: string }) {
   const [showPermissions, setShowPermissions] = useState(false);
   const [showAssetModal, setShowAssetModal] = useState(false);
   const [draggingBlockId, setDraggingBlockId] = useState<string | null>(null);
-  const [dragOverBlockId, setDragOverBlockId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{
+    blockId: string;
+    position: "before" | "after";
+  } | null>(null);
   const [uploadingAsset, setUploadingAsset] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -491,43 +604,86 @@ export function FileEditor({ fileId }: { fileId: string }) {
     return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
   }, [saveState]);
 
-  async function onAddBlock(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function addBlockAt(
+    type: ContentBlockType,
+    text: string,
+    afterBlockId?: string,
+  ) {
     setError(null);
     setMessage(null);
 
     try {
       await createBlock({
         fileId,
-        type: newType,
-        dataJson: buildBlockData(newType, newText),
+        type,
+        dataJson: buildBlockData(type, text),
+        ...(afterBlockId ? { afterBlockId } : {}),
       });
-      setNewText("");
       setMessage("内容块已添加");
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "添加内容块失败");
+      // 让表单保留已输入的内容，避免失败时丢失。
+      throw caught;
     }
   }
 
-  function onNewTextChange(value: string) {
-    const shortcut = blockShortcuts.find((item) =>
-      value.startsWith(`${item.command} `),
-    );
-
-    if (shortcut) {
-      setNewType(shortcut.type);
-      setNewText(value.slice(shortcut.command.length + 1));
+  // 拖拽长距离移动时，指针靠近视口上下边缘自动滚动页面。
+  const dragPointerY = useRef<number | null>(null);
+  useEffect(() => {
+    if (!draggingBlockId) {
+      dragPointerY.current = null;
       return;
     }
 
-    if (value === "/hr") {
-      setNewType("divider");
-      setNewText("");
+    function trackPointer(event: DragEvent) {
+      dragPointerY.current = event.clientY;
+    }
+
+    function autoScrollStep() {
+      const y = dragPointerY.current;
+
+      if (y !== null) {
+        const edge = 96;
+        const maxSpeed = 24;
+
+        if (y < edge) {
+          window.scrollBy(0, -Math.ceil(((edge - y) / edge) * maxSpeed));
+        } else if (y > window.innerHeight - edge) {
+          window.scrollBy(
+            0,
+            Math.ceil(((y - (window.innerHeight - edge)) / edge) * maxSpeed),
+          );
+        }
+      }
+    }
+
+    document.addEventListener("dragover", trackPointer);
+    const interval = window.setInterval(autoScrollStep, 16);
+    return () => {
+      document.removeEventListener("dragover", trackPointer);
+      window.clearInterval(interval);
+      dragPointerY.current = null;
+    };
+  }, [draggingBlockId]);
+
+  function moveBlockByOffset(blockId: string, offset: -1 | 1) {
+    const index = blocks.findIndex((block) => block.id === blockId);
+    const targetIndex = index + offset;
+
+    if (index < 0 || targetIndex < 0 || targetIndex >= blocks.length) {
       return;
     }
 
-    setNewText(value);
+    const nextBlocks = [...blocks];
+    const [movedBlock] = nextBlocks.splice(index, 1);
+
+    if (!movedBlock) {
+      return;
+    }
+
+    nextBlocks.splice(targetIndex, 0, movedBlock);
+    void saveBlockOrder(nextBlocks);
   }
 
   function openAssetPicker(blockId: string) {
@@ -647,7 +803,11 @@ export function FileEditor({ fileId }: { fileId: string }) {
     }
   }
 
-  function moveBlock(blockId: string, targetBlockId: string) {
+  function moveBlock(
+    blockId: string,
+    targetBlockId: string,
+    position: "before" | "after",
+  ) {
     if (blockId === targetBlockId) {
       return;
     }
@@ -666,8 +826,16 @@ export function FileEditor({ fileId }: { fileId: string }) {
       return;
     }
 
-    nextBlocks.splice(targetIndex, 0, movedBlock);
-    setDragOverBlockId(null);
+    // 源块已移除，目标块的索引需要重新计算后再按方向插入。
+    const adjustedTargetIndex = nextBlocks.findIndex(
+      (block) => block.id === targetBlockId,
+    );
+    nextBlocks.splice(
+      position === "after" ? adjustedTargetIndex + 1 : adjustedTargetIndex,
+      0,
+      movedBlock,
+    );
+    setDropTarget(null);
     void saveBlockOrder(nextBlocks);
   }
 
@@ -1007,7 +1175,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
           {url ? (
             <a
               className="render-attachment editable-attachment"
-              href={url}
+              href={attachmentDownloadUrl(url)}
               rel="noreferrer"
               target="_blank"
             >
@@ -1280,126 +1448,180 @@ export function FileEditor({ fileId }: { fileId: string }) {
             <div className="editor-document-shell">
               <div className="document-editor">
                 {blocks.map((block) => (
-                  <article
-                    className={`doc-block ${draggingBlockId === block.id ? "dragging" : ""} ${
-                      dragOverBlockId === block.id &&
-                      draggingBlockId !== block.id
-                        ? "drop-target"
-                        : ""
-                    }`}
-                    id={`block-${block.id}`}
-                    key={block.id}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDragEnter={() => {
-                      if (draggingBlockId && draggingBlockId !== block.id) {
-                        setDragOverBlockId(block.id);
-                      }
-                    }}
-                    onDrop={() => {
-                      if (draggingBlockId) {
-                        moveBlock(draggingBlockId, block.id);
-                        setDraggingBlockId(null);
-                      }
-                    }}
-                  >
-                    <div className="doc-block-controls" data-menu-root="true">
-                      <span
-                        className="drag-handle"
-                        draggable
-                        onDragEnd={() => {
-                          setDraggingBlockId(null);
-                          setDragOverBlockId(null);
-                        }}
-                        onDragStart={() => {
-                          setDraggingBlockId(block.id);
-                          setDragOverBlockId(null);
-                        }}
-                        title="拖动排序"
-                      >
-                        <GripVertical aria-hidden="true" />
-                      </span>
-                      <button
-                        className="icon-button subtle row-more-button"
-                        onClick={(event) =>
-                          toggleBlockMenu(block.id, event.currentTarget)
+                  <Fragment key={block.id}>
+                    <article
+                      className={`doc-block ${draggingBlockId === block.id ? "dragging" : ""} ${
+                        dropTarget?.blockId === block.id &&
+                        draggingBlockId !== block.id
+                          ? `drop-target drop-${dropTarget.position}`
+                          : ""
+                      }`}
+                      id={`block-${block.id}`}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+
+                        if (!draggingBlockId) {
+                          return;
                         }
-                        title="内容块操作"
-                        type="button"
-                      >
-                        <MoreHorizontal aria-hidden="true" />
-                      </button>
-                    </div>
-                    <div className="doc-block-body">
-                      <div className="doc-block-toolbar">
-                        <select
-                          className="block-type-select"
-                          title="内容块类型"
-                          value={block.type}
-                          onChange={(event) =>
-                            void onUpdateBlockType(
-                              block,
-                              event.target.value as ContentBlockType,
+
+                        if (draggingBlockId === block.id) {
+                          setDropTarget((current) =>
+                            current ? null : current,
+                          );
+                          return;
+                        }
+
+                        const rect =
+                          event.currentTarget.getBoundingClientRect();
+                        const position =
+                          event.clientY < rect.top + rect.height / 2
+                            ? "before"
+                            : "after";
+
+                        setDropTarget((current) =>
+                          current?.blockId === block.id &&
+                          current.position === position
+                            ? current
+                            : { blockId: block.id, position },
+                        );
+                      }}
+                      onDrop={() => {
+                        if (
+                          draggingBlockId &&
+                          dropTarget?.blockId === block.id
+                        ) {
+                          moveBlock(
+                            draggingBlockId,
+                            block.id,
+                            dropTarget.position,
+                          );
+                        }
+                        setDraggingBlockId(null);
+                        setDropTarget(null);
+                      }}
+                    >
+                      <div className="doc-block-controls" data-menu-root="true">
+                        <button
+                          aria-label="在下方插入块"
+                          className="icon-button subtle block-insert-button"
+                          onClick={() =>
+                            setInsertAfterBlockId((current) =>
+                              current === block.id ? null : block.id,
                             )
                           }
+                          title="在下方插入块"
+                          type="button"
                         >
-                          {blockTypeOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
+                          <Plus aria-hidden="true" />
+                        </button>
+                        <span
+                          className="drag-handle"
+                          draggable
+                          onDragEnd={() => {
+                            setDraggingBlockId(null);
+                            setDropTarget(null);
+                          }}
+                          onDragStart={() => {
+                            setDraggingBlockId(block.id);
+                            setDropTarget(null);
+                          }}
+                          title="拖动排序"
+                        >
+                          <GripVertical aria-hidden="true" />
+                        </span>
+                        <button
+                          className="icon-button subtle row-more-button"
+                          onClick={(event) =>
+                            toggleBlockMenu(block.id, event.currentTarget)
+                          }
+                          title="内容块操作"
+                          type="button"
+                        >
+                          <MoreHorizontal aria-hidden="true" />
+                        </button>
                       </div>
-                      {renderBlockEditor(block)}
-                    </div>
-                  </article>
+                      <div className="doc-block-body">
+                        <div className="doc-block-toolbar">
+                          <select
+                            className="block-type-select"
+                            title="内容块类型"
+                            value={block.type}
+                            onChange={(event) =>
+                              void onUpdateBlockType(
+                                block,
+                                event.target.value as ContentBlockType,
+                              )
+                            }
+                          >
+                            {blockTypeOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {renderBlockEditor(block)}
+                      </div>
+                    </article>
+                    {insertAfterBlockId === block.id ? (
+                      <AddBlockForm
+                        autoFocus
+                        className="doc-add-block doc-inline-inserter"
+                        onCancel={() => setInsertAfterBlockId(null)}
+                        onSubmit={(type, text) =>
+                          addBlockAt(type, text, block.id)
+                        }
+                        submitLabel="插入"
+                      />
+                    ) : null}
+                  </Fragment>
                 ))}
                 {blocks.length === 0 ? (
                   <div className="empty-state">这个文件还没有内容块。</div>
                 ) : null}
-                <form className="doc-add-block" onSubmit={onAddBlock}>
-                  <select
-                    className="select"
-                    value={newType}
-                    onChange={(event) =>
-                      setNewType(event.target.value as ContentBlockType)
-                    }
-                  >
-                    {blockTypeOptions
-                      .filter((option) => option.value !== "attachment")
-                      .map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                  </select>
-                  {["divider", "table", "image"].includes(newType) ? null : (
-                    <AutoTextarea
-                      className="doc-new-block-input"
-                      onChange={(event) => onNewTextChange(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (
-                          (event.metaKey || event.ctrlKey) &&
-                          event.key === "Enter"
-                        ) {
-                          event.currentTarget.form?.requestSubmit();
-                        }
-                      }}
-                      placeholder="输入新内容，试试 /h1…/h6 /table /math /bilibili /code /quote /todo /hr"
-                      rows={3}
-                      value={newText}
-                    />
-                  )}
-                  <button className="button secondary" type="submit">
-                    <Plus aria-hidden="true" className="button-icon" />
-                    添加块
-                  </button>
-                </form>
+                <AddBlockForm
+                  className="doc-add-block"
+                  onSubmit={(type, text) => addBlockAt(type, text)}
+                />
                 {openBlockMenu && menuBlock ? (
                   <div
                     className="context-menu floating-block-menu"
                     data-menu-root="true"
                     style={{ left: openBlockMenu.x, top: openBlockMenu.y }}
                   >
+                    <button
+                      onClick={() => {
+                        setOpenBlockMenu(null);
+                        setInsertAfterBlockId(menuBlock.id);
+                      }}
+                      type="button"
+                    >
+                      在下方插入块
+                    </button>
+                    {blocks.findIndex((block) => block.id === menuBlock.id) >
+                    0 ? (
+                      <button
+                        onClick={() => {
+                          setOpenBlockMenu(null);
+                          moveBlockByOffset(menuBlock.id, -1);
+                        }}
+                        type="button"
+                      >
+                        上移
+                      </button>
+                    ) : null}
+                    {blocks.findIndex((block) => block.id === menuBlock.id) <
+                    blocks.length - 1 ? (
+                      <button
+                        onClick={() => {
+                          setOpenBlockMenu(null);
+                          moveBlockByOffset(menuBlock.id, 1);
+                        }}
+                        type="button"
+                      >
+                        下移
+                      </button>
+                    ) : null}
                     <button
                       onClick={() => {
                         setOpenBlockMenu(null);

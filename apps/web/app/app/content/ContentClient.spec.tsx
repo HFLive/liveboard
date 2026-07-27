@@ -19,6 +19,7 @@ import {
 
 vi.mock("@/lib/api", () => ({
   apiResourceUrl: vi.fn((path: string) => path),
+  assetDownloadUrl: vi.fn((assetId: string) => `/assets/${assetId}?download=1`),
   createFile: vi.fn(),
   createFolder: vi.fn(),
   deleteFile: vi.fn(),
@@ -163,6 +164,46 @@ describe("ContentClient folder deletion", () => {
 
     await waitFor(() =>
       expect(deleteLibraryAsset).toHaveBeenCalledWith("asset-1"),
+    );
+  });
+
+  it("previews uploaded files in-app and downloads via attachment URL", async () => {
+    vi.mocked(listFiles).mockResolvedValue({
+      files: [],
+      standaloneAssets: [
+        {
+          id: "asset-1",
+          folderId: "folder-1",
+          filename: "截图.png",
+          mimeType: "image/png",
+          sizeBytes: 2048,
+          canManage: true,
+          updatedAt: "2026-07-20T08:00:00.000Z",
+        },
+      ],
+    });
+
+    render(<ContentClient />);
+    await enterFolderFromTree("课程资料");
+
+    fireEvent.click(await screen.findByRole("link", { name: /截图\.png/ }));
+
+    const dialog = await screen.findByRole("dialog", { name: "截图.png" });
+    expect(
+      within(dialog).getByRole("img", { name: "截图.png" }),
+    ).toHaveAttribute("src", "/assets/asset-1");
+    expect(within(dialog).getByRole("link", { name: "下载" })).toHaveAttribute(
+      "href",
+      "/assets/asset-1?download=1",
+    );
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle("文件操作"));
+    expect(await screen.findByRole("link", { name: "下载" })).toHaveAttribute(
+      "href",
+      "/assets/asset-1?download=1",
     );
   });
 
