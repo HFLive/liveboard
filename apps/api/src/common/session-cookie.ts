@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 const SESSION_COOKIE_VERSION = "v3";
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const HTTPS_SESSION_COOKIE_NAME = "liveboard_session";
+export const HTTP_SESSION_COOKIE_NAME = "liveboard_session_http";
 const DEFAULT_DEV_SECRET = "liveboard-dev-session-secret";
 
 export function shouldUseSecureSessionCookie() {
@@ -16,6 +18,28 @@ export function shouldUseSecureSessionCookie() {
   }
 
   return process.env.NODE_ENV === "production";
+}
+
+export function getSessionCookieName(secure = shouldUseSecureSessionCookie()) {
+  return secure ? HTTPS_SESSION_COOKIE_NAME : HTTP_SESSION_COOKIE_NAME;
+}
+
+export function verifySessionCookies(
+  cookies: Readonly<Record<string, string | undefined>> | undefined,
+  secure = shouldUseSecureSessionCookie(),
+) {
+  const names = secure
+    ? [HTTPS_SESSION_COOKIE_NAME]
+    : [HTTP_SESSION_COOKIE_NAME, HTTPS_SESSION_COOKIE_NAME];
+
+  for (const name of names) {
+    const session = verifySessionCookieValue(cookies?.[name]);
+    if (session) {
+      return session;
+    }
+  }
+
+  return null;
 }
 
 function getSessionSecret() {

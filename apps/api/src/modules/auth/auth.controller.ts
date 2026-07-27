@@ -16,6 +16,9 @@ import { CurrentUserId } from "../../common/current-user-id.decorator";
 import { Public } from "../../common/public.decorator";
 import {
   createSessionCookieValue,
+  getSessionCookieName,
+  HTTP_SESSION_COOKIE_NAME,
+  HTTPS_SESSION_COOKIE_NAME,
   SESSION_TTL_MS,
   shouldUseSecureSessionCookie,
 } from "../../common/session-cookie";
@@ -43,15 +46,16 @@ export class AuthController {
       body.password,
       req.ip || req.socket.remoteAddress || "unknown",
     );
+    const secure = shouldUseSecureSessionCookie();
     res.cookie(
-      "liveboard_session",
+      getSessionCookieName(secure),
       createSessionCookieValue(user.id, sessionVersion),
       {
         httpOnly: true,
         maxAge: SESSION_TTL_MS,
         path: "/",
         sameSite: "lax",
-        secure: shouldUseSecureSessionCookie(),
+        secure,
       },
     );
 
@@ -61,11 +65,20 @@ export class AuthController {
   @Post("logout")
   @Public()
   logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie("liveboard_session", {
+    const secure = shouldUseSecureSessionCookie();
+    res.clearCookie(getSessionCookieName(secure), {
       path: "/",
       sameSite: "lax",
-      secure: shouldUseSecureSessionCookie(),
+      secure,
     });
+    res.clearCookie(
+      secure ? HTTP_SESSION_COOKIE_NAME : HTTPS_SESSION_COOKIE_NAME,
+      {
+        path: "/",
+        sameSite: "lax",
+        secure: false,
+      },
+    );
     return { ok: true };
   }
 
@@ -169,15 +182,16 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.changePassword(userId, body);
+    const secure = shouldUseSecureSessionCookie();
     res.cookie(
-      "liveboard_session",
+      getSessionCookieName(secure),
       createSessionCookieValue(result.userId, result.sessionVersion),
       {
         httpOnly: true,
         maxAge: SESSION_TTL_MS,
         path: "/",
         sameSite: "lax",
-        secure: shouldUseSecureSessionCookie(),
+        secure,
       },
     );
     return { ok: true };

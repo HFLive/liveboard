@@ -1,7 +1,11 @@
 import {
   createSessionCookieValue,
+  getSessionCookieName,
+  HTTP_SESSION_COOKIE_NAME,
+  HTTPS_SESSION_COOKIE_NAME,
   SESSION_TTL_MS,
   shouldUseSecureSessionCookie,
+  verifySessionCookies,
   verifySessionCookieValue,
 } from "./session-cookie";
 
@@ -74,6 +78,44 @@ describe("session cookie", () => {
     process.env.SESSION_COOKIE_SECURE = "true";
 
     expect(shouldUseSecureSessionCookie()).toBe(true);
+  });
+
+  it("uses different cookie names for HTTPS and HTTP", () => {
+    expect(getSessionCookieName(true)).toBe(HTTPS_SESSION_COOKIE_NAME);
+    expect(getSessionCookieName(false)).toBe(HTTP_SESSION_COOKIE_NAME);
+  });
+
+  it("accepts the HTTP cookie after downgrading from HTTPS", () => {
+    const httpSession = createSessionCookieValue("http-user", 2);
+
+    expect(
+      verifySessionCookies({ [HTTP_SESSION_COOKIE_NAME]: httpSession }, false),
+    ).toEqual({
+      userId: "http-user",
+      sessionVersion: 2,
+    });
+  });
+
+  it("keeps accepting the legacy cookie for existing HTTP sessions", () => {
+    const legacySession = createSessionCookieValue("legacy-user", 1);
+
+    expect(
+      verifySessionCookies(
+        { [HTTPS_SESSION_COOKIE_NAME]: legacySession },
+        false,
+      ),
+    ).toEqual({
+      userId: "legacy-user",
+      sessionVersion: 1,
+    });
+  });
+
+  it("does not accept an HTTP-only cookie while HTTPS is enabled", () => {
+    const httpSession = createSessionCookieValue("http-user", 2);
+
+    expect(
+      verifySessionCookies({ [HTTP_SESSION_COOKIE_NAME]: httpSession }, true),
+    ).toBeNull();
   });
 });
 

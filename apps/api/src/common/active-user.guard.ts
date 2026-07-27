@@ -8,7 +8,7 @@ import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import { PrismaService } from "../modules/prisma/prisma.service";
 import { IS_PUBLIC_KEY } from "./public.decorator";
-import { verifySessionCookieValue } from "./session-cookie";
+import { verifySessionCookies } from "./session-cookie";
 
 export interface AuthenticatedRequest extends Request {
   currentUserId?: string;
@@ -33,7 +33,7 @@ export class ActiveUserGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const cookies = request.cookies as
       Record<string, string | undefined> | undefined;
-    const session = verifySessionCookieValue(cookies?.liveboard_session);
+    const session = verifySessionCookies(cookies);
     if (!session) {
       throw new UnauthorizedException("Missing or invalid session");
     }

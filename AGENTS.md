@@ -259,5 +259,6 @@ UI 修改额外确认：
 - 2026-07-27：Release 固定携带的 lego v5.3.1 要求 `run` 子命令位于全部选项之前，续期同样使用 `run --renew-days`，不存在旧版 `renew --days` 命令。systemd timer 已负责随机错峰，因此续期传入 `--no-random-sleep`。Release 打包必须用真实 lego 二进制执行域名证书与 IP `shortlived` profile 的完整参数检查，不能只依赖忽略未知参数的 mock。
 - 2026-07-27：HTTPS 管理支持停用并切回指定 HTTP 主机、自动续期开关和公网 IPv4 HTTPS。IP 证书使用 Let’s Encrypt `shortlived` profile，有效期约 6 天，进入 3 天续期窗口后更新；关闭自动续期只跳过 systemd 定时检查，手动续期仍可执行。停用 HTTPS 不删除已有证书，但会恢复 HTTP Nginx、`SESSION_COOKIE_SECURE=false` 和 HTTP `WEB_ORIGIN`。
 - 2026-07-27：HTTP 访问地址改为独立于 HTTPS 状态的常驻配置，支持一个主地址和最多 7 个附加域名/IP。HTTPS 启用期间修改只保存降级预案，不触碰当前 Nginx、Cookie 或容器；HTTP 模式修改会先保留当前访问 Host、应用并本机验证全部 Host 路由，再更新 `WEB_ORIGIN` 和运行时。停用 HTTPS 默认使用已保存预案，不再要求临时输入地址。
+- 2026-07-27：HTTP 与 HTTPS 会话改用不同 Cookie 名称：HTTPS 继续使用 `liveboard_session`，HTTP 使用 `liveboard_session_http`。这是因为浏览器会拒绝 HTTP 响应用同名非 Secure Cookie 覆盖降级前遗留的 Secure Cookie，表现为登录成功后立即回到登录页。HTTP 模式继续兼容升级前已有的 `liveboard_session`，HTTPS 模式不得接受 HTTP 专用 Cookie。
 
 后续纪要只记录会影响未来开发判断的决策、迁移或故障原因，不记录每个微小样式调整。
