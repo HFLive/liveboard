@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import {
   apiResourceUrl,
+  configureHttpAccess,
   disableHttps,
   enableHttps,
   getHttpsStatus,
@@ -120,10 +121,12 @@ export function SystemSettingsClient() {
   const [httpsDomain, setHttpsDomain] = useState("");
   const [httpsEmail, setHttpsEmail] = useState("");
   const [httpHost, setHttpHost] = useState("");
+  const [httpAliases, setHttpAliases] = useState("");
   const [loadingHttps, setLoadingHttps] = useState(true);
   const [enablingHttps, setEnablingHttps] = useState(false);
   const [disablingHttps, setDisablingHttps] = useState(false);
   const [updatingAutoRenew, setUpdatingAutoRenew] = useState(false);
+  const [savingHttpAccess, setSavingHttpAccess] = useState(false);
   const [protocolSwitchTarget, setProtocolSwitchTarget] = useState<
     string | null
   >(null);
@@ -149,17 +152,26 @@ export function SystemSettingsClient() {
     getHttpsStatus()
       .then((result) => {
         setHttpsStatus(result.https);
+        const primaryHost =
+          result.https.httpPrimaryHost ??
+          result.https.httpHost ??
+          result.https.domain;
+        const allowedHosts = result.https.httpAllowedHosts ?? [];
+        if (primaryHost) {
+          setHttpHost(primaryHost);
+          setHttpAliases(
+            allowedHosts.filter((host) => host !== primaryHost).join("\n"),
+          );
+        }
         if (result.https.domain) {
           setHttpsDomain(result.https.domain);
-          setHttpHost(result.https.domain);
-        } else if (result.https.httpHost) {
-          setHttpHost(result.https.httpHost);
-          setHttpsDomain(result.https.httpHost);
-        } else if (
-          window.location.hostname !== "localhost" &&
-          !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(window.location.hostname)
-        ) {
-          setHttpsDomain(window.location.hostname);
+        } else if (primaryHost) {
+          setHttpsDomain(primaryHost);
+        } else if (window.location.hostname !== "localhost") {
+          setHttpHost(window.location.hostname);
+          if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(window.location.hostname)) {
+            setHttpsDomain(window.location.hostname);
+          }
         }
       })
       .catch((caught) => {
@@ -251,7 +263,18 @@ export function SystemSettingsClient() {
         email: httpsEmail,
       });
       setHttpsStatus(result.https);
-      setHttpHost(result.https.domain ?? "");
+      const enabledPrimary =
+        result.https.httpPrimaryHost ??
+        result.https.httpHost ??
+        result.https.domain;
+      if (enabledPrimary) {
+        setHttpHost(enabledPrimary);
+        setHttpAliases(
+          (result.https.httpAllowedHosts ?? [])
+            .filter((host) => host !== enabledPrimary)
+            .join("\n"),
+        );
+      }
       if (!result.https.domain) {
         throw new Error("HTTPS 已启用，但服务器没有返回网站域名");
       }
@@ -275,7 +298,8 @@ export function SystemSettingsClient() {
   }
 
   async function onDisableHttps() {
-    const fallbackHost = httpHost.trim();
+    const fallbackHost =
+      httpsStatus?.httpPrimaryHost ?? httpsStatus?.httpHost ?? "";
     if (!fallbackHost) {
       setError("请填写停用后用于 HTTP 访问的域名或公网 IPv4");
       return;
@@ -292,7 +316,7 @@ export function SystemSettingsClient() {
     setError(null);
     setMessage(null);
     try {
-      const result = await disableHttps({ httpHost: fallbackHost });
+      const result = await disableHttps();
       setHttpsStatus(result.https);
       setMessage("HTTPS 已停用，正在重新载入服务并切换到 HTTP");
       window.setTimeout(() => {
@@ -302,6 +326,71 @@ export function SystemSettingsClient() {
       setError(caught instanceof Error ? caught.message : "停用 HTTPS 失败");
     } finally {
       setDisablingHttps(false);
+    }
+  }
+
+  async function onSaveHttpAccess(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const primaryHost = httpHost.trim();
+    if (!primaryHost) {
+      setError("请填写首选 HTTP 访问地址");
+      return;
+    }
+    const allowedHosts = Array.from(
+      new Set(
+        [
+          primaryHost,
+          ...httpAliases.split(/[,\n]/),
+          ...(!httpsStatus?.enabled && window.location.hostname !== "localhost"
+            ? [window.location.hostname]
+            : []),
+        ]
+          .map((host) => host.trim())
+          .filter(Boolean),
+      ),
+    );
+
+    setSavingHttpAccess(true);
+    setError(null);
+    setMessage(null);
+    setProtocolSwitchTarget(null);
+    try {
+      const result = await configureHttpAccess({
+        primaryHost,
+        allowedHosts,
+      });
+      setHttpsStatus(result.https);
+      const savedPrimary =
+        result.https.httpPrimaryHost ?? result.https.httpHost ?? primaryHost;
+      setHttpHost(savedPrimary);
+      setHttpAliases(
+        (result.https.httpAllowedHosts ?? [])
+          .filter((host) => host !== savedPrimary)
+          .join("\n"),
+      );
+
+      if (result.https.enabled) {
+        setMessage("HTTP 降级设置已保存，当前 HTTPS 不受影响");
+        return;
+      }
+
+      const target = `http://${savedPrimary}/app/admin/settings`;
+      setMessage("HTTP 访问设置已保存，正在等待服务重新载入");
+      const ready = await waitForWebReady(new URL(target).origin);
+      if (!ready) {
+        setProtocolSwitchTarget(target);
+        setError(
+          "HTTP 配置已经保存，但等待 Web 服务恢复超时。请稍后通过下方地址重试。",
+        );
+        return;
+      }
+      window.location.replace(target);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "保存 HTTP 访问设置失败",
+      );
+    } finally {
+      setSavingHttpAccess(false);
     }
   }
 
@@ -504,22 +593,26 @@ export function SystemSettingsClient() {
                           />
                         </label>
                         <div className="https-disable-controls">
-                          <label>
-                            <span>停用后的 HTTP 访问地址</span>
-                            <input
-                              autoCapitalize="none"
-                              disabled={disablingHttps}
-                              onChange={(event) =>
-                                setHttpHost(event.target.value)
-                              }
-                              placeholder="8.166.143.156"
-                              spellCheck={false}
-                              value={httpHost}
-                            />
-                          </label>
+                          <span>
+                            <strong>停用后切换到</strong>
+                            <small>
+                              http://
+                              {httpsStatus.httpPrimaryHost ??
+                                httpsStatus.httpHost ??
+                                "尚未配置"}
+                            </small>
+                          </span>
                           <button
                             className="button danger"
-                            disabled={disablingHttps || updatingAutoRenew}
+                            disabled={
+                              disablingHttps ||
+                              updatingAutoRenew ||
+                              savingHttpAccess ||
+                              !(
+                                httpsStatus.httpPrimaryHost ??
+                                httpsStatus.httpHost
+                              )
+                            }
                             onClick={() => void onDisableHttps()}
                             type="button"
                           >
@@ -589,6 +682,80 @@ export function SystemSettingsClient() {
                     </p>
                   </div>
                 )}
+                {httpsStatus?.available && !loadingHttps ? (
+                  <form
+                    className="http-access-form"
+                    onSubmit={(event) => void onSaveHttpAccess(event)}
+                  >
+                    <div className="http-access-heading">
+                      <div>
+                        <strong>
+                          {httpsStatus.enabled
+                            ? "HTTP 降级设置"
+                            : "HTTP 访问设置"}
+                        </strong>
+                        <p className="muted">
+                          {httpsStatus.enabled
+                            ? "提前保存停用 HTTPS 后使用的地址，不会修改当前证书、Nginx HTTPS 或自动续期。"
+                            : "首选地址用于管理页面跳转；其他允许地址仍可直接访问本站。"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="http-access-fields">
+                      <label>
+                        <span>首选 HTTP 地址</span>
+                        <div className="http-host-input">
+                          <span>http://</span>
+                          <input
+                            autoCapitalize="none"
+                            disabled={savingHttpAccess || disablingHttps}
+                            onChange={(event) =>
+                              setHttpHost(event.target.value)
+                            }
+                            placeholder="8.166.143.156"
+                            required
+                            spellCheck={false}
+                            value={httpHost}
+                          />
+                        </div>
+                      </label>
+                      <label>
+                        <span>其他允许地址</span>
+                        <textarea
+                          autoCapitalize="none"
+                          disabled={savingHttpAccess || disablingHttps}
+                          onChange={(event) =>
+                            setHttpAliases(event.target.value)
+                          }
+                          placeholder={
+                            "board.example.com\n每行一个域名或公网 IPv4"
+                          }
+                          rows={3}
+                          spellCheck={false}
+                          value={httpAliases}
+                        />
+                      </label>
+                    </div>
+                    <div className="http-access-actions">
+                      <p className="muted">
+                        最多保存 8 个地址。未知 Host
+                        不会自动加入；修改失败会保留原配置。
+                      </p>
+                      <button
+                        className="button secondary"
+                        disabled={savingHttpAccess || disablingHttps}
+                        type="submit"
+                      >
+                        <Save aria-hidden="true" className="button-icon" />
+                        {savingHttpAccess
+                          ? "正在验证并保存"
+                          : httpsStatus.enabled
+                            ? "保存降级设置"
+                            : "应用 HTTP 设置"}
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
               </section>
 
               <section

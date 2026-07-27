@@ -34,6 +34,16 @@ EOF
   chmod +x "$BIN_DIR/$command"
 done
 
+cat >"$BIN_DIR/curl" <<'EOF'
+#!/bin/sh
+if [ "${LIVEBOARD_TEST_CURL_FAILURE:-0}" = 1 ]; then
+  echo "mock local HTTP probe failed" >&2
+  exit 1
+fi
+exit 0
+EOF
+chmod +x "$BIN_DIR/curl"
+
 cat >"$LEGO_BIN" <<'EOF'
 #!/bin/sh
 set -eu
@@ -214,23 +224,81 @@ env $AGENT_ENV \
     >"$TEST_DIR/manual-renew-while-disabled.json"
 test "$((BEFORE_SCHEDULED_RENEW + 1))" -eq "$(wc -l <"$LEGO_LOG")"
 
+HTTPS_NGINX_BEFORE_HTTP_PLAN=$(cksum "$NGINX_SITE")
+HTTPS_ENV_BEFORE_HTTP_PLAN=$(cksum "$ENV_FILE")
+env $AGENT_ENV \
+  LIVEBOARD_STATE_DIR="$STATE_DIR" \
+  LIVEBOARD_NGINX_SITE="$NGINX_SITE" \
+  LIVEBOARD_LEGO_BIN="$LEGO_BIN" \
+  LIVEBOARD_SKIP_RUNTIME_RECREATE=1 \
+  python3 "$ROOT_DIR/scripts/liveboard-https-agent.py" configure-http \
+    --primary 8.166.143.156 \
+    --allow board.example.com \
+    >"$TEST_DIR/configure-http-plan.json"
+grep -q '"httpPrimaryHost": "8.166.143.156"' \
+  "$TEST_DIR/configure-http-plan.json"
+grep -q '"httpAllowedHosts": \["8.166.143.156", "board.example.com"\]' \
+  "$TEST_DIR/configure-http-plan.json"
+test "$HTTPS_NGINX_BEFORE_HTTP_PLAN" = "$(cksum "$NGINX_SITE")"
+test "$HTTPS_ENV_BEFORE_HTTP_PLAN" = "$(cksum "$ENV_FILE")"
+
 env $AGENT_ENV \
   LIVEBOARD_STATE_DIR="$STATE_DIR" \
   LIVEBOARD_NGINX_SITE="$NGINX_SITE" \
   LIVEBOARD_LEGO_BIN="$LEGO_BIN" \
   LIVEBOARD_SKIP_RUNTIME_RECREATE=1 \
   python3 "$ROOT_DIR/scripts/liveboard-https-agent.py" disable \
-    --http-host 8.166.143.156 \
     >"$TEST_DIR/disable.json"
 grep -q '"enabled": false' "$TEST_DIR/disable.json"
 grep -q '"httpHost": "8.166.143.156"' "$TEST_DIR/disable.json"
+grep -q '"httpAllowedHosts": \["8.166.143.156", "board.example.com"\]' \
+  "$TEST_DIR/disable.json"
 grep -q '^SESSION_COOKIE_SECURE=false$' "$ENV_FILE"
-grep -q '^WEB_ORIGIN=http://8.166.143.156$' "$ENV_FILE"
+grep -q '^WEB_ORIGIN=http://8.166.143.156,http://board.example.com$' "$ENV_FILE"
 grep -q '^ACCESS_MODE=http-ip$' "$STATE_DIR/install.conf"
+grep -q '^HTTP_PRIMARY_HOST=8.166.143.156$' "$STATE_DIR/install.conf"
+grep -q '^HTTP_ALLOWED_HOSTS=8.166.143.156,board.example.com$' \
+  "$STATE_DIR/install.conf"
+grep -q '^  server_name 8.166.143.156 board.example.com;$' "$NGINX_SITE"
 if grep -q '^  listen 443 ssl;$' "$NGINX_SITE"; then
   echo "停用 HTTPS 后不应继续监听 TLS。" >&2
   exit 1
 fi
+
+env $AGENT_ENV \
+  LIVEBOARD_STATE_DIR="$STATE_DIR" \
+  LIVEBOARD_NGINX_SITE="$NGINX_SITE" \
+  LIVEBOARD_LEGO_BIN="$LEGO_BIN" \
+  LIVEBOARD_SKIP_RUNTIME_RECREATE=1 \
+  python3 "$ROOT_DIR/scripts/liveboard-https-agent.py" configure-http \
+    --primary board.example.com \
+    --allow 8.166.143.156 \
+    >"$TEST_DIR/configure-http-active.json"
+grep -q '"httpPrimaryHost": "board.example.com"' \
+  "$TEST_DIR/configure-http-active.json"
+grep -q '^WEB_ORIGIN=http://board.example.com,http://8.166.143.156$' "$ENV_FILE"
+grep -q '^ACCESS_MODE=http-domain$' "$STATE_DIR/install.conf"
+grep -q '^  server_name board.example.com 8.166.143.156;$' "$NGINX_SITE"
+
+HTTP_NGINX_BEFORE_FAILED_CHANGE=$(cksum "$NGINX_SITE")
+HTTP_ENV_BEFORE_FAILED_CHANGE=$(cksum "$ENV_FILE")
+HTTP_INSTALL_BEFORE_FAILED_CHANGE=$(cksum "$STATE_DIR/install.conf")
+if env $AGENT_ENV \
+  LIVEBOARD_STATE_DIR="$STATE_DIR" \
+  LIVEBOARD_NGINX_SITE="$NGINX_SITE" \
+  LIVEBOARD_LEGO_BIN="$LEGO_BIN" \
+  LIVEBOARD_TEST_CURL_FAILURE=1 \
+  LIVEBOARD_SKIP_RUNTIME_RECREATE=1 \
+  python3 "$ROOT_DIR/scripts/liveboard-https-agent.py" configure-http \
+    --primary fallback.example.com \
+    >"$TEST_DIR/configure-http-rollback.log" 2>&1; then
+  echo "HTTP 本机探测失败时不应应用新配置。" >&2
+  exit 1
+fi
+test "$HTTP_NGINX_BEFORE_FAILED_CHANGE" = "$(cksum "$NGINX_SITE")"
+test "$HTTP_ENV_BEFORE_FAILED_CHANGE" = "$(cksum "$ENV_FILE")"
+test "$HTTP_INSTALL_BEFORE_FAILED_CHANGE" = \
+  "$(cksum "$STATE_DIR/install.conf")"
 
 env $AGENT_ENV \
   LIVEBOARD_STATE_DIR="$STATE_DIR" \

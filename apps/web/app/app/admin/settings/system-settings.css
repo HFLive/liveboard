@@ -156,7 +156,7 @@
 }
 
 .system-settings-page .https-renew-control small,
-.system-settings-page .https-disable-controls label > span {
+.system-settings-page .https-disable-controls small {
   color: var(--muted);
   font-size: 11px;
   font-weight: 500;
@@ -174,16 +174,100 @@
   gap: 10px;
 }
 
-.system-settings-page .https-disable-controls label {
+.system-settings-page .https-disable-controls > span {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
+  gap: 3px;
   min-width: 0;
 }
 
-.system-settings-page .https-disable-controls input {
+.system-settings-page .http-access-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.system-settings-page .http-access-heading p {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.system-settings-page .http-access-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.system-settings-page .http-access-fields label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.system-settings-page .http-access-fields :is(input, textarea) {
   width: 100%;
   min-width: 0;
+}
+
+.system-settings-page .http-access-fields textarea {
+  resize: vertical;
+}
+
+.system-settings-page .http-host-input {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--fill-subtle);
+}
+
+.system-settings-page .http-host-input > span {
+  padding-left: 10px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.system-settings-page .http-host-input input {
+  border: 0;
+  background: transparent;
+  padding-left: 2px;
+}
+
+.system-settings-page .http-host-input:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.system-settings-page .http-host-input input:focus {
+  outline: 0;
+}
+
+.system-settings-page .http-access-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.system-settings-page .http-access-actions p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.system-settings-page .http-access-actions .button {
+  flex: 0 0 auto;
 }
 
 .system-settings-page .https-enable-form {
@@ -344,6 +428,19 @@
   }
 
   .system-settings-page .https-disable-controls .button {
+    width: 100%;
+  }
+
+  .system-settings-page .http-access-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .system-settings-page .http-access-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .system-settings-page .http-access-actions .button {
     width: 100%;
   }
 

@@ -57,6 +57,7 @@ TLS_ALPN_CHALLENGE = "tls-alpn-01"
 DOMAIN_SUBJECT = "domain"
 IP_SUBJECT = "ip"
 SHORTLIVED_PROFILE = "shortlived"
+MAX_HTTP_HOSTS = 8
 
 
 class HttpsError(RuntimeError):
@@ -128,6 +129,62 @@ def normalize_subject(value: str) -> tuple[str, str]:
     if address.version != 4 or not address.is_global:
         raise HttpsError("IP HTTPS 目前只支持可从公网访问的 IPv4 地址")
     return str(address), IP_SUBJECT
+
+
+def normalize_http_access(
+    primary_value: str,
+    allowed_values: Any = None,
+) -> tuple[str, list[str]]:
+    primary, _ = normalize_subject(primary_value)
+    if allowed_values is None:
+        candidates: list[Any] = []
+    elif isinstance(allowed_values, list):
+        candidates = allowed_values
+    else:
+        raise HttpsError("HTTP 允许地址必须是列表")
+
+    hosts = [primary]
+    for candidate in candidates:
+        if not isinstance(candidate, str):
+            raise HttpsError("HTTP 允许地址必须是域名或公网 IPv4")
+        normalized, _ = normalize_subject(candidate)
+        if normalized not in hosts:
+            hosts.append(normalized)
+    if len(hosts) > MAX_HTTP_HOSTS:
+        raise HttpsError(f"HTTP 访问地址最多允许 {MAX_HTTP_HOSTS} 个")
+    return primary, hosts
+
+
+def configured_http_access(
+    config: dict[str, Any],
+    fallback: str | None = None,
+) -> tuple[str | None, list[str]]:
+    primary_value = (
+        config.get("httpPrimaryHost")
+        or config.get("httpHost")
+        or fallback
+    )
+    if not isinstance(primary_value, str) or not primary_value.strip():
+        return None, []
+    allowed_values = config.get("httpAllowedHosts")
+    if not isinstance(allowed_values, list):
+        allowed_values = []
+    try:
+        return normalize_http_access(primary_value, allowed_values)
+    except HttpsError:
+        normalized, _ = normalize_subject(primary_value)
+        return normalized, [normalized]
+
+
+def http_access_config_values(
+    primary: str,
+    hosts: list[str],
+) -> dict[str, Any]:
+    return {
+        "httpPrimaryHost": primary,
+        "httpAllowedHosts": hosts,
+        "httpHost": primary,
+    }
 
 
 def normalize_email(value: str) -> str:
@@ -236,15 +293,34 @@ def nginx_proxy_locations() -> str:
 """ % WEBROOT
 
 
-def http_nginx_config(domain: str) -> str:
+def http_nginx_config(
+    host_values: str | list[str],
+    *,
+    reject_unknown: bool = False,
+) -> str:
+    hosts = [host_values] if isinstance(host_values, str) else host_values
+    default_server = (
+        """\
+# Reject hosts that were not explicitly configured for LiveBoard.
+server {
+  listen 80 default_server;
+  server_name _;
+  return 444;
+}
+
+"""
+        if reject_unknown
+        else ""
+    )
     return """\
 # Managed by LiveBoard
+%s
 server {
   listen 80;
   server_name %s;
 
 %s}
-""" % (domain, nginx_proxy_locations())
+""" % (default_server, " ".join(hosts), nginx_proxy_locations())
 
 
 def https_nginx_config(domain: str, certificate: Path, key: Path) -> str:
@@ -292,6 +368,27 @@ def install_nginx_config(content: str) -> None:
     atomic_write(NGINX_SITE, content, mode=0o644)
     run([require_command("nginx"), "-t"], timeout=30)
     run([require_command("systemctl"), "reload", "nginx"], timeout=30)
+
+
+def verify_local_http_hosts(hosts: list[str]) -> None:
+    if os.environ.get("LIVEBOARD_SKIP_LOCAL_HTTP_CHECK") == "1":
+        return
+    curl = require_command("curl")
+    for host in hosts:
+        run(
+            [
+                curl,
+                "--fail",
+                "--silent",
+                "--show-error",
+                "--max-time",
+                "15",
+                "--header",
+                f"Host: {host}",
+                "http://127.0.0.1/",
+            ],
+            timeout=20,
+        )
 
 
 def check_http_challenge(domain: str) -> None:
@@ -524,6 +621,7 @@ def enable_https(domain_value: str, email_value: str) -> dict[str, Any]:
         HTTPS_DIR.mkdir(parents=True, exist_ok=True)
         WEBROOT.mkdir(parents=True, exist_ok=True)
         LEGO_PATH.mkdir(parents=True, exist_ok=True)
+        existing_config = read_json(CONFIG_FILE)
         original_nginx = NGINX_SITE.read_text(encoding="utf-8")
         original_env = ENV_FILE.read_text(encoding="utf-8")
         original_install_conf = (
@@ -603,6 +701,12 @@ def enable_https(domain_value: str, email_value: str) -> dict[str, Any]:
                     "UPDATED_AT": now_iso(),
                 },
             )
+            http_primary, http_hosts = configured_http_access(
+                existing_config,
+                fallback=subject,
+            )
+            if not http_primary:
+                http_primary, http_hosts = normalize_http_access(subject)
             config = {
                 "enabled": True,
                 "domain": subject,
@@ -618,6 +722,7 @@ def enable_https(domain_value: str, email_value: str) -> dict[str, Any]:
                 "enabledAt": now_iso(),
                 "lastRenewedAt": now_iso(),
                 "lastRenewalCheckAt": now_iso(),
+                **http_access_config_values(http_primary, http_hosts),
             }
             save_config(config)
             LAST_ERROR_FILE.unlink(missing_ok=True)
@@ -708,10 +813,19 @@ def renew_https(*, scheduled: bool = False) -> dict[str, Any]:
         return https_status()
 
 
-def disable_https(http_host_value: str) -> dict[str, Any]:
-    http_host, _ = normalize_subject(http_host_value)
+def configure_http_access(
+    primary_value: str,
+    allowed_values: Any = None,
+) -> dict[str, Any]:
+    primary, hosts = normalize_http_access(primary_value, allowed_values)
     with operation_lock():
         config = read_json(CONFIG_FILE)
+        if config.get("enabled"):
+            config.update(http_access_config_values(primary, hosts))
+            config["httpAccessUpdatedAt"] = now_iso()
+            save_config(config)
+            return https_status()
+
         original_nginx = NGINX_SITE.read_text(encoding="utf-8")
         original_env = ENV_FILE.read_text(encoding="utf-8")
         original_install_conf = (
@@ -720,21 +834,115 @@ def disable_https(http_host_value: str) -> dict[str, Any]:
             else None
         )
         try:
-            install_nginx_config(http_nginx_config(http_host))
+            install_nginx_config(
+                http_nginx_config(hosts, reject_unknown=True)
+            )
+            verify_local_http_hosts(hosts)
             update_env_values(
                 {
                     "SESSION_COOKIE_SECURE": "false",
-                    "WEB_ORIGIN": f"http://{http_host}",
+                    "WEB_ORIGIN": ",".join(
+                        f"http://{host}" for host in hosts
+                    ),
                 }
             )
+            _, primary_type = normalize_subject(primary)
             update_key_value_file(
                 INSTALL_CONF,
                 {
-                    "ACCESS_MODE": "http-ip",
-                    "HTTPS_DOMAIN": "",
+                    "ACCESS_MODE": (
+                        "http-ip"
+                        if primary_type == IP_SUBJECT
+                        else "http-domain"
+                    ),
+                    "HTTP_PRIMARY_HOST": primary,
+                    "HTTP_ALLOWED_HOSTS": ",".join(hosts),
                     "UPDATED_AT": now_iso(),
                 },
             )
+            config.update(http_access_config_values(primary, hosts))
+            config["httpAccessUpdatedAt"] = now_iso()
+            save_config(config)
+            LAST_ERROR_FILE.unlink(missing_ok=True)
+            schedule_runtime_apply()
+            return https_status()
+        except Exception as caught:
+            atomic_write(NGINX_SITE, original_nginx, mode=0o644)
+            atomic_write(ENV_FILE, original_env)
+            if original_install_conf is None:
+                INSTALL_CONF.unlink(missing_ok=True)
+            else:
+                atomic_write(INSTALL_CONF, original_install_conf)
+            try:
+                run([require_command("nginx"), "-t"], timeout=30)
+                run(
+                    [require_command("systemctl"), "reload", "nginx"],
+                    timeout=30,
+                )
+            except Exception:
+                pass
+            if isinstance(caught, HttpsError):
+                raise
+            raise HttpsError(str(caught)) from caught
+
+
+def disable_https(
+    http_host_value: str = "",
+    allowed_values: Any = None,
+) -> dict[str, Any]:
+    with operation_lock():
+        config = read_json(CONFIG_FILE)
+        if http_host_value.strip():
+            http_host, http_hosts = normalize_http_access(
+                http_host_value,
+                allowed_values,
+            )
+        else:
+            fallback = str(config.get("domain", "")).strip() or None
+            http_host, http_hosts = configured_http_access(
+                config,
+                fallback=fallback,
+            )
+            if not http_host:
+                raise HttpsError(
+                    "尚未配置 HTTP 访问地址，请先保存 HTTP 访问设置"
+                )
+        original_nginx = NGINX_SITE.read_text(encoding="utf-8")
+        original_env = ENV_FILE.read_text(encoding="utf-8")
+        original_install_conf = (
+            INSTALL_CONF.read_text(encoding="utf-8")
+            if INSTALL_CONF.is_file()
+            else None
+        )
+        try:
+            install_nginx_config(
+                http_nginx_config(http_hosts, reject_unknown=True)
+            )
+            verify_local_http_hosts(http_hosts)
+            update_env_values(
+                {
+                    "SESSION_COOKIE_SECURE": "false",
+                    "WEB_ORIGIN": ",".join(
+                        f"http://{host}" for host in http_hosts
+                    ),
+                }
+            )
+            _, primary_type = normalize_subject(http_host)
+            update_key_value_file(
+                INSTALL_CONF,
+                {
+                    "ACCESS_MODE": (
+                        "http-ip"
+                        if primary_type == IP_SUBJECT
+                        else "http-domain"
+                    ),
+                    "HTTPS_DOMAIN": "",
+                    "HTTP_PRIMARY_HOST": http_host,
+                    "HTTP_ALLOWED_HOSTS": ",".join(http_hosts),
+                    "UPDATED_AT": now_iso(),
+                },
+            )
+            previous_https_subject = str(config.get("domain", "")).strip()
             config.update(
                 {
                     "enabled": False,
@@ -744,7 +952,10 @@ def disable_https(http_host_value: str) -> dict[str, Any]:
                     "certificateProfile": None,
                     "autoRenewEnabled": False,
                     "disabledAt": now_iso(),
-                    "httpHost": http_host,
+                    "previousHttpsSubject": (
+                        previous_https_subject or None
+                    ),
+                    **http_access_config_values(http_host, http_hosts),
                 }
             )
             save_config(config)
@@ -803,6 +1014,10 @@ def https_status() -> dict[str, Any]:
         last_error = LAST_ERROR_FILE.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
         pass
+    http_primary, http_hosts = configured_http_access(
+        config,
+        fallback=domain or None,
+    )
     return {
         "available": LEGO_BIN.is_file() and os.access(LEGO_BIN, os.X_OK),
         "enabled": bool(config.get("enabled")),
@@ -816,7 +1031,9 @@ def https_status() -> dict[str, Any]:
         "autoRenewEnabled": bool(
             config.get("autoRenewEnabled", bool(config.get("enabled")))
         ),
-        "httpHost": config.get("httpHost"),
+        "httpHost": http_primary,
+        "httpPrimaryHost": http_primary,
+        "httpAllowedHosts": http_hosts,
         "expiresAt": certificate_expiry(certificate) if certificate else None,
         "lastRenewedAt": config.get("lastRenewedAt"),
         "lastRenewalCheckAt": config.get("lastRenewalCheckAt"),
@@ -841,7 +1058,18 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any]:
     if action == "disable":
         return {
             "ok": True,
-            "status": disable_https(str(request.get("httpHost", ""))),
+            "status": disable_https(
+                str(request.get("httpHost", "")),
+                request.get("allowedHosts"),
+            ),
+        }
+    if action == "configure-http":
+        return {
+            "ok": True,
+            "status": configure_http_access(
+                str(request.get("primaryHost", "")),
+                request.get("allowedHosts"),
+            ),
         }
     if action == "set-auto-renew":
         enabled = request.get("enabled")
@@ -903,7 +1131,13 @@ def parse_arguments() -> argparse.Namespace:
     renew = subparsers.add_parser("renew")
     renew.add_argument("--scheduled", action="store_true")
     disable = subparsers.add_parser("disable")
-    disable.add_argument("--http-host", required=True)
+    disable.add_argument("--http-host", default="")
+    disable.add_argument("--allow", action="append", default=[])
+    disable.add_argument("--allowed-hosts", default="")
+    http_access = subparsers.add_parser("configure-http")
+    http_access.add_argument("--primary", required=True)
+    http_access.add_argument("--allow", action="append", default=[])
+    http_access.add_argument("--allowed-hosts", default="")
     auto_renew = subparsers.add_parser("set-auto-renew")
     auto_renew.add_argument(
         "state",
@@ -925,7 +1159,22 @@ def main() -> int:
         elif arguments.command == "renew":
             result = renew_https(scheduled=arguments.scheduled)
         elif arguments.command == "disable":
-            result = disable_https(arguments.http_host)
+            allowed_hosts = arguments.allow + [
+                value
+                for value in arguments.allowed_hosts.split(",")
+                if value
+            ]
+            result = disable_https(arguments.http_host, allowed_hosts)
+        elif arguments.command == "configure-http":
+            allowed_hosts = arguments.allow + [
+                value
+                for value in arguments.allowed_hosts.split(",")
+                if value
+            ]
+            result = configure_http_access(
+                arguments.primary,
+                allowed_hosts,
+            )
         elif arguments.command == "set-auto-renew":
             result = set_auto_renew(arguments.state == "on")
         elif arguments.command == "apply-runtime":

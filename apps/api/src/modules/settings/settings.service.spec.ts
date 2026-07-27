@@ -32,6 +32,7 @@ describe("SettingsService", () => {
     status: jest.fn(),
     enable: jest.fn(),
     disable: jest.fn(),
+    configureHttpAccess: jest.fn(),
     setAutoRenew: jest.fn(),
   };
 
@@ -64,6 +65,8 @@ describe("SettingsService", () => {
       certificateProfile: null,
       autoRenewEnabled: false,
       httpHost: null,
+      httpPrimaryHost: null,
+      httpAllowedHosts: [],
       expiresAt: null,
       lastRenewedAt: null,
       lastRenewalCheckAt: null,
@@ -78,6 +81,8 @@ describe("SettingsService", () => {
       certificateProfile: null,
       autoRenewEnabled: true,
       httpHost: null,
+      httpPrimaryHost: "board.example.com",
+      httpAllowedHosts: ["board.example.com"],
       expiresAt: "2026-10-24T00:00:00Z",
       lastRenewedAt: "2026-07-26T00:00:00Z",
       lastRenewalCheckAt: "2026-07-26T00:00:00Z",
@@ -92,6 +97,8 @@ describe("SettingsService", () => {
       certificateProfile: null,
       autoRenewEnabled: false,
       httpHost: "8.166.143.156",
+      httpPrimaryHost: "8.166.143.156",
+      httpAllowedHosts: ["8.166.143.156"],
       expiresAt: null,
       lastRenewedAt: null,
       lastRenewalCheckAt: null,
@@ -106,6 +113,8 @@ describe("SettingsService", () => {
       certificateProfile: null,
       autoRenewEnabled: false,
       httpHost: null,
+      httpPrimaryHost: "board.example.com",
+      httpAllowedHosts: ["board.example.com"],
       expiresAt: "2026-10-24T00:00:00Z",
       lastRenewedAt: "2026-07-26T00:00:00Z",
       lastRenewalCheckAt: "2026-07-26T00:00:00Z",
@@ -237,10 +246,28 @@ describe("SettingsService", () => {
     );
   });
 
-  it("normalizes the HTTP fallback host before disabling HTTPS", async () => {
+  it("allows the host agent to use the saved HTTP settings when disabling HTTPS", async () => {
+    await service.disableHttps("admin-1");
+
+    expect(httpsAgent.disable).toHaveBeenCalledWith(undefined);
+  });
+
+  it("normalizes a legacy HTTP fallback host before disabling HTTPS", async () => {
     await service.disableHttps("admin-1", " 8.166.143.156 ");
 
     expect(httpsAgent.disable).toHaveBeenCalledWith("8.166.143.156");
+  });
+
+  it("normalizes and saves HTTP access settings through the host agent", async () => {
+    await service.configureHttpAccess("admin-1", " 8.166.143.156 ", [
+      " board.example.com ",
+      " ",
+    ]);
+
+    expect(httpsAgent.configureHttpAccess).toHaveBeenCalledWith(
+      "8.166.143.156",
+      ["board.example.com"],
+    );
   });
 
   it("updates automatic renewal through the host agent", async () => {

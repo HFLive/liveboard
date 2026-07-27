@@ -37,7 +37,8 @@ clean 选项：
 https 子命令：
   status
   enable --domain 域名或公网IPv4 --email 邮箱
-  disable --http-host 域名或公网IPv4
+  http-access --primary 域名或公网IPv4 [--allow 地址...]
+  disable [--http-host 域名或公网IPv4] [--allow 地址...]
   auto-renew on|off
   renew
 EOF
@@ -289,6 +290,7 @@ command_https() {
       ;;
     disable)
       http_host=
+      allowed_hosts=
       while [ "$#" -gt 0 ]; do
         case "$1" in
           --http-host)
@@ -296,11 +298,52 @@ command_https() {
             http_host=$2
             shift 2
             ;;
+          --allow)
+            [ "$#" -ge 2 ] || die "--allow 需要域名或公网 IPv4。"
+            if [ -n "$allowed_hosts" ]; then
+              allowed_hosts="$allowed_hosts,$2"
+            else
+              allowed_hosts=$2
+            fi
+            shift 2
+            ;;
           *) die "无法识别的 https disable 参数：$1" ;;
         esac
       done
-      [ -n "$http_host" ] || die "缺少 --http-host。"
-      python3 "$HTTPS_AGENT" disable --http-host "$http_host"
+      if [ -n "$http_host" ]; then
+        python3 "$HTTPS_AGENT" disable \
+          --http-host "$http_host" \
+          --allowed-hosts "$allowed_hosts"
+      else
+        python3 "$HTTPS_AGENT" disable
+      fi
+      ;;
+    http-access)
+      primary=
+      allowed_hosts=
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --primary)
+            [ "$#" -ge 2 ] || die "--primary 需要域名或公网 IPv4。"
+            primary=$2
+            shift 2
+            ;;
+          --allow)
+            [ "$#" -ge 2 ] || die "--allow 需要域名或公网 IPv4。"
+            if [ -n "$allowed_hosts" ]; then
+              allowed_hosts="$allowed_hosts,$2"
+            else
+              allowed_hosts=$2
+            fi
+            shift 2
+            ;;
+          *) die "无法识别的 https http-access 参数：$1" ;;
+        esac
+      done
+      [ -n "$primary" ] || die "缺少 --primary。"
+      python3 "$HTTPS_AGENT" configure-http \
+        --primary "$primary" \
+        --allowed-hosts "$allowed_hosts"
       ;;
     auto-renew)
       [ "$#" -eq 1 ] || die "用法：liveboard https auto-renew on|off"
