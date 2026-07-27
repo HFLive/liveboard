@@ -22,6 +22,7 @@ describe("ActiveUserGuard", () => {
   beforeEach(() => {
     jest.resetAllMocks();
     process.env.SESSION_SECRET = "test-session-secret-with-sufficient-length";
+    process.env.SESSION_COOKIE_SECURE = "true";
     request.cookies = {};
     delete request.currentUserId;
     guard = new ActiveUserGuard(
@@ -73,5 +74,36 @@ describe("ActiveUserGuard", () => {
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(request.currentUserId).toBe("user-1");
+  });
+
+  it("accepts the separate HTTP cookie in HTTP mode", async () => {
+    process.env.SESSION_COOKIE_SECURE = "false";
+    reflector.getAllAndOverride.mockReturnValue(false);
+    request.cookies = {
+      liveboard_session_http: createSessionCookieValue("user-1", 4),
+      liveboard_session: createSessionCookieValue("stale-https-user", 1),
+    };
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      status: "active",
+      sessionVersion: 4,
+    });
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(prisma.user.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "user-1" } }),
+    );
+  });
+
+  it("does not accept the HTTP cookie in HTTPS mode", async () => {
+    reflector.getAllAndOverride.mockReturnValue(false);
+    request.cookies = {
+      liveboard_session_http: createSessionCookieValue("user-1", 4),
+    };
+
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 });
