@@ -616,6 +616,7 @@ export function UserManagementClient() {
                     <td data-label="显示名">
                       <UserProfileLink
                         className="user-profile-link"
+                        compactBadges
                         user={user}
                       />
                     </td>

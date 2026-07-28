@@ -41,7 +41,11 @@ export function StorageBackendClient() {
         setRegion(result.storage.oss.region ?? "");
         setBucket(result.storage.oss.bucket ?? "");
         setEndpoint(result.storage.oss.endpoint ?? "");
-        setInternal(result.storage.oss.internal);
+        setInternal(
+          result.storage.downloadMode === "direct"
+            ? false
+            : result.storage.oss.internal,
+        );
         setAccessKeyId(result.storage.oss.accessKeyId ?? "");
       })
       .catch((caught) =>
@@ -346,9 +350,9 @@ export function StorageBackendClient() {
                         cn-hangzhou。
                       </li>
                       <li>
-                        ECS 与 Bucket 同地域时勾选「使用内网
-                        Endpoint」，上传下载免流量费；自定义 Endpoint
-                        一般留空即可。
+                        使用「服务器中转」且 ECS 与 Bucket
+                        同地域时，可以勾选「使用内网 Endpoint」，服务器访问 OSS
+                        不产生公网流量费；自定义 Endpoint 一般留空即可。
                       </li>
                       <li>
                         填完后先点「测试连接」，通过后再保存；保存时系统还会再做一次真实读写探测。
@@ -388,12 +392,22 @@ export function StorageBackendClient() {
                   </label>
                   <label className="storage-backend-inline-check">
                     <input
+                      aria-describedby="storage-internal-endpoint-hint"
                       checked={internal}
+                      disabled={downloadMode === "direct"}
                       onChange={(event) => setInternal(event.target.checked)}
                       type="checkbox"
                     />
                     服务器与 OSS 同地域，使用内网 Endpoint（免流量费）
                   </label>
+                  <small
+                    className="field-hint storage-backend-inline-hint"
+                    id="storage-internal-endpoint-hint"
+                  >
+                    {downloadMode === "direct"
+                      ? "签名直出需要浏览器访问公网 Endpoint，不能使用内网 Endpoint。"
+                      : "服务器通过内网访问 OSS，不产生 OSS 公网流量费；用户下载仍会占用服务器公网带宽。"}
+                  </small>
                   <label className="label">
                     AccessKey ID
                     <input
@@ -443,7 +457,8 @@ export function StorageBackendClient() {
                     <h2>下载方式</h2>
                     <p>
                       签名直出让浏览器直接从对象存储下载，节省服务器带宽；签名地址
-                      10 分钟内有效，仅对 OSS 中的文件生效。
+                      10 分钟内有效，仅对 OSS 中的文件生效，必须使用公网
+                      Endpoint。
                     </p>
                   </div>
                 </div>
@@ -457,6 +472,7 @@ export function StorageBackendClient() {
                   </button>
                   <button
                     className={downloadMode === "direct" ? "active" : ""}
+                    disabled={internal}
                     onClick={() => setDownloadMode("direct")}
                     type="button"
                   >

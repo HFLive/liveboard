@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getFile, listBlocks } from "@/lib/api";
 import { FileViewer } from "./FileViewer";
@@ -10,6 +10,7 @@ vi.mock("@/lib/api", () => ({
 
 describe("FileViewer", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     vi.mocked(getFile).mockResolvedValue({
       file: {
         id: "file-1",
@@ -45,7 +46,11 @@ describe("FileViewer", () => {
     });
     expect(heading).toBeInTheDocument();
     // 已发布不加标签：每篇正式文档都一样，标出来只是噪声。
-    expect(heading.previousElementSibling).toBeNull();
+    expect(
+      heading
+        .closest(".content-viewer-heading")
+        ?.querySelector(".content-viewer-status"),
+    ).toBeNull();
     expect(screen.queryByText("已发布")).not.toBeInTheDocument();
     expect(screen.getByText("默认只展示正文")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
@@ -79,8 +84,11 @@ describe("FileViewer", () => {
       level: 1,
       name: "草稿文档",
     });
-    expect(heading.previousElementSibling).toHaveClass("content-viewer-status");
-    expect(heading.previousElementSibling).toHaveTextContent("草稿");
+    const status = heading
+      .closest(".content-viewer-heading")
+      ?.querySelector(".content-viewer-status");
+    expect(status).toHaveTextContent("草稿");
+    expect(status?.parentElement).toHaveClass("content-viewer-kicker");
   });
 
   it("does not show the edit link to a viewer", async () => {
@@ -106,5 +114,27 @@ describe("FileViewer", () => {
     expect(
       screen.queryByRole("link", { name: "编辑" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("uses serif reading typography and persists font preferences", async () => {
+    render(<FileViewer fileId="file-1" />);
+
+    await screen.findByRole("heading", { level: 1, name: "展示文档" });
+    const article = screen.getByRole("article");
+    expect(article).toHaveAttribute("data-reader-font", "serif");
+    expect(article).toHaveStyle({ "--reader-font-size": "19px" });
+
+    fireEvent.click(screen.getByRole("button", { name: "楷体" }));
+    fireEvent.click(screen.getByRole("button", { name: "增大正文字号" }));
+
+    expect(article).toHaveAttribute("data-reader-font", "kai");
+    expect(article).toHaveStyle({ "--reader-font-size": "20px" });
+    await waitFor(() =>
+      expect(
+        JSON.parse(
+          window.localStorage.getItem("liveboard:reader-preferences") ?? "{}",
+        ),
+      ).toEqual({ font: "kai", fontSize: 20 }),
+    );
   });
 });

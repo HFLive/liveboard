@@ -3124,12 +3124,6 @@ p.muted {
   padding: clamp(22px, 3vw, 38px);
 }
 
-.editor-preview-title {
-  margin: 0;
-  font-size: 28px;
-  line-height: 1.25;
-}
-
 .editor-preview-document .render-heading-xl {
   border-bottom: 0;
   padding-bottom: 0;

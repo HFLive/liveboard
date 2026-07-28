@@ -7,12 +7,13 @@ import {
   Patch,
   Post,
   Put,
+  Req,
   Res,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import {
   CreateClassroomAnnouncementDto,
@@ -26,6 +27,7 @@ import {
   MAX_CLASSROOM_FILE_SIZE_BYTES,
   type UploadedClassroomFile,
 } from "./classrooms.service";
+import { createRequestAbortSignal } from "../../common/request-abort";
 
 @Controller("classrooms")
 export class ClassroomsController {
@@ -170,11 +172,23 @@ export class ClassroomsController {
   async uploadFile(
     @CurrentUserId() userId: string | null,
     @Param("id") classroomId: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
     @UploadedFile() file?: UploadedClassroomFile,
   ) {
-    return {
-      file: await this.classroomsService.uploadFile(userId, classroomId, file),
-    };
+    const requestAbort = createRequestAbortSignal(request, response);
+    try {
+      return {
+        file: await this.classroomsService.uploadFile(
+          userId,
+          classroomId,
+          file,
+          requestAbort.signal,
+        ),
+      };
+    } finally {
+      requestAbort.dispose();
+    }
   }
 
   @Get(":id/files/:fileId")

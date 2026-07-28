@@ -49,8 +49,87 @@
   white-space: nowrap;
 }
 
+.inline-format-toolbar {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  left: 144px;
+  min-height: 28px;
+  justify-content: flex-end;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 120ms ease,
+    visibility 120ms ease;
+}
+
 .doc-block:not(:focus-within) .inline-format-toolbar {
-  display: none;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.doc-block-body {
+  position: relative;
+}
+
+@media (min-width: 1121px) {
+  .app-main:has(.content-editor-workspace) {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .app-main:has(.content-editor-workspace) > .mobile-route-content {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .content-editor-workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .content-editor-workspace .editor-title-bar {
+    flex: 0 0 auto;
+  }
+
+  .content-editor-workspace .editor-workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .content-editor-workspace .editor-split {
+    height: 100%;
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  .content-editor-workspace .editor-pane {
+    position: static;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    align-self: stretch;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .editor-format-pane {
+    min-height: 0;
+  }
+
+  .editor-format-scroll,
+  .editor-preview-scroll {
+    height: 100%;
+    max-height: none;
+    overflow: auto;
+    scrollbar-gutter: stable;
+  }
 }
 
 .editor-outline {
@@ -96,6 +175,148 @@
   color: var(--text);
 }
 
+.internal-document-modal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(520px, calc(100vw - 28px));
+  max-height: min(680px, calc(100dvh - 32px));
+  overflow: hidden;
+}
+
+.internal-document-modal .modal-head {
+  min-height: 0;
+  padding: 17px 20px 14px;
+}
+
+.internal-document-modal .modal-head h2 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.015em;
+}
+
+.internal-document-modal .modal-head p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.internal-document-modal .modal-head .icon-button {
+  align-self: start;
+  width: 30px;
+  height: 30px;
+}
+
+.internal-document-body {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+  gap: 8px;
+  padding: 14px 20px 18px;
+}
+
+.internal-document-search {
+  position: relative;
+  display: block;
+}
+
+.internal-document-search > svg {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 12px;
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.internal-document-search > input {
+  width: 100%;
+  min-height: 38px;
+  padding-left: 34px;
+  font-size: 13px;
+}
+
+.internal-document-result-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.internal-document-list {
+  min-height: 0;
+  max-height: min(48vh, 360px);
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.internal-document-list > [role="listitem"] > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 8px 7px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.internal-document-list > [role="listitem"] > button:hover,
+.internal-document-list > [role="listitem"] > button:focus-visible {
+  background: var(--fill-hover);
+  outline: 0;
+}
+
+.internal-document-list > [role="listitem"] > button > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.internal-document-list strong,
+.internal-document-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.internal-document-list strong {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.internal-document-list small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.internal-document-list em {
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: var(--fill-active);
+  padding: 2px 5px;
+  color: var(--text-soft);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.internal-document-empty {
+  padding: 24px 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
 @media (max-width: 760px) {
   .editor-title-bar {
     align-items: stretch;
@@ -111,9 +332,18 @@
   }
 
   .inline-format-toolbar {
-    flex-wrap: wrap;
-    overflow-x: visible;
+    left: 122px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
     padding-inline: 0;
+  }
+
+  .internal-document-modal .modal-head {
+    padding-inline: 16px;
+  }
+
+  .internal-document-body {
+    padding-inline: 16px;
   }
 
   .editor-preview-pane {

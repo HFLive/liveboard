@@ -4,16 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { ArrowLeft, Send } from "lucide-react";
-import type {
-  ForumCategorySummary,
-  ForumRelatedResource,
-} from "@liveboard/shared";
+import type { ForumCategorySummary } from "@liveboard/shared";
 import {
   createForumThread,
-  listExerciseSets,
-  listFiles,
   listForumOverview,
-  listTeachingDecks,
   uploadForumPostImages,
 } from "@/lib/api";
 import { APP_ROUTES, forumThread } from "@/lib/routes";
@@ -36,46 +30,18 @@ export function NewForumThreadClient() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resourceOptions, setResourceOptions] = useState<
-    ForumRelatedResource[]
-  >([]);
-  const [selectedRelatedKeys, setSelectedRelatedKeys] = useState<Set<string>>(
-    new Set(),
-  );
 
   useEffect(() => {
     let mounted = true;
 
-    Promise.all([
-      listForumOverview(),
-      listFiles(),
-      listTeachingDecks(),
-      listExerciseSets(),
-    ])
-      .then(([result, fileResult, teachingResult, exerciseResult]) => {
+    listForumOverview()
+      .then((result) => {
         if (!mounted) {
           return;
         }
 
         setCategories(result.categories);
         setCategoryId(result.categories[0]?.id ?? "");
-        setResourceOptions([
-          ...fileResult.files.map((file) => ({
-            type: "document" as const,
-            id: file.id,
-            title: file.title,
-          })),
-          ...teachingResult.decks.map((deck) => ({
-            type: "teaching" as const,
-            id: deck.id,
-            title: deck.title,
-          })),
-          ...exerciseResult.exerciseSets.map((exercise) => ({
-            type: "exercise" as const,
-            id: exercise.id,
-            title: exercise.title,
-          })),
-        ]);
       })
       .catch((caught) => {
         if (mounted) {
@@ -112,11 +78,6 @@ export function NewForumThreadClient() {
           title,
           body,
           isAnonymous,
-          relatedResources: resourceOptions
-            .filter((resource) =>
-              selectedRelatedKeys.has(`${resource.type}:${resource.id}`),
-            )
-            .map(({ type, id }) => ({ type, id })),
         });
         const postId = result.thread.posts[0]?.id;
         if (!postId) throw new Error("帖子创建成功，但未找到正文");
@@ -223,47 +184,6 @@ export function NewForumThreadClient() {
             onProcessingChange={setProcessingImages}
             value={images}
           />
-
-          <details className="forum-related-picker">
-            <summary>关联内容（{selectedRelatedKeys.size}/6）</summary>
-            <div>
-              {resourceOptions.length ? (
-                resourceOptions.map((resource) => {
-                  const key = `${resource.type}:${resource.id}`;
-                  const checked = selectedRelatedKeys.has(key);
-                  return (
-                    <label key={key}>
-                      <input
-                        checked={checked}
-                        disabled={!checked && selectedRelatedKeys.size >= 6}
-                        onChange={() =>
-                          setSelectedRelatedKeys((current) => {
-                            const next = new Set(current);
-                            if (next.has(key)) next.delete(key);
-                            else next.add(key);
-                            return next;
-                          })
-                        }
-                        type="checkbox"
-                      />
-                      <span>
-                        <small>
-                          {resource.type === "document"
-                            ? "文档"
-                            : resource.type === "teaching"
-                              ? "课件"
-                              : "练习"}
-                        </small>
-                        {resource.title}
-                      </span>
-                    </label>
-                  );
-                })
-              ) : (
-                <p className="muted">暂无可关联内容。</p>
-              )}
-            </div>
-          </details>
 
           <div className="forum-new-actions">
             <label className="forum-anonymous-option">

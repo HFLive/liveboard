@@ -63,6 +63,15 @@ import {
 import { formatDateTime, formatRelativeTime } from "@/lib/labels";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
+import { UploadTaskToast } from "@/components/upload/UploadTaskToast";
+import {
+  prepareUploadJobs,
+  useUploadTask,
+} from "@/components/upload/useUploadTask";
+import {
+  FeedbackNotice,
+  useFeedbackNotice,
+} from "@/components/system/FeedbackNotice";
 
 export type ClassroomTab =
   "announcements" | "teaching" | "exercises" | "files" | "members";
@@ -101,8 +110,16 @@ export function ClassroomDetailClient({
   const [savingClassroom, setSavingClassroom] = useState(false);
   const [deletingClassroom, setDeletingClassroom] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const {
+    tasks: uploadTasks,
+    uploadFiles,
+    cancelUpload,
+    dismissUpload,
+  } = useUploadTask();
+  const [errorNotice, setError] = useFeedbackNotice();
+  const [messageNotice, setMessage] = useFeedbackNotice();
+  const error = errorNotice?.text ?? null;
+  const message = messageNotice?.text ?? null;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -191,27 +208,44 @@ export function ClassroomDetailClient({
   }
 
   async function onUpload(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    const selectedFiles = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!file) return;
+    if (selectedFiles.length === 0) return;
+    const jobs = prepareUploadJobs(
+      selectedFiles,
+      files.map((file) => file.filename),
+      "当前课堂中已存在同名文件",
+    );
     setUploading(true);
     setError(null);
     try {
-      const result = await uploadClassroomFile(classroomId, file);
-      setFiles((current) => [result.file, ...current]);
-      setClassroom((current) =>
-        current
-          ? {
-              ...current,
-              storageUsedBytes:
-                current.storageUsedBytes + result.file.sizeBytes,
-              fileCount: current.fileCount + 1,
-            }
-          : current,
+      const outcomes = await uploadFiles(jobs, (job, options) =>
+        uploadClassroomFile(classroomId, job.file, options),
       );
-      setMessage("课堂文件已上传");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "上传失败");
+      const uploadedFiles = outcomes.flatMap((outcome) =>
+        outcome.result ? [outcome.result.file] : [],
+      );
+      if (uploadedFiles.length > 0) {
+        setFiles((current) => [...uploadedFiles, ...current]);
+        const uploadedBytes = uploadedFiles.reduce(
+          (total, file) => total + file.sizeBytes,
+          0,
+        );
+        setClassroom((current) =>
+          current
+            ? {
+                ...current,
+                storageUsedBytes: current.storageUsedBytes + uploadedBytes,
+                fileCount: current.fileCount + uploadedFiles.length,
+              }
+            : current,
+        );
+        setMessage(
+          uploadedFiles.length === 1
+            ? "课堂文件已上传"
+            : `${uploadedFiles.length} 个课堂文件已上传`,
+        );
+      }
     } finally {
       setUploading(false);
     }
@@ -462,8 +496,8 @@ export function ClassroomDetailClient({
           ) : null}
         </div>
       </header>
-      {error ? <p className="error-text">{error}</p> : null}
-      {message ? <p className="success-text">{message}</p> : null}
+      <FeedbackNotice notice={errorNotice} tone="error" />
+      <FeedbackNotice notice={messageNotice} tone="success" />
 
       <div className="segmented-control classroom-tabs" aria-label="课堂内容">
         <button
@@ -569,6 +603,7 @@ export function ClassroomDetailClient({
               <input
                 className="classroom-upload-input"
                 disabled={uploading}
+                multiple
                 onChange={(event) => void onUpload(event)}
                 ref={fileInputRef}
                 type="file"
@@ -586,8 +621,8 @@ export function ClassroomDetailClient({
                 <div>
                   <h2>{announcement.title}</h2>
                   <small>
-                    <UserProfileLink user={announcement.author} /> ·{" "}
-                    {formatDateTime(announcement.createdAt)}
+                    <UserProfileLink compactBadges user={announcement.author} />{" "}
+                    · {formatDateTime(announcement.createdAt)}
                     {announcement.updatedAt !== announcement.createdAt
                       ? " · 已编辑"
                       : ""}
@@ -649,7 +684,7 @@ export function ClassroomDetailClient({
                   {deck.title}
                 </Link>
                 <small>
-                  <UserProfileLink user={deck.createdBy} /> ·{" "}
+                  <UserProfileLink compactBadges user={deck.createdBy} /> ·{" "}
                   {formatRelativeTime(deck.updatedAt)}
                 </small>
               </span>
@@ -808,7 +843,7 @@ export function ClassroomDetailClient({
             {classroom.members?.map((member) => (
               <div className="classroom-member-row" key={member.user.id}>
                 <span>
-                  <UserProfileLink user={member.user} />
+                  <UserProfileLink compactBadges user={member.user} />
                   <small>@{member.user.username}</small>
                 </span>
                 <select
@@ -1124,6 +1159,11 @@ export function ClassroomDetailClient({
           </form>
         </div>
       ) : null}
+      <UploadTaskToast
+        onCancel={cancelUpload}
+        onDismiss={dismissUpload}
+        tasks={uploadTasks}
+      />
     </div>
   );
 }

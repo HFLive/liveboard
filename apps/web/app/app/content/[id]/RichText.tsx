@@ -68,9 +68,15 @@ function renderInline(value: string): ReactNode[] {
       nodes.push(<code key={key}>{match[2]}</code>);
     } else if (match[3] !== undefined && match[4] !== undefined) {
       const label = renderInline(match[3]);
+      const isInternal = match[4].startsWith("/") && !match[4].startsWith("//");
       nodes.push(
         isSafeRichTextHref(match[4]) ? (
-          <a href={match[4]} key={key} rel="noreferrer" target="_blank">
+          <a
+            href={match[4]}
+            key={key}
+            rel={isInternal ? undefined : "noreferrer"}
+            target={isInternal ? undefined : "_blank"}
+          >
             {label}
           </a>
         ) : (

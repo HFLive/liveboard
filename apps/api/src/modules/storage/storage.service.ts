@@ -20,6 +20,7 @@ import type {
   StorageBackendName,
   StorageDownloadMode,
 } from "./storage-backend";
+import { ATOMIC_UPLOAD_PART_SIZE_BYTES } from "./storage-backend";
 
 export interface OssSettingsInput {
   region?: string;
@@ -97,6 +98,7 @@ export class StorageService {
       useSSL: config.get<string>("MINIO_USE_SSL", "false") === "true",
       accessKey,
       secretKey,
+      partSize: ATOMIC_UPLOAD_PART_SIZE_BYTES,
     });
   }
 
@@ -147,6 +149,9 @@ export class StorageService {
   ): Promise<string | null> {
     const settings = await this.getSettings();
     if ((settings?.downloadMode ?? "proxy") !== "direct") return null;
+    // 历史配置可能同时启用了内网 Endpoint 与签名直出。内网地址无法由
+    // 公网浏览器访问，因此安全回退到调用方的服务器流式中转。
+    if (storageBackend === "oss" && settings?.ossInternal) return null;
     const backend = await this.backendFor(storageBackend);
     return backend.presignGet(key, {
       expirySeconds: PRESIGN_EXPIRY_SECONDS,
@@ -202,6 +207,15 @@ export class StorageService {
     if (nextBackend === "oss" && !effectiveConfig) {
       throw new BadRequestException(
         "启用阿里云 OSS 前请完整填写地域、Bucket 和访问凭证",
+      );
+    }
+    if (
+      nextBackend === "oss" &&
+      nextDownloadMode === "direct" &&
+      effectiveConfig?.internal
+    ) {
+      throw new BadRequestException(
+        "签名直出需要浏览器访问公网 Endpoint，不能使用内网 Endpoint",
       );
     }
     // 启用 OSS 或修改 OSS 配置时，必须先通过真实读写探测才允许保存

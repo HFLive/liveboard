@@ -103,7 +103,7 @@ export interface UserPublicActivity {
   }>;
 }
 
-export type ActivityKind = "exercise" | "grading" | "document" | "forum";
+export type ActivityKind = "exercise" | "grading" | "forum";
 
 export interface ActivityItem {
   id: string;
@@ -284,10 +284,6 @@ export interface ForumThreadSummary {
   createdAt: string;
   updatedAt: string;
   lastActivityAt: string;
-  followed?: boolean;
-  followRequired?: boolean;
-  unread?: boolean;
-  mentioned?: boolean;
   relatedResources?: ForumRelatedResource[];
 }
 

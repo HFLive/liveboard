@@ -1,0 +1,17 @@
+.user-profile-page .user-profile-content,
+.user-profile-page .user-profile-activity {
+  width: min(1040px, 100%);
+  max-width: none;
+  margin-inline: auto;
+}
+
+.user-profile-page .user-profile-avatar {
+  border: 0;
+  box-shadow: 0 9px 26px color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+@media (max-width: 700px) {
+  .user-profile-page .user-profile-avatar {
+    box-shadow: 0 7px 20px color-mix(in srgb, var(--text) 16%, transparent);
+  }
+}

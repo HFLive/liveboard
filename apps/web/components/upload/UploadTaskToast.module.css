@@ -1,0 +1,175 @@
+.toast {
+  position: fixed;
+  z-index: 950;
+  right: 20px;
+  bottom: 20px;
+  width: min(360px, calc(100vw - 28px));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-popover);
+  color: var(--text);
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+}
+
+.heading strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heading span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.taskList {
+  max-height: min(360px, calc(100vh - 120px));
+  overflow-y: auto;
+}
+
+.task {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 28px;
+  align-items: start;
+  gap: 9px;
+  padding: 11px 12px;
+}
+
+.task + .task {
+  border-top: 1px solid var(--line);
+}
+
+.task > svg {
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  color: var(--accent-dark);
+}
+
+.task[data-status="error"] > svg {
+  color: var(--danger);
+}
+
+.task[data-status="cancelled"] > svg,
+.task[data-status="queued"] > svg {
+  color: var(--muted);
+}
+
+.taskBody {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.fileRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.fileRow span {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileRow em {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--fill-hover);
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 160ms ease;
+}
+
+.task p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.task > button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  cursor: pointer;
+}
+
+.task > button:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.task > button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.spinning {
+  animation: upload-task-spin 1s linear infinite;
+}
+
+@keyframes upload-task-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .toast {
+    right: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+  }
+
+  .taskList {
+    max-height: min(300px, calc(100vh - 120px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress span {
+    transition: none;
+  }
+
+  .spinning {
+    animation: none;
+  }
+}

@@ -1,5 +1,37 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { API_URL, ApiError, request, shouldRedirectToLogin } from "./client";
+import {
+  API_URL,
+  ApiError,
+  request,
+  shouldRedirectToLogin,
+  uploadFormData,
+} from "./client";
+
+class FakeXMLHttpRequest extends EventTarget {
+  static latest: FakeXMLHttpRequest | null = null;
+  readonly upload = new EventTarget();
+  responseText = "";
+  status = 0;
+  withCredentials = false;
+  method = "";
+  url = "";
+
+  constructor() {
+    super();
+    FakeXMLHttpRequest.latest = this;
+  }
+
+  open(method: string, url: string) {
+    this.method = method;
+    this.url = url;
+  }
+
+  send(_body: FormData) {}
+
+  abort() {
+    this.dispatchEvent(new Event("abort"));
+  }
+}
 
 describe("API request client", () => {
   afterEach(() => {
@@ -90,4 +122,47 @@ describe("API request client", () => {
       expect(shouldRedirectToLogin(status, path)).toBe(expected);
     },
   );
+
+  it("reports browser upload progress and resolves the JSON response", async () => {
+    vi.stubGlobal("XMLHttpRequest", FakeXMLHttpRequest);
+    const onProgress = vi.fn();
+    const promise = uploadFormData<{ ok: boolean }>(
+      "/assets/upload",
+      new FormData(),
+      "上传失败",
+      { onProgress },
+    );
+    const xhr = FakeXMLHttpRequest.latest!;
+
+    xhr.upload.dispatchEvent(
+      Object.assign(new Event("progress"), {
+        lengthComputable: true,
+        loaded: 42,
+        total: 100,
+      }),
+    );
+    xhr.status = 200;
+    xhr.responseText = JSON.stringify({ ok: true });
+    xhr.dispatchEvent(new Event("load"));
+
+    await expect(promise).resolves.toEqual({ ok: true });
+    expect(onProgress).toHaveBeenNthCalledWith(1, 42);
+    expect(onProgress).toHaveBeenLastCalledWith(100);
+    expect(xhr.withCredentials).toBe(true);
+  });
+
+  it("aborts the request when the upload task is cancelled", async () => {
+    vi.stubGlobal("XMLHttpRequest", FakeXMLHttpRequest);
+    const controller = new AbortController();
+    const promise = uploadFormData(
+      "/assets/upload",
+      new FormData(),
+      "上传失败",
+      { signal: controller.signal },
+    );
+
+    controller.abort();
+
+    await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+  });
 });

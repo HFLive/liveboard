@@ -116,7 +116,7 @@ textarea {
 /* Application frame and navigation */
 
 .app-frame {
-  grid-template-columns: 116px minmax(0, 1fr);
+  grid-template-columns: 108px minmax(0, 1fr);
   min-height: 100dvh;
   background: var(--bg);
 }
@@ -137,11 +137,11 @@ textarea {
 }
 
 .rail-brand {
+  justify-content: center;
   grid-template-columns: 38px;
-  gap: 11px;
-  width: fit-content;
-  border-radius: var(--radius-lg);
-  padding: 10px 4px 12px;
+  width: 100%;
+  border-radius: 10px;
+  padding: 10px 0 14px;
 }
 
 .rail-brand:hover {
@@ -169,18 +169,18 @@ textarea {
 }
 
 .rail-nav {
-  gap: 4px;
+  gap: 3px;
   padding: 4px 0 8px;
 }
 
 .rail-link {
-  gap: 18px;
-  min-height: 42px;
+  gap: 11px;
+  min-height: 40px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--rail-muted);
-  padding: 0 10px;
-  font-size: 14px;
+  padding: 0 9px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -191,16 +191,16 @@ textarea {
 
 .rail-link.active {
   border-color: transparent;
-  background: rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.07);
   color: #fff;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+  box-shadow: none;
 }
 
 .rail-link.active::before {
-  top: 11px;
-  bottom: 11px;
+  top: 10px;
+  bottom: 10px;
   left: 0;
-  width: 3px;
+  width: 2px;
   background: #d4a145;
 }
 
@@ -259,9 +259,9 @@ textarea {
   position: fixed;
   z-index: 1000;
   bottom: 12px;
-  left: 124px;
+  left: 116px;
   display: grid;
-  width: min(390px, calc(100vw - 140px));
+  width: min(390px, calc(100vw - 132px));
   max-height: min(620px, calc(100dvh - 24px));
   overflow: hidden;
   border: 1px solid var(--line);
@@ -447,22 +447,6 @@ textarea {
   display: block;
 }
 
-.rail-usage-user {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text);
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.rail-usage-user .rail-avatar {
-  width: 22px;
-  height: 22px;
-  border-color: var(--line);
-  font-size: 11px;
-}
-
 .nav-button {
   min-height: 34px;
   border: 0;
@@ -495,17 +479,6 @@ textarea {
   display: grid;
   place-items: center;
   line-height: 0;
-}
-
-.rail-usage-popover {
-  position: fixed;
-  z-index: 200;
-  width: auto;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-popover);
-  padding: 10px 12px;
 }
 
 .rail-usage-bar-fill {
@@ -1917,10 +1890,10 @@ button:disabled {
   height: 104px;
   overflow: hidden;
   transform: translateY(-42px);
-  border: 4px solid var(--bg);
+  border: 0;
   border-radius: 50%;
   background: var(--panel-soft);
-  box-shadow: 0 3px 12px rgba(28, 24, 18, 0.1);
+  box-shadow: none;
   color: var(--text);
   font-size: 34px;
   font-weight: 800;
@@ -2007,6 +1980,30 @@ button:disabled {
 .user-badge > span {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.user-badges--compact {
+  gap: 3px;
+}
+
+.user-badges--compact .user-badge {
+  min-height: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.user-badges--compact .user-badge svg {
+  width: 14px;
+  height: 14px;
+}
+
+.user-badges--compact .user-badge > span {
+  display: none;
+}
+
+.user-badges--compact .user-badge[data-color] {
+  background: transparent;
 }
 
 .user-badge[data-color="gold"] {
@@ -2560,7 +2557,7 @@ body,
 }
 
 .rail-link.active {
-  background: rgba(212, 161, 69, 0.13);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .workbench-main,

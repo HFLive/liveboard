@@ -14,6 +14,7 @@ import {
   deleteLibraryAsset,
   getFolderTree,
   listFiles,
+  uploadAsset,
   updateContentPins,
 } from "@/lib/api";
 
@@ -167,6 +168,72 @@ describe("ContentClient folder deletion", () => {
     );
   });
 
+  it("rejects invalid and duplicate upload names before sending the file", async () => {
+    vi.mocked(listFiles).mockResolvedValue({
+      files: [],
+      standaloneAssets: [
+        {
+          id: "asset-1",
+          folderId: "folder-1",
+          filename: "讲义.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 2048,
+          canManage: true,
+          updatedAt: "2026-07-20T08:00:00.000Z",
+        },
+      ],
+    });
+
+    render(<ContentClient />);
+    await enterFolderFromTree("课程资料");
+
+    const input = screen.getByLabelText("上传文件到当前文件夹");
+    fireEvent.change(input, {
+      target: {
+        files: [
+          new File(["invalid"], "讲义\u200b.pdf", {
+            type: "application/pdf",
+          }),
+        ],
+      },
+    });
+    expect(
+      await screen.findByText("文件名称不能包含换行、控制字符或不可见字符"),
+    ).toBeInTheDocument();
+
+    fireEvent.change(input, {
+      target: {
+        files: [
+          new File(["duplicate"], "讲义.pdf", {
+            type: "application/pdf",
+          }),
+        ],
+      },
+    });
+    expect(
+      await screen.findByText("当前文件夹中已存在同名文件"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭“讲义.pdf”" }));
+    expect(
+      screen.queryByText("当前文件夹中已存在同名文件"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(input, {
+      target: {
+        files: [
+          new File(["duplicate-again"], "讲义.pdf", {
+            type: "application/pdf",
+          }),
+        ],
+      },
+    });
+    expect(
+      await screen.findByText("当前文件夹中已存在同名文件"),
+    ).toBeInTheDocument();
+    expect(uploadAsset).not.toHaveBeenCalled();
+  });
+
   it("previews uploaded files in-app and downloads via attachment URL", async () => {
     vi.mocked(listFiles).mockResolvedValue({
       files: [],
@@ -199,6 +266,12 @@ describe("ContentClient folder deletion", () => {
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("row", { name: /截图\.png/ }));
+    expect(
+      await screen.findByRole("dialog", { name: "截图.png" }),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
 
     fireEvent.click(screen.getByTitle("文件操作"));
     expect(await screen.findByRole("link", { name: "下载" })).toHaveAttribute(

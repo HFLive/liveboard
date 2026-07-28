@@ -78,11 +78,20 @@ import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { SortIconSelect } from "@/components/SortIconSelect";
 import { PermissionUserPicker } from "@/components/PermissionUserPicker";
 import { AssetPreviewDialog } from "@/components/asset-preview/AssetPreviewDialog";
+import { UploadTaskToast } from "@/components/upload/UploadTaskToast";
+import {
+  prepareUploadJobs,
+  useUploadTask,
+} from "@/components/upload/useUploadTask";
 import { MarkdownImportButton } from "./MarkdownImportButton";
 import {
   SkeletonRows,
   TableSkeletonRows,
 } from "@/components/system/ProgressiveLoading";
+import {
+  FeedbackNotice,
+  useFeedbackNotice,
+} from "@/components/system/FeedbackNotice";
 
 type FlatFolderNode = FolderNode & { depth: number };
 type PinnedContentItem =
@@ -223,6 +232,12 @@ export function ContentClient() {
     FolderAssetSummary[]
   >([]);
   const [uploadingAsset, setUploadingAsset] = useState(false);
+  const {
+    tasks: uploadTasks,
+    uploadFiles,
+    cancelUpload,
+    dismissUpload,
+  } = useUploadTask();
   const [renamingAsset, setRenamingAsset] = useState<FolderAssetSummary | null>(
     null,
   );
@@ -259,8 +274,10 @@ export function ContentClient() {
   const [canManageGrants, setCanManageGrants] = useState(false);
   const [grantUserId, setGrantUserId] = useState("");
   const [grantLevel, setGrantLevel] = useState<PermissionLevel>("viewer");
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [messageNotice, setMessage] = useFeedbackNotice();
+  const [errorNotice, setError] = useFeedbackNotice();
+  const message = messageNotice?.text ?? null;
+  const error = errorNotice?.text ?? null;
   const [deleteFolderTarget, setDeleteFolderTarget] =
     useState<DeleteFolderTarget | null>(null);
   const [deleteFolderStep, setDeleteFolderStep] = useState<1 | 2>(1);
@@ -703,18 +720,30 @@ export function ContentClient() {
   }
 
   async function onUploadAsset(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    const selectedFiles = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!file || !activeFolderId) return;
+    if (selectedFiles.length === 0 || !activeFolderId) return;
+    const jobs = prepareUploadJobs(
+      selectedFiles,
+      standaloneAssets.map((asset) => asset.filename),
+      "当前文件夹中已存在同名文件",
+    );
     setUploadingAsset(true);
     setError(null);
     setMessage(null);
     try {
-      await uploadAsset({ file, folderId: activeFolderId });
-      setMessage(`“${file.name}”已上传`);
-      await refreshFolderContents(activeFolderId);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "上传文件失败");
+      const outcomes = await uploadFiles(jobs, (job, options) =>
+        uploadAsset({ file: job.file, folderId: activeFolderId }, options),
+      );
+      const successCount = outcomes.filter(
+        (outcome) => outcome.result !== undefined,
+      ).length;
+      if (successCount > 0) {
+        setMessage(
+          successCount === 1 ? "文件已上传" : `${successCount} 个文件已上传`,
+        );
+        await refreshFolderContents(activeFolderId);
+      }
     } finally {
       setUploadingAsset(false);
     }
@@ -1108,6 +1137,22 @@ export function ContentClient() {
     } else {
       window.open(contentDetail(item.file.id), "_blank", "noopener,noreferrer");
     }
+  }
+
+  function onAssetRowClick(
+    event: ReactMouseEvent<HTMLTableRowElement>,
+    asset: FolderAssetSummary,
+  ) {
+    const target = event.target;
+
+    if (
+      target instanceof Element &&
+      target.closest("a, button, [data-menu-root='true']")
+    ) {
+      return;
+    }
+
+    setPreviewAsset(asset);
   }
 
   function renderContentRowContextMenu(
@@ -1694,8 +1739,8 @@ export function ContentClient() {
         </div>
       </header>
 
-      {error ? <p className="error-text">{error}</p> : null}
-      {message ? <p className="success-text">{message}</p> : null}
+      <FeedbackNotice notice={errorNotice} tone="error" />
+      <FeedbackNotice notice={messageNotice} tone="success" />
 
       <div className="panel-head content-path-head">
         <button
@@ -1758,6 +1803,7 @@ export function ContentClient() {
                 accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,image/png,image/jpeg,image/gif,image/webp"
                 aria-label="上传文件到当前文件夹"
                 hidden
+                multiple
                 onChange={(event) => void onUploadAsset(event)}
                 ref={assetInputRef}
                 type="file"
@@ -1990,7 +2036,11 @@ export function ContentClient() {
                   </Fragment>
                 ))}
                 {sortedAssets.map((asset) => (
-                  <tr className="content-asset-row" key={asset.id}>
+                  <tr
+                    className="content-asset-row"
+                    key={asset.id}
+                    onClick={(event) => onAssetRowClick(event, asset)}
+                  >
                     <td data-label="文件名">
                       <a
                         className="content-file-link"
@@ -2383,6 +2433,11 @@ export function ContentClient() {
       <AssetPreviewDialog
         asset={previewAsset}
         onClose={() => setPreviewAsset(null)}
+      />
+      <UploadTaskToast
+        onCancel={cancelUpload}
+        onDismiss={dismissUpload}
+        tasks={uploadTasks}
       />
 
       {renamingAsset ? (

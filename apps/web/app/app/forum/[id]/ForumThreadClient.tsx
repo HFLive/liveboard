@@ -5,13 +5,12 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  Bell,
-  BellOff,
+  ArrowLeft,
   Lock,
   MessageSquareReply,
+  MoreHorizontal,
   Pencil,
   Save,
-  Search,
   Send,
   Trash2,
   ThumbsDown,
@@ -33,7 +32,6 @@ import {
   uploadForumPostImages,
   updateForumPost,
   updateForumThread,
-  updateForumThreadFollow,
   voteForumPost,
 } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/labels";
@@ -84,16 +82,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
   const [actionLoading, setActionLoading] = useState(false);
   const [votingPostIds, setVotingPostIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
-  const [postSearch, setPostSearch] = useState("");
   const draftKey = `liveboard:forum-reply-draft:${threadId}`;
-  const searchResults = useMemo(() => {
-    const value = postSearch.trim().toLowerCase();
-    return value
-      ? (thread?.posts ?? []).filter((post) =>
-          post.body.toLowerCase().includes(value),
-        )
-      : [];
-  }, [postSearch, thread?.posts]);
 
   useEffect(() => {
     let mounted = true;
@@ -150,28 +139,6 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     }, 250);
     return () => window.clearTimeout(timer);
   }, [draftKey, reply, replyDrafts]);
-
-  async function toggleFollow() {
-    if (!thread || actionLoading) return;
-    setActionLoading(true);
-    setError(null);
-    try {
-      const result = await updateForumThreadFollow(thread.id, !thread.followed);
-      setThread((current) =>
-        current
-          ? {
-              ...current,
-              followed: result.followed,
-              followRequired: result.followRequired ?? current.followRequired,
-            }
-          : current,
-      );
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "更新关注失败");
-    } finally {
-      setActionLoading(false);
-    }
-  }
 
   async function handleReply(
     event: FormEvent<HTMLFormElement>,
@@ -293,6 +260,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
             ) : (
               <UserProfileLink
                 className="user-profile-link"
+                compactBadges
                 user={post.author}
               />
             )}
@@ -302,6 +270,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
               真实身份：
               <UserProfileLink
                 className="user-profile-link"
+                compactBadges
                 user={post.author}
               />
             </small>
@@ -623,6 +592,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                       ) : (
                         <UserProfileLink
                           className="user-profile-link"
+                          compactBadges
                           user={replyPost.replyTo.author}
                         />
                       )}
@@ -711,14 +681,21 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       {thread ? (
         <section className="forum-thread-detail surface">
           <header className="forum-thread-top">
-            {thread.status === "locked" ? (
-              <div className="forum-thread-topline">
+            <div className="forum-thread-context">
+              <Link
+                className="page-back-link forum-thread-back"
+                href={APP_ROUTES.forum}
+              >
+                <ArrowLeft aria-hidden="true" />
+                返回论坛
+              </Link>
+              {thread.status === "locked" ? (
                 <em className="forum-status-badge locked">
                   <Lock aria-hidden="true" />
                   已锁定
                 </em>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
             {editingThread ? (
               <form className="forum-thread-edit-form" onSubmit={saveThread}>
                 <input
@@ -761,101 +738,58 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
               </form>
             ) : null}
             <div className="forum-thread-actions">
-              <div className="forum-thread-search">
-                <label className="search-field">
-                  <Search aria-hidden="true" />
-                  <input
-                    aria-label="在帖子内搜索"
-                    onChange={(event) => setPostSearch(event.target.value)}
-                    placeholder="在帖子内搜索"
-                    value={postSearch}
-                  />
-                </label>
-                {postSearch.trim() ? (
-                  <div className="forum-thread-search-results">
-                    <span>{searchResults.length} 条匹配</span>
-                    {searchResults.slice(0, 8).map((post, index) => (
+              {(thread.canEdit && !editingThread) ||
+              thread.canModerate ||
+              thread.canDelete ? (
+                <details className="forum-thread-more">
+                  <summary aria-label="更多帖子操作" title="更多帖子操作">
+                    <MoreHorizontal aria-hidden="true" />
+                  </summary>
+                  <div className="forum-thread-more-menu">
+                    {thread.canEdit && !editingThread ? (
                       <button
-                        key={post.id}
-                        onClick={() =>
-                          document
-                            .getElementById(`forum-post-${post.id}`)
-                            ?.scrollIntoView({
-                              behavior: "smooth",
-                              block: "center",
-                            })
-                        }
+                        disabled={actionLoading}
+                        onClick={startEditThread}
                         type="button"
                       >
-                        {index + 1}. {post.body.slice(0, 36)}
+                        <Pencil aria-hidden="true" />
+                        编辑帖子
                       </button>
-                    ))}
+                    ) : null}
+                    {thread.canModerate ? (
+                      thread.status === "locked" ? (
+                        <button
+                          disabled={actionLoading}
+                          onClick={() => setThreadStatus("open")}
+                          type="button"
+                        >
+                          <Unlock aria-hidden="true" />
+                          解锁帖子
+                        </button>
+                      ) : (
+                        <button
+                          disabled={actionLoading}
+                          onClick={() => setThreadStatus("locked")}
+                          type="button"
+                        >
+                          <Lock aria-hidden="true" />
+                          锁定帖子
+                        </button>
+                      )
+                    ) : null}
+                    {thread.canDelete ? (
+                      <button
+                        className="danger"
+                        disabled={actionLoading}
+                        onClick={deleteThread}
+                        type="button"
+                      >
+                        <Trash2 aria-hidden="true" />
+                        删除帖子
+                      </button>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
-              <button
-                className="button secondary"
-                disabled={actionLoading || thread.followRequired}
-                onClick={() => void toggleFollow()}
-                type="button"
-              >
-                {thread.followed ? (
-                  <BellOff aria-hidden="true" className="button-icon" />
-                ) : (
-                  <Bell aria-hidden="true" className="button-icon" />
-                )}
-                <span className="forum-action-label">
-                  {thread.followRequired
-                    ? "已自动关注"
-                    : thread.followed
-                      ? "取消关注"
-                      : "关注主题"}
-                </span>
-              </button>
-              {thread.canEdit && !editingThread ? (
-                <button
-                  className="button secondary forum-moderation-action"
-                  disabled={actionLoading}
-                  onClick={startEditThread}
-                  type="button"
-                >
-                  <Pencil aria-hidden="true" className="button-icon" />
-                  <span className="forum-action-label">编辑帖子</span>
-                </button>
-              ) : null}
-              {thread.canModerate ? (
-                thread.status === "locked" ? (
-                  <button
-                    className="button secondary forum-moderation-action"
-                    disabled={actionLoading}
-                    onClick={() => setThreadStatus("open")}
-                    type="button"
-                  >
-                    <Unlock aria-hidden="true" className="button-icon" />
-                    <span className="forum-action-label">解锁</span>
-                  </button>
-                ) : (
-                  <button
-                    className="button secondary forum-moderation-action"
-                    disabled={actionLoading}
-                    onClick={() => setThreadStatus("locked")}
-                    type="button"
-                  >
-                    <Lock aria-hidden="true" className="button-icon" />
-                    <span className="forum-action-label">锁定</span>
-                  </button>
-                )
-              ) : null}
-              {thread.canDelete ? (
-                <button
-                  className="button danger forum-moderation-action"
-                  disabled={actionLoading}
-                  onClick={deleteThread}
-                  type="button"
-                >
-                  <Trash2 aria-hidden="true" className="button-icon" />
-                  <span className="forum-action-label">删除帖子</span>
-                </button>
+                </details>
               ) : null}
             </div>
           </header>
@@ -866,65 +800,65 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 className="forum-post-row forum-main-post"
                 id={`forum-post-${postStructure.mainPost.id}`}
               >
-                <aside className="forum-post-author">
+                <header className="forum-main-post-header">
                   <ForumUserAvatar
                     className="forum-comment-avatar forum-main-author-avatar"
                     isAnonymous={postStructure.mainPost.isAnonymous}
                     user={postStructure.mainPost.author}
                   />
-                  <strong>
-                    {postStructure.mainPost.isAnonymous ? (
-                      "匿名用户"
-                    ) : (
-                      <UserProfileLink
-                        className="user-profile-link"
-                        user={postStructure.mainPost.author}
-                      />
-                    )}
-                  </strong>
-                  {postStructure.mainPost.isAnonymous ? (
-                    <span>
-                      {postStructure.mainPost.author.id !== "anonymous" ? (
-                        <>
-                          真实身份：
-                          <UserProfileLink
-                            className="user-profile-link"
-                            user={postStructure.mainPost.author}
-                          />
-                        </>
+                  <div className="forum-main-post-byline">
+                    <strong>
+                      {postStructure.mainPost.isAnonymous ? (
+                        "匿名用户"
                       ) : (
-                        "匿名"
+                        <UserProfileLink
+                          className="user-profile-link"
+                          compactBadges
+                          user={postStructure.mainPost.author}
+                        />
                       )}
-                    </span>
-                  ) : null}
-                </aside>
-                <div className="forum-post-content">
-                  <div className="forum-post-toolbar">
-                    <time>
+                    </strong>
+                    <span>
                       {formatRelativeTime(postStructure.mainPost.createdAt)}
                       {postStructure.mainPost.updatedAt !==
                       postStructure.mainPost.createdAt
                         ? " · 已编辑"
                         : ""}
-                    </time>
-                    <span>
-                      {postStructure.mainPost.canDelete ? (
-                        <button
-                          className="icon-button subtle"
-                          disabled={actionLoading}
-                          onClick={() =>
-                            removePost(postStructure.mainPost!.id, true)
-                          }
-                          title="删除"
-                          type="button"
-                        >
-                          <Trash2 aria-hidden="true" />
-                        </button>
+                      {postStructure.mainPost.isAnonymous &&
+                      postStructure.mainPost.author.id !== "anonymous" ? (
+                        <>
+                          {" · 真实身份："}
+                          <UserProfileLink
+                            className="user-profile-link"
+                            compactBadges
+                            user={postStructure.mainPost.author}
+                          />
+                        </>
                       ) : null}
                     </span>
                   </div>
+                  {postStructure.mainPost.canDelete ? (
+                    <button
+                      className="icon-button subtle forum-main-post-delete"
+                      disabled={actionLoading}
+                      onClick={() =>
+                        removePost(postStructure.mainPost!.id, true)
+                      }
+                      title="删除"
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </header>
+                <div className="forum-post-content">
                   {!editingThread ? (
-                    <h1 className="forum-main-post-title">{thread.title}</h1>
+                    <>
+                      <span className="forum-main-post-category">
+                        {thread.category.name}
+                      </span>
+                      <h1 className="forum-main-post-title">{thread.title}</h1>
+                    </>
                   ) : null}
                   {editingPostId === postStructure.mainPost.id ? (
                     <div className="forum-post-edit-form">

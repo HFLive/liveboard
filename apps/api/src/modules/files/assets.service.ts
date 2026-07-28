@@ -16,6 +16,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { DEFAULT_MEMBER_ATTACHMENT_QUOTA_BYTES } from "../../common/storage-quota";
 import { requireResourceName } from "../../common/resource-name";
+import { putObjectWithCompensation } from "../storage/upload-compensation";
 
 export interface UploadedAssetFile {
   originalname: string;
@@ -57,6 +58,7 @@ export class AssetsService {
     userId: string | null,
     input: UploadAssetInput,
     file: UploadedAssetFile | undefined,
+    signal?: AbortSignal,
   ) {
     if (!userId) {
       throw new UnauthorizedException("Missing session");
@@ -70,18 +72,19 @@ export class AssetsService {
       throw new BadRequestException("文件不能超过 50MB");
     }
 
+    const filename = requireResourceName(file.originalname, "文件名称");
     const mimeType = normalizeAssetMimeType(file);
 
     const context = await this.resolveUploadContext(userId, input);
     if (context.kind === "standalone") {
-      assertStandaloneTypeAllowed(file.originalname, mimeType);
+      assertStandaloneTypeAllowed(filename, mimeType);
     }
     const backend = await this.storage.activeBackend();
 
-    const safeName = sanitizeFilename(file.originalname);
+    const storageFilename = sanitizeStorageFilename(filename);
     const storageKey = `${context.workspaceId}/${new Date()
       .toISOString()
-      .slice(0, 10)}/${randomUUID()}-${safeName}`;
+      .slice(0, 10)}/${randomUUID()}-${storageFilename}`;
 
     const asset = await this.reserveAssetWithinQuota(userId, file.size, {
       workspaceId: context.workspaceId,
@@ -90,20 +93,21 @@ export class AssetsService {
       storageKey,
       storageBackend: backend.name,
       kind: context.kind,
-      filename: safeName,
+      filename,
       mimeType,
       sizeBytes: file.size,
       uploadedBy: userId,
     });
 
-    try {
-      await backend.putObject(storageKey, file.buffer, mimeType);
-    } catch (caught) {
-      await this.prisma.fileAsset
-        .delete({ where: { id: asset.id } })
-        .catch(() => undefined);
-      throw caught;
-    }
+    await putObjectWithCompensation({
+      backend,
+      storageKey,
+      data: file.buffer,
+      mimeType,
+      signal,
+      releaseReservation: () =>
+        this.prisma.fileAsset.delete({ where: { id: asset.id } }),
+    });
 
     return {
       ...asset,
@@ -481,6 +485,18 @@ export class AssetsService {
     }
 
     const name = requireResourceName(filename, "文件名称");
+    const duplicate = await this.prisma.fileAsset.findFirst({
+      where: {
+        folderId: asset.folderId,
+        kind: "standalone",
+        filename: name,
+        id: { not: asset.id },
+      },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new ConflictException("当前文件夹中已存在同名文件");
+    }
     const updated = await this.prisma.fileAsset.update({
       where: { id: asset.id },
       data: { filename: name },
@@ -734,6 +750,34 @@ export class AssetsService {
             ]);
             if (!user) throw new UnauthorizedException("Missing session");
 
+            const duplicate =
+              data.kind === "standalone" && data.folderId
+                ? await tx.fileAsset.findFirst({
+                    where: {
+                      folderId: data.folderId,
+                      kind: "standalone",
+                      filename: data.filename,
+                    },
+                    select: { id: true },
+                  })
+                : data.kind === "embedded" && data.fileId
+                  ? await tx.fileAsset.findFirst({
+                      where: {
+                        fileId: data.fileId,
+                        kind: "embedded",
+                        filename: data.filename,
+                      },
+                      select: { id: true },
+                    })
+                  : null;
+            if (duplicate) {
+              throw new ConflictException(
+                data.kind === "standalone"
+                  ? "当前文件夹中已存在同名文件"
+                  : "当前文档中已存在同名附件",
+              );
+            }
+
             const quotaBytes =
               user.storageQuotaBytes ??
               workspace?.memberAttachmentQuotaBytes ??
@@ -774,7 +818,7 @@ export class AssetsService {
   }
 }
 
-function sanitizeFilename(filename: string) {
+function sanitizeStorageFilename(filename: string) {
   return (filename || "asset")
     .replace(/[^\w.\-\u4e00-\u9fa5]+/g, "_")
     .slice(0, 120);

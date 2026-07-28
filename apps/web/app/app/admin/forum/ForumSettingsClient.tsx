@@ -190,7 +190,7 @@ export function ForumSettingsClient() {
             {!loadingCategories && categories.length === 0 ? (
               <div className="empty-panel compact">
                 <strong>还没有论坛版块</strong>
-                <span>创建第一个版块后，成员才能按主题发布帖子。</span>
+                <span>创建第一个版块后，成员才能发布帖子。</span>
               </div>
             ) : null}
           </div>

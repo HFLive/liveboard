@@ -16,6 +16,7 @@ describe("ClassroomsService", () => {
     },
     classroomFile: {
       aggregate: jest.fn(),
+      findFirst: jest.fn(),
       create: jest.fn(),
     },
     workspace: { findUnique: jest.fn() },
@@ -188,6 +189,7 @@ describe("ClassroomsService", () => {
       userId: "teacher-1",
       role: "teacher",
     });
+    prisma.classroomFile.findFirst.mockResolvedValue(null);
     prisma.$transaction.mockImplementation((callback) => callback(prisma));
   }
 
@@ -254,5 +256,44 @@ describe("ClassroomsService", () => {
       expect.any(Buffer),
       "text/plain",
     );
+  });
+
+  it("rejects invalid classroom filenames instead of silently replacing them", async () => {
+    mockTeacherUpload();
+
+    await expect(
+      service.uploadFile("teacher-1", "classroom-1", {
+        originalname: "讲义\u200b.txt",
+        mimetype: "text/plain",
+        size: 100,
+        buffer: Buffer.alloc(100),
+      }),
+    ).rejects.toThrow("文件名称不能包含换行、控制字符或不可见字符");
+    expect(prisma.classroomFile.create).not.toHaveBeenCalled();
+    expect(backend.putObject).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate filenames in the same classroom", async () => {
+    mockTeacherUpload();
+    prisma.classroom.findUnique.mockResolvedValue({
+      id: "classroom-1",
+      workspaceId: "ws-1",
+      storageQuotaBytes: 1024,
+    });
+    prisma.classroomFile.findFirst.mockResolvedValue({ id: "cf-existing" });
+    prisma.classroomFile.aggregate.mockResolvedValue({
+      _sum: { sizeBytes: 0 },
+    });
+
+    await expect(
+      service.uploadFile("teacher-1", "classroom-1", {
+        originalname: "讲义.txt",
+        mimetype: "text/plain",
+        size: 100,
+        buffer: Buffer.alloc(100),
+      }),
+    ).rejects.toThrow("当前课堂中已存在同名文件");
+    expect(prisma.classroomFile.create).not.toHaveBeenCalled();
+    expect(backend.putObject).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,12 @@ import type { Readable } from "node:stream";
 export type StorageBackendName = "minio" | "oss";
 export type StorageDownloadMode = "proxy" | "direct";
 
+/**
+ * LiveBoard 当前最大上传为 100MB。把 SDK 分片阈值设得更高，
+ * 让所有受支持上传使用原子单次 PUT，避免进程中断留下未完成分片。
+ */
+export const ATOMIC_UPLOAD_PART_SIZE_BYTES = 128 * 1024 * 1024;
+
 export interface PresignDownloadOptions {
   expirySeconds: number;
   responseContentDisposition?: string;

@@ -22,7 +22,7 @@ export class ActivityService {
     activityReadAt: Date | null;
   }) {
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const [exercises, submissions, files, forumThreads, dismissals] =
+    const [exercises, submissions, forumThreads, dismissals] =
       await Promise.all([
         this.prisma.exerciseSet.findMany({
           where: {
@@ -38,32 +38,10 @@ export class ActivityService {
           orderBy: { gradedAt: "desc" },
           take: 10,
         }),
-        this.prisma.file.findMany({
-          where: {
-            createdById: user.id,
-            status: { not: "archived" },
-            updatedAt: { gte: since },
-          },
-          orderBy: { updatedAt: "desc" },
-          take: 10,
-        }),
         this.prisma.forumThread.findMany({
           where: {
             lastActivityAt: { gte: since },
-            OR: [
-              { authorId: user.id },
-              { userStates: { some: { userId: user.id, followed: true } } },
-              {
-                posts: {
-                  some: {
-                    body: {
-                      contains: `@${user.username}`,
-                      mode: "insensitive",
-                    },
-                  },
-                },
-              },
-            ],
+            authorId: user.id,
           },
           include: { category: { select: { name: true } } },
           orderBy: { lastActivityAt: "desc" },
@@ -102,20 +80,11 @@ export class ActivityService {
         occurredAt: submission.gradedAt!.toISOString(),
         unread: isUnread(submission.gradedAt!),
       })),
-      ...files.map((file) => ({
-        id: `document-${file.id}-${file.updatedAt.toISOString()}`,
-        kind: "document" as const,
-        title: file.title,
-        detail: "你的文档已更新",
-        href: `/app/content/${encodeURIComponent(file.id)}`,
-        occurredAt: file.updatedAt.toISOString(),
-        unread: isUnread(file.updatedAt),
-      })),
       ...forumThreads.map((thread) => ({
         id: `forum-${thread.id}-${thread.lastActivityAt.toISOString()}`,
         kind: "forum" as const,
         title: thread.title,
-        detail: `${thread.category.name} · 主题有新回复或提及`,
+        detail: `${thread.category.name} · 帖子有新回复`,
         href: `/app/forum/${encodeURIComponent(thread.id)}`,
         occurredAt: thread.lastActivityAt.toISOString(),
         unread: isUnread(thread.lastActivityAt),

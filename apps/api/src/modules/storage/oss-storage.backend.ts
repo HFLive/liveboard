@@ -4,6 +4,7 @@ import type {
   ObjectStorageBackend,
   PresignDownloadOptions,
 } from "./storage-backend";
+import { ATOMIC_UPLOAD_PART_SIZE_BYTES } from "./storage-backend";
 
 export interface OssClientConfig {
   region: string;
@@ -34,6 +35,7 @@ export class OssStorageBackend implements ObjectStorageBackend {
       secretKey: config.accessKeySecret,
       region: config.region,
       pathStyle: false,
+      partSize: ATOMIC_UPLOAD_PART_SIZE_BYTES,
     });
   }
 

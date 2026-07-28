@@ -19,7 +19,6 @@ describe("ForumService", () => {
       findUnique: jest.fn(),
       delete: jest.fn(),
     },
-    forumThreadState: { upsert: jest.fn() },
     forumPost: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
@@ -48,7 +47,6 @@ describe("ForumService", () => {
     prisma.$transaction.mockImplementation(
       async (callback: (tx: typeof prisma) => unknown) => callback(prisma),
     );
-    prisma.forumThreadState.upsert.mockResolvedValue({ followed: false });
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
       username: "learner",
@@ -106,22 +104,6 @@ describe("ForumService", () => {
     // 撞上 (workspaceId, name) 唯一索引就让整个论坛页 500。
     expect(prisma.forumCategory.updateMany).not.toHaveBeenCalled();
     expect(prisma.forumCategory.createMany).not.toHaveBeenCalled();
-  });
-
-  it("keeps a thread followed when the current user has posted in it", async () => {
-    prisma.forumThread.findUnique.mockResolvedValue({
-      id: "thread-1",
-      authorId: "author-1",
-      posts: [{ id: "post-1" }],
-    });
-    prisma.forumThreadState.upsert.mockResolvedValue({ followed: true });
-
-    const result = await service.setThreadFollow("user-1", "thread-1", false);
-
-    expect(result).toEqual({ followed: true, followRequired: true });
-    expect(prisma.forumThreadState.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ update: { followed: true } }),
-    );
   });
 
   it.each(["member", "admin"] as const)(

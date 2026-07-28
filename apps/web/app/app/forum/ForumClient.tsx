@@ -16,7 +16,6 @@ import { ForumUserAvatar } from "./ForumUserAvatar";
 
 type CategoryFilter = "all" | string;
 type SortMode = "activity" | "newest" | "replies";
-type FeedFilter = "all" | "unread" | "mentioned" | "followed";
 
 const SORT_OPTIONS = [
   { value: "activity", label: "最近活跃" },
@@ -30,7 +29,6 @@ export function ForumClient() {
   const [activeCategoryId, setActiveCategoryId] =
     useState<CategoryFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("activity");
-  const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,18 +65,13 @@ export function ForumClient() {
       .filter((thread) => {
         const matchesCategory =
           activeCategoryId === "all" || thread.categoryId === activeCategoryId;
-        const matchesFeed =
-          feedFilter === "all" ||
-          (feedFilter === "unread" && thread.unread) ||
-          (feedFilter === "mentioned" && thread.mentioned) ||
-          (feedFilter === "followed" && thread.followed);
         const matchesQuery = normalizedQuery
           ? thread.title.toLowerCase().includes(normalizedQuery) ||
             thread.excerpt.toLowerCase().includes(normalizedQuery) ||
             thread.author.displayName.toLowerCase().includes(normalizedQuery) ||
             thread.author.username.toLowerCase().includes(normalizedQuery)
           : true;
-        return matchesCategory && matchesFeed && matchesQuery;
+        return matchesCategory && matchesQuery;
       })
       .sort((left, right) => {
         if (sortMode === "replies") {
@@ -92,88 +85,88 @@ export function ForumClient() {
         ).getTime();
         return rightTime - leftTime;
       });
-  }, [activeCategoryId, feedFilter, query, sortMode, threads]);
+  }, [activeCategoryId, query, sortMode, threads]);
 
-  const hasFilters =
-    activeCategoryId !== "all" || feedFilter !== "all" || Boolean(query.trim());
+  const hasFilters = activeCategoryId !== "all" || Boolean(query.trim());
 
   function resetFilters() {
     setActiveCategoryId("all");
-    setFeedFilter("all");
     setQuery("");
   }
 
   return (
     <div className="workspace forum-workspace forum-home">
-      <header className="forum-page-header">
-        <div>
-          <h1>论坛</h1>
-          <p>{threads.length} 个帖子</p>
-        </div>
-      </header>
-
       {error ? <p className="error-text">{error}</p> : null}
 
       <section className="forum-shell" aria-label="论坛工作区">
+        <aside className="forum-category-sidebar" aria-label="论坛版块">
+          <h2>版块</h2>
+          <nav className="forum-category-nav">
+            <button
+              className={activeCategoryId === "all" ? "active" : ""}
+              onClick={() => setActiveCategoryId("all")}
+              type="button"
+            >
+              <span>全部版块</span>
+              <span className="forum-category-count">{threads.length}</span>
+            </button>
+            {categories.map((category) => (
+              <button
+                className={activeCategoryId === category.id ? "active" : ""}
+                key={category.id}
+                onClick={() => setActiveCategoryId(category.id)}
+                type="button"
+              >
+                <span>{category.name}</span>
+                <span className="forum-category-count">
+                  {category.threadCount}
+                </span>
+              </button>
+            ))}
+          </nav>
+        </aside>
+
         <section className="forum-feed">
           <div className="forum-feed-head forum-feed-toolbar">
-            <label className="search-field forum-search">
-              <Search aria-hidden="true" />
-              <input
-                aria-label="搜索论坛"
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索标题、内容或作者"
-                value={query}
-              />
-            </label>
-            <div
-              className="segmented-control forum-feed-filter"
-              aria-label="帖子范围"
-            >
-              {(
-                [
-                  ["all", "全部"],
-                  ["unread", "未读"],
-                  ["mentioned", "提及"],
-                  ["followed", "关注"],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  className={feedFilter === value ? "active" : ""}
-                  key={value}
-                  onClick={() => setFeedFilter(value)}
-                  type="button"
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="forum-toolbar-primary">
+              <label className="search-field forum-search">
+                <Search aria-hidden="true" />
+                <input
+                  aria-label="搜索论坛"
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="搜索标题、内容或作者"
+                  value={query}
+                />
+              </label>
             </div>
-            <select
-              aria-label="选择版块"
-              className="select compact-select"
-              value={activeCategoryId}
-              onChange={(event) => setActiveCategoryId(event.target.value)}
-            >
-              <option value="all">全部帖子（{threads.length}）</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}（{category.threadCount}）
-                </option>
-              ))}
-            </select>
-            <SortIconSelect
-              className="forum-sort-control"
-              onChange={setSortMode}
-              options={SORT_OPTIONS}
-              value={sortMode}
-            />
-            <Link
-              className="button forum-create-action"
-              href={APP_ROUTES.forumNew}
-            >
-              <Plus aria-hidden="true" className="button-icon" />
-              <span className="forum-create-label">发帖</span>
-            </Link>
+            <div className="forum-toolbar-secondary">
+              <select
+                aria-label="选择版块"
+                className="select compact-select forum-mobile-category-select"
+                value={activeCategoryId}
+                onChange={(event) => setActiveCategoryId(event.target.value)}
+              >
+                <option value="all">全部版块（{threads.length}）</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}（{category.threadCount}）
+                  </option>
+                ))}
+              </select>
+              <SortIconSelect
+                className="forum-sort-control"
+                onChange={setSortMode}
+                options={SORT_OPTIONS}
+                value={sortMode}
+              />
+              <Link
+                className="button forum-create-action"
+                href={APP_ROUTES.forumNew}
+              >
+                <Plus aria-hidden="true" className="button-icon" />
+                <span className="forum-create-label">发内容</span>
+              </Link>
+            </div>
           </div>
 
           <div className="forum-thread-list">
@@ -209,12 +202,31 @@ export function ForumClient() {
                     user={thread.author}
                   />
                   <span className="forum-topic-content">
+                    <span className="forum-topic-heading">
+                      <strong className="forum-topic-title">
+                        {thread.status === "locked" ? (
+                          <span className="forum-lock-tag">已锁定</span>
+                        ) : null}
+                        <Link
+                          href={forumThread(thread.id)}
+                          rel="noopener noreferrer"
+                          target="_blank"
+                        >
+                          {thread.title}
+                        </Link>
+                      </strong>
+                      <span className="forum-category-tag">
+                        {category?.name ?? "未分类"}
+                      </span>
+                    </span>
+                    {thread.excerpt ? <p>{thread.excerpt}</p> : null}
                     <span className="forum-topic-meta">
                       {thread.isAnonymous ? (
                         <span>匿名用户</span>
                       ) : (
                         <UserProfileLink
                           className="user-profile-link"
+                          compactBadges
                           user={thread.author}
                         />
                       )}
@@ -224,6 +236,7 @@ export function ForumClient() {
                           真实身份：
                           <UserProfileLink
                             className="user-profile-link"
+                            compactBadges
                             user={thread.author}
                           />
                         </span>
@@ -235,28 +248,6 @@ export function ForumClient() {
                         <span>{formatRelativeTime(thread.lastActivityAt)}</span>
                       </span>
                     </span>
-                    <strong className="forum-topic-title">
-                      <span className="forum-category-tag">
-                        {category?.name ?? "未分类"}
-                      </span>
-                      {thread.status === "locked" ? (
-                        <span className="forum-lock-tag">已锁定</span>
-                      ) : null}
-                      {thread.unread ? (
-                        <span className="forum-unread-tag">未读</span>
-                      ) : null}
-                      {thread.mentioned ? (
-                        <span className="forum-mention-tag">提及你</span>
-                      ) : null}
-                      <Link
-                        href={forumThread(thread.id)}
-                        rel="noopener noreferrer"
-                        target="_blank"
-                      >
-                        {thread.title}
-                      </Link>
-                    </strong>
-                    {thread.excerpt ? <p>{thread.excerpt}</p> : null}
                   </span>
                 </article>
               );
@@ -269,7 +260,7 @@ export function ForumClient() {
                 </strong>
                 <span>
                   {threads.length === 0
-                    ? "发第一个帖子，开始交流。"
+                    ? "发布第一个帖子，开始交流。"
                     : "调整搜索词或筛选条件。"}
                 </span>
                 {hasFilters ? (
@@ -282,7 +273,7 @@ export function ForumClient() {
                   </button>
                 ) : (
                   <Link className="button secondary" href={APP_ROUTES.forumNew}>
-                    发帖
+                    发内容
                   </Link>
                 )}
               </div>

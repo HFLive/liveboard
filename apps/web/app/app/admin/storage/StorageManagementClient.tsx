@@ -416,6 +416,7 @@ export function StorageManagementClient() {
                       <strong>
                         <UserProfileLink
                           className="user-profile-link"
+                          compactBadges
                           user={item.user}
                         />
                       </strong>

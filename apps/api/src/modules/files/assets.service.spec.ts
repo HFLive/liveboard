@@ -78,10 +78,12 @@ describe("AssetsService consistency", () => {
     file: { findUnique: jest.fn() },
     fileAsset: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
       aggregate: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
       delete: jest.fn(),
       deleteMany: jest.fn(),
     },
@@ -251,6 +253,7 @@ describe("AssetsService consistency", () => {
         findUnique: jest.fn().mockResolvedValue(null),
       },
       fileAsset: {
+        findFirst: jest.fn().mockResolvedValue(null),
         aggregate: jest.fn().mockResolvedValue({ _sum: { sizeBytes: 0 } }),
         create: jest.fn().mockResolvedValue({ id: "asset-1" }),
       },
@@ -276,6 +279,40 @@ describe("AssetsService consistency", () => {
     expect(prisma.fileAsset.delete).toHaveBeenCalledWith({
       where: { id: "asset-1" },
     });
+  });
+
+  it("rejects duplicate attachment filenames in the same document", async () => {
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          storageQuotaBytes: 1024,
+        }),
+      },
+      workspace: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      fileAsset: {
+        findFirst: jest.fn().mockResolvedValue({ id: "existing-asset" }),
+        aggregate: jest.fn(),
+        create: jest.fn(),
+      },
+    };
+    prisma.$transaction.mockImplementation((callback) => callback(tx));
+
+    await expect(
+      service.uploadAsset(
+        "user-1",
+        { fileId: "file-1" },
+        {
+          originalname: "notes.txt",
+          mimetype: "text/plain",
+          size: 5,
+          buffer: Buffer.from("notes"),
+        },
+      ),
+    ).rejects.toThrow("当前文档中已存在同名附件");
+    expect(tx.fileAsset.create).not.toHaveBeenCalled();
+    expect(backend.putObject).not.toHaveBeenCalled();
   });
 
   it("limits replies to three images on the server", async () => {
@@ -375,6 +412,7 @@ describe("AssetsService consistency", () => {
       id: "workspace-1",
       memberAttachmentQuotaBytes: null,
     });
+    prisma.fileAsset.findFirst.mockResolvedValue(null);
     prisma.fileAsset.aggregate.mockResolvedValue({ _sum: { sizeBytes: 0 } });
     prisma.fileAsset.create.mockResolvedValue({
       id: "asset-standalone-1",
@@ -409,6 +447,60 @@ describe("AssetsService consistency", () => {
     });
     expect(backend.putObject).toHaveBeenCalled();
     expect(result.kind).toBe("standalone");
+  });
+
+  it("rejects invalid standalone filenames instead of silently replacing them", async () => {
+    mockStandaloneUpload();
+
+    await expect(
+      service.uploadAsset(
+        "user-1",
+        { folderId: "folder-1" },
+        {
+          originalname: "讲义\u200b.pdf",
+          mimetype: "application/pdf",
+          size: 5,
+          buffer: Buffer.from("%PDF-"),
+        },
+      ),
+    ).rejects.toThrow("文件名称不能包含换行、控制字符或不可见字符");
+    expect(prisma.fileAsset.create).not.toHaveBeenCalled();
+    expect(backend.putObject).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate standalone filenames in the same folder", async () => {
+    mockStandaloneUpload();
+    prisma.fileAsset.findFirst.mockResolvedValue({ id: "existing-asset" });
+
+    await expect(
+      service.uploadAsset(
+        "user-1",
+        { folderId: "folder-1" },
+        {
+          originalname: "讲义.pdf",
+          mimetype: "application/pdf",
+          size: 5,
+          buffer: Buffer.from("%PDF-"),
+        },
+      ),
+    ).rejects.toThrow("当前文件夹中已存在同名文件");
+    expect(prisma.fileAsset.create).not.toHaveBeenCalled();
+    expect(backend.putObject).not.toHaveBeenCalled();
+  });
+
+  it("applies the same duplicate check when renaming standalone files", async () => {
+    prisma.fileAsset.findUnique.mockResolvedValue({
+      id: "asset-1",
+      kind: "standalone",
+      folderId: "folder-1",
+      uploadedBy: "user-1",
+    });
+    prisma.fileAsset.findFirst.mockResolvedValue({ id: "asset-2" });
+
+    await expect(
+      service.renameStandaloneAsset("user-1", "asset-1", "讲义.pdf"),
+    ).rejects.toThrow("当前文件夹中已存在同名文件");
+    expect(prisma.fileAsset.update).not.toHaveBeenCalled();
   });
 
   it("rejects standalone uploads of unsupported file types", async () => {

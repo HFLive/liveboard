@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type CSSProperties, useEffect, useState } from "react";
-import { Edit3 } from "lucide-react";
+import { ALargeSmall, Check, Edit3, Minus, Plus } from "lucide-react";
 import type { ContentBlock, FileDetail } from "@/lib/api";
 import { dismissImportWarnings, getFile, listBlocks } from "@/lib/api";
 import { fileStatusLabel, permissionLabel } from "@/lib/labels";
@@ -19,6 +19,23 @@ function canEditContent(permission: FileDetail["permission"]) {
   );
 }
 
+type ReaderFont = "serif" | "kai" | "sans";
+
+const READER_PREFERENCES_KEY = "liveboard:reader-preferences";
+const DEFAULT_READER_FONT: ReaderFont = "serif";
+const DEFAULT_READER_FONT_SIZE = 19;
+const MIN_READER_FONT_SIZE = 16;
+const MAX_READER_FONT_SIZE = 24;
+const readerFontOptions: Array<{ value: ReaderFont; label: string }> = [
+  { value: "serif", label: "宋体" },
+  { value: "kai", label: "楷体" },
+  { value: "sans", label: "黑体" },
+];
+
+function isReaderFont(value: unknown): value is ReaderFont {
+  return readerFontOptions.some((option) => option.value === value);
+}
+
 export function FileViewer({ fileId }: { fileId: string }) {
   const [file, setFile] = useState<FileDetail | null>(null);
   useDocumentTitle(file?.title ?? null);
@@ -26,6 +43,11 @@ export function FileViewer({ fileId }: { fileId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dismissingReport, setDismissingReport] = useState(false);
+  const [readerFont, setReaderFont] = useState<ReaderFont>(DEFAULT_READER_FONT);
+  const [readerFontSize, setReaderFontSize] = useState(
+    DEFAULT_READER_FONT_SIZE,
+  );
+  const [readerPreferencesReady, setReaderPreferencesReady] = useState(false);
   const headings = blocks
     .filter((block) => block.type.startsWith("heading_"))
     .map((block) => ({
@@ -55,6 +77,41 @@ export function FileViewer({ fileId }: { fileId: string }) {
       active = false;
     };
   }, [fileId]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(READER_PREFERENCES_KEY);
+      if (stored) {
+        const preferences = JSON.parse(stored) as {
+          font?: unknown;
+          fontSize?: unknown;
+        };
+        if (isReaderFont(preferences.font)) {
+          setReaderFont(preferences.font);
+        }
+        if (typeof preferences.fontSize === "number") {
+          setReaderFontSize(
+            Math.max(
+              MIN_READER_FONT_SIZE,
+              Math.min(MAX_READER_FONT_SIZE, preferences.fontSize),
+            ),
+          );
+        }
+      }
+    } catch {
+      // 损坏的本地偏好不应阻塞正文阅读，直接回退默认排版。
+    } finally {
+      setReaderPreferencesReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!readerPreferencesReady) return;
+    window.localStorage.setItem(
+      READER_PREFERENCES_KEY,
+      JSON.stringify({ font: readerFont, fontSize: readerFontSize }),
+    );
+  }, [readerFont, readerFontSize, readerPreferencesReady]);
 
   async function onDismissImportReport() {
     if (!file) return;
@@ -91,8 +148,9 @@ export function FileViewer({ fileId }: { fileId: string }) {
       ) : file ? (
         <>
           <header className="content-viewer-header">
-            <div>
-              <div className="content-viewer-title">
+            <div className="content-viewer-heading">
+              <div className="content-viewer-kicker">
+                <span className="content-viewer-eyebrow">文档</span>
                 {/* 已发布是文档的常态，标出来等于每篇都挂一个同样的标签，没有信息量。
                     只有草稿、已删除这类「读到的不是正式版本」才需要提醒。 */}
                 {file.status === "published" ? null : (
@@ -103,17 +161,75 @@ export function FileViewer({ fileId }: { fileId: string }) {
                     {fileStatusLabel(file.status)}
                   </span>
                 )}
+              </div>
+              <div className="content-viewer-title">
                 <h1>{file.title}</h1>
               </div>
             </div>
-            {canEditContent(file.permission) ? (
-              <div className="button-row">
-                <Link className="button secondary" href={contentEdit(fileId)}>
+            <div className="content-viewer-actions">
+              <details className="reader-settings">
+                <summary aria-label="打开阅读设置" className="button secondary">
+                  <ALargeSmall aria-hidden="true" className="button-icon" />
+                  阅读
+                </summary>
+                <div className="reader-settings-popover">
+                  <strong>阅读设置</strong>
+                  <span className="reader-settings-label">字体</span>
+                  <div className="reader-font-options">
+                    {readerFontOptions.map((option) => (
+                      <button
+                        aria-pressed={readerFont === option.value}
+                        key={option.value}
+                        onClick={() => setReaderFont(option.value)}
+                        type="button"
+                      >
+                        <span data-font={option.value}>{option.label}</span>
+                        {readerFont === option.value ? (
+                          <Check aria-hidden="true" />
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="reader-settings-label">字号</span>
+                  <div className="reader-size-control">
+                    <button
+                      aria-label="减小正文字号"
+                      disabled={readerFontSize <= MIN_READER_FONT_SIZE}
+                      onClick={() =>
+                        setReaderFontSize((current) =>
+                          Math.max(MIN_READER_FONT_SIZE, current - 1),
+                        )
+                      }
+                      type="button"
+                    >
+                      <Minus aria-hidden="true" />
+                    </button>
+                    <span>{readerFontSize}px</span>
+                    <button
+                      aria-label="增大正文字号"
+                      disabled={readerFontSize >= MAX_READER_FONT_SIZE}
+                      onClick={() =>
+                        setReaderFontSize((current) =>
+                          Math.min(MAX_READER_FONT_SIZE, current + 1),
+                        )
+                      }
+                      type="button"
+                    >
+                      <Plus aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              </details>
+              {canEditContent(file.permission) ? (
+                <Link
+                  className="button secondary content-viewer-edit-link"
+                  href={contentEdit(fileId)}
+                >
                   <Edit3 aria-hidden="true" className="button-icon" />
                   编辑
                 </Link>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </header>
 
           {/* 导入报告只对改得动文档的人有意义，纯读者看到也无从下手。 */}
@@ -166,11 +282,20 @@ export function FileViewer({ fileId }: { fileId: string }) {
                 </nav>
               </aside>
             ) : null}
-            <article className="content-viewer-document">
+            <article
+              className="content-viewer-document"
+              data-reader-font={readerFont}
+              style={
+                {
+                  "--reader-font-size": `${readerFontSize}px`,
+                } as CSSProperties
+              }
+            >
               {blocks.length > 0 ? (
                 blocks.map((block) => (
                   <div
                     className="content-viewer-block"
+                    data-block-type={block.type}
                     id={
                       block.type.startsWith("heading_")
                         ? `heading-${block.id}`
