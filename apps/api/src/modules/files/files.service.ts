@@ -667,6 +667,42 @@ export class FilesService {
     };
   }
 
+  /**
+   * 导入报告是一次性的核对清单，不是文档的属性：
+   * 解析器把哪些内容降级了，作者核对并修正之后它就只剩噪声，
+   * 却会跟着文档一直留在浏览页上。所以这里是真删除，删完谁都看不到。
+   */
+  async dismissImportWarnings(userId: string | null, fileId: string) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    const permission = await this.permissions.getEffectiveLevelForFile(
+      userId,
+      fileId,
+    );
+
+    if (!canEdit(permission) && permission !== "lecturer") {
+      throw new ForbiddenException("No permission to edit file");
+    }
+
+    const file = await this.prisma.file.findUnique({
+      where: { id: fileId },
+      select: { id: true },
+    });
+
+    if (!file) {
+      throw new NotFoundException("File not found");
+    }
+
+    // 走裸 SQL 是为了绕开 @updatedAt：删报告不是改内容，
+    // 用 prisma.file.update 会把文档顶到「最近更新」第一位，等于谎报了一次编辑。
+    await this.prisma
+      .$executeRaw`UPDATE "File" SET "importWarnings" = NULL WHERE "id" = ${fileId}`;
+
+    return { ok: true };
+  }
+
   async exportMarkdown(userId: string | null, fileId: string) {
     const file = await this.getFile(userId, fileId);
     const blocks = await this.prisma.contentBlock.findMany({

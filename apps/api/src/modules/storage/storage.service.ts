@@ -44,6 +44,11 @@ export interface PresignDownloadTarget {
   cacheControl?: string;
 }
 
+export interface StorageFileDistribution {
+  minio: { count: number; bytes: number };
+  oss: { count: number; bytes: number };
+}
+
 const SETTINGS_CACHE_TTL_MS = 30_000;
 const PRESIGN_EXPIRY_SECONDS = 600;
 const BACKENDS: StorageBackendName[] = ["minio", "oss"];
@@ -162,11 +167,14 @@ export class StorageService {
   async getSettingsForAdmin(userId: string | null) {
     await this.requireSuperAdmin(userId);
     const settings = await this.getSettings();
-    const healthy = await this.activeBackend()
-      .then((backend) => backend.healthCheck())
-      .then(() => true)
-      .catch(() => false);
-    return this.toPublicSettings(settings, healthy);
+    const [healthy, fileDistribution] = await Promise.all([
+      this.activeBackend()
+        .then((backend) => backend.healthCheck())
+        .then(() => true)
+        .catch(() => false),
+      this.fileDistribution(),
+    ]);
+    return this.toPublicSettings(settings, healthy, fileDistribution);
   }
 
   async updateSettings(
@@ -221,11 +229,14 @@ export class StorageService {
       update: data,
     });
     this.settingsCache = null;
-    const healthy = await this.backendFor(saved.backend)
-      .then((backend) => backend.healthCheck())
-      .then(() => true)
-      .catch(() => false);
-    return this.toPublicSettings(saved, healthy);
+    const [healthy, fileDistribution] = await Promise.all([
+      this.backendFor(saved.backend)
+        .then((backend) => backend.healthCheck())
+        .then(() => true)
+        .catch(() => false),
+      this.fileDistribution(),
+    ]);
+    return this.toPublicSettings(saved, healthy, fileDistribution);
   }
 
   async testConnection(userId: string | null, input: OssSettingsInput) {
@@ -320,6 +331,33 @@ export class StorageService {
     };
   }
 
+  /** 统计课堂文件与文档附件分别落在服务器存储 / OSS 上的数量与体积。 */
+  private async fileDistribution(): Promise<StorageFileDistribution> {
+    const [classroomFiles, fileAssets] = await Promise.all([
+      this.prisma.classroomFile.groupBy({
+        by: ["storageBackend"],
+        _count: { _all: true },
+        _sum: { sizeBytes: true },
+      }),
+      this.prisma.fileAsset.groupBy({
+        by: ["storageBackend"],
+        _count: { _all: true },
+        _sum: { sizeBytes: true },
+      }),
+    ]);
+    const distribution: StorageFileDistribution = {
+      minio: { count: 0, bytes: 0 },
+      oss: { count: 0, bytes: 0 },
+    };
+    for (const row of [...classroomFiles, ...fileAssets]) {
+      const bucket =
+        row.storageBackend === "oss" ? distribution.oss : distribution.minio;
+      bucket.count += row._count._all;
+      bucket.bytes += row._sum.sizeBytes ?? 0;
+    }
+    return distribution;
+  }
+
   private async getSettings() {
     if (
       this.settingsCache &&
@@ -359,6 +397,7 @@ export class StorageService {
   private toPublicSettings(
     settings: StorageSettings | null,
     activeBackendHealthy: boolean,
+    fileDistribution: StorageFileDistribution,
   ) {
     return {
       backend: settings?.backend ?? "minio",
@@ -376,6 +415,7 @@ export class StorageService {
         secretConfigured: Boolean(settings?.ossAccessKeySecret),
       },
       activeBackendHealthy,
+      fileDistribution,
       updatedAt: settings?.updatedAt.toISOString() ?? null,
     };
   }

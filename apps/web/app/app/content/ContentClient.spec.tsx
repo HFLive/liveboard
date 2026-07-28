@@ -345,6 +345,44 @@ describe("ContentClient folder deletion", () => {
     });
   });
 
+  it("orders the location tree by pin, matching the table", async () => {
+    const rootFolder = folderTree[0]!;
+    const childFolder = rootFolder.children[0]!;
+    const secondChild: FolderNode = {
+      ...childFolder,
+      id: "folder-3",
+      name: "第二章",
+      pinnedOrder: 0,
+    };
+    // 接口按 sortOrder → name 返回「第一章、第二章」，其中第二章被置顶。
+    // 置顶是这个位置下的排列方式，左侧位置树必须和右侧表格给出同一个顺序。
+    const pinnedTree: FolderNode[] = [
+      {
+        ...rootFolder,
+        files: [],
+        children: [{ ...childFolder, pinnedOrder: null }, secondChild],
+      },
+    ];
+    vi.mocked(getFolderTree).mockReset().mockResolvedValue({
+      folders: pinnedTree,
+      canManagePins: true,
+    });
+
+    render(<ContentClient />);
+
+    const tree = getTree();
+    await within(tree).findByRole("button", { name: "第二章" });
+    const treeNames = Array.from(
+      tree.querySelectorAll(".tree-item .tree-label span[title]"),
+    ).map((node) => node.textContent);
+    expect(treeNames).toEqual(["课程资料", "第二章", "第一章"]);
+
+    await enterFolderFromTree("课程资料");
+    const tableRows = within(screen.getByRole("table")).getAllByRole("row");
+    expect(tableRows[0]).toHaveTextContent("第二章");
+    expect(tableRows[1]).toHaveTextContent("第一章");
+  });
+
   it("shows an icon before document names in the document table", async () => {
     vi.mocked(listFiles).mockResolvedValueOnce({
       files: [{ ...folderTree[0]!.files[0]!, status: "draft" }],

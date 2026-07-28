@@ -20,8 +20,8 @@ const desktopOnlyRoutes = [
     detail: "手机端仍可查看和播放课件；内容编排请使用电脑完成。",
   },
   {
-    pattern: /^\/app\/exercises\/new$/,
-    title: "创建练习仅支持电脑端",
+    pattern: /^\/app\/exercises\/(?:new|[^/]+\/edit)$/,
+    title: "编排练习仅支持电脑端",
     detail: "手机端仍可查看和作答练习；题目编排请使用电脑完成。",
   },
   {

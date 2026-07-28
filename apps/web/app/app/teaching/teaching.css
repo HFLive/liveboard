@@ -75,8 +75,7 @@
 }
 
 .teaching-deck-actions,
-.teaching-item-actions,
-.teaching-save-bar {
+.teaching-item-actions {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -95,182 +94,124 @@
   margin: 18px;
 }
 
-/* 课件编辑页：全宽左对齐，主栏编排内容，右栏集中添加素材。 */
+/* 课件编辑页：与文档编辑页同构 —— 顶部可编辑标题 + 信息条 + 主操作，
+   下方左右分栏（左：大纲，右：素材）。扁平、细分隔线，不叠加卡片。 */
 .workspace.teaching-editor-workspace {
   width: 100%;
   max-width: none;
   margin: 0;
+  gap: 0;
 }
 
-.teaching-editor-layout {
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+/* 返回链接与标题拉开一档，让「离开本页」和「本页标题」分属两个层级。 */
+.teaching-editor-workspace > .page-back-link {
+  margin-bottom: 12px;
 }
 
-.teaching-editor-main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.teaching-editor-head-meta {
-  color: var(--muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.teaching-editor-head-actions {
-  display: flex;
+/* 顶栏压紧：标题、信息条、主操作合计约 60px，把首屏让给大纲。 */
+.teaching-editor-workspace .editor-title-bar {
   align-items: center;
-  gap: 10px;
+  min-height: 0;
+  margin-top: 0;
+  padding-bottom: 0;
 }
 
-.teaching-editor-settings {
-  display: grid;
-  grid-template-columns: minmax(260px, 520px);
-  align-items: end;
-  gap: 10px;
-  padding: 16px 0 14px;
+.teaching-editor-workspace .title-input {
+  font-size: 24px;
 }
 
-.teaching-editor-settings .teaching-title-field {
-  min-width: 0;
+/* 给标题聚焦时的外发光留出空隙。 */
+.teaching-editor-workspace .editor-meta-strip {
+  margin-top: 6px;
 }
 
-.teaching-editor-layout .workbench-side {
-  min-width: 0;
+.teaching-editor-workspace .title-input::placeholder {
+  color: #c4bcae;
 }
 
-.teaching-editor-layout .action-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  min-width: 0;
-  padding-inline: 0;
+.teaching-editor-workspace .editor-title-bar .button-row {
+  gap: 8px;
 }
 
-.teaching-editor-layout .action-panel > h2 {
+.teaching-editor-workspace > .error-text {
+  margin: 4px 0 0;
+}
+
+/* 左宽右窄：大纲是阅读物，素材是拾取器。
+   全页只保留这一条横线（页头与正文之间），其余分区靠留白，避免层级过多。 */
+.teaching-editor-split {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.62fr);
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+/* —— 左栏：课件大纲 —— */
+
+.teaching-item-empty {
   margin: 0;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--line);
-}
-
-.teaching-editor-layout .action-panel > .button {
-  align-self: flex-start;
-}
-
-.teaching-block-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: min(42vh, 430px);
-  overflow: auto;
-  margin-inline: -8px;
-  padding-inline: 8px;
-}
-
-.teaching-block-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-  border-radius: 8px;
-  padding: 9px 8px;
-  cursor: pointer;
-}
-
-.teaching-block-row:hover {
-  background: var(--fill-hover);
-}
-
-.teaching-block-row.selected,
-.teaching-block-row.selected:hover {
-  background: var(--accent-soft);
-}
-
-.teaching-block-picker input {
-  margin-top: 4px;
-}
-
-.teaching-block-picker span {
-  display: -webkit-box;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--ink);
-  font-size: 0.9rem;
-  line-height: 1.45;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.teaching-block-picker small {
-  display: block;
-  margin-bottom: 3px;
+  padding: 28px 0;
   color: var(--muted);
-  font-size: 0.72rem;
-}
-
-.teaching-block-empty {
-  margin: 0;
-  padding: 12px 8px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.teaching-title-field .input {
-  font-size: 0.96rem;
-  font-weight: 600;
-}
-
-.teaching-visibility-button {
-  flex: 0 0 auto;
-}
-
-.workspace.teaching-editor-workspace .teaching-visibility-modal {
-  width: min(520px, 100%);
+  font-size: 13px;
 }
 
 .teaching-item-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
-  padding-bottom: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.teaching-item-empty {
-  margin: 0;
-  padding: 34px 12px;
+/* 来源分组标题：连续同源的条目只标注一次，去掉逐行重复的文件名。 */
+.teaching-item-group {
+  margin: 14px 0 4px;
   color: var(--muted);
-  font-size: 13px;
-  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.teaching-item-group:first-child {
+  margin-top: 0;
 }
 
 .teaching-item-row {
   display: grid;
-  grid-template-columns: 24px 30px 22px minmax(0, 1fr) auto;
+  grid-template-columns: 20px 26px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  border-radius: 10px;
-  padding: 11px 10px;
+  border-radius: 8px;
+  padding: 8px 8px 8px 2px;
+}
+
+.teaching-item-row:hover,
+.teaching-item-row:focus-within {
+  background: var(--fill-subtle);
 }
 
 .teaching-item-row.dragging {
-  opacity: 0.45;
+  opacity: 0.4;
 }
 
 .teaching-item-drag {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 28px;
+  width: 20px;
+  height: 26px;
   border: 0;
-  border-radius: 6px;
   background: transparent;
-  color: var(--muted);
+  color: transparent;
   cursor: grab;
+}
+
+.teaching-item-row:hover .teaching-item-drag,
+.teaching-item-drag:focus-visible {
+  color: var(--line-strong);
 }
 
 .teaching-item-drag:active {
@@ -281,11 +222,54 @@
   width: 15px;
 }
 
-.teaching-image-fit {
+/* 等宽序号，不加底色方块：与首页编号目录同一套排版语言。 */
+.teaching-item-index {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.teaching-item-main {
   display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* 标题与类型标签始终同行：标题截断，类型标签靠右对齐成一列，行高保持一致。 */
+.teaching-item-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.teaching-item-line > strong {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teaching-item-line > small {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.teaching-image-fit {
+  display: inline-flex;
   align-items: center;
-  gap: 7px;
-  margin-top: 5px;
+  gap: 6px;
   color: var(--muted);
   font-size: 11px;
 }
@@ -293,51 +277,28 @@
 .teaching-image-fit select {
   border: 0;
   border-radius: 6px;
-  background: var(--fill-subtle);
-  padding: 4px 6px;
+  background: var(--fill-active);
+  padding: 3px 5px;
   color: var(--text-soft);
   font: inherit;
 }
 
-.teaching-source-tabs {
-  margin-bottom: 8px;
+/* 行内操作默认隐形，hover/键盘聚焦时出现，让长列表保持安静。 */
+.teaching-item-actions {
+  opacity: 0;
 }
 
-.teaching-item-row:hover {
-  background: var(--fill-hover);
+.teaching-item-row:hover .teaching-item-actions,
+.teaching-item-row:focus-within .teaching-item-actions {
+  opacity: 1;
 }
 
-.teaching-item-row > svg {
-  width: 18px;
-  color: var(--muted);
-}
-
-.teaching-item-row > div:not(.teaching-item-actions) {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.teaching-item-row strong,
-.teaching-item-row small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.teaching-item-row small,
-.teaching-item-index {
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.teaching-item-actions button,
-.teaching-presenter-controls button {
+.teaching-item-actions button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -345,24 +306,184 @@
 }
 
 .teaching-item-actions button:hover:not(:disabled) {
-  color: var(--ink);
+  color: var(--text);
   background: transparent;
 }
 
+.teaching-item-actions button.danger:hover:not(:disabled) {
+  color: var(--danger);
+}
+
 .teaching-item-actions button:disabled {
-  opacity: 0.3;
+  opacity: 0.25;
   cursor: default;
 }
 
 .teaching-item-actions svg {
-  width: 16px;
+  width: 15px;
 }
 
-.teaching-save-bar {
-  justify-content: flex-end;
-  margin-top: auto;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
+/* —— 右栏：内容素材 —— */
+
+.workspace .teaching-editor-split > .teaching-source-pane {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* 减去顶部标题栏高度，保证首屏就能看到底部的添加按钮；
+     吸顶后（top: 12px）仍然完整可见。 */
+  max-height: calc(100dvh - 200px);
+}
+
+.teaching-source-tabs {
+  flex: 0 0 auto;
+  min-height: 38px;
+}
+
+.teaching-source-tabs button {
+  min-height: 30px;
+}
+
+.teaching-source-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.teaching-source-select {
+  flex: 0 0 auto;
+}
+
+.teaching-picker-tools {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.teaching-picker-tools button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 0;
+}
+
+.teaching-picker-tools button:hover {
+  color: var(--accent-dark);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.teaching-picker-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 120px;
+  margin-inline: -8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.teaching-pick-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.teaching-pick-row:hover {
+  background: var(--fill-subtle);
+}
+
+/* 选中态刻意做轻：整块 --accent-soft 铺满时，多选会连成一片色块。
+   靠琥珀色勾选框点题，底色只留极淡一层用于扫读。 */
+.teaching-pick-row.selected,
+.teaching-pick-row.selected:hover {
+  background: rgba(183, 121, 31, 0.06);
+}
+
+.teaching-pick-row input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.teaching-pick-row > span {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.teaching-pick-row small {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.teaching-picker-empty {
+  margin: 0;
+  padding: 14px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 添加按钮固定在素材栏底部，段落再长也不用滚动去找。 */
+.teaching-source-actions {
+  flex: 0 0 auto;
+  padding-top: 10px;
+}
+
+.teaching-source-actions .button {
+  width: 100%;
+  justify-content: center;
+}
+
+.workspace .teaching-source-actions .button:disabled {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--muted);
+}
+
+/* 中等宽度（含平板横屏）收成单栏：素材栏回到文档流，接在大纲后面。 */
+@media (max-width: 1080px) {
+  .teaching-editor-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+  }
+
+  .workspace .teaching-editor-split > .teaching-source-pane {
+    position: static;
+    max-height: none;
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+  }
+
+  .teaching-picker-list {
+    max-height: 320px;
+  }
+
+  .teaching-item-actions {
+    opacity: 1;
+  }
 }
 
 .app-frame:has(.teaching-presenter) {
@@ -1206,25 +1327,16 @@
     align-self: flex-start;
   }
 
-  .teaching-editor-layout {
-    grid-template-columns: minmax(0, 1fr);
+  .teaching-editor-workspace .title-input {
+    font-size: 24px;
   }
 
-  .teaching-editor-main,
-  .teaching-editor-layout .workbench-side {
-    width: 100%;
-    min-width: 0;
+  .teaching-editor-workspace .editor-title-bar {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .teaching-editor-settings {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .teaching-editor-head-meta {
-    display: none;
-  }
-
-  .teaching-block-picker {
+  .teaching-picker-list {
     max-height: 280px;
   }
 
@@ -1253,17 +1365,6 @@
 }
 
 @media (max-width: 560px) {
-  .teaching-editor-head-actions .teaching-visibility-button,
-  .teaching-editor-layout .action-panel > .button {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .teaching-editor-head-actions {
-    align-items: flex-end;
-    flex-direction: column;
-  }
-
   .teaching-list-panel .list-toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -1284,17 +1385,12 @@
   }
 
   .teaching-item-row {
-    grid-template-columns: 24px 26px 18px minmax(0, 1fr);
+    grid-template-columns: 20px 26px minmax(0, 1fr);
   }
 
   .teaching-item-actions {
     grid-column: 2 / -1;
     justify-content: flex-end;
-  }
-
-  .teaching-source-panel,
-  .teaching-compose-panel {
-    padding: 14px;
   }
 
   .teaching-presenter-info span:last-child {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Settings } from "lucide-react";
+import { MessageSquare, Settings } from "lucide-react";
 import type { UserProfile, UserPublicActivity } from "@liveboard/shared";
 import {
   apiResourceUrl,
@@ -10,7 +10,7 @@ import {
   getUserProfile,
   getUserPublicActivity,
 } from "@/lib/api";
-import { APP_ROUTES, forumThread, teachingPresent } from "@/lib/routes";
+import { APP_ROUTES, forumThread } from "@/lib/routes";
 import { formatRelativeTime } from "@/lib/labels";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { UserBadges } from "@/components/UserBadges";
@@ -85,29 +85,13 @@ export function UserProfileClient({ userId }: { userId: string }) {
           <div className="user-profile-activity">
             <section>
               <div className="panel-head">
-                <h2>可访问课件</h2>
-              </div>
-              {activity?.teachingDecks.length ? (
-                <div className="user-profile-activity-list">
-                  {activity.teachingDecks.map((deck) => (
-                    <Link href={teachingPresent(deck.id)} key={deck.id}>
-                      <strong>{deck.title}</strong>
-                      <span>{formatRelativeTime(deck.updatedAt)}</span>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <p className="muted user-profile-empty">暂无可查看的课件</p>
-              )}
-            </section>
-            <section>
-              <div className="panel-head">
                 <h2>论坛主题</h2>
               </div>
               {activity?.forumThreads.length ? (
                 <div className="user-profile-activity-list">
                   {activity.forumThreads.map((thread) => (
                     <Link href={forumThread(thread.id)} key={thread.id}>
+                      <MessageSquare aria-hidden="true" />
                       <strong>{thread.title}</strong>
                       <span>
                         {thread.categoryName} · {thread.postCount} 条内容 ·{" "}

@@ -94,12 +94,6 @@ export interface UserProfile extends UserSummary {
 }
 
 export interface UserPublicActivity {
-  teachingDecks: Array<{
-    id: string;
-    title: string;
-    itemCount: number;
-    updatedAt: string;
-  }>;
   forumThreads: Array<{
     id: string;
     title: string;

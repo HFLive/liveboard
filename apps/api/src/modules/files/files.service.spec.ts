@@ -39,6 +39,7 @@ describe("FilesService", () => {
       findUnique: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
+      update: jest.fn(),
       delete: jest.fn(),
     },
     folder: {
@@ -56,6 +57,7 @@ describe("FilesService", () => {
       findMany: jest.fn(),
     },
     $transaction: jest.fn(),
+    $executeRaw: jest.fn(),
   };
   let service: FilesService;
 
@@ -469,5 +471,31 @@ describe("FilesService", () => {
     await expect(
       service.exportMarkdown("viewer-1", "file-1"),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("clears the markdown import report without touching updatedAt", async () => {
+    prisma.file.findUnique.mockResolvedValue({ id: "file-1" });
+
+    await expect(
+      service.dismissImportWarnings("editor-1", "file-1"),
+    ).resolves.toEqual({ ok: true });
+    // 必须走裸 SQL：prisma.file.update 会触发 @updatedAt，
+    // 把「删了一份报告」记成一次内容修改，文档就被顶到最近更新第一位。
+    expect(prisma.file.update).not.toHaveBeenCalled();
+    expect(prisma.$executeRaw).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.stringContaining('UPDATE "File" SET "importWarnings" = NULL'),
+      ]),
+      "file-1",
+    );
+  });
+
+  it("refuses to clear the import report without edit permission", async () => {
+    permissions.getEffectiveLevelForFile.mockResolvedValue("viewer");
+
+    await expect(
+      service.dismissImportWarnings("viewer-1", "file-1"),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
   });
 });

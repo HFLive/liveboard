@@ -4,6 +4,7 @@
 **/dist/
 **/*.tsbuildinfo
 coverage/
+.playwright-mcp/
 .turbo/
 .pnpm-store/
 .env

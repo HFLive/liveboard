@@ -584,6 +584,10 @@ export interface StorageSettings {
     secretConfigured: boolean;
   };
   activeBackendHealthy: boolean;
+  fileDistribution: {
+    minio: { count: number; bytes: number };
+    oss: { count: number; bytes: number };
+  };
   updatedAt: string | null;
 }
 
@@ -1311,6 +1315,12 @@ export function publishFile(fileId: string) {
 
 export function deleteFile(fileId: string) {
   return request<{ ok: boolean }>(`/files/${fileId}`, {
+    method: "DELETE",
+  });
+}
+
+export function dismissImportWarnings(fileId: string) {
+  return request<{ ok: boolean }>(`/files/${fileId}/import-warnings`, {
     method: "DELETE",
   });
 }

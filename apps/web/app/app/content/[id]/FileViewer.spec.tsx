@@ -44,8 +44,9 @@ describe("FileViewer", () => {
       name: "展示文档",
     });
     expect(heading).toBeInTheDocument();
-    expect(heading.previousElementSibling).toHaveClass("content-viewer-status");
-    expect(heading.previousElementSibling).toHaveTextContent("已发布");
+    // 已发布不加标签：每篇正式文档都一样，标出来只是噪声。
+    expect(heading.previousElementSibling).toBeNull();
+    expect(screen.queryByText("已发布")).not.toBeInTheDocument();
     expect(screen.getByText("默认只展示正文")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "编辑" })).toHaveAttribute(
@@ -55,6 +56,31 @@ describe("FileViewer", () => {
     expect(
       screen.queryByRole("link", { name: "返回文档" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("still marks a draft so readers know it is not the published version", async () => {
+    vi.mocked(getFile).mockResolvedValueOnce({
+      file: {
+        id: "file-1",
+        folderId: "folder-1",
+        title: "草稿文档",
+        type: "doc",
+        status: "draft",
+        pinnedOrder: null,
+        updatedAt: "2026-07-15T00:00:00.000Z",
+        permission: "editor",
+        version: 1,
+      },
+    });
+
+    render(<FileViewer fileId="file-1" />);
+
+    const heading = await screen.findByRole("heading", {
+      level: 1,
+      name: "草稿文档",
+    });
+    expect(heading.previousElementSibling).toHaveClass("content-viewer-status");
+    expect(heading.previousElementSibling).toHaveTextContent("草稿");
   });
 
   it("does not show the edit link to a viewer", async () => {

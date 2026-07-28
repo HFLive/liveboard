@@ -109,8 +109,8 @@ async function main() {
   });
   await upsertForumCategory({
     workspaceId: workspace.id,
-    name: "课程讨论",
-    description: "围绕课程内容、作业思路和课堂延伸展开讨论。",
+    name: "课程交流",
+    description: "围绕课程内容、作业思路和课堂延伸展开交流。",
     sortOrder: 20,
   });
   await upsertForumCategory({
@@ -247,33 +247,44 @@ async function main() {
     ],
   });
 
-  const exerciseFile = await prisma.file.upsert({
-    where: { id: "seed_file_exercise_basics" },
-    update: {
-      title: "基础概念测验",
-      status: "published",
+  // 练习挂在课堂下，不再包一层 type: "exercise_set" 的 File —— ExerciseSet.fileId
+  // 只是历史关联，新建练习早已不创建文件。
+  const classroom = await prisma.classroom.upsert({
+    where: {
+      workspaceId_name: { workspaceId: workspace.id, name: "示例课堂" },
     },
+    update: { description: "种子数据课堂，用于试用课件、练习与成员管理。" },
     create: {
-      id: "seed_file_exercise_basics",
       workspaceId: workspace.id,
-      folderId: publicFolder.id,
-      type: "exercise_set",
-      title: "基础概念测验",
-      status: "published",
+      name: "示例课堂",
+      description: "种子数据课堂，用于试用课件、练习与成员管理。",
       createdById: lecturer.id,
-      updatedById: lecturer.id,
-      publishedAt: new Date(),
     },
   });
 
+  for (const [userId, role] of [
+    [lecturer.id, "teacher"],
+    [learner.id, "student"],
+  ]) {
+    await prisma.classroomMember.upsert({
+      where: { classroomId_userId: { classroomId: classroom.id, userId } },
+      update: { role },
+      create: { classroomId: classroom.id, userId, role },
+    });
+  }
+
   const exerciseSet = await prisma.exerciseSet.upsert({
-    where: { fileId: exerciseFile.id },
+    where: { id: "seed_exercise_basics" },
     update: {
+      title: "基础概念测验",
       allowMultipleSubmissions: true,
       showAnswerAfterSubmit: false,
     },
     create: {
-      fileId: exerciseFile.id,
+      id: "seed_exercise_basics",
+      classroomId: classroom.id,
+      title: "基础概念测验",
+      createdById: lecturer.id,
       allowMultipleSubmissions: true,
       showAnswerAfterSubmit: false,
     },

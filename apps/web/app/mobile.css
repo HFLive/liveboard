@@ -4,7 +4,9 @@
 .rail-mobile-menu-toggle,
 .rail-mobile-footer-row,
 .rail-mobile-account-actions,
+.rail-mobile-backdrop,
 .rail-mobile-usage,
+.rail-logout-label,
 .mobile-route-unsupported {
   display: none;
 }
@@ -84,6 +86,16 @@
     color: var(--rail-muted);
   }
 
+  .rail-mobile-backdrop {
+    position: fixed;
+    z-index: 705;
+    inset: 58px 0 0;
+    display: block;
+    border: 0;
+    background: rgba(35, 31, 25, 0.18);
+    padding: 0;
+  }
+
   .rail-nav {
     position: absolute;
     z-index: 710;
@@ -91,12 +103,12 @@
     right: 10px;
     left: 10px;
     display: none;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
     max-height: calc(100dvh - 76px);
     overflow-y: auto;
     border: 1px solid var(--line);
-    border-radius: 14px;
+    border-radius: 16px;
     background: var(--surface-raised);
     padding: 8px;
     box-shadow: var(--shadow-popover);
@@ -110,16 +122,16 @@
     flex: none;
     flex-direction: row;
     justify-content: flex-start;
-    gap: 9px;
+    gap: 11px;
     width: 100%;
     min-width: 0;
-    min-height: 42px;
+    min-height: 46px;
     border: 0;
-    border-radius: 9px;
+    border-radius: 10px;
     background: transparent;
     color: var(--text-soft);
-    padding: 0 11px;
-    font-size: 13px;
+    padding: 0 13px;
+    font-size: 14px;
     line-height: 1;
   }
 
@@ -130,13 +142,22 @@
     color: var(--text);
   }
 
+  .rail-link.active {
+    font-weight: 650;
+  }
+
   .rail-link.active::before {
     display: none;
   }
 
   .rail-link .rail-icon {
-    width: 17px;
-    height: 17px;
+    width: 18px;
+    height: 18px;
+    color: var(--muted);
+  }
+
+  .rail-link.active .rail-icon {
+    color: var(--accent-dark);
   }
 
   .rail-link.mobile-complex-nav {
@@ -146,19 +167,16 @@
   .rail-mobile-footer-row {
     display: grid;
     grid-column: 1 / -1;
-    grid-template-columns: auto;
-    justify-content: end;
-    align-items: center;
-    gap: 8px;
-    margin-top: 4px;
+    gap: 2px;
+    margin-top: 6px;
     border-top: 1px solid var(--line);
-    padding: 8px 4px 0 11px;
+    padding: 8px 0 0;
   }
 
   .rail-mobile-account-actions {
-    display: flex;
-    align-items: center;
-    gap: 1px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px;
   }
 
   .rail-mobile-usage {
@@ -205,30 +223,37 @@
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 9px;
-    width: auto;
-    min-height: 40px;
+    gap: 11px;
+    width: 100%;
+    min-height: 46px;
     border: 0;
-    border-radius: 8px;
+    border-radius: 10px;
     background: transparent;
     color: var(--text-soft);
-    padding: 0 7px;
-    font-size: 12px;
+    padding: 0 13px;
+    font-size: 14px;
     text-decoration: none;
   }
 
-  .rail-mobile-account-actions > a {
-    white-space: nowrap;
+  .rail-mobile-account-actions > a:hover,
+  .rail-mobile-account-actions > .rail-logout-button:hover {
+    background: var(--fill-hover);
+    color: var(--text);
   }
 
   .rail-mobile-account-actions > .rail-logout-button {
-    width: 36px;
-    padding: 0;
+    font: inherit;
+    font-size: 14px;
+  }
+
+  .rail-mobile-account-actions .rail-logout-label {
+    display: inline;
   }
 
   .rail-mobile-account-actions svg {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
+    color: var(--muted);
   }
 
   .rail-footer {
@@ -274,6 +299,11 @@
     min-width: 0;
     min-height: calc(100dvh - 58px);
     padding: 14px;
+  }
+
+  /* 个人主页横幅在移动端同样通栏，抵消 app-main 的内边距。 */
+  .user-profile-card {
+    margin: -14px -14px 0;
   }
 
   .workspace {
@@ -675,8 +705,11 @@
     background: transparent;
   }
 
+  /* 置顶不靠底色标注：连着几条时，每行各自的圆角会在交界处挤出一串白色缺口，
+     看上去像几张贴在一起的卡片。行首那枚琥珀色图钉已经说明了它被置顶，
+     和桌面端一致，也省掉一层多余的色块。 */
   .app-main .workspace.content-workspace .content-pinned-row {
-    background: var(--fill-subtle);
+    background: transparent;
   }
 
   .app-main
@@ -1060,12 +1093,8 @@
     padding: 12px;
   }
 
-  .rail-nav {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .rail-mobile-account-actions {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .user-profile-card {
+    margin: -12px -12px 0;
   }
 
   .ai-workspace .home-ai-messages {
