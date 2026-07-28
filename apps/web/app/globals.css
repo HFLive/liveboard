@@ -3788,6 +3788,54 @@ p.muted {
   border: 0;
 }
 
+.render-bilibili-http {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-block: 1px solid var(--line);
+}
+
+.render-bilibili-http > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.render-bilibili-http strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.render-bilibili-http span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.render-bilibili-http a {
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: var(--fill-subtle);
+  color: var(--text);
+  padding: 8px 11px;
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.render-bilibili-http a:hover {
+  background: var(--fill-hover);
+}
+
+@media (max-width: 640px) {
+  .render-bilibili-http {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+}
+
 .bilibili-block-editor {
   display: grid;
   gap: 7px;
