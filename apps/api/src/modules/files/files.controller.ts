@@ -352,6 +352,14 @@ export class FilesController {
     return this.filesService.deleteFile(userId, fileId);
   }
 
+  @Delete("files/:id/import-warnings")
+  async dismissImportWarnings(
+    @CurrentUserId() userId: string | null,
+    @Param("id") fileId: string,
+  ) {
+    return this.filesService.dismissImportWarnings(userId, fileId);
+  }
+
   @Get("files/:id/blocks")
   async listBlocks(
     @CurrentUserId() userId: string | null,

@@ -1339,9 +1339,9 @@ export function FileEditor({ fileId }: { fileId: string }) {
           </div>
         </div>
         <div className="button-row">
-          {isPublished ? (
-            <span className="publish-state-badge">已发布</span>
-          ) : isArchived ? (
+          {/* 已发布不再挂标签：这一格没有「发布」按钮本身就说明它已经发过了。
+              已归档是异常状态，仍然要明说。 */}
+          {isPublished ? null : isArchived ? (
             <span className="publish-state-badge muted">已归档</span>
           ) : (
             <button

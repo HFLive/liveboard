@@ -3151,21 +3151,32 @@ p.muted {
   padding: 28px clamp(14px, 3vw, 36px) 44px;
 }
 
+/* 标题输入框不用下划线表示可编辑/聚焦：一条近全宽的横线会和页面里的分隔线
+   撞在一起。改成 hover/聚焦时浮出一块淡色输入区，负外边距抵消内边距，
+   静止状态下标题仍与页面左边距对齐。 */
 .title-input {
   display: block;
   width: min(820px, 100%);
-  border: 1px solid transparent;
+  border: 0;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text);
   font-size: 32px;
   font-weight: 750;
   line-height: 1.2;
-  padding: 3px 0 8px;
+  margin-left: -10px;
+  padding: 3px 10px 7px;
+  transition: background-color 0.14s ease;
+}
+
+.title-input:hover {
+  background: var(--fill-subtle);
 }
 
 .title-input:focus {
-  border-bottom-color: var(--line-strong);
   outline: 0;
+  background: var(--fill-subtle);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .document-editor {

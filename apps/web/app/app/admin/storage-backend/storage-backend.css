@@ -66,6 +66,36 @@
   color: var(--danger);
 }
 
+.storage-backend-page .storage-backend-distribution {
+  grid-column: 1 / -1;
+}
+
+.storage-backend-page .storage-backend-distribution dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.storage-backend-page .storage-backend-dist-item {
+  align-items: center;
+  background: var(--fill-subtle);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  gap: 6px;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
+.storage-backend-page .storage-backend-dist-item > svg {
+  color: var(--muted);
+  height: 15px;
+  width: 15px;
+}
+
+.storage-backend-page .storage-backend-dist-item small {
+  color: var(--muted);
+}
+
 .storage-backend-page .storage-backend-choices {
   display: grid;
   gap: 10px;

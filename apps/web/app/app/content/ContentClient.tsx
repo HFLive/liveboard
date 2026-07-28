@@ -148,13 +148,28 @@ function flattenFolders(folders: FolderNode[], depth = 0): FlatFolderNode[] {
   ]);
 }
 
+// 置顶只影响同级内的先后：置顶项按 pinnedOrder 排到前面，其余保持接口顺序
+// （sortOrder → name）。Array.sort 是稳定的，所以未置顶的相对次序不会被打乱。
+function sortFoldersByPin(folders: FolderNode[]): FolderNode[] {
+  return [...folders].sort((left, right) => {
+    if (left.pinnedOrder !== null && right.pinnedOrder !== null) {
+      return left.pinnedOrder - right.pinnedOrder;
+    }
+
+    if (left.pinnedOrder !== null) return -1;
+    if (right.pinnedOrder !== null) return 1;
+    return 0;
+  });
+}
+
 // 左侧位置树只展示文件夹，作为纯粹的层级导航；文档统一在右侧表格呈现。
+// 排序必须和右侧一致：置顶是「这个位置下的排列方式」，不是右侧表格的私有视图。
 function flattenVisibleFolders(
   folders: FolderNode[],
   collapsedFolderIds: Set<string>,
   depth = 0,
 ): FlatFolderNode[] {
-  return folders.flatMap((folder) => [
+  return sortFoldersByPin(folders).flatMap((folder) => [
     { ...folder, depth },
     ...(collapsedFolderIds.has(folder.id)
       ? []

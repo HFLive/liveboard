@@ -1054,15 +1054,15 @@ export class ForumService {
     return workspace;
   }
 
+  /**
+   * 只负责「空 workspace 补齐默认分类」这一件事，分类已存在时是纯读路径。
+   *
+   * 这里曾经顺带跑一段把「课程讨论」改名成「课程交流」的一次性数据迁移：
+   * 论坛首页每次请求都写一次库，而当两个名字在同一 workspace 并存时，
+   * 改名会撞上 @@unique([workspaceId, name]) 抛 P2002，让论坛整页 500。
+   * 改名已经删除 —— 分类叫什么不影响功能，不值得为它冒险改动既有数据。
+   */
   private async ensureDefaultCategories(workspaceId: string) {
-    await this.prisma.forumCategory.updateMany({
-      where: { workspaceId, name: "课程讨论" },
-      data: {
-        name: "课程交流",
-        description: "围绕课程内容、作业思路和课堂延伸展开交流。",
-      },
-    });
-
     const categoryCount = await this.prisma.forumCategory.count({
       where: { workspaceId },
     });

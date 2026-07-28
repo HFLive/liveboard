@@ -76,7 +76,7 @@ describe("responsive workspace contracts", () => {
 
   it("keeps teaching and document editing in a readable single column", () => {
     expect(teachingCss).toMatch(
-      /@media \(max-width: 820px\)[\s\S]*?\.teaching-editor-layout[\s\S]*?grid-template-columns: minmax\(0, 1fr\)/,
+      /@media \(max-width: 1080px\)[\s\S]*?\.teaching-editor-split[\s\S]*?grid-template-columns: minmax\(0, 1fr\)/,
     );
     expect(editorCss).toMatch(
       /@media \(max-width: 760px\)[\s\S]*?\.editor-split[\s\S]*?grid-template-columns: minmax\(0, 1fr\)/,

@@ -32,6 +32,7 @@ export function LogoutButton() {
       type="button"
     >
       <LogOut aria-hidden="true" className="rail-icon" />
+      <span className="rail-logout-label">退出登录</span>
     </button>
   );
 }

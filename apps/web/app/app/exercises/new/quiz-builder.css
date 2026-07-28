@@ -1,59 +1,134 @@
-/* 创建练习页：左侧题目列表与编辑器、右侧基础设置与发布的路由专属样式。
-   双栏竖线、面板标题与控件密度沿用 .workspace 全局规则，这里只处理内部结构。 */
+/* 创建/编辑练习页：与文档、课件编辑页同构 —— 顶部可编辑标题 + 信息条 + 主操作，
+   下方左右分栏（左：题目，右：设置）。
 
-.quiz-builder .quiz-builder-head-meta {
-  color: var(--muted);
-  font-size: 12px;
+   层级只有三级：页面 → 分栏 → 卡片，且全页只有一条常驻横线（页头与正文之间）。
+   「正在编辑哪一题」由编辑器就地替换该行来表达，不再是列表高亮 + 页尾编辑器两地呼应。 */
+
+.workspace.quiz-builder {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  gap: 0;
 }
 
-.quiz-builder .quiz-builder-head-actions {
+/* 返回链接与标题拉开一档，让「离开本页」和「本页标题」分属两个层级。 */
+.quiz-builder > .page-back-link {
+  margin-bottom: 12px;
+}
+
+/* 顶栏压紧，把首屏让给题目列表。 */
+.quiz-builder .editor-title-bar {
+  align-items: center;
+  min-height: 0;
+  margin-top: 0;
+  padding-bottom: 0;
+}
+
+.quiz-builder .title-input {
+  font-size: 24px;
+}
+
+.quiz-builder .title-input::placeholder {
+  color: #c4bcae;
+}
+
+/* 给标题聚焦时的外发光留出空隙。 */
+.quiz-builder .editor-meta-strip {
+  margin-top: 6px;
+}
+
+.quiz-builder > .error-text {
+  margin: 10px 0 0;
+}
+
+/* 左宽右窄：题目是主工作区，设置是偶尔一顾的旁栏。 */
+.quiz-builder-split {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.42fr);
+  gap: clamp(24px, 3vw, 44px);
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+/* 两栏共用的栏头：小标题靠左，操作靠右，不加边框。 */
+.quiz-builder .editor-pane-head {
+  align-items: center;
+  min-height: 30px;
+  padding-bottom: 10px;
+}
+
+.quiz-builder .quiz-pane-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px;
+  margin-left: auto;
 }
 
-.quiz-builder .quiz-builder-head-actions .button {
-  min-height: 30px;
+/* 三个次要入口做成安静的文字按钮：它们是备选路径，不该和顶栏主操作抢注意力。 */
+.quiz-builder .quiz-pane-actions .button.secondary {
+  min-height: 28px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
   padding-inline: 8px;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-/* 题目列表：间距分隔的连续行，hover 圆角浅灰，正在编辑的行为选中态。 */
+.quiz-builder .quiz-pane-actions .button.secondary:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.quiz-builder .quiz-pane-actions .button.secondary:disabled {
+  background: transparent;
+  opacity: 0.45;
+}
+
+.quiz-builder .quiz-pane-actions .button-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* —— 左栏：题目列表 —— */
+
 .quiz-builder .quiz-question-list {
   display: grid;
   gap: 2px;
-  padding: 6px 10px 10px;
-}
-
-.quiz-builder .quiz-question-empty {
-  margin: 0;
-  padding: 14px 6px;
-  color: var(--muted);
-  font-size: 13px;
+  min-width: 0;
 }
 
 .quiz-builder .quiz-question-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 20px 24px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  border-radius: 10px;
-  padding: 8px 10px;
+  border-radius: 8px;
+  padding: 4px 6px 4px 0;
+}
+
+.quiz-builder .quiz-question-row:hover,
+.quiz-builder .quiz-question-row:focus-within {
+  background: var(--fill-subtle);
 }
 
 .quiz-builder .quiz-question-drag {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 28px;
-  flex: 0 0 auto;
+  width: 20px;
+  height: 26px;
   border: 0;
-  border-radius: 6px;
   background: transparent;
-  color: var(--muted);
+  color: transparent;
   cursor: grab;
+}
+
+.quiz-builder .quiz-question-row:hover .quiz-question-drag,
+.quiz-builder .quiz-question-drag:focus-visible {
+  color: var(--line-strong);
 }
 
 .quiz-builder .quiz-question-drag:active {
@@ -61,54 +136,41 @@
 }
 
 .quiz-builder .quiz-question-drag svg {
-  width: 14px;
+  width: 15px;
 }
 
-.quiz-builder .quiz-question-row:hover {
-  background: var(--fill-hover);
-}
-
-.quiz-builder .quiz-question-row.editing,
-.quiz-builder .quiz-question-row.editing:hover {
-  background: var(--accent-soft);
-}
-
+/* 等宽序号，不加底色方块：与课件大纲同一套排版语言。 */
 .quiz-builder .quiz-question-number {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  background: var(--fill-hover);
-  color: var(--muted);
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
-  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
-.quiz-builder .quiz-question-row.editing .quiz-question-number {
-  background: transparent;
-  color: var(--accent-dark);
-}
-
-.quiz-builder .quiz-question-main {
+/* 整行是编辑入口，所以它本身就是按钮，但外观完全按文本行走。 */
+.quiz-builder .quiz-question-open {
   display: grid;
-  gap: 2px;
-  flex: 1 1 auto;
+  gap: 1px;
   min-width: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 6px 4px;
+  text-align: left;
+  cursor: pointer;
 }
 
-.quiz-builder .quiz-question-main h3 {
-  margin: 0;
+.quiz-builder .quiz-question-open strong {
   overflow: hidden;
-  font-size: 13px;
-  font-weight: 650;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.quiz-builder .quiz-question-main p {
-  margin: 0;
+.quiz-builder .quiz-question-open small {
   overflow: hidden;
   color: var(--muted);
   font-size: 12px;
@@ -116,35 +178,51 @@
   white-space: nowrap;
 }
 
+/* 行内操作默认隐形，hover/键盘聚焦时出现，让长列表保持安静。 */
 .quiz-builder .quiz-question-actions {
   display: flex;
   align-items: center;
-  flex: 0 0 auto;
   gap: 2px;
+  opacity: 0;
 }
 
-/* 题目编辑器：与列表之间一道通长分隔线。 */
+.quiz-builder .quiz-question-row:hover .quiz-question-actions,
+.quiz-builder .quiz-question-row:focus-within .quiz-question-actions {
+  opacity: 1;
+}
+
+/* —— 题目编辑器：不是卡片，是这一行「摊开」的样子 ——
+
+   不用白底浮层，也不用彩色竖条。正在编辑的题目靠三件事和列表区分：
+   上下两道通栏细线把它从行距里划出来、大幅留白、题干用大字号。
+   左槽 52px 与列表行的序号槽同宽，所以展开前后序号和正文都不会横向跳动。 */
 .quiz-builder .quiz-editor {
   display: grid;
-  gap: 16px;
-  scroll-margin-top: 80px;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px 8px;
+  scroll-margin-top: 24px;
   border-top: 1px solid var(--line);
-  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  margin: 8px 0;
+  padding: 20px 0 18px;
 }
 
-.quiz-builder .quiz-editor-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+.quiz-builder .quiz-editor > * {
+  grid-column: 2;
 }
 
-.quiz-builder .quiz-editor-head > div {
-  display: grid;
-  gap: 2px;
+.quiz-builder .quiz-editor > .quiz-editor-index {
+  grid-row: 1;
+  grid-column: 1;
+  align-self: center;
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
-.quiz-builder .quiz-editor-head span,
 .quiz-builder .quiz-answer-block-label,
 .quiz-builder .quiz-score-field span {
   color: var(--muted);
@@ -152,8 +230,17 @@
   font-weight: 650;
 }
 
-.quiz-builder .quiz-editor-head strong {
-  font-size: 15px;
+.quiz-builder .quiz-editor-cancel {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.quiz-builder .quiz-editor-cancel:hover {
+  color: var(--text);
 }
 
 /* 题型与判断题答案统一使用分段控件。 */
@@ -164,36 +251,46 @@
   max-width: 100%;
 }
 
-.quiz-builder .quiz-answer-block {
-  display: grid;
-  gap: 7px;
-  justify-items: start;
+/* 题干不套 label：卡片本身已经说明这是一道题，占位符足够引导，少一层标题。 */
+.quiz-builder .quiz-prompt-input {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  outline: 0;
+  margin-left: -8px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.55;
+  transition: background-color 0.14s ease;
 }
 
-.quiz-builder .quiz-prompt-field textarea {
-  min-height: 84px;
-  line-height: 1.6;
+.quiz-builder .quiz-prompt-input::placeholder {
+  color: #b9b1a4;
+  font-weight: 500;
 }
 
-/* 选项编辑：连续行 + 底部弱分隔线，输入框透明。 */
+.quiz-builder .quiz-prompt-input:hover {
+  background: var(--fill-subtle);
+}
+
+.quiz-builder .quiz-prompt-input:focus {
+  background: var(--fill-subtle);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+/* —— 选项编辑 —— */
+
 .quiz-builder .quiz-option-editor {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
-.quiz-builder .quiz-option-editor-label {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.quiz-builder .quiz-option-editor-label > span {
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.quiz-builder .quiz-option-editor-label small {
+.quiz-builder .quiz-option-hint {
+  margin: 0;
   color: var(--muted);
   font-size: 12px;
 }
@@ -202,13 +299,18 @@
   display: grid;
 }
 
+/* 下划线只在 hover/聚焦时出现：常驻时四五条横线会让卡片显得比页面还碎。 */
 .quiz-builder .quiz-option-row {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) 28px;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
-  border-bottom: 1px solid var(--line);
+  min-height: 36px;
+  border-bottom: 1px solid transparent;
+}
+
+.quiz-builder .quiz-option-row:hover {
+  border-bottom-color: var(--line);
 }
 
 .quiz-builder .quiz-option-row:focus-within {
@@ -218,7 +320,7 @@
 .quiz-builder .quiz-option-row > input:first-child {
   width: 15px;
   height: 15px;
-  accent-color: var(--accent-dark);
+  accent-color: var(--accent);
 }
 
 .quiz-builder .quiz-option-input {
@@ -232,20 +334,32 @@
   font-size: 13px;
 }
 
+.quiz-builder .quiz-option-row .inline-icon-button {
+  opacity: 0;
+}
+
+.quiz-builder .quiz-option-row:hover .inline-icon-button,
+.quiz-builder .quiz-option-row:focus-within .inline-icon-button {
+  opacity: 1;
+}
+
 .quiz-builder .quiz-add-option {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   width: fit-content;
   border: 0;
+  border-radius: 6px;
   background: transparent;
-  color: var(--text-soft);
-  padding: 4px 0;
+  color: var(--muted);
+  margin-left: -4px;
+  padding: 5px 6px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .quiz-builder .quiz-add-option:hover {
+  background: var(--fill-hover);
   color: var(--text);
 }
 
@@ -253,64 +367,53 @@
   width: 14px;
 }
 
+/* —— 其他题型的答案区 —— */
+
+.quiz-builder .quiz-answer-block {
+  display: grid;
+  gap: 7px;
+  justify-items: start;
+}
+
 .quiz-builder .quiz-answer-field {
   max-width: 420px;
 }
 
-/* 人工批改说明：浅填充信息块，无外框。 */
 .quiz-builder .quiz-manual-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  border-radius: 10px;
-  background: var(--fill-subtle);
-  padding: 10px 12px;
-}
-
-.quiz-builder .quiz-manual-note svg {
-  flex: 0 0 auto;
-  width: 15px;
-  margin-top: 2px;
-  color: var(--text-soft);
-}
-
-.quiz-builder .quiz-manual-note span {
-  display: grid;
-  gap: 2px;
+  margin: 0;
+  color: var(--muted);
   font-size: 13px;
 }
 
-.quiz-builder .quiz-manual-note small {
-  color: var(--muted);
-  font-size: 12px;
-}
+/* —— 编辑器页脚：分值、必答、主操作 —— */
 
 .quiz-builder .quiz-editor-footer {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-
-.quiz-builder .quiz-score-field {
-  display: grid;
-  gap: 5px;
-  width: 96px;
 }
 
 .quiz-builder .quiz-editor-options {
   display: flex;
-  align-items: flex-end;
-  gap: 14px;
+  align-items: center;
+  gap: 16px;
+}
+
+.quiz-builder .quiz-score-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quiz-builder .quiz-score-field .input {
+  width: 72px;
 }
 
 .quiz-builder .quiz-required-field {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 36px;
   color: var(--text-soft);
   font-size: 12px;
   cursor: pointer;
@@ -319,32 +422,52 @@
 .quiz-builder .quiz-required-field input {
   width: 15px;
   height: 15px;
-  accent-color: var(--accent-dark);
+  accent-color: var(--accent);
 }
 
-/* 右侧基础设置。 */
-.quiz-builder .quiz-settings .label small {
+/* —— 右栏：设置 —— */
+
+.quiz-builder .quiz-setting-pane {
+  position: sticky;
+  top: 12px;
+}
+
+.quiz-builder .quiz-setting-list {
+  display: grid;
+  gap: 14px;
+}
+
+.quiz-builder .quiz-setting-list .label small {
   font-weight: 400;
 }
 
-.quiz-builder .quiz-rule-list {
+/* 规则行去掉上下分隔线，靠 hover 底色成行；勾选框放左侧与选项编辑同一习惯。 */
+.quiz-builder .quiz-rule-row {
   display: grid;
-  border-top: 1px solid var(--line);
+  grid-template-columns: 15px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  border-radius: 8px;
+  margin-left: -8px;
+  padding: 8px;
+  cursor: pointer;
 }
 
-.quiz-builder .quiz-rule-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  border-bottom: 1px solid var(--line);
-  padding: 8px 0;
-  cursor: pointer;
+.quiz-builder .quiz-rule-row:hover {
+  background: var(--fill-subtle);
+}
+
+.quiz-builder .quiz-rule-row > input {
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  accent-color: var(--accent);
 }
 
 .quiz-builder .quiz-rule-row > span {
   display: grid;
   gap: 2px;
+  min-width: 0;
 }
 
 .quiz-builder .quiz-rule-row strong {
@@ -357,55 +480,7 @@
   line-height: 1.45;
 }
 
-.quiz-builder .quiz-rule-row input {
-  flex: 0 0 auto;
-  width: 15px;
-  height: 15px;
-  accent-color: var(--accent-dark);
-}
-
-.quiz-builder .quiz-visibility-button {
-  justify-self: start;
-}
-
-/* 发布面板：标签值列表 + 主操作。 */
-.quiz-builder .quiz-publish-meta {
-  display: grid;
-  margin: 0;
-}
-
-.quiz-builder .quiz-publish-meta > div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  border-bottom: 1px solid var(--line);
-  padding: 6px 0;
-}
-
-.quiz-builder .quiz-publish-meta > div:last-child {
-  border-bottom: 0;
-}
-
-.quiz-builder .quiz-publish-meta dt {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.quiz-builder .quiz-publish-meta dd {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 650;
-  text-align: right;
-}
-
-.quiz-builder .quiz-publish-button {
-  width: 100%;
-}
-
-.quiz-builder .quiz-visibility-modal {
-  width: min(560px, 100%);
-}
+/* —— 弹窗 —— */
 
 .quiz-builder .quiz-preview-modal {
   width: min(760px, 100%);
@@ -461,26 +536,39 @@
   font-size: 12px;
 }
 
-/* 移动端吸底创建条，默认隐藏。 */
-.quiz-builder .quiz-mobile-publish {
-  display: none;
+/* 窄屏收成单列：先编题，设置沉到底部。 */
+@media (max-width: 1080px) {
+  .quiz-builder-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 30px;
+  }
+
+  /* 单列下不给设置区加分隔线：它紧跟在编辑器的收尾线之后，
+     两条线只隔十几像素会撞在一起。改成拉开留白，靠「设置」这个小标题分段。 */
+  .quiz-builder .quiz-setting-pane {
+    position: static;
+    padding-top: 10px;
+  }
+
+  /* 时间与规则不该铺满整个正文宽度，读起来像被拉散的表单。 */
+  .quiz-builder .quiz-setting-list {
+    max-width: 520px;
+  }
+
+  .quiz-builder .quiz-question-actions,
+  .quiz-builder .quiz-option-row .inline-icon-button {
+    opacity: 1;
+  }
 }
 
-/* 窄屏回落为单列时保持任务顺序：先编题，再补充设置并发布。 */
-
 @media (max-width: 720px) {
-  .quiz-builder .panel-head {
+  .quiz-builder .editor-pane-head {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .quiz-builder .quiz-builder-head-actions {
-    justify-content: flex-start;
-  }
-
-  .quiz-builder .quiz-editor-head {
-    align-items: flex-start;
-    flex-direction: column;
+  .quiz-builder .quiz-pane-actions {
+    margin-left: -8px;
   }
 
   .quiz-builder .quiz-editor-footer {
@@ -488,54 +576,8 @@
     flex-direction: column;
   }
 
-  .quiz-builder .quiz-score-field {
-    width: 100%;
-  }
-
-  .quiz-builder .quiz-editor-options {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .quiz-builder .quiz-editor-footer .button-row,
   .quiz-builder .quiz-editor-footer .button {
     width: 100%;
-  }
-
-  .quiz-builder .quiz-option-editor-label {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .quiz-builder .quiz-publish-button {
-    display: none;
-  }
-
-  .quiz-builder .quiz-mobile-publish {
-    position: sticky;
-    z-index: 80;
-    bottom: max(12px, env(safe-area-inset-bottom));
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin: 4px 10px 0;
-    border: 1px solid var(--line-strong);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
-    padding: 8px 10px;
-    backdrop-filter: blur(8px);
-  }
-
-  .quiz-builder .quiz-mobile-publish span {
-    color: var(--muted);
-    font-size: 13px;
-    font-weight: 700;
-  }
-
-  .quiz-builder .quiz-mobile-publish .button {
-    width: auto;
-    min-width: 120px;
   }
 }

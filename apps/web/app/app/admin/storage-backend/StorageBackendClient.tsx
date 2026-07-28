@@ -170,6 +170,27 @@ export function StorageBackendClient() {
                   {settings.minio.endpoint} / {settings.minio.bucket}
                 </dd>
               </div>
+              <div className="storage-backend-distribution">
+                <dt>文件分布</dt>
+                <dd>
+                  <span className="storage-backend-dist-item">
+                    <HardDrive aria-hidden="true" />
+                    服务器{" "}
+                    <strong>{settings.fileDistribution.minio.count} 个</strong>
+                    <small>
+                      {formatFileSize(settings.fileDistribution.minio.bytes)}
+                    </small>
+                  </span>
+                  <span className="storage-backend-dist-item">
+                    <Cloud aria-hidden="true" />
+                    阿里云 OSS{" "}
+                    <strong>{settings.fileDistribution.oss.count} 个</strong>
+                    <small>
+                      {formatFileSize(settings.fileDistribution.oss.bytes)}
+                    </small>
+                  </span>
+                </dd>
+              </div>
             </dl>
           </section>
 
@@ -455,4 +476,20 @@ export function StorageBackendClient() {
       )}
     </div>
   );
+}
+
+function formatFileSize(size: number) {
+  if (size < 1024) {
+    return `${size} B`;
+  }
+
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+
+  if (size < 1024 * 1024 * 1024) {
+    return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  return `${(size / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }

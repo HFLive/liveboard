@@ -30,6 +30,8 @@ describe("StorageService", () => {
       findUnique: jest.fn(),
       upsert: jest.fn(),
     },
+    classroomFile: { groupBy: jest.fn() },
+    fileAsset: { groupBy: jest.fn() },
   };
   const secrets = {
     encrypt: jest.fn(),
@@ -77,6 +79,8 @@ describe("StorageService", () => {
     prisma.user.findUnique.mockResolvedValue(superAdmin);
     prisma.workspace.findFirst.mockResolvedValue({ id: "workspace-1" });
     prisma.storageSettings.findUnique.mockResolvedValue(null);
+    prisma.classroomFile.groupBy.mockResolvedValue([]);
+    prisma.fileAsset.groupBy.mockResolvedValue([]);
   });
 
   it("returns MinIO defaults when no settings row exists", async () => {
@@ -88,6 +92,35 @@ describe("StorageService", () => {
         oss: { secretConfigured: false },
       },
     );
+  });
+
+  it("aggregates file counts and sizes per storage backend", async () => {
+    prisma.classroomFile.groupBy.mockResolvedValue([
+      {
+        storageBackend: "minio",
+        _count: { _all: 3 },
+        _sum: { sizeBytes: 100 },
+      },
+    ]);
+    prisma.fileAsset.groupBy.mockResolvedValue([
+      {
+        storageBackend: "minio",
+        _count: { _all: 2 },
+        _sum: { sizeBytes: 60 },
+      },
+      {
+        storageBackend: "oss",
+        _count: { _all: 4 },
+        _sum: { sizeBytes: null },
+      },
+    ]);
+
+    const result = await service.getSettingsForAdmin("admin-1");
+
+    expect(result.fileDistribution).toEqual({
+      minio: { count: 5, bytes: 160 },
+      oss: { count: 4, bytes: 0 },
+    });
   });
 
   it("rejects storage settings from non super admins", async () => {

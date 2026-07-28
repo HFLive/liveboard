@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,8 +13,6 @@ import {
   Eye,
   FileInput,
   GripVertical,
-  Library,
-  Pencil,
   Plus,
   Trash2,
   X,
@@ -27,9 +25,7 @@ import {
 import {
   createExerciseSet,
   CreateExerciseQuestionInput,
-  ExerciseSetSummary,
   getExerciseSet,
-  listExerciseSets,
   updateExerciseSet,
 } from "@/lib/api";
 import { questionTypeLabel } from "@/lib/labels";
@@ -108,9 +104,6 @@ export function NewExerciseClient({
     number | null
   >(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [showQuestionBank, setShowQuestionBank] = useState(false);
-  const [questionBank, setQuestionBank] = useState<ExerciseSetSummary[]>([]);
-  const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [bulkImportText, setBulkImportText] = useState("");
   const [draftRecovered, setDraftRecovered] = useState(false);
@@ -124,7 +117,7 @@ export function NewExerciseClient({
   useEffect(() => {
     if (exerciseId) {
       getExerciseSet(exerciseId)
-        .then(async ({ exerciseSet }) => {
+        .then(({ exerciseSet }) => {
           if (!exerciseSet.canManage) {
             throw new Error("只有课堂教师可以编辑练习");
           }
@@ -161,14 +154,6 @@ export function NewExerciseClient({
               required: question.required ?? true,
             })),
           );
-          const exerciseResult = await listExerciseSets(
-            exerciseSet.classroomId,
-          );
-          const reusable = exerciseResult.exerciseSets.filter(
-            (exercise) => exercise.canManage && exercise.id !== exerciseId,
-          );
-          setQuestionBank(reusable);
-          setSelectedQuestionBankId(reusable[0]?.id ?? "");
         })
         .catch((caught) =>
           setError(caught instanceof Error ? caught.message : "加载练习失败"),
@@ -205,19 +190,7 @@ export function NewExerciseClient({
 
     if (!activeClassroomId) {
       setError("请从课堂内创建练习");
-      return;
     }
-    listExerciseSets(activeClassroomId)
-      .then((exerciseResult) => {
-        const reusable = exerciseResult.exerciseSets.filter(
-          (exercise) => exercise.canManage,
-        );
-        setQuestionBank(reusable);
-        setSelectedQuestionBankId(reusable[0]?.id ?? "");
-      })
-      .catch((caught) =>
-        setError(caught instanceof Error ? caught.message : "加载用户失败"),
-      );
   }, [activeClassroomId, draftKey, exerciseId]);
 
   useEffect(() => {
@@ -442,11 +415,6 @@ export function NewExerciseClient({
     setScore(question.score);
     setRequired(question.required ?? true);
     setError(null);
-    window.requestAnimationFrame(() => {
-      document
-        .getElementById("question-editor")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
   }
 
   function removeQuestion(index: number) {
@@ -504,37 +472,6 @@ export function NewExerciseClient({
     ]);
   }
 
-  async function importFromQuestionBank() {
-    if (!selectedQuestionBankId) return;
-    try {
-      const result = await getExerciseSet(selectedQuestionBankId);
-      const imported = result.exerciseSet.questions.map((question) => ({
-        type: question.type,
-        promptJson: {
-          text:
-            question.promptJson &&
-            typeof question.promptJson === "object" &&
-            "text" in question.promptJson &&
-            typeof question.promptJson.text === "string"
-              ? question.promptJson.text
-              : "未命名题目",
-        },
-        ...(question.optionsJson && typeof question.optionsJson === "object"
-          ? { optionsJson: question.optionsJson as { options: string[] } }
-          : {}),
-        ...(question.answerJson !== undefined
-          ? { answerJson: question.answerJson }
-          : {}),
-        score: question.score,
-        required: question.required ?? true,
-      }));
-      setQuestions((current) => [...current, ...imported]);
-      setShowQuestionBank(false);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "导入题目失败");
-    }
-  }
-
   function importBulkQuestions() {
     const imported = bulkImportText
       .split("\n")
@@ -564,8 +501,7 @@ export function NewExerciseClient({
     setError(null);
   }
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function publish() {
     setError(null);
 
     if (editingIndex !== null || prompt.trim()) {
@@ -629,6 +565,189 @@ export function NewExerciseClient({
     }
   }
 
+  /* 题目编辑器只存在一份：编辑某题时就地替换该行，否则挂在列表末尾当新题目录入口。
+     这样「正在编辑的是哪一题」由位置本身说明，不需要再靠高亮去关联两处。 */
+  const questionEditor = (
+    <article
+      aria-label={
+        editingIndex === null ? "新题目" : `编辑第 ${editingIndex + 1} 题`
+      }
+      className="quiz-editor"
+      id="question-editor"
+    >
+      {/* 序号落在列表自己的数字槽里，展开的编辑器就是那一行「摊开」的样子。 */}
+      <span aria-hidden="true" className="quiz-editor-index">
+        {(editingIndex ?? questions.length) + 1}
+      </span>
+      <div
+        aria-label="题型"
+        className="segmented-control quiz-type-picker"
+        role="group"
+      >
+        {questionTypes.map((item) => (
+          <button
+            aria-pressed={type === item.value}
+            className={type === item.value ? "active" : ""}
+            key={item.value}
+            onClick={() => changeQuestionType(item.value)}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      <AutoTextarea
+        aria-label="题干"
+        className="quiz-prompt-input"
+        onChange={(event) => setPrompt(event.target.value)}
+        placeholder="输入题目"
+        rows={1}
+        value={prompt}
+      />
+
+      {needsOptions ? (
+        <div className="quiz-option-editor">
+          <p className="quiz-option-hint">
+            {type === "single_choice"
+              ? "点选左侧圆圈标记唯一正确答案"
+              : "勾选左侧方框标记一个或多个正确答案"}
+          </p>
+          <div className="quiz-option-list">
+            {options.map((option, index) => {
+              const checked = Array.isArray(answer)
+                ? answer.includes(option)
+                : answer === option;
+              return (
+                <div className="quiz-option-row" key={index}>
+                  <input
+                    aria-label={`将选项 ${index + 1} 设为正确答案`}
+                    checked={checked && Boolean(option.trim())}
+                    name={
+                      type === "single_choice" ? "correct-option" : undefined
+                    }
+                    onChange={() => toggleCorrectOption(option)}
+                    type={type === "single_choice" ? "radio" : "checkbox"}
+                  />
+                  <input
+                    aria-label={`选项 ${index + 1}`}
+                    className="quiz-option-input"
+                    onChange={(event) =>
+                      updateOption(index, event.target.value)
+                    }
+                    placeholder={`选项 ${index + 1}`}
+                    value={option}
+                  />
+                  <button
+                    aria-label={`删除选项 ${index + 1}`}
+                    className="inline-icon-button"
+                    disabled={options.length <= 2}
+                    onClick={() => removeOption(index)}
+                    title="删除选项"
+                    type="button"
+                  >
+                    <X aria-hidden="true" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <button className="quiz-add-option" onClick={addOption} type="button">
+            <Plus aria-hidden="true" />
+            添加选项
+          </button>
+        </div>
+      ) : type === "true_false" ? (
+        <div className="quiz-answer-block">
+          <span className="quiz-answer-block-label">标准答案</span>
+          <div
+            aria-label="标准答案"
+            className="segmented-control quiz-tf-picker"
+            role="group"
+          >
+            <button
+              aria-pressed={answer === true}
+              className={answer === true ? "active" : ""}
+              onClick={() => setAnswer(true)}
+              type="button"
+            >
+              正确
+            </button>
+            <button
+              aria-pressed={answer === false}
+              className={answer === false ? "active" : ""}
+              onClick={() => setAnswer(false)}
+              type="button"
+            >
+              错误
+            </button>
+          </div>
+        </div>
+      ) : type === "fill_blank" ? (
+        <label className="label quiz-answer-field">
+          标准答案
+          <input
+            className="input"
+            onChange={(event) => setAnswer(event.target.value)}
+            placeholder="输入可接受的标准答案"
+            value={typeof answer === "string" ? answer : ""}
+          />
+        </label>
+      ) : (
+        <p className="quiz-manual-note">
+          成员填写长文本作答，提交后由教师人工批改给分。
+        </p>
+      )}
+
+      <footer className="quiz-editor-footer">
+        <div className="quiz-editor-options">
+          <label className="quiz-score-field">
+            <span>分值</span>
+            <input
+              className="input"
+              min={1}
+              onChange={(event) => setScore(Number(event.target.value))}
+              type="number"
+              value={score}
+            />
+          </label>
+          <label className="quiz-required-field">
+            <input
+              checked={required}
+              onChange={(event) => setRequired(event.target.checked)}
+              type="checkbox"
+            />
+            必答题
+          </label>
+        </div>
+        <div className="button-row">
+          {editingIndex !== null ? (
+            <button
+              className="quiz-editor-cancel"
+              onClick={resetQuestionEditor}
+              type="button"
+            >
+              取消
+            </button>
+          ) : null}
+          {/* 全页只留顶栏一颗实心主按钮，卡内提交用描边，层级不打架。 */}
+          <button
+            className="button secondary"
+            onClick={saveQuestion}
+            type="button"
+          >
+            {editingIndex === null ? (
+              <CirclePlus aria-hidden="true" className="button-icon" />
+            ) : (
+              <Check aria-hidden="true" className="button-icon" />
+            )}
+            {editingIndex === null ? "添加题目" : "保存修改"}
+          </button>
+        </div>
+      </footer>
+    </article>
+  );
+
   return (
     <div className="workspace quiz-builder">
       <Link
@@ -636,43 +755,66 @@ export function NewExerciseClient({
         href={classroomDetail(activeClassroomId ?? "", "exercises")}
       >
         <ArrowLeft aria-hidden="true" />
-        返回练习列表
+        <span>返回练习</span>
       </Link>
-      <section className="page-head">
+
+      <header className="page-head compact editor-title-bar">
         <div>
-          <p className="page-eyebrow">在线练习</p>
-          <h1>{exerciseId ? "编辑练习" : "创建练习"}</h1>
+          <input
+            aria-label="练习名称"
+            className="title-input"
+            maxLength={120}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="未命名练习"
+            value={title}
+          />
+          <div className="editor-meta-strip" aria-label="练习信息">
+            <span>
+              <strong>题目</strong>
+              {questions.length} 道
+            </span>
+            <span>
+              <strong>总分</strong>
+              {totalScore} 分
+            </span>
+            {exerciseId ? null : (
+              <span>
+                <strong>草稿</strong>
+                {draftRecovered ? "已恢复上次编辑" : "自动保存在本机"}
+              </span>
+            )}
+          </div>
         </div>
-      </section>
+        <div className="button-row">
+          <button
+            className="button"
+            disabled={loading}
+            onClick={() => void publish()}
+            type="button"
+          >
+            <Check aria-hidden="true" className="button-icon" />
+            {loading
+              ? exerciseId
+                ? "保存中"
+                : "创建中"
+              : exerciseId
+                ? "保存练习"
+                : "创建练习"}
+          </button>
+        </div>
+      </header>
 
       {error ? (
         <p className="error-text" role="alert">
           {error}
         </p>
       ) : null}
-      {draftRecovered ? (
-        <p className="success-text">已恢复上次未完成的练习草稿。</p>
-      ) : null}
 
-      <form className="workbench quiz-builder-form" onSubmit={onSubmit}>
-        <div className="workbench-main quiz-builder-main">
-          <div className="panel-head">
-            <div>
-              <h2>题目</h2>
-            </div>
-            <div className="quiz-builder-head-actions">
-              <span className="quiz-builder-head-meta">
-                {questions.length} 道题 · 共 {totalScore} 分
-              </span>
-              <button
-                className="button secondary"
-                disabled={!questionBank.length}
-                onClick={() => setShowQuestionBank(true)}
-                type="button"
-              >
-                <Library aria-hidden="true" className="button-icon" />
-                题库复用
-              </button>
+      <div className="editor-split quiz-builder-split">
+        <section className="editor-pane quiz-question-pane" aria-label="题目">
+          <div className="editor-pane-head">
+            <strong>题目</strong>
+            <div className="quiz-pane-actions">
               <button
                 className="button secondary"
                 onClick={() => setShowBulkImport(true)}
@@ -694,406 +836,153 @@ export function NewExerciseClient({
           </div>
 
           <div className="quiz-question-list">
-            {questions.length === 0 ? (
-              <p className="quiz-question-empty">
-                还没有题目，在下方编辑器中添加第一道。
-              </p>
-            ) : null}
-            {questions.map((question, index) => (
-              <article
-                className={`quiz-question-row${editingIndex === index ? " editing" : ""}`}
-                key={`${question.type}-${index}`}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={() => {
-                  if (draggingQuestionIndex !== null) {
-                    moveQuestionTo(draggingQuestionIndex, index);
-                  }
-                  setDraggingQuestionIndex(null);
-                }}
-              >
-                <button
-                  aria-label={`拖动第 ${index + 1} 题排序`}
-                  className="quiz-question-drag"
-                  draggable
-                  onDragEnd={() => setDraggingQuestionIndex(null)}
-                  onDragStart={() => setDraggingQuestionIndex(index)}
-                  title="拖动排序"
-                  type="button"
+            {questions.map((question, index) =>
+              editingIndex === index ? (
+                <Fragment key="open-editor">{questionEditor}</Fragment>
+              ) : (
+                <article
+                  className="quiz-question-row"
+                  key={`${question.type}-${index}`}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => {
+                    if (draggingQuestionIndex !== null) {
+                      moveQuestionTo(draggingQuestionIndex, index);
+                    }
+                    setDraggingQuestionIndex(null);
+                  }}
                 >
-                  <GripVertical aria-hidden="true" />
-                </button>
-                <span aria-hidden="true" className="quiz-question-number">
-                  {index + 1}
-                </span>
-                <div className="quiz-question-main">
-                  <h3>{question.promptJson.text}</h3>
-                  <p>
-                    {questionTypeLabel(question.type)} · {question.score} 分
-                    {question.required === false ? " · 选答" : " · 必答"}
-                    {question.type === "short_answer"
-                      ? " · 人工批改"
-                      : ` · 答案：${formatBuilderAnswer(question.answerJson)}`}
-                  </p>
-                </div>
-                <div className="quiz-question-actions">
                   <button
-                    aria-label={`复制第 ${index + 1} 题`}
-                    className="inline-icon-button"
-                    onClick={() => duplicateQuestion(index)}
-                    title="复制题目"
+                    aria-label={`拖动第 ${index + 1} 题排序`}
+                    className="quiz-question-drag"
+                    draggable
+                    onDragEnd={() => setDraggingQuestionIndex(null)}
+                    onDragStart={() => setDraggingQuestionIndex(index)}
+                    title="拖动排序"
                     type="button"
                   >
-                    <Copy aria-hidden="true" />
+                    <GripVertical aria-hidden="true" />
                   </button>
+                  <span aria-hidden="true" className="quiz-question-number">
+                    {index + 1}
+                  </span>
+                  {/* 整行即编辑入口，省掉一颗铅笔按钮。 */}
                   <button
-                    aria-label={`编辑第 ${index + 1} 题`}
-                    className="inline-icon-button"
+                    className="quiz-question-open"
                     onClick={() => editQuestion(index)}
-                    title="编辑题目"
+                    title="编辑这道题"
                     type="button"
                   >
-                    <Pencil aria-hidden="true" />
+                    <strong>{question.promptJson.text}</strong>
+                    <small>
+                      {questionTypeLabel(question.type)} · {question.score} 分
+                      {question.required === false ? " · 选答" : ""}
+                      {question.type === "short_answer"
+                        ? " · 人工批改"
+                        : ` · 答案 ${formatBuilderAnswer(question.answerJson)}`}
+                    </small>
                   </button>
-                  <button
-                    aria-label={`上移第 ${index + 1} 题`}
-                    className="inline-icon-button"
-                    disabled={index === 0}
-                    onClick={() => moveQuestion(index, -1)}
-                    title="上移"
-                    type="button"
-                  >
-                    <ArrowUp aria-hidden="true" />
-                  </button>
-                  <button
-                    aria-label={`下移第 ${index + 1} 题`}
-                    className="inline-icon-button"
-                    disabled={index === questions.length - 1}
-                    onClick={() => moveQuestion(index, 1)}
-                    title="下移"
-                    type="button"
-                  >
-                    <ArrowDown aria-hidden="true" />
-                  </button>
-                  <button
-                    aria-label={`删除第 ${index + 1} 题`}
-                    className="inline-icon-button danger"
-                    onClick={() => removeQuestion(index)}
-                    title="删除题目"
-                    type="button"
-                  >
-                    <Trash2 aria-hidden="true" />
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          <article className="quiz-editor" id="question-editor">
-            <header className="quiz-editor-head">
-              <div>
-                <span>
-                  {editingIndex === null
-                    ? "新题目"
-                    : `编辑第 ${editingIndex + 1} 题`}
-                </span>
-                <strong>{questionTypeLabel(type)}</strong>
-              </div>
-              {editingIndex !== null ? (
-                <button
-                  className="button secondary"
-                  onClick={resetQuestionEditor}
-                  type="button"
-                >
-                  取消编辑
-                </button>
-              ) : null}
-            </header>
-
-            <div
-              aria-label="题型"
-              className="segmented-control quiz-type-picker"
-              role="group"
-            >
-              {questionTypes.map((item) => (
-                <button
-                  aria-pressed={type === item.value}
-                  className={type === item.value ? "active" : ""}
-                  key={item.value}
-                  onClick={() => changeQuestionType(item.value)}
-                  type="button"
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
-            <label className="label quiz-prompt-field">
-              题目
-              <AutoTextarea
-                className="textarea"
-                onChange={(event) => setPrompt(event.target.value)}
-                placeholder="输入题目内容"
-                rows={3}
-                value={prompt}
-              />
-            </label>
-
-            {needsOptions ? (
-              <div className="quiz-option-editor">
-                <div className="quiz-option-editor-label">
-                  <span>选项</span>
-                  <small>
-                    {type === "single_choice"
-                      ? "点选左侧圆圈设置唯一正确答案"
-                      : "勾选左侧方框设置一个或多个正确答案"}
-                  </small>
-                </div>
-                <div className="quiz-option-list">
-                  {options.map((option, index) => {
-                    const checked = Array.isArray(answer)
-                      ? answer.includes(option)
-                      : answer === option;
-                    return (
-                      <div className="quiz-option-row" key={index}>
-                        <input
-                          aria-label={`将选项 ${index + 1} 设为正确答案`}
-                          checked={checked && Boolean(option.trim())}
-                          name={
-                            type === "single_choice"
-                              ? "correct-option"
-                              : undefined
-                          }
-                          onChange={() => toggleCorrectOption(option)}
-                          type={type === "single_choice" ? "radio" : "checkbox"}
-                        />
-                        <input
-                          aria-label={`选项 ${index + 1}`}
-                          className="quiz-option-input"
-                          onChange={(event) =>
-                            updateOption(index, event.target.value)
-                          }
-                          placeholder={`选项 ${index + 1}`}
-                          value={option}
-                        />
-                        <button
-                          aria-label={`删除选项 ${index + 1}`}
-                          className="inline-icon-button"
-                          disabled={options.length <= 2}
-                          onClick={() => removeOption(index)}
-                          title="删除选项"
-                          type="button"
-                        >
-                          <X aria-hidden="true" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <button
-                  className="quiz-add-option"
-                  onClick={addOption}
-                  type="button"
-                >
-                  <Plus aria-hidden="true" />
-                  添加选项
-                </button>
-              </div>
-            ) : type === "true_false" ? (
-              <div className="quiz-answer-block">
-                <span className="quiz-answer-block-label">标准答案</span>
-                <div
-                  aria-label="标准答案"
-                  className="segmented-control quiz-tf-picker"
-                  role="group"
-                >
-                  <button
-                    aria-pressed={answer === true}
-                    className={answer === true ? "active" : ""}
-                    onClick={() => setAnswer(true)}
-                    type="button"
-                  >
-                    正确
-                  </button>
-                  <button
-                    aria-pressed={answer === false}
-                    className={answer === false ? "active" : ""}
-                    onClick={() => setAnswer(false)}
-                    type="button"
-                  >
-                    错误
-                  </button>
-                </div>
-              </div>
-            ) : type === "fill_blank" ? (
-              <label className="label quiz-answer-field">
-                标准答案
-                <input
-                  className="input"
-                  onChange={(event) => setAnswer(event.target.value)}
-                  placeholder="输入可接受的标准答案"
-                  value={typeof answer === "string" ? answer : ""}
-                />
-              </label>
-            ) : (
-              <div className="quiz-manual-note">
-                <Check aria-hidden="true" />
-                <span>
-                  <strong>这道题将人工批改</strong>
-                  <small>成员可输入长文本，提交后由教师给分。</small>
-                </span>
-              </div>
+                  <div className="quiz-question-actions">
+                    <button
+                      aria-label={`复制第 ${index + 1} 题`}
+                      className="inline-icon-button"
+                      onClick={() => duplicateQuestion(index)}
+                      title="复制题目"
+                      type="button"
+                    >
+                      <Copy aria-hidden="true" />
+                    </button>
+                    <button
+                      aria-label={`上移第 ${index + 1} 题`}
+                      className="inline-icon-button"
+                      disabled={index === 0}
+                      onClick={() => moveQuestion(index, -1)}
+                      title="上移"
+                      type="button"
+                    >
+                      <ArrowUp aria-hidden="true" />
+                    </button>
+                    <button
+                      aria-label={`下移第 ${index + 1} 题`}
+                      className="inline-icon-button"
+                      disabled={index === questions.length - 1}
+                      onClick={() => moveQuestion(index, 1)}
+                      title="下移"
+                      type="button"
+                    >
+                      <ArrowDown aria-hidden="true" />
+                    </button>
+                    <button
+                      aria-label={`删除第 ${index + 1} 题`}
+                      className="inline-icon-button danger"
+                      onClick={() => removeQuestion(index)}
+                      title="删除题目"
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </button>
+                  </div>
+                </article>
+              ),
             )}
-
-            <footer className="quiz-editor-footer">
-              <div className="quiz-editor-options">
-                <label className="quiz-score-field">
-                  <span>分值</span>
-                  <input
-                    className="input"
-                    min={1}
-                    onChange={(event) => setScore(Number(event.target.value))}
-                    type="number"
-                    value={score}
-                  />
-                </label>
-                <label className="quiz-required-field">
-                  <input
-                    checked={required}
-                    onChange={(event) => setRequired(event.target.checked)}
-                    type="checkbox"
-                  />
-                  必答题
-                </label>
-              </div>
-              <div className="button-row">
-                {editingIndex !== null ? (
-                  <button
-                    className="button secondary"
-                    onClick={resetQuestionEditor}
-                    type="button"
-                  >
-                    取消
-                  </button>
-                ) : null}
-                <button className="button" onClick={saveQuestion} type="button">
-                  {editingIndex === null ? (
-                    <CirclePlus aria-hidden="true" className="button-icon" />
-                  ) : (
-                    <Check aria-hidden="true" className="button-icon" />
-                  )}
-                  {editingIndex === null ? "添加题目" : "保存修改"}
-                </button>
-              </div>
-            </footer>
-          </article>
-
-          <div className="quiz-mobile-publish">
-            <span>
-              {questions.length} 道题 · 共 {totalScore} 分
-            </span>
-            <button className="button" disabled={loading} type="submit">
-              {loading
-                ? exerciseId
-                  ? "保存中"
-                  : "创建中"
-                : exerciseId
-                  ? "保存练习"
-                  : "创建练习"}
-            </button>
+            {editingIndex === null ? questionEditor : null}
           </div>
-        </div>
+        </section>
 
-        <aside className="workbench-side">
-          <section className="action-panel quiz-settings">
-            <h2>基础设置</h2>
+        <aside className="editor-pane quiz-setting-pane" aria-label="练习设置">
+          <div className="editor-pane-head">
+            <strong>设置</strong>
+            <span>时间与作答规则</span>
+          </div>
+          <div className="quiz-setting-list">
             <label className="label">
-              练习名称
-              <input
-                className="input"
-                maxLength={120}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="例如：第一章课后练习"
-                value={title}
-              />
-            </label>
-            <label className="label">
-              开始时间（可选）
+              开始时间
               <input
                 className="input"
                 onChange={(event) => setOpenAt(event.target.value)}
                 type="datetime-local"
                 value={openAt}
               />
-              <small className="muted">不填写则创建后立即开始。</small>
+              <small className="muted">留空则创建后立即开始。</small>
             </label>
             <label className="label">
-              截止时间（可选）
+              截止时间
               <input
                 className="input"
                 onChange={(event) => setDueAt(event.target.value)}
                 type="datetime-local"
                 value={dueAt}
               />
-              <small className="muted">不填写则不设截止时间。</small>
+              <small className="muted">留空则不设截止时间。</small>
             </label>
-            <div className="quiz-rule-list">
-              <label className="quiz-rule-row">
-                <span>
-                  <strong>允许多次提交</strong>
-                  <small>成员可重新作答，并保留每次提交记录。</small>
-                </span>
-                <input
-                  checked={allowMultipleSubmissions}
-                  onChange={(event) =>
-                    setAllowMultipleSubmissions(event.target.checked)
-                  }
-                  type="checkbox"
-                />
-              </label>
-              <label className="quiz-rule-row">
-                <span>
-                  <strong>提交后显示答案</strong>
-                  <small>成员提交后可查看本练习的参考答案。</small>
-                </span>
-                <input
-                  checked={showAnswerAfterSubmit}
-                  onChange={(event) =>
-                    setShowAnswerAfterSubmit(event.target.checked)
-                  }
-                  type="checkbox"
-                />
-              </label>
-            </div>
-          </section>
-
-          <section className="action-panel quiz-publish">
-            <h2>发布</h2>
-            <dl className="quiz-publish-meta">
-              <div>
-                <dt>题数</dt>
-                <dd>{questions.length} 道</dd>
-              </div>
-              <div>
-                <dt>总分</dt>
-                <dd>{totalScore} 分</dd>
-              </div>
-            </dl>
-            <button
-              className="button quiz-publish-button"
-              disabled={loading}
-              type="submit"
-            >
-              {loading
-                ? exerciseId
-                  ? "保存中"
-                  : "创建中"
-                : exerciseId
-                  ? "保存练习"
-                  : "创建练习"}
-            </button>
-          </section>
+            <label className="quiz-rule-row">
+              <input
+                checked={allowMultipleSubmissions}
+                onChange={(event) =>
+                  setAllowMultipleSubmissions(event.target.checked)
+                }
+                type="checkbox"
+              />
+              <span>
+                <strong>允许多次提交</strong>
+                <small>成员可重新作答，并保留每次提交记录。</small>
+              </span>
+            </label>
+            <label className="quiz-rule-row">
+              <input
+                checked={showAnswerAfterSubmit}
+                onChange={(event) =>
+                  setShowAnswerAfterSubmit(event.target.checked)
+                }
+                type="checkbox"
+              />
+              <span>
+                <strong>提交后显示答案</strong>
+                <small>成员提交后可查看本练习的参考答案。</small>
+              </span>
+            </label>
+          </div>
         </aside>
-      </form>
+      </div>
       {showPreview ? (
         <div className="modal-backdrop" role="presentation">
           <section
@@ -1138,56 +1027,6 @@ export function NewExerciseClient({
                   )}
                 </article>
               ))}
-            </div>
-          </section>
-        </div>
-      ) : null}
-      {showQuestionBank ? (
-        <div className="modal-backdrop" role="presentation">
-          <section
-            aria-labelledby="question-bank-title"
-            aria-modal="true"
-            className="modal-panel quiz-import-modal"
-            role="dialog"
-          >
-            <div className="modal-head">
-              <h2 id="question-bank-title">从已有练习复用题目</h2>
-              <button
-                className="icon-button subtle"
-                onClick={() => setShowQuestionBank(false)}
-                title="关闭"
-                type="button"
-              >
-                <X aria-hidden="true" />
-              </button>
-            </div>
-            <div className="modal-body">
-              <label className="label">
-                选择练习
-                <select
-                  className="select"
-                  onChange={(event) =>
-                    setSelectedQuestionBankId(event.target.value)
-                  }
-                  value={selectedQuestionBankId}
-                >
-                  {questionBank.map((exercise) => (
-                    <option key={exercise.id} value={exercise.id}>
-                      {exercise.title}（{exercise.questionCount} 题）
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p className="muted">将复制所选练习的全部题目，可继续编辑。</p>
-            </div>
-            <div className="modal-foot">
-              <button
-                className="button"
-                onClick={() => void importFromQuestionBank()}
-                type="button"
-              >
-                导入题目
-              </button>
             </div>
           </section>
         </div>

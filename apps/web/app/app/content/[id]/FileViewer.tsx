@@ -4,7 +4,7 @@ import Link from "next/link";
 import { type CSSProperties, useEffect, useState } from "react";
 import { Edit3 } from "lucide-react";
 import type { ContentBlock, FileDetail } from "@/lib/api";
-import { getFile, listBlocks } from "@/lib/api";
+import { dismissImportWarnings, getFile, listBlocks } from "@/lib/api";
 import { fileStatusLabel, permissionLabel } from "@/lib/labels";
 import { contentEdit } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
@@ -25,6 +25,7 @@ export function FileViewer({ fileId }: { fileId: string }) {
   const [blocks, setBlocks] = useState<ContentBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dismissingReport, setDismissingReport] = useState(false);
   const headings = blocks
     .filter((block) => block.type.startsWith("heading_"))
     .map((block) => ({
@@ -55,6 +56,29 @@ export function FileViewer({ fileId }: { fileId: string }) {
     };
   }, [fileId]);
 
+  async function onDismissImportReport() {
+    if (!file) return;
+    if (
+      !window.confirm(
+        "永久删除这份 Markdown 导入报告？删除后所有人都不再看到。",
+      )
+    ) {
+      return;
+    }
+
+    setDismissingReport(true);
+    setError(null);
+
+    try {
+      await dismissImportWarnings(file.id);
+      setFile({ ...file, importWarnings: null });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "删除导入报告失败");
+    } finally {
+      setDismissingReport(false);
+    }
+  }
+
   return (
     <div className="content-viewer workspace">
       {error ? <p className="error-text">{error}</p> : null}
@@ -69,12 +93,16 @@ export function FileViewer({ fileId }: { fileId: string }) {
           <header className="content-viewer-header">
             <div>
               <div className="content-viewer-title">
-                <span
-                  className="content-viewer-status"
-                  data-status={file.status}
-                >
-                  {fileStatusLabel(file.status)}
-                </span>
+                {/* 已发布是文档的常态，标出来等于每篇都挂一个同样的标签，没有信息量。
+                    只有草稿、已删除这类「读到的不是正式版本」才需要提醒。 */}
+                {file.status === "published" ? null : (
+                  <span
+                    className="content-viewer-status"
+                    data-status={file.status}
+                  >
+                    {fileStatusLabel(file.status)}
+                  </span>
+                )}
                 <h1>{file.title}</h1>
               </div>
             </div>
@@ -88,7 +116,10 @@ export function FileViewer({ fileId }: { fileId: string }) {
             ) : null}
           </header>
 
-          {file.importWarnings && file.importWarnings.length > 0 ? (
+          {/* 导入报告只对改得动文档的人有意义，纯读者看到也无从下手。 */}
+          {canEditContent(file.permission) &&
+          file.importWarnings &&
+          file.importWarnings.length > 0 ? (
             <details className="content-import-report">
               <summary>
                 Markdown 导入报告 · {file.importWarnings.length} 项需要注意
@@ -98,6 +129,14 @@ export function FileViewer({ fileId }: { fileId: string }) {
                   <li key={warning}>{warning}</li>
                 ))}
               </ul>
+              <button
+                className="content-import-report-dismiss"
+                disabled={dismissingReport}
+                onClick={() => void onDismissImportReport()}
+                type="button"
+              >
+                {dismissingReport ? "删除中…" : "核对完毕，删除报告"}
+              </button>
             </details>
           ) : null}
 

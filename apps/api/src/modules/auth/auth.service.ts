@@ -135,7 +135,7 @@ export class AuthService {
     userId: string | null,
     targetUserId: string,
   ): Promise<UserPublicActivity> {
-    const actor = await this.requireActiveUser(userId);
+    await this.requireActiveUser(userId);
     const target = await this.prisma.user.findUnique({
       where: { id: targetUserId },
       select: { id: true, status: true },
@@ -145,36 +145,17 @@ export class AuthService {
       throw new NotFoundException("User not found");
     }
 
-    const [teachingDecks, forumThreads] = await Promise.all([
-      this.prisma.teachingDeck.findMany({
-        where: {
-          createdById: targetUserId,
-          ...(actor.systemRole === "super_admin"
-            ? {}
-            : { classroom: { members: { some: { userId: actor.id } } } }),
-        },
-        include: { _count: { select: { items: true } } },
-        orderBy: { updatedAt: "desc" },
-        take: 8,
-      }),
-      this.prisma.forumThread.findMany({
-        where: { authorId: targetUserId, isAnonymous: false },
-        include: {
-          category: { select: { name: true } },
-          _count: { select: { posts: true } },
-        },
-        orderBy: { lastActivityAt: "desc" },
-        take: 8,
-      }),
-    ]);
+    const forumThreads = await this.prisma.forumThread.findMany({
+      where: { authorId: targetUserId, isAnonymous: false },
+      include: {
+        category: { select: { name: true } },
+        _count: { select: { posts: true } },
+      },
+      orderBy: { lastActivityAt: "desc" },
+      take: 8,
+    });
 
     return {
-      teachingDecks: teachingDecks.map((deck) => ({
-        id: deck.id,
-        title: deck.title,
-        itemCount: deck._count.items,
-        updatedAt: deck.updatedAt.toISOString(),
-      })),
       forumThreads: forumThreads.map((thread) => ({
         id: thread.id,
         title: thread.title,

@@ -278,6 +278,15 @@ export function AppNav() {
         )}
       </button>
 
+      {mobileMenuOpen ? (
+        <button
+          aria-label="关闭主菜单"
+          className="rail-mobile-backdrop"
+          onClick={() => setMobileMenuOpen(false)}
+          type="button"
+        />
+      ) : null}
+
       <nav className="rail-nav" aria-label="主导航">
         {visibleNavItems.map((item) => {
           const Icon = item.Icon;

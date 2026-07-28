@@ -10,6 +10,7 @@ describe("ForumService", () => {
     workspace: { findFirst: jest.fn() },
     forumCategory: {
       updateMany: jest.fn(),
+      createMany: jest.fn(),
       count: jest.fn(),
       findMany: jest.fn(),
     },
@@ -94,10 +95,17 @@ describe("ForumService", () => {
     const result = await service.listOverview("user-1");
 
     expect(result.threads[0]?.excerpt).toBe("第一段 第二段");
-    expect(prisma.forumCategory.updateMany).toHaveBeenCalledWith({
-      where: { workspaceId: "workspace-1", name: "课程讨论" },
-      data: expect.objectContaining({ name: "课程交流" }),
-    });
+  });
+
+  it("does not write to forum categories while reading the overview", async () => {
+    prisma.forumThread.findMany.mockResolvedValue([]);
+
+    await service.listOverview("user-1");
+
+    // 分类已存在时读路径必须是只读的：这里曾经跑一次改名 updateMany，
+    // 撞上 (workspaceId, name) 唯一索引就让整个论坛页 500。
+    expect(prisma.forumCategory.updateMany).not.toHaveBeenCalled();
+    expect(prisma.forumCategory.createMany).not.toHaveBeenCalled();
   });
 
   it("keeps a thread followed when the current user has posted in it", async () => {

@@ -2,13 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
-  ClipboardList,
-  FileText,
   GripVertical,
   Plus,
   Save,
@@ -29,11 +27,13 @@ import {
   listFiles,
   updateTeachingDeck,
 } from "@/lib/api";
-import { classroomDetail, teachingEdit, teachingPresent } from "@/lib/routes";
+import { classroomDetail, teachingEdit } from "@/lib/routes";
 import {
   getBlockLabel,
   getBlockText,
 } from "../content/[id]/ContentBlockRenderer";
+
+const EXERCISE_SOURCE = "嵌套练习";
 
 type DraftItem =
   | {
@@ -53,6 +53,8 @@ type DraftItem =
       source: string;
     };
 
+type SaveState = "clean" | "dirty" | "saving";
+
 export function TeachingEditor({
   deckId,
   classroomId,
@@ -69,10 +71,13 @@ export function TeachingEditor({
   const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(
     new Set(),
   );
-  const [selectedExerciseId, setSelectedExerciseId] = useState("");
+  const [selectedExerciseIds, setSelectedExerciseIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [items, setItems] = useState<DraftItem[]>([]);
   const [activeClassroomId, setActiveClassroomId] = useState(classroomId ?? "");
-  const [loading, setLoading] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("clean");
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [sourceTab, setSourceTab] = useState<"document" | "exercise">(
     "document",
   );
@@ -83,6 +88,9 @@ export function TeachingEditor({
     () => files.find((file) => file.id === selectedFileId) ?? null,
     [files, selectedFileId],
   );
+
+  const selectedCount =
+    sourceTab === "document" ? selectedBlockIds.size : selectedExerciseIds.size;
 
   useEffect(() => {
     async function load() {
@@ -103,7 +111,6 @@ export function TeachingEditor({
       setFiles(contentFiles);
       setExercises(exerciseResult.exerciseSets);
       setSelectedFileId(contentFiles[0]?.id ?? "");
-      setSelectedExerciseId(exerciseResult.exerciseSets[0]?.id ?? "");
       if (!deckResult) return;
       if (!deckResult.deck.canEdit) {
         throw new Error("只有课堂教师可以编辑课件");
@@ -130,7 +137,7 @@ export function TeachingEditor({
               type: "exercise" as const,
               exerciseSetId: item.exerciseSetId,
               label: item.exerciseTitle ?? "练习",
-              source: "嵌套练习",
+              source: EXERCISE_SOURCE,
             });
           }
           return result;
@@ -157,41 +164,61 @@ export function TeachingEditor({
       );
   }, [selectedFileId]);
 
-  function addBlocks() {
-    const next = blocks
-      .filter((block) => selectedBlockIds.has(block.id))
-      .map((block) => ({
-        key: `block-${block.id}-${Date.now()}-${Math.random()}`,
-        type: "content_block" as const,
-        sourceBlockId: block.id,
-        label: getBlockText(block) || getBlockLabel(block.type),
-        source: selectedFile?.title ?? "文档",
-        blockType: block.type,
-        imageFit: "fit" as const,
-      }));
-    setItems((current) => [...current, ...next]);
-    setSelectedBlockIds(new Set());
+  /** 所有用户改动都经过这里，让顶栏的保存状态始终反映真实进度。 */
+  function editItems(next: (current: DraftItem[]) => DraftItem[]) {
+    setItems(next);
+    setSaveState("dirty");
   }
 
-  function addExercise() {
-    const exercise = exercises.find((item) => item.id === selectedExerciseId);
-    if (!exercise) return;
-    setItems((current) => [
-      ...current,
-      {
-        key: `exercise-${exercise.id}-${Date.now()}`,
-        type: "exercise",
+  function addSelected() {
+    if (sourceTab === "document") {
+      const next = blocks
+        .filter((block) => selectedBlockIds.has(block.id))
+        .map((block) => ({
+          key: `block-${block.id}-${Date.now()}-${Math.random()}`,
+          type: "content_block" as const,
+          sourceBlockId: block.id,
+          label: getBlockText(block) || getBlockLabel(block.type),
+          source: selectedFile?.title ?? "文档",
+          blockType: block.type,
+          imageFit: "fit" as const,
+        }));
+      if (!next.length) return;
+      editItems((current) => [...current, ...next]);
+      setSelectedBlockIds(new Set());
+      return;
+    }
+    const next = exercises
+      .filter((exercise) => selectedExerciseIds.has(exercise.id))
+      .map((exercise) => ({
+        key: `exercise-${exercise.id}-${Date.now()}-${Math.random()}`,
+        type: "exercise" as const,
         exerciseSetId: exercise.id,
         label: exercise.title,
-        source: "嵌套练习",
-      },
-    ]);
+        source: EXERCISE_SOURCE,
+      }));
+    if (!next.length) return;
+    editItems((current) => [...current, ...next]);
+    setSelectedExerciseIds(new Set());
+  }
+
+  function toggleId(
+    setter: typeof setSelectedBlockIds,
+    id: string,
+    checked: boolean,
+  ) {
+    setter((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   }
 
   function move(index: number, delta: number) {
     const target = index + delta;
     if (target < 0 || target >= items.length) return;
-    setItems((current) => {
+    editItems((current) => {
       const next = [...current];
       const currentItem = next[index];
       const targetItem = next[target];
@@ -204,7 +231,7 @@ export function TeachingEditor({
 
   function moveTo(itemKey: string, targetKey: string) {
     if (itemKey === targetKey) return;
-    setItems((current) => {
+    editItems((current) => {
       const sourceIndex = current.findIndex((item) => item.key === itemKey);
       const targetIndex = current.findIndex((item) => item.key === targetKey);
       if (sourceIndex < 0 || targetIndex < 0) return current;
@@ -226,7 +253,7 @@ export function TeachingEditor({
       setError("请至少添加一个文档段落或练习");
       return;
     }
-    setLoading(true);
+    setSaveState("saving");
     setError(null);
     const payload = {
       classroomId: activeClassroomId,
@@ -250,14 +277,15 @@ export function TeachingEditor({
             items: payload.items,
           })
         : await createTeachingDeck(payload);
+      setSaveState("clean");
+      setSavedAt(new Date());
       if (!deckId) {
         router.replace(teachingEdit(result.deck.id));
       }
       router.refresh();
     } catch (caught) {
+      setSaveState("dirty");
       setError(caught instanceof Error ? caught.message : "保存课件失败");
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -270,168 +298,192 @@ export function TeachingEditor({
         <ArrowLeft aria-hidden="true" />
         <span>返回课件</span>
       </Link>
-      <header className="page-head compact">
+
+      <header className="page-head compact editor-title-bar">
         <div>
-          <p className="page-eyebrow">课件编辑</p>
-          <h1>{deckId ? "编辑课件" : "创建课件"}</h1>
+          <input
+            aria-label="课件名称"
+            className="title-input"
+            maxLength={120}
+            onChange={(event) => {
+              setTitle(event.target.value);
+              setSaveState("dirty");
+            }}
+            placeholder="未命名课件"
+            value={title}
+          />
+          <div className="editor-meta-strip" aria-label="课件信息">
+            <span>
+              <strong>内容</strong>
+              {items.length} 项
+            </span>
+            <span>
+              <strong>保存</strong>
+              {saveState === "saving"
+                ? "保存中…"
+                : saveState === "dirty"
+                  ? "有未保存修改"
+                  : savedAt
+                    ? `已保存 ${savedAt.toLocaleTimeString("zh-CN", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}`
+                    : deckId
+                      ? "已保存"
+                      : "尚未保存"}
+            </span>
+          </div>
+        </div>
+        <div className="button-row">
+          <button
+            className="button"
+            disabled={saveState === "saving"}
+            onClick={() => void save()}
+            type="button"
+          >
+            <Save aria-hidden="true" className="button-icon" />
+            {saveState === "saving" ? "保存中" : "保存课件"}
+          </button>
         </div>
       </header>
+
       {error ? <p className="error-text">{error}</p> : null}
-      <div className="workbench teaching-editor-layout">
-        <div className="workbench-main teaching-editor-main">
-          <div className="panel-head">
-            <div>
-              <h2>课件内容</h2>
-            </div>
-            <div className="teaching-editor-head-actions">
-              <span className="teaching-editor-head-meta">
-                按顺序排列，展示时自动分页
-              </span>
-            </div>
-          </div>
 
-          <div className="teaching-editor-settings">
-            <label className="label teaching-title-field">
-              课件名称
-              <input
-                className="input"
-                maxLength={120}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="例如：第一章课堂讲解"
-                value={title}
-              />
-            </label>
-          </div>
-
-          <div className="teaching-item-list">
-            {items.length === 0 ? (
-              <p className="teaching-item-empty">
-                课件还是空的，从文档段落或练习中添加内容。
-              </p>
-            ) : null}
-            {items.map((item, index) => (
-              <article
-                className={`teaching-item-row ${draggingItemKey === item.key ? "dragging" : ""}`}
-                key={item.key}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={() => {
-                  if (draggingItemKey) moveTo(draggingItemKey, item.key);
-                  setDraggingItemKey(null);
-                }}
-              >
-                <button
-                  aria-label={`拖动第 ${index + 1} 项排序`}
-                  className="teaching-item-drag"
-                  draggable
-                  onDragEnd={() => setDraggingItemKey(null)}
-                  onDragStart={() => setDraggingItemKey(item.key)}
-                  title="拖动排序"
-                  type="button"
-                >
-                  <GripVertical aria-hidden="true" />
-                </button>
-                <span aria-hidden="true" className="teaching-item-index">
-                  {index + 1}
-                </span>
-                {item.type === "content_block" ? (
-                  <FileText aria-hidden="true" />
-                ) : (
-                  <ClipboardList aria-hidden="true" />
-                )}
-                <div className="teaching-item-main">
-                  <strong>{item.label}</strong>
-                  <small>{item.source}</small>
-                  {item.type === "content_block" &&
-                  item.blockType === "image" ? (
-                    <label className="teaching-image-fit">
-                      图片展示
-                      <select
-                        onChange={(event) =>
-                          setItems((current) =>
-                            current.map((currentItem) =>
-                              currentItem.key === item.key &&
-                              currentItem.type === "content_block"
-                                ? {
-                                    ...currentItem,
-                                    imageFit: event.target.value as
-                                      "fit" | "fill" | "original",
-                                  }
-                                : currentItem,
-                            ),
-                          )
-                        }
-                        value={item.imageFit}
+      <div className="editor-split teaching-editor-split">
+        <section
+          className="editor-pane teaching-outline-pane"
+          aria-label="课件大纲"
+        >
+          {items.length === 0 ? (
+            <p className="teaching-item-empty">
+              课件还是空的。在右侧勾选文档段落或练习添加到这里，之后可拖动调整顺序。
+            </p>
+          ) : (
+            <ol className="teaching-item-list">
+              {items.map((item, index) => {
+                const previous = items[index - 1];
+                const startsGroup =
+                  !previous || previous.source !== item.source;
+                return (
+                  <Fragment key={item.key}>
+                    {startsGroup ? (
+                      <li className="teaching-item-group" aria-hidden="true">
+                        {item.source}
+                      </li>
+                    ) : null}
+                    <li
+                      className={`teaching-item-row ${draggingItemKey === item.key ? "dragging" : ""}`}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => {
+                        if (draggingItemKey) moveTo(draggingItemKey, item.key);
+                        setDraggingItemKey(null);
+                      }}
+                    >
+                      <button
+                        aria-label={`拖动第 ${index + 1} 项排序`}
+                        className="teaching-item-drag"
+                        draggable
+                        onDragEnd={() => setDraggingItemKey(null)}
+                        onDragStart={() => setDraggingItemKey(item.key)}
+                        title="拖动排序"
+                        type="button"
                       >
-                        <option value="fit">适应画布</option>
-                        <option value="fill">填满区域</option>
-                        <option value="original">原始比例</option>
-                      </select>
-                    </label>
-                  ) : null}
-                </div>
-                <div className="teaching-item-actions">
-                  <button
-                    aria-label={`上移第 ${index + 1} 项`}
-                    className="inline-icon-button"
-                    disabled={index === 0}
-                    onClick={() => move(index, -1)}
-                    title="上移"
-                    type="button"
-                  >
-                    <ArrowUp aria-hidden="true" />
-                  </button>
-                  <button
-                    aria-label={`下移第 ${index + 1} 项`}
-                    className="inline-icon-button"
-                    disabled={index === items.length - 1}
-                    onClick={() => move(index, 1)}
-                    title="下移"
-                    type="button"
-                  >
-                    <ArrowDown aria-hidden="true" />
-                  </button>
-                  <button
-                    aria-label={`移除第 ${index + 1} 项`}
-                    className="inline-icon-button danger"
-                    onClick={() =>
-                      setItems((current) =>
-                        current.filter((_, itemIndex) => itemIndex !== index),
-                      )
-                    }
-                    title="移除"
-                    type="button"
-                  >
-                    <Trash2 aria-hidden="true" />
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
+                        <GripVertical aria-hidden="true" />
+                      </button>
+                      <span className="teaching-item-index">{index + 1}</span>
+                      <div className="teaching-item-main">
+                        <span className="teaching-item-line">
+                          <strong>{item.label}</strong>
+                          <small>
+                            {item.type === "content_block"
+                              ? getBlockLabel(item.blockType)
+                              : "练习"}
+                          </small>
+                        </span>
+                        {item.type === "content_block" &&
+                        item.blockType === "image" ? (
+                          <label className="teaching-image-fit">
+                            图片展示
+                            <select
+                              onChange={(event) =>
+                                editItems((current) =>
+                                  current.map((currentItem) =>
+                                    currentItem.key === item.key &&
+                                    currentItem.type === "content_block"
+                                      ? {
+                                          ...currentItem,
+                                          imageFit: event.target.value as
+                                            "fit" | "fill" | "original",
+                                        }
+                                      : currentItem,
+                                  ),
+                                )
+                              }
+                              value={item.imageFit}
+                            >
+                              <option value="fit">适应画布</option>
+                              <option value="fill">填满区域</option>
+                              <option value="original">原始比例</option>
+                            </select>
+                          </label>
+                        ) : null}
+                      </div>
+                      <div className="teaching-item-actions">
+                        <button
+                          aria-label={`上移第 ${index + 1} 项`}
+                          className="inline-icon-button"
+                          disabled={index === 0}
+                          onClick={() => move(index, -1)}
+                          title="上移"
+                          type="button"
+                        >
+                          <ArrowUp aria-hidden="true" />
+                        </button>
+                        <button
+                          aria-label={`下移第 ${index + 1} 项`}
+                          className="inline-icon-button"
+                          disabled={index === items.length - 1}
+                          onClick={() => move(index, 1)}
+                          title="下移"
+                          type="button"
+                        >
+                          <ArrowDown aria-hidden="true" />
+                        </button>
+                        <button
+                          aria-label={`移除第 ${index + 1} 项`}
+                          className="inline-icon-button danger"
+                          onClick={() =>
+                            editItems((current) =>
+                              current.filter(
+                                (_, itemIndex) => itemIndex !== index,
+                              ),
+                            )
+                          }
+                          title="移除"
+                          type="button"
+                        >
+                          <Trash2 aria-hidden="true" />
+                        </button>
+                      </div>
+                    </li>
+                  </Fragment>
+                );
+              })}
+            </ol>
+          )}
+        </section>
 
-          <div className="teaching-save-bar">
-            {deckId ? (
-              <Link className="button secondary" href={teachingPresent(deckId)}>
-                预览展示
-              </Link>
-            ) : null}
-            <button
-              className="button"
-              disabled={loading}
-              onClick={() => void save()}
-              type="button"
-            >
-              <Save aria-hidden="true" className="button-icon" />
-              {loading ? "保存中" : "保存课件"}
-            </button>
-          </div>
-        </div>
-
-        <aside className="workbench-side">
+        <aside
+          className="editor-pane teaching-source-pane"
+          aria-label="内容素材"
+        >
           <div
-            className="segmented-control teaching-source-tabs"
             aria-label="内容来源"
+            className="segmented-control teaching-source-tabs"
+            role="group"
           >
             <button
+              aria-pressed={sourceTab === "document"}
               className={sourceTab === "document" ? "active" : ""}
               onClick={() => setSourceTab("document")}
               type="button"
@@ -439,6 +491,7 @@ export function TeachingEditor({
               文档段落
             </button>
             <button
+              aria-pressed={sourceTab === "exercise"}
               className={sourceTab === "exercise" ? "active" : ""}
               onClick={() => setSourceTab("exercise")}
               type="button"
@@ -446,15 +499,15 @@ export function TeachingEditor({
               嵌套练习
             </button>
           </div>
-          {sourceTab === "document" ? (
-            <section className="action-panel teaching-source-panel">
-              <h2>文档段落</h2>
-              <label className="label">
-                文档
+
+          <div className="teaching-source-body">
+            {sourceTab === "document" ? (
+              <>
                 <select
-                  className="select"
-                  value={selectedFileId}
+                  aria-label="选择文档"
+                  className="select teaching-source-select"
                   onChange={(event) => setSelectedFileId(event.target.value)}
+                  value={selectedFileId}
                 >
                   {files.length ? null : <option value="">暂无文档</option>}
                   {files.map((file) => (
@@ -463,86 +516,122 @@ export function TeachingEditor({
                     </option>
                   ))}
                 </select>
-              </label>
-              <div className="teaching-block-picker">
-                {blocks.length === 0 ? (
-                  <p className="teaching-block-empty">这个文档暂无可选段落。</p>
-                ) : null}
-                {blocks.map((block) => {
-                  const checked = selectedBlockIds.has(block.id);
-                  return (
-                    <label
-                      className={
-                        checked
-                          ? "teaching-block-row selected"
-                          : "teaching-block-row"
-                      }
-                      key={block.id}
-                    >
-                      <input
-                        checked={checked}
-                        onChange={() =>
-                          setSelectedBlockIds((current) => {
-                            const next = new Set(current);
-                            if (next.has(block.id)) next.delete(block.id);
-                            else next.add(block.id);
-                            return next;
-                          })
-                        }
-                        type="checkbox"
-                      />
-                      <span>
-                        <small>{getBlockLabel(block.type)}</small>
-                        {getBlockText(block) || "无文字内容"}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-              <button
-                className="button secondary"
-                disabled={!selectedBlockIds.size}
-                onClick={addBlocks}
-                type="button"
-              >
-                <Plus aria-hidden="true" className="button-icon" /> 添加所选段落
-              </button>
-            </section>
-          ) : null}
 
-          {sourceTab === "exercise" ? (
-            <section className="action-panel teaching-exercise-panel">
-              <h2>嵌套练习</h2>
-              <label className="label">
-                练习
-                <select
-                  className="select"
-                  value={selectedExerciseId}
-                  onChange={(event) =>
-                    setSelectedExerciseId(event.target.value)
-                  }
-                >
-                  {exercises.length ? null : (
-                    <option value="">暂无可用练习</option>
-                  )}
-                  {exercises.map((exercise) => (
-                    <option key={exercise.id} value={exercise.id}>
-                      {exercise.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                className="button secondary"
-                disabled={!selectedExerciseId}
-                onClick={addExercise}
-                type="button"
-              >
-                <ClipboardList aria-hidden="true" className="button-icon" />{" "}
-                添加练习
-              </button>
-            </section>
-          ) : null}
+                {blocks.length ? (
+                  <div className="teaching-picker-tools">
+                    <span>{blocks.length} 个段落</span>
+                    <button
+                      onClick={() =>
+                        setSelectedBlockIds((current) =>
+                          current.size === blocks.length
+                            ? new Set()
+                            : new Set(blocks.map((block) => block.id)),
+                        )
+                      }
+                      type="button"
+                    >
+                      {selectedBlockIds.size === blocks.length
+                        ? "取消全选"
+                        : "全选"}
+                    </button>
+                  </div>
+                ) : null}
+
+                <div className="teaching-picker-list">
+                  {blocks.length === 0 ? (
+                    <p className="teaching-picker-empty">
+                      这个文档暂无可选段落。
+                    </p>
+                  ) : null}
+                  {blocks.map((block) => {
+                    const checked = selectedBlockIds.has(block.id);
+                    return (
+                      <label
+                        className={
+                          checked
+                            ? "teaching-pick-row selected"
+                            : "teaching-pick-row"
+                        }
+                        key={block.id}
+                      >
+                        <input
+                          checked={checked}
+                          onChange={(event) =>
+                            toggleId(
+                              setSelectedBlockIds,
+                              block.id,
+                              event.target.checked,
+                            )
+                          }
+                          type="checkbox"
+                        />
+                        <span>
+                          <small>{getBlockLabel(block.type)}</small>
+                          {getBlockText(block) || "无文字内容"}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <>
+                {exercises.length ? (
+                  <div className="teaching-picker-tools">
+                    <span>{exercises.length} 个练习</span>
+                  </div>
+                ) : null}
+                <div className="teaching-picker-list">
+                  {exercises.length === 0 ? (
+                    <p className="teaching-picker-empty">
+                      这个课堂还没有可嵌入的练习。
+                    </p>
+                  ) : null}
+                  {exercises.map((exercise) => {
+                    const checked = selectedExerciseIds.has(exercise.id);
+                    return (
+                      <label
+                        className={
+                          checked
+                            ? "teaching-pick-row selected"
+                            : "teaching-pick-row"
+                        }
+                        key={exercise.id}
+                      >
+                        <input
+                          checked={checked}
+                          onChange={(event) =>
+                            toggleId(
+                              setSelectedExerciseIds,
+                              exercise.id,
+                              event.target.checked,
+                            )
+                          }
+                          type="checkbox"
+                        />
+                        <span>
+                          <small>{exercise.questionCount} 题</small>
+                          {exercise.title}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="teaching-source-actions">
+            <button
+              className="button"
+              disabled={!selectedCount}
+              onClick={addSelected}
+              type="button"
+            >
+              <Plus aria-hidden="true" className="button-icon" />
+              {selectedCount ? `添加 ${selectedCount} 项` : "添加到课件"}
+            </button>
+          </div>
         </aside>
       </div>
     </div>
