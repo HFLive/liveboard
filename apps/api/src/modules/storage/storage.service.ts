@@ -149,6 +149,10 @@ export class StorageService {
   ): Promise<string | null> {
     const settings = await this.getSettings();
     if ((settings?.downloadMode ?? "proxy") !== "direct") return null;
+    // 阿里云 OSS 默认域名会阻止浏览器内联预览签名 URL。图片、头像、
+    // Banner 和 favicon 等 inline 资源统一由 API 中转，只有明确下载的
+    // attachment 才签名直出，避免出现文件可下载但 <img> 无法显示。
+    if (target.inline) return null;
     // 历史配置可能同时启用了内网 Endpoint 与签名直出。内网地址无法由
     // 公网浏览器访问，因此安全回退到调用方的服务器流式中转。
     if (storageBackend === "oss" && settings?.ossInternal) return null;

@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ContentBlock } from "@/lib/api";
 import { RenderBlockContent, buildBlockData } from "./ContentBlockRenderer";
 
@@ -14,6 +14,10 @@ function block(type: ContentBlock["type"], dataJson: ContentBlock["dataJson"]) {
 }
 
 describe("ContentBlockRenderer", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("renders native fourth through sixth level headings", () => {
     const { rerender } = render(
       <RenderBlockContent block={block("heading_4", { text: "四级" })} />,
@@ -60,6 +64,7 @@ describe("ContentBlockRenderer", () => {
   });
 
   it("renders only normalized Bilibili player embeds", () => {
+    vi.stubGlobal("isSecureContext", true);
     const { rerender } = render(
       <RenderBlockContent
         block={block("bilibili", {
@@ -72,6 +77,10 @@ describe("ContentBlockRenderer", () => {
       "src",
       "https://player.bilibili.com/player.html?bvid=BV1xx411c7mD&autoplay=0",
     );
+    expect(screen.getByTitle("B站视频")).toHaveAttribute(
+      "allow",
+      "fullscreen; picture-in-picture; local-network-access; local-network; loopback-network",
+    );
 
     rerender(
       <RenderBlockContent
@@ -81,5 +90,26 @@ describe("ContentBlockRenderer", () => {
       />,
     );
     expect(screen.queryByTitle("B站视频")).not.toBeInTheDocument();
+  });
+
+  it("links to Bilibili instead of creating an iframe on public HTTP pages", async () => {
+    vi.stubGlobal("isSecureContext", false);
+    render(
+      <RenderBlockContent
+        block={block("bilibili", {
+          embedCode:
+            '<iframe src="//player.bilibili.com/player.html?bvid=BV1qd3N68EjK&p=2"></iframe>',
+        })}
+      />,
+    );
+
+    expect(
+      await screen.findByText("当前 HTTP 环境无法嵌入播放"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTitle("B站视频")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "在 B 站打开" })).toHaveAttribute(
+      "href",
+      "https://www.bilibili.com/video/BV1qd3N68EjK?p=2",
+    );
   });
 });

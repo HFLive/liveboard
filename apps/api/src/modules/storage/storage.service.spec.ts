@@ -318,6 +318,29 @@ describe("StorageService", () => {
     expect(mockMinioClient.presignedGetObject).not.toHaveBeenCalled();
   });
 
+  it("proxies inline OSS resources because default OSS domains block previews", async () => {
+    prisma.storageSettings.findUnique.mockResolvedValue({
+      backend: "oss",
+      downloadMode: "direct",
+      ossRegion: "cn-hangzhou",
+      ossBucket: "liveboard",
+      ossEndpoint: null,
+      ossInternal: false,
+      ossAccessKeyId: "ak",
+      ossAccessKeySecret: "enc:raw-secret",
+      updatedAt: new Date("2026-07-27T00:00:00Z"),
+    });
+
+    await expect(
+      service.presignDownload("oss", "some/image.png", {
+        filename: "image.png",
+        mimeType: "image/png",
+        inline: true,
+      }),
+    ).resolves.toBeNull();
+    expect(mockMinioClient.presignedGetObject).not.toHaveBeenCalled();
+  });
+
   it("presigns downloads from OSS in direct mode", async () => {
     prisma.storageSettings.findUnique.mockResolvedValue({
       backend: "oss",

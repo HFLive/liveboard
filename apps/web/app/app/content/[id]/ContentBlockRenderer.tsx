@@ -1,5 +1,6 @@
 import type { ContentBlockType } from "@liveboard/shared";
 import { normalizeBilibiliEmbedUrl } from "@liveboard/shared/bilibili";
+import { useEffect, useState } from "react";
 import { attachmentDownloadUrl, type ContentBlock } from "@/lib/api";
 import { MathFormula, RichText } from "./RichText";
 
@@ -106,6 +107,62 @@ function lines(text: string) {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+function BilibiliEmbed({ embedUrl }: { embedUrl: string }) {
+  const [secureContext, setSecureContext] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setSecureContext(window.isSecureContext);
+  }, []);
+
+  if (secureContext === false) {
+    return (
+      <div className="render-bilibili-http">
+        <div>
+          <strong>当前 HTTP 环境无法嵌入播放</strong>
+          <span>浏览器只允许 HTTPS 网站申请播放器所需的网络权限。</span>
+        </div>
+        <a href={bilibiliWatchUrl(embedUrl)} rel="noreferrer" target="_blank">
+          在 B 站打开
+        </a>
+      </div>
+    );
+  }
+
+  if (secureContext === null) {
+    return (
+      <div aria-label="正在加载 B站视频" className="render-bilibili skeleton" />
+    );
+  }
+
+  return (
+    <div className="render-bilibili">
+      <iframe
+        allow="fullscreen; picture-in-picture; local-network-access; local-network; loopback-network"
+        allowFullScreen
+        loading="lazy"
+        referrerPolicy="strict-origin-when-cross-origin"
+        sandbox="allow-scripts allow-same-origin allow-presentation"
+        src={embedUrl}
+        title="B站视频"
+      />
+    </div>
+  );
+}
+
+function bilibiliWatchUrl(embedUrl: string) {
+  const url = new URL(embedUrl);
+  const bvid = url.searchParams.get("bvid");
+  const aid = url.searchParams.get("aid");
+  const videoId = bvid ?? (aid ? `av${aid}` : "");
+  const watchUrl = new URL(
+    `/video/${encodeURIComponent(videoId)}`,
+    "https://www.bilibili.com",
+  );
+  const page = url.searchParams.get("p");
+  if (page) watchUrl.searchParams.set("p", page);
+  return watchUrl.toString();
 }
 
 export function RenderBlockContent({ block }: { block: ContentBlock }) {
@@ -290,17 +347,7 @@ export function RenderBlockContent({ block }: { block: ContentBlock }) {
     );
 
     return embedUrl ? (
-      <div className="render-bilibili">
-        <iframe
-          allow="fullscreen; picture-in-picture"
-          allowFullScreen
-          loading="lazy"
-          referrerPolicy="strict-origin-when-cross-origin"
-          sandbox="allow-scripts allow-same-origin allow-presentation"
-          src={embedUrl}
-          title="B站视频"
-        />
-      </div>
+      <BilibiliEmbed embedUrl={embedUrl} />
     ) : (
       <div className="render-placeholder">B站视频：等待有效嵌入代码</div>
     );
