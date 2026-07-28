@@ -226,6 +226,7 @@ export function SubmissionsClient({
                   <strong>
                     <UserProfileLink
                       className="user-profile-link"
+                      compactBadges
                       user={submission.user}
                     />
                   </strong>

@@ -19,7 +19,19 @@ describe("RichText", () => {
       "href",
       "https://example.com",
     );
+    expect(screen.getByRole("link", { name: "官网" })).toHaveAttribute(
+      "target",
+      "_blank",
+    );
     expect(document.querySelector(".katex")).not.toBeNull();
+  });
+
+  it("opens internal document links in the current page", () => {
+    render(<RichText enabled text="[课程导读](/app/content/file-2)" />);
+
+    const link = screen.getByRole("link", { name: "课程导读" });
+    expect(link).toHaveAttribute("href", "/app/content/file-2");
+    expect(link).not.toHaveAttribute("target");
   });
 
   it("keeps legacy text plain and refuses executable link protocols", () => {

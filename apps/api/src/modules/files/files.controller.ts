@@ -7,13 +7,14 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   Res,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Type } from "class-transformer";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import {
   IsArray,
   IsBoolean,
@@ -36,6 +37,7 @@ import {
 } from "./assets.service";
 import { FilesService } from "./files.service";
 import { MAX_MARKDOWN_SIZE_BYTES } from "./markdown";
+import { createRequestAbortSignal } from "../../common/request-abort";
 
 class CreateFolderDto {
   @IsString()
@@ -398,11 +400,23 @@ export class FilesController {
   async uploadAsset(
     @CurrentUserId() userId: string | null,
     @Body() body: UploadAssetDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
     @UploadedFile() file?: UploadedAssetFile,
   ) {
-    return {
-      asset: await this.assetsService.uploadAsset(userId, body, file),
-    };
+    const requestAbort = createRequestAbortSignal(request, response);
+    try {
+      return {
+        asset: await this.assetsService.uploadAsset(
+          userId,
+          body,
+          file,
+          requestAbort.signal,
+        ),
+      };
+    } finally {
+      requestAbort.dispose();
+    }
   }
 
   @Get("assets/library")

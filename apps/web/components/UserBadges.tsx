@@ -4,16 +4,24 @@ import type { BadgeSummary } from "@liveboard/shared";
 export function UserBadges({
   badges,
   className,
+  compact = false,
 }: {
   badges?: BadgeSummary[];
   className?: string;
+  compact?: boolean;
 }) {
   if (!badges?.length) return null;
 
   return (
     <span
       aria-label={`佩戴徽章：${badges.map((badge) => badge.name).join("、")}`}
-      className={["user-badges", className].filter(Boolean).join(" ")}
+      className={[
+        "user-badges",
+        compact ? "user-badges--compact" : "",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       {badges.slice(0, 3).map((badge) => (
         <span

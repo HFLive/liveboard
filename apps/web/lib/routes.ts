@@ -101,7 +101,7 @@ export function appRouteTitle(pathname: string) {
     [APP_ROUTES.teaching, "课件"],
     [APP_ROUTES.teachingNew, "新建课件"],
     [APP_ROUTES.forum, "论坛"],
-    [APP_ROUTES.forumNew, "发布主题"],
+    [APP_ROUTES.forumNew, "发内容"],
     [APP_ROUTES.admin, "管理中心"],
     [APP_ROUTES.adminUsers, "成员管理"],
     [APP_ROUTES.adminBadges, "徽章认证"],

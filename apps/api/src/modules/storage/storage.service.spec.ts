@@ -1,6 +1,7 @@
 import type { ConfigService } from "@nestjs/config";
 import type { AiSecretService } from "../ai/ai-secret.service";
 import type { PrismaService } from "../prisma/prisma.service";
+import { ATOMIC_UPLOAD_PART_SIZE_BYTES } from "./storage-backend";
 import { StorageService } from "./storage.service";
 
 const mockMinioClient = {
@@ -91,6 +92,14 @@ describe("StorageService", () => {
         activeBackendHealthy: true,
         oss: { secretConfigured: false },
       },
+    );
+  });
+
+  it("keeps supported uploads below the storage SDK multipart threshold", () => {
+    expect(MockedMinioClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        partSize: ATOMIC_UPLOAD_PART_SIZE_BYTES,
+      }),
     );
   });
 
@@ -190,6 +199,26 @@ describe("StorageService", () => {
     expect(prisma.storageSettings.upsert).not.toHaveBeenCalled();
   });
 
+  it("rejects direct downloads through an internal OSS endpoint", async () => {
+    await expect(
+      service.updateSettings("admin-1", {
+        backend: "oss",
+        downloadMode: "direct",
+        oss: {
+          region: "cn-hangzhou",
+          bucket: "liveboard",
+          internal: true,
+          accessKeyId: "ak",
+          accessKeySecret: "raw-secret",
+        },
+      }),
+    ).rejects.toThrow(
+      "签名直出需要浏览器访问公网 Endpoint，不能使用内网 Endpoint",
+    );
+    expect(mockMinioClient.putObject).not.toHaveBeenCalled();
+    expect(prisma.storageSettings.upsert).not.toHaveBeenCalled();
+  });
+
   it("probes OSS with a real write before saving the configuration", async () => {
     prisma.storageSettings.upsert.mockResolvedValue({
       backend: "oss",
@@ -258,6 +287,29 @@ describe("StorageService", () => {
   it("returns null for presigned downloads in proxy mode", async () => {
     await expect(
       service.presignDownload("minio", "some/key", {
+        filename: "a.pdf",
+        mimeType: "application/pdf",
+        inline: false,
+      }),
+    ).resolves.toBeNull();
+    expect(mockMinioClient.presignedGetObject).not.toHaveBeenCalled();
+  });
+
+  it("falls back to proxy downloads for a legacy direct and internal configuration", async () => {
+    prisma.storageSettings.findUnique.mockResolvedValue({
+      backend: "oss",
+      downloadMode: "direct",
+      ossRegion: "cn-hangzhou",
+      ossBucket: "liveboard",
+      ossEndpoint: null,
+      ossInternal: true,
+      ossAccessKeyId: "ak",
+      ossAccessKeySecret: "enc:raw-secret",
+      updatedAt: new Date("2026-07-27T00:00:00Z"),
+    });
+
+    await expect(
+      service.presignDownload("oss", "some/key", {
         filename: "a.pdf",
         mimeType: "application/pdf",
         inline: false,

@@ -85,7 +85,7 @@ export function UserProfileClient({ userId }: { userId: string }) {
           <div className="user-profile-activity">
             <section>
               <div className="panel-head">
-                <h2>论坛主题</h2>
+                <h2>论坛帖子</h2>
               </div>
               {activity?.forumThreads.length ? (
                 <div className="user-profile-activity-list">
@@ -101,7 +101,7 @@ export function UserProfileClient({ userId }: { userId: string }) {
                   ))}
                 </div>
               ) : (
-                <p className="muted user-profile-empty">暂无公开主题</p>
+                <p className="muted user-profile-empty">暂无公开帖子</p>
               )}
             </section>
           </div>

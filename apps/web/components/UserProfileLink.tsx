@@ -7,12 +7,14 @@ type UserProfileLinkProps = {
   user: Pick<UserSummary, "id" | "displayName" | "badges">;
   className?: string;
   children?: React.ReactNode;
+  compactBadges?: boolean;
 };
 
 export function UserProfileLink({
   user,
   className,
   children,
+  compactBadges = false,
 }: UserProfileLinkProps) {
   return (
     <Link
@@ -22,7 +24,7 @@ export function UserProfileLink({
       target="_blank"
     >
       <span>{children ?? user.displayName}</span>
-      <UserBadges badges={user.badges} />
+      <UserBadges badges={user.badges} compact={compactBadges} />
     </Link>
   );
 }

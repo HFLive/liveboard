@@ -34,6 +34,18 @@ function formatSize(sizeBytes: number) {
   return `${sizeBytes} B`;
 }
 
+function formatFileKind(filename: string) {
+  const extension = filename.includes(".")
+    ? filename.split(".").pop()?.trim()
+    : "";
+
+  if (!extension || extension.length > 8) {
+    return "文件";
+  }
+
+  return extension.toLocaleUpperCase();
+}
+
 export function AssetPreviewDialog({
   asset,
   onClose,
@@ -61,11 +73,20 @@ export function AssetPreviewDialog({
 
   if (!asset) return null;
 
+  const canPreview = canPreviewAssetInline(asset.mimeType);
+  const fileKind = formatFileKind(asset.filename);
+
   return (
     <div className="modal-backdrop" onClick={onClose} role="presentation">
       <div
+        aria-describedby={canPreview ? undefined : "asset-preview-description"}
         aria-labelledby="asset-preview-title"
-        className="modal-panel asset-preview-dialog"
+        aria-modal="true"
+        className={`modal-panel asset-preview-dialog ${
+          canPreview
+            ? "asset-preview-dialog--image"
+            : "asset-preview-dialog--file"
+        }`}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
@@ -75,6 +96,7 @@ export function AssetPreviewDialog({
           </h2>
           <button
             className="icon-button subtle"
+            aria-label="关闭文件预览"
             onClick={onClose}
             title="关闭"
             type="button"
@@ -83,7 +105,7 @@ export function AssetPreviewDialog({
           </button>
         </div>
         <div className="modal-body asset-preview-body">
-          {canPreviewAssetInline(asset.mimeType) ? (
+          {canPreview ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               alt={asset.filename}
@@ -92,24 +114,24 @@ export function AssetPreviewDialog({
             />
           ) : (
             <div className="asset-preview-fallback">
-              <FileIcon aria-hidden="true" />
-              <strong>{asset.filename}</strong>
-              <span className="muted">
-                此类型文件暂不支持在线预览，可下载后查看。
-              </span>
+              <div className="asset-preview-file-mark" aria-hidden="true">
+                <FileIcon />
+                <span>{fileKind}</span>
+              </div>
+              <div className="asset-preview-message">
+                <strong>无法在线预览</strong>
+                <span className="muted" id="asset-preview-description">
+                  下载后可使用本地应用打开。
+                </span>
+              </div>
             </div>
           )}
         </div>
         <div className="modal-foot">
-          <span className="muted">{formatSize(asset.sizeBytes)}</span>
+          <span className="asset-preview-meta">
+            {fileKind} <i aria-hidden="true">·</i> {formatSize(asset.sizeBytes)}
+          </span>
           <div className="button-row">
-            <button
-              className="button secondary"
-              onClick={onClose}
-              type="button"
-            >
-              关闭
-            </button>
             <a className="button" href={assetDownloadUrl(asset.id)}>
               <Download aria-hidden="true" />
               下载

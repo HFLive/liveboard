@@ -91,29 +91,29 @@ enum FileAssetKind {
 }
 
 model User {
-  id                String     @id @default(cuid())
-  username          String     @unique
-  displayName       String
-  passwordHash      String
-  avatarStorageKey  String?
-  avatarMimeType    String?
-  avatarUpdatedAt   DateTime?
+  id                   String         @id @default(cuid())
+  username             String         @unique
+  displayName          String
+  passwordHash         String
+  avatarStorageKey     String?
+  avatarMimeType       String?
+  avatarUpdatedAt      DateTime?
   avatarStorageBackend StorageBackend @default(minio)
-  bio               String?
-  bannerStorageKey  String?
-  bannerMimeType    String?
-  bannerUpdatedAt   DateTime?
+  bio                  String?
+  bannerStorageKey     String?
+  bannerMimeType       String?
+  bannerUpdatedAt      DateTime?
   bannerStorageBackend StorageBackend @default(minio)
-  sessionVersion    Int        @default(0)
-  systemRole        SystemRole
-  status            UserStatus @default(active)
-  storageQuotaBytes Int?
-  aiCallCount       Int        @default(0)
-  aiCallLimit       Int?
-  aiCallDateKey     String?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-  activityReadAt    DateTime?
+  sessionVersion       Int            @default(0)
+  systemRole           SystemRole
+  status               UserStatus     @default(active)
+  storageQuotaBytes    Int?
+  aiCallCount          Int            @default(0)
+  aiCallLimit          Int?
+  aiCallDateKey        String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  activityReadAt       DateTime?
 
   createdFolders          Folder[]                @relation("FolderCreatedBy")
   createdFiles            File[]                  @relation("FileCreatedBy")
@@ -128,7 +128,6 @@ model User {
   aiConversations         AiConversation[]
   forumThreads            ForumThread[]           @relation("ForumThreadAuthor")
   forumPosts              ForumPost[]             @relation("ForumPostAuthor")
-  forumThreadStates       ForumThreadState[]
   teachingDecks           TeachingDeck[]          @relation("TeachingDeckCreatedBy")
   createdExerciseSets     ExerciseSet[]           @relation("ExerciseSetCreatedBy")
   uploadedAssets          FileAsset[]             @relation("FileAssetUploader")
@@ -161,18 +160,18 @@ model ServerMetricSample {
 }
 
 model Workspace {
-  id                String    @id @default(cuid())
-  name              String
-  slug              String    @unique
-  timeZone          String    @default("Asia/Shanghai")
-  faviconStorageKey String?
-  faviconMimeType   String?
-  faviconUpdatedAt  DateTime?
-  faviconStorageBackend StorageBackend @default(minio)
+  id                         String         @id @default(cuid())
+  name                       String
+  slug                       String         @unique
+  timeZone                   String         @default("Asia/Shanghai")
+  faviconStorageKey          String?
+  faviconMimeType            String?
+  faviconUpdatedAt           DateTime?
+  faviconStorageBackend      StorageBackend @default(minio)
   memberAttachmentQuotaBytes Int?
   classroomStorageQuotaBytes Int?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt                  DateTime       @default(now())
+  updatedAt                  DateTime       @updatedAt
 
   folders           Folder[]
   files             File[]
@@ -219,29 +218,13 @@ model ForumThread {
   updatedAt        DateTime          @updatedAt
   lastActivityAt   DateTime          @default(now())
 
-  workspace  Workspace          @relation(fields: [workspaceId], references: [id])
-  category   ForumCategory      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  author     User               @relation("ForumThreadAuthor", fields: [authorId], references: [id])
-  posts      ForumPost[]
-  userStates ForumThreadState[]
+  workspace Workspace     @relation(fields: [workspaceId], references: [id])
+  category  ForumCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  author    User          @relation("ForumThreadAuthor", fields: [authorId], references: [id])
+  posts     ForumPost[]
 
   @@index([workspaceId, lastActivityAt])
   @@index([categoryId, lastActivityAt])
-}
-
-model ForumThreadState {
-  threadId   String
-  userId     String
-  followed   Boolean   @default(false)
-  lastReadAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-
-  thread ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([threadId, userId])
-  @@index([userId, followed, updatedAt])
 }
 
 model ForumPost {
@@ -508,14 +491,14 @@ model TeachingDeckItem {
 }
 
 model Classroom {
-  id          String   @id @default(cuid())
-  workspaceId String
-  name        String
-  description String?
-  createdById String
+  id                String   @id @default(cuid())
+  workspaceId       String
+  name              String
+  description       String?
+  createdById       String
   storageQuotaBytes Int?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   workspace     Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy     User                    @relation("ClassroomCreatedBy", fields: [createdById], references: [id])
@@ -544,15 +527,15 @@ model ClassroomMember {
 }
 
 model ClassroomFile {
-  id          String   @id @default(cuid())
-  classroomId String
-  storageKey  String   @unique
+  id             String         @id @default(cuid())
+  classroomId    String
+  storageKey     String         @unique
   storageBackend StorageBackend @default(minio)
-  filename    String
-  mimeType    String
-  sizeBytes   Int
-  uploadedBy  String
-  createdAt   DateTime @default(now())
+  filename       String
+  mimeType       String
+  sizeBytes      Int
+  uploadedBy     String
+  createdAt      DateTime       @default(now())
 
   classroom Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
   uploader  User      @relation("ClassroomFileUploader", fields: [uploadedBy], references: [id])
@@ -631,23 +614,23 @@ model SubmissionAnswer {
 }
 
 model FileAsset {
-  id          String   @id @default(cuid())
-  workspaceId String
-  folderId    String?
-  fileId      String?
-  forumPostId String?
-  storageKey  String   @unique
+  id             String         @id @default(cuid())
+  workspaceId    String
+  folderId       String?
+  fileId         String?
+  forumPostId    String?
+  storageKey     String         @unique
   storageBackend StorageBackend @default(minio)
-  kind        FileAssetKind @default(embedded)
-  filename    String
-  mimeType    String
-  sizeBytes   Int
-  width       Int?
-  height      Int?
-  sortOrder   Int?
-  uploadedBy  String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  kind           FileAssetKind  @default(embedded)
+  filename       String
+  mimeType       String
+  sizeBytes      Int
+  width          Int?
+  height         Int?
+  sortOrder      Int?
+  uploadedBy     String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   workspace         Workspace          @relation(fields: [workspaceId], references: [id])
   folder            Folder?            @relation(fields: [folderId], references: [id])

@@ -39,6 +39,8 @@ import {
   ApiError,
   redirectToLoginOnUnauthorized,
   request,
+  uploadFormData,
+  type UploadRequestOptions,
 } from "./client";
 
 export { ApiError } from "./client";
@@ -858,16 +860,6 @@ export function updateForumThread(
   });
 }
 
-export function updateForumThreadFollow(threadId: string, followed: boolean) {
-  return request<{ followed: boolean; followRequired?: boolean }>(
-    `/forum/threads/${threadId}/follow`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ followed }),
-    },
-  );
-}
-
 export function deleteForumThread(threadId: string) {
   return request<{ ok: boolean }>(`/forum/threads/${threadId}`, {
     method: "DELETE",
@@ -1205,11 +1197,14 @@ export class AssetInUseError extends ApiError {
   }
 }
 
-export async function uploadAsset(input: {
-  file: File;
-  fileId?: string;
-  folderId?: string;
-}) {
+export async function uploadAsset(
+  input: {
+    file: File;
+    fileId?: string;
+    folderId?: string;
+  },
+  options?: UploadRequestOptions,
+) {
   const formData = new FormData();
   formData.set("file", input.file);
 
@@ -1221,21 +1216,12 @@ export async function uploadAsset(input: {
     formData.set("folderId", input.folderId);
   }
 
-  const response = await fetch(`${API_URL}/assets/upload`, {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    redirectToLoginOnUnauthorized(response.status, "/assets/upload");
-    const body = (await response.json().catch(() => null)) as {
-      message?: string;
-    } | null;
-    throw new ApiError(body?.message ?? "Upload failed", response.status);
-  }
-
-  return (await response.json()) as { asset: FileAssetSummary };
+  return uploadFormData<{ asset: FileAssetSummary }>(
+    "/assets/upload",
+    formData,
+    "文件上传失败",
+    options,
+  );
 }
 
 export function listLibraryAssets() {
@@ -1520,28 +1506,20 @@ export function listClassroomFiles(classroomId: string) {
   );
 }
 
-export async function uploadClassroomFile(classroomId: string, file: File) {
+export async function uploadClassroomFile(
+  classroomId: string,
+  file: File,
+  options?: UploadRequestOptions,
+) {
   const path = `/classrooms/${classroomId}/files`;
   const formData = new FormData();
   formData.set("file", file);
-  const response = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
-  if (!response.ok) {
-    redirectToLoginOnUnauthorized(response.status, path);
-    const body = (await response.json().catch(() => null)) as {
-      message?: string | string[];
-    } | null;
-    throw new ApiError(
-      Array.isArray(body?.message)
-        ? body.message.join("；")
-        : (body?.message ?? "上传课堂文件失败"),
-      response.status,
-    );
-  }
-  return (await response.json()) as { file: ClassroomFileSummary };
+  return uploadFormData<{ file: ClassroomFileSummary }>(
+    path,
+    formData,
+    "上传课堂文件失败",
+    options,
+  );
 }
 
 export function deleteClassroomFile(classroomId: string, fileId: string) {

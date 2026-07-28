@@ -154,9 +154,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
-.storage-backend-page .storage-backend-form .label:nth-child(3),
-.storage-backend-page .storage-backend-form .label:nth-child(5),
-.storage-backend-page .storage-backend-form .label:nth-child(6),
+.storage-backend-page .storage-backend-form > .label:nth-child(n + 3),
 .storage-backend-page .storage-backend-inline-check {
   grid-column: 1 / -1;
 }
@@ -165,6 +163,15 @@
   align-items: center;
   display: flex;
   gap: 8px;
+}
+
+.storage-backend-page .storage-backend-inline-check:has(input:disabled) {
+  color: var(--muted);
+}
+
+.storage-backend-page .storage-backend-inline-hint {
+  grid-column: 1 / -1;
+  margin-top: -6px;
 }
 
 .storage-backend-page .storage-backend-test-row {

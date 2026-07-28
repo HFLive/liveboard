@@ -1,5 +1,6 @@
 import { UserProfileClient } from "./UserProfileClient";
 import type { Metadata } from "next";
+import "./user-profile.css";
 
 export const metadata: Metadata = { title: "个人主页" };
 

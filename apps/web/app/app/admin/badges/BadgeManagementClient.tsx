@@ -302,7 +302,7 @@ export function BadgeManagementClient() {
                         type="checkbox"
                       />
                       <span className="badge-member-identity">
-                        <UserProfileLink user={user} />
+                        <UserProfileLink compactBadges user={user} />
                         <small>@{user.username}</small>
                       </span>
                       <span className="user-tag-list">

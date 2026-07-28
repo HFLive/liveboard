@@ -11,6 +11,8 @@ import {
 } from "react";
 import type {
   ContentBlockType,
+  FileSummary,
+  FolderNode,
   PermissionLevel,
   UserSummary,
   UserTagSummary,
@@ -21,6 +23,7 @@ import {
 } from "@liveboard/shared/resource-name";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import {
   Upload,
   GripVertical,
@@ -29,6 +32,7 @@ import {
   Plus,
   RotateCcw,
   Send,
+  Search,
   Trash2,
   Users,
   X,
@@ -43,6 +47,7 @@ import {
   downloadMarkdown,
   FileDetail,
   getFile,
+  getFolderTree,
   listAssignablePermissionUsers,
   listLibraryAssets,
   listPermissionGrants,
@@ -68,10 +73,19 @@ import {
   RenderBlockContent,
 } from "./ContentBlockRenderer";
 import { assetTypeLabel, permissionLabel } from "@/lib/labels";
-import { APP_ROUTES } from "@/lib/routes";
+import { APP_ROUTES, contentDetail } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { AutoTextarea } from "@/components/AutoTextarea";
 import { PermissionUserPicker } from "@/components/PermissionUserPicker";
+import { UploadTaskToast } from "@/components/upload/UploadTaskToast";
+import {
+  prepareUploadJobs,
+  useUploadTask,
+} from "@/components/upload/useUploadTask";
+import {
+  FeedbackNotice,
+  useFeedbackNotice,
+} from "@/components/system/FeedbackNotice";
 
 const blockShortcuts: Array<{ command: string; type: ContentBlockType }> = [
   { command: "/h1", type: "heading_1" },
@@ -224,17 +238,83 @@ function getBlockRows(type: ContentBlockType) {
   return 2;
 }
 
+export interface InternalDocumentOption {
+  id: string;
+  title: string;
+  path: string;
+  status: FileSummary["status"];
+}
+
+export function flattenInternalDocuments(
+  folders: FolderNode[],
+  parentPath = "",
+): InternalDocumentOption[] {
+  return folders.flatMap((folder) => {
+    const path = parentPath ? `${parentPath} / ${folder.name}` : folder.name;
+
+    return [
+      ...folder.files.map((file) => ({
+        id: file.id,
+        title: file.title,
+        path,
+        status: file.status,
+      })),
+      ...flattenInternalDocuments(folder.children, path),
+    ];
+  });
+}
+
+export function syncScrollProgress(
+  source: Pick<HTMLElement, "scrollTop" | "scrollHeight" | "clientHeight">,
+  target: Pick<HTMLElement, "scrollTop" | "scrollHeight" | "clientHeight">,
+) {
+  const sourceRange = source.scrollHeight - source.clientHeight;
+  const targetRange = target.scrollHeight - target.clientHeight;
+
+  if (sourceRange <= 0 || targetRange <= 0) {
+    return null;
+  }
+
+  const progress = Math.max(0, Math.min(1, source.scrollTop / sourceRange));
+  target.scrollTop = progress * targetRange;
+  return progress;
+}
+
+function setScrollProgress(
+  element: Pick<HTMLElement, "scrollTop" | "scrollHeight" | "clientHeight">,
+  progress: number,
+) {
+  const range = element.scrollHeight - element.clientHeight;
+  element.scrollTop = Math.max(0, range) * Math.max(0, Math.min(1, progress));
+}
+
 export function RichTextBlockEditor({
   block,
+  internalDocuments = [],
   onChange,
   onSave,
 }: {
   block: ContentBlock;
+  internalDocuments?: InternalDocumentOption[];
   onChange: (text: string) => void;
   onSave: () => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const selectionRef = useRef({ start: 0, end: 0 });
+  const [showDocumentPicker, setShowDocumentPicker] = useState(false);
+  const [documentQuery, setDocumentQuery] = useState("");
   const text = getBlockText(block);
+  const filteredDocuments = useMemo(() => {
+    const query = documentQuery.trim().toLocaleLowerCase("zh-CN");
+
+    return internalDocuments.filter((document) =>
+      query
+        ? `${document.title} ${document.path}`
+            .toLocaleLowerCase("zh-CN")
+            .includes(query)
+        : true,
+    );
+  }, [documentQuery, internalDocuments]);
 
   function wrapSelection(before: string, after = before, fallback = "文字") {
     const textarea = textareaRef.current;
@@ -253,20 +333,65 @@ export function RichTextBlockEditor({
     });
   }
 
-  function insertLink() {
+  function openDocumentPicker() {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    selectionRef.current = {
+      start: textarea.selectionStart,
+      end: textarea.selectionEnd,
+    };
+    setDocumentQuery("");
+    setShowDocumentPicker(true);
+  }
+
+  function insertExternalLink() {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
     const href = window.prompt(
-      "输入链接地址（http、https、mailto 或站内 / 路径）",
+      "输入站外链接地址（http、https 或 mailto）",
       "https://",
     );
     if (!href) return;
-    const textarea = textareaRef.current;
-    if (!textarea) return;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const selection = text.slice(start, end) || "链接文字";
     const next = `${text.slice(0, start)}[${selection}](${href})${text.slice(end)}`;
     onChange(next);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const cursor = start + selection.length + href.length + 4;
+      textarea.setSelectionRange(cursor, cursor);
+    });
   }
+
+  function insertDocumentLink(document: InternalDocumentOption) {
+    const { start, end } = selectionRef.current;
+    const selection = text.slice(start, end) || document.title;
+    const href = contentDetail(document.id);
+    const next = `${text.slice(0, start)}[${selection}](${href})${text.slice(end)}`;
+    onChange(next);
+    setShowDocumentPicker(false);
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const cursor = start + selection.length + String(href).length + 4;
+      textarea.focus();
+      textarea.setSelectionRange(cursor, cursor);
+    });
+  }
+
+  useEffect(() => {
+    if (!showDocumentPicker) return;
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setShowDocumentPicker(false);
+      }
+    }
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [showDocumentPicker]);
 
   return (
     <div className="rich-text-editor">
@@ -305,10 +430,17 @@ export function RichTextBlockEditor({
         </button>
         <button
           onMouseDown={(event) => event.preventDefault()}
-          onClick={insertLink}
+          onClick={insertExternalLink}
           type="button"
         >
           ↗<span>链接</span>
+        </button>
+        <button
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={openDocumentPicker}
+          type="button"
+        >
+          ◫<span>站内文档</span>
         </button>
         <button
           onMouseDown={(event) => event.preventDefault()}
@@ -327,6 +459,95 @@ export function RichTextBlockEditor({
         rows={getBlockRows(block.type)}
         value={text}
       />
+      {showDocumentPicker && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="modal-backdrop internal-document-backdrop"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) {
+                  setShowDocumentPicker(false);
+                }
+              }}
+              role="presentation"
+            >
+              <section
+                aria-labelledby={`document-link-title-${block.id}`}
+                aria-modal="true"
+                className="modal-panel internal-document-modal"
+                role="dialog"
+              >
+                <div className="modal-head">
+                  <div>
+                    <h2 id={`document-link-title-${block.id}`}>
+                      链接到站内文档
+                    </h2>
+                    <p className="muted">
+                      选择有权访问的文档，链接将在本站当前页面打开
+                    </p>
+                  </div>
+                  <button
+                    aria-label="关闭站内文档选择"
+                    className="icon-button subtle"
+                    onClick={() => setShowDocumentPicker(false)}
+                    type="button"
+                  >
+                    <X aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="modal-body internal-document-body">
+                  <label className="internal-document-search">
+                    <Search aria-hidden="true" />
+                    <input
+                      aria-label="搜索站内文档"
+                      autoFocus
+                      className="input"
+                      onChange={(event) => setDocumentQuery(event.target.value)}
+                      placeholder="搜索文档名或所在位置"
+                      value={documentQuery}
+                    />
+                  </label>
+                  <div className="internal-document-result-meta">
+                    <span>
+                      {documentQuery.trim()
+                        ? `找到 ${filteredDocuments.length} 份文档`
+                        : `共 ${internalDocuments.length} 份文档`}
+                    </span>
+                    <span>选择后立即插入</span>
+                  </div>
+                  <div
+                    aria-label="可链接的站内文档"
+                    className="internal-document-list"
+                    role="list"
+                  >
+                    {filteredDocuments.length > 0 ? (
+                      filteredDocuments.map((document) => (
+                        <div key={document.id} role="listitem">
+                          <button
+                            onClick={() => insertDocumentLink(document)}
+                            type="button"
+                          >
+                            <span>
+                              <strong>{document.title}</strong>
+                              <small>{document.path}</small>
+                            </span>
+                            {document.status === "draft" ? <em>草稿</em> : null}
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="internal-document-empty">
+                        {internalDocuments.length > 0
+                          ? "没有匹配的文档"
+                          : "暂无其他可访问的文档"}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -421,16 +642,9 @@ export function TableBlockEditor({
   );
 }
 
-export function DocumentPreview({
-  blocks,
-  title,
-}: {
-  blocks: ContentBlock[];
-  title: string;
-}) {
+export function DocumentPreview({ blocks }: { blocks: ContentBlock[] }) {
   return (
     <article className="editor-preview-document">
-      <h1 className="editor-preview-title">{title || "未命名文档"}</h1>
       {blocks.length > 0 ? (
         blocks.map((block) => (
           <div className="editor-preview-block" key={block.id}>
@@ -449,6 +663,9 @@ export function FileEditor({ fileId }: { fileId: string }) {
   const [file, setFile] = useState<FileDetail | null>(null);
   useDocumentTitle(file ? `${file.title} - 编辑` : null);
   const [blocks, setBlocks] = useState<ContentBlock[]>([]);
+  const [internalDocuments, setInternalDocuments] = useState<
+    InternalDocumentOption[]
+  >([]);
   const [libraryAssets, setLibraryAssets] = useState<FileAssetSummary[]>([]);
   const [assetQuery, setAssetQuery] = useState("");
   const [assetTargetBlockId, setAssetTargetBlockId] = useState<string | null>(
@@ -480,12 +697,25 @@ export function FileEditor({ fileId }: { fileId: string }) {
     position: "before" | "after";
   } | null>(null);
   const [uploadingAsset, setUploadingAsset] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    tasks: uploadTasks,
+    uploadFiles,
+    cancelUpload,
+    dismissUpload,
+  } = useUploadTask();
+  const [messageNotice, setMessage] = useFeedbackNotice();
+  const [errorNotice, setError] = useFeedbackNotice();
+  const message = messageNotice?.text ?? null;
+  const error = errorNotice?.text ?? null;
   const [saveState, setSaveState] = useState<
     "saved" | "dirty" | "saving" | "error"
   >("saved");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const editorScrollRef = useRef<HTMLDivElement>(null);
+  const previewScrollRef = useRef<HTMLDivElement>(null);
+  const scrollSyncFrameRef = useRef<number | null>(null);
+  const scrollSyncActiveRef = useRef(false);
+  const scrollProgressRef = useRef(0);
   const directGrantUserIds = useMemo(
     () => new Set(grants.map((grant) => grant.userId)),
     [grants],
@@ -545,6 +775,15 @@ export function FileEditor({ fileId }: { fileId: string }) {
     setLastSavedAt(new Date());
   }
 
+  async function loadInternalDocuments() {
+    const result = await getFolderTree();
+    setInternalDocuments(
+      flattenInternalDocuments(result.folders)
+        .filter((document) => document.id !== fileId)
+        .sort((left, right) => left.title.localeCompare(right.title, "zh-CN")),
+    );
+  }
+
   async function openPermissions() {
     setError(null);
     try {
@@ -572,8 +811,69 @@ export function FileEditor({ fileId }: { fileId: string }) {
     load().catch((caught) => {
       setError(caught instanceof Error ? caught.message : "加载文件失败");
     });
+    loadInternalDocuments().catch(() => {
+      // 文档本身仍可编辑；站内链接选择器会显示紧凑空状态。
+      setInternalDocuments([]);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileId]);
+
+  useEffect(
+    () => () => {
+      if (scrollSyncFrameRef.current !== null) {
+        cancelAnimationFrame(scrollSyncFrameRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const editor = editorScrollRef.current;
+      const preview = previewScrollRef.current;
+
+      if (
+        !editor ||
+        !preview ||
+        !window.matchMedia("(min-width: 1121px)").matches
+      ) {
+        return;
+      }
+
+      setScrollProgress(editor, scrollProgressRef.current);
+      setScrollProgress(preview, scrollProgressRef.current);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [blocks, titleInput]);
+
+  function synchronizePaneScroll(
+    source: HTMLDivElement | null,
+    target: HTMLDivElement | null,
+  ) {
+    if (
+      !source ||
+      !target ||
+      scrollSyncActiveRef.current ||
+      !window.matchMedia("(min-width: 1121px)").matches
+    ) {
+      return;
+    }
+
+    scrollSyncActiveRef.current = true;
+    const progress = syncScrollProgress(source, target);
+    if (progress !== null) {
+      scrollProgressRef.current = progress;
+    }
+
+    if (scrollSyncFrameRef.current !== null) {
+      cancelAnimationFrame(scrollSyncFrameRef.current);
+    }
+    scrollSyncFrameRef.current = requestAnimationFrame(() => {
+      scrollSyncActiveRef.current = false;
+      scrollSyncFrameRef.current = null;
+    });
+  }
 
   useEffect(() => {
     function closeMenus(event: MouseEvent) {
@@ -726,26 +1026,62 @@ export function FileEditor({ fileId }: { fileId: string }) {
     });
   }
 
-  async function onUploadAsset(file: File | undefined) {
-    if (!file) {
+  async function onUploadAssets(files: File[]) {
+    if (files.length === 0 || !assetTargetBlockId) {
       return;
     }
+    const targetBlockId = assetTargetBlockId;
+    const jobs = prepareUploadJobs(files, [], "本次选择中包含同名文件");
 
     setUploadingAsset(true);
     setError(null);
     setMessage(null);
 
     try {
-      const result = await uploadAsset({ file, fileId });
-      const asset = result.asset;
-      await insertAssetIntoTarget(asset);
+      const outcomes = await uploadFiles(jobs, (job, options) =>
+        uploadAsset({ file: job.file, fileId }, options),
+      );
+      const assets = outcomes.flatMap((outcome) =>
+        outcome.result ? [outcome.result.asset] : [],
+      );
+      if (assets.length === 0) return;
+
+      const [firstAsset, ...remainingAssets] = assets;
+      if (!firstAsset) return;
+      const firstType: ContentBlockType = firstAsset.mimeType.startsWith(
+        "image/",
+      )
+        ? "image"
+        : "attachment";
+      await updateBlock({
+        blockId: targetBlockId,
+        type: firstType,
+        dataJson: buildAssetBlockData(firstAsset),
+      });
+      let afterBlockId = targetBlockId;
+      for (const asset of remainingAssets) {
+        const type: ContentBlockType = asset.mimeType.startsWith("image/")
+          ? "image"
+          : "attachment";
+        const result = await createBlock({
+          fileId,
+          type,
+          dataJson: buildAssetBlockData(asset),
+          afterBlockId,
+        });
+        afterBlockId = result.block.id;
+      }
       setMessage(
-        asset.mimeType.startsWith("image/") ? "图片已插入" : "附件已插入",
+        assets.length === 1
+          ? firstAsset.mimeType.startsWith("image/")
+            ? "图片已插入"
+            : "附件已插入"
+          : `${assets.length} 个文件已插入`,
       );
       closeAssetPicker();
       await load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "上传失败");
+      setError(caught instanceof Error ? caught.message : "插入文件失败");
     } finally {
       setUploadingAsset(false);
     }
@@ -1279,6 +1615,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
       return (
         <RichTextBlockEditor
           block={block}
+          internalDocuments={internalDocuments}
           onChange={(text) => void onUpdateBlock(block, text)}
           onSave={() => void onSaveBlock(block)}
         />
@@ -1302,7 +1639,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
   }
 
   return (
-    <div className="workspace">
+    <div className="workspace content-editor-workspace">
       <section className="page-head compact editor-title-bar">
         <div>
           <input
@@ -1405,8 +1742,8 @@ export function FileEditor({ fileId }: { fileId: string }) {
         </div>
       </section>
 
-      {error ? <p className="error-text">{error}</p> : null}
-      {message ? <p className="success-text">{message}</p> : null}
+      <FeedbackNotice notice={errorNotice} tone="error" />
+      <FeedbackNotice notice={messageNotice} tone="success" />
 
       <section className="editor-workspace">
         <div className="editor-split">
@@ -1418,231 +1755,245 @@ export function FileEditor({ fileId }: { fileId: string }) {
               <strong>格式编辑</strong>
               <span>选择区块类型并编辑内容</span>
             </header>
-            {outlineBlocks.length > 0 ? (
-              <nav className="editor-outline" aria-label="文档大纲">
-                <strong>大纲</strong>
-                <div>
-                  {outlineBlocks.map((heading) => (
-                    <button
-                      key={heading.id}
-                      onClick={() => {
-                        document
-                          .getElementById(`block-${heading.id}`)
-                          ?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "center",
-                          });
-                      }}
-                      style={
-                        { "--heading-level": heading.level } as CSSProperties
-                      }
-                      title={heading.text}
-                      type="button"
-                    >
-                      {heading.text}
-                    </button>
-                  ))}
-                </div>
-              </nav>
-            ) : null}
-            <div className="editor-document-shell">
-              <div className="document-editor">
-                {blocks.map((block) => (
-                  <Fragment key={block.id}>
-                    <article
-                      className={`doc-block ${draggingBlockId === block.id ? "dragging" : ""} ${
-                        dropTarget?.blockId === block.id &&
-                        draggingBlockId !== block.id
-                          ? `drop-target drop-${dropTarget.position}`
-                          : ""
-                      }`}
-                      id={`block-${block.id}`}
-                      onDragOver={(event) => {
-                        event.preventDefault();
-
-                        if (!draggingBlockId) {
-                          return;
+            <div
+              className="editor-format-scroll"
+              onScroll={() =>
+                synchronizePaneScroll(
+                  editorScrollRef.current,
+                  previewScrollRef.current,
+                )
+              }
+              ref={editorScrollRef}
+            >
+              {outlineBlocks.length > 0 ? (
+                <nav className="editor-outline" aria-label="文档大纲">
+                  <strong>大纲</strong>
+                  <div>
+                    {outlineBlocks.map((heading) => (
+                      <button
+                        key={heading.id}
+                        onClick={() => {
+                          document
+                            .getElementById(`block-${heading.id}`)
+                            ?.scrollIntoView({
+                              behavior: "smooth",
+                              block: "center",
+                            });
+                        }}
+                        style={
+                          { "--heading-level": heading.level } as CSSProperties
                         }
+                        title={heading.text}
+                        type="button"
+                      >
+                        {heading.text}
+                      </button>
+                    ))}
+                  </div>
+                </nav>
+              ) : null}
+              <div className="editor-document-shell">
+                <div className="document-editor">
+                  {blocks.map((block) => (
+                    <Fragment key={block.id}>
+                      <article
+                        className={`doc-block ${draggingBlockId === block.id ? "dragging" : ""} ${
+                          dropTarget?.blockId === block.id &&
+                          draggingBlockId !== block.id
+                            ? `drop-target drop-${dropTarget.position}`
+                            : ""
+                        }`}
+                        id={`block-${block.id}`}
+                        onDragOver={(event) => {
+                          event.preventDefault();
 
-                        if (draggingBlockId === block.id) {
+                          if (!draggingBlockId) {
+                            return;
+                          }
+
+                          if (draggingBlockId === block.id) {
+                            setDropTarget((current) =>
+                              current ? null : current,
+                            );
+                            return;
+                          }
+
+                          const rect =
+                            event.currentTarget.getBoundingClientRect();
+                          const position =
+                            event.clientY < rect.top + rect.height / 2
+                              ? "before"
+                              : "after";
+
                           setDropTarget((current) =>
-                            current ? null : current,
+                            current?.blockId === block.id &&
+                            current.position === position
+                              ? current
+                              : { blockId: block.id, position },
                           );
-                          return;
-                        }
-
-                        const rect =
-                          event.currentTarget.getBoundingClientRect();
-                        const position =
-                          event.clientY < rect.top + rect.height / 2
-                            ? "before"
-                            : "after";
-
-                        setDropTarget((current) =>
-                          current?.blockId === block.id &&
-                          current.position === position
-                            ? current
-                            : { blockId: block.id, position },
-                        );
-                      }}
-                      onDrop={() => {
-                        if (
-                          draggingBlockId &&
-                          dropTarget?.blockId === block.id
-                        ) {
-                          moveBlock(
-                            draggingBlockId,
-                            block.id,
-                            dropTarget.position,
-                          );
-                        }
-                        setDraggingBlockId(null);
-                        setDropTarget(null);
-                      }}
-                    >
-                      <div className="doc-block-controls" data-menu-root="true">
-                        <button
-                          aria-label="在下方插入块"
-                          className="icon-button subtle block-insert-button"
-                          onClick={() =>
-                            setInsertAfterBlockId((current) =>
-                              current === block.id ? null : block.id,
-                            )
+                        }}
+                        onDrop={() => {
+                          if (
+                            draggingBlockId &&
+                            dropTarget?.blockId === block.id
+                          ) {
+                            moveBlock(
+                              draggingBlockId,
+                              block.id,
+                              dropTarget.position,
+                            );
                           }
-                          title="在下方插入块"
-                          type="button"
+                          setDraggingBlockId(null);
+                          setDropTarget(null);
+                        }}
+                      >
+                        <div
+                          className="doc-block-controls"
+                          data-menu-root="true"
                         >
-                          <Plus aria-hidden="true" />
-                        </button>
-                        <span
-                          className="drag-handle"
-                          draggable
-                          onDragEnd={() => {
-                            setDraggingBlockId(null);
-                            setDropTarget(null);
-                          }}
-                          onDragStart={() => {
-                            setDraggingBlockId(block.id);
-                            setDropTarget(null);
-                          }}
-                          title="拖动排序"
-                        >
-                          <GripVertical aria-hidden="true" />
-                        </span>
-                        <button
-                          className="icon-button subtle row-more-button"
-                          onClick={(event) =>
-                            toggleBlockMenu(block.id, event.currentTarget)
-                          }
-                          title="内容块操作"
-                          type="button"
-                        >
-                          <MoreHorizontal aria-hidden="true" />
-                        </button>
-                      </div>
-                      <div className="doc-block-body">
-                        <div className="doc-block-toolbar">
-                          <select
-                            className="block-type-select"
-                            title="内容块类型"
-                            value={block.type}
-                            onChange={(event) =>
-                              void onUpdateBlockType(
-                                block,
-                                event.target.value as ContentBlockType,
+                          <button
+                            aria-label="在下方插入块"
+                            className="icon-button subtle block-insert-button"
+                            onClick={() =>
+                              setInsertAfterBlockId((current) =>
+                                current === block.id ? null : block.id,
                               )
                             }
+                            title="在下方插入块"
+                            type="button"
                           >
-                            {blockTypeOptions.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
+                            <Plus aria-hidden="true" />
+                          </button>
+                          <span
+                            className="drag-handle"
+                            draggable
+                            onDragEnd={() => {
+                              setDraggingBlockId(null);
+                              setDropTarget(null);
+                            }}
+                            onDragStart={() => {
+                              setDraggingBlockId(block.id);
+                              setDropTarget(null);
+                            }}
+                            title="拖动排序"
+                          >
+                            <GripVertical aria-hidden="true" />
+                          </span>
+                          <button
+                            className="icon-button subtle row-more-button"
+                            onClick={(event) =>
+                              toggleBlockMenu(block.id, event.currentTarget)
+                            }
+                            title="内容块操作"
+                            type="button"
+                          >
+                            <MoreHorizontal aria-hidden="true" />
+                          </button>
                         </div>
-                        {renderBlockEditor(block)}
-                      </div>
-                    </article>
-                    {insertAfterBlockId === block.id ? (
-                      <AddBlockForm
-                        autoFocus
-                        className="doc-add-block doc-inline-inserter"
-                        onCancel={() => setInsertAfterBlockId(null)}
-                        onSubmit={(type, text) =>
-                          addBlockAt(type, text, block.id)
-                        }
-                        submitLabel="插入"
-                      />
-                    ) : null}
-                  </Fragment>
-                ))}
-                {blocks.length === 0 ? (
-                  <div className="empty-state">这个文件还没有内容块。</div>
-                ) : null}
-                <AddBlockForm
-                  className="doc-add-block"
-                  onSubmit={(type, text) => addBlockAt(type, text)}
-                />
-                {openBlockMenu && menuBlock ? (
-                  <div
-                    className="context-menu floating-block-menu"
-                    data-menu-root="true"
-                    style={{ left: openBlockMenu.x, top: openBlockMenu.y }}
-                  >
-                    <button
-                      onClick={() => {
-                        setOpenBlockMenu(null);
-                        setInsertAfterBlockId(menuBlock.id);
-                      }}
-                      type="button"
+                        <div className="doc-block-body">
+                          <div className="doc-block-toolbar">
+                            <select
+                              className="block-type-select"
+                              title="内容块类型"
+                              value={block.type}
+                              onChange={(event) =>
+                                void onUpdateBlockType(
+                                  block,
+                                  event.target.value as ContentBlockType,
+                                )
+                              }
+                            >
+                              {blockTypeOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {renderBlockEditor(block)}
+                        </div>
+                      </article>
+                      {insertAfterBlockId === block.id ? (
+                        <AddBlockForm
+                          autoFocus
+                          className="doc-add-block doc-inline-inserter"
+                          onCancel={() => setInsertAfterBlockId(null)}
+                          onSubmit={(type, text) =>
+                            addBlockAt(type, text, block.id)
+                          }
+                          submitLabel="插入"
+                        />
+                      ) : null}
+                    </Fragment>
+                  ))}
+                  {blocks.length === 0 ? (
+                    <div className="empty-state">这个文件还没有内容块。</div>
+                  ) : null}
+                  <AddBlockForm
+                    className="doc-add-block"
+                    onSubmit={(type, text) => addBlockAt(type, text)}
+                  />
+                  {openBlockMenu && menuBlock ? (
+                    <div
+                      className="context-menu floating-block-menu"
+                      data-menu-root="true"
+                      style={{ left: openBlockMenu.x, top: openBlockMenu.y }}
                     >
-                      在下方插入块
-                    </button>
-                    {blocks.findIndex((block) => block.id === menuBlock.id) >
-                    0 ? (
                       <button
                         onClick={() => {
                           setOpenBlockMenu(null);
-                          moveBlockByOffset(menuBlock.id, -1);
+                          setInsertAfterBlockId(menuBlock.id);
                         }}
                         type="button"
                       >
-                        上移
+                        在下方插入块
                       </button>
-                    ) : null}
-                    {blocks.findIndex((block) => block.id === menuBlock.id) <
-                    blocks.length - 1 ? (
+                      {blocks.findIndex((block) => block.id === menuBlock.id) >
+                      0 ? (
+                        <button
+                          onClick={() => {
+                            setOpenBlockMenu(null);
+                            moveBlockByOffset(menuBlock.id, -1);
+                          }}
+                          type="button"
+                        >
+                          上移
+                        </button>
+                      ) : null}
+                      {blocks.findIndex((block) => block.id === menuBlock.id) <
+                      blocks.length - 1 ? (
+                        <button
+                          onClick={() => {
+                            setOpenBlockMenu(null);
+                            moveBlockByOffset(menuBlock.id, 1);
+                          }}
+                          type="button"
+                        >
+                          下移
+                        </button>
+                      ) : null}
                       <button
                         onClick={() => {
                           setOpenBlockMenu(null);
-                          moveBlockByOffset(menuBlock.id, 1);
+                          void onSaveBlock(menuBlock);
                         }}
                         type="button"
                       >
-                        下移
+                        保存
                       </button>
-                    ) : null}
-                    <button
-                      onClick={() => {
-                        setOpenBlockMenu(null);
-                        void onSaveBlock(menuBlock);
-                      }}
-                      type="button"
-                    >
-                      保存
-                    </button>
-                    <button
-                      className="danger"
-                      onClick={() => {
-                        setOpenBlockMenu(null);
-                        void onDeleteBlock(menuBlock);
-                      }}
-                      type="button"
-                    >
-                      删除
-                    </button>
-                  </div>
-                ) : null}
+                      <button
+                        className="danger"
+                        onClick={() => {
+                          setOpenBlockMenu(null);
+                          void onDeleteBlock(menuBlock);
+                        }}
+                        type="button"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           </section>
@@ -1654,8 +2005,17 @@ export function FileEditor({ fileId }: { fileId: string }) {
               <strong>格式预览</strong>
               <span>内容修改会在这里即时呈现</span>
             </header>
-            <div className="editor-preview-scroll">
-              <DocumentPreview blocks={blocks} title={titleInput} />
+            <div
+              className="editor-preview-scroll"
+              onScroll={() =>
+                synchronizePaneScroll(
+                  previewScrollRef.current,
+                  editorScrollRef.current,
+                )
+              }
+              ref={previewScrollRef}
+            >
+              <DocumentPreview blocks={blocks} />
             </div>
           </aside>
         </div>
@@ -1687,10 +2047,11 @@ export function FileEditor({ fileId }: { fileId: string }) {
                 <input
                   disabled={uploadingAsset}
                   onChange={(event) => {
-                    const file = event.target.files?.[0];
+                    const files = Array.from(event.target.files ?? []);
                     event.target.value = "";
-                    void onUploadAsset(file);
+                    void onUploadAssets(files);
                   }}
+                  multiple
                   type="file"
                 />
                 <span>
@@ -1910,6 +2271,11 @@ export function FileEditor({ fileId }: { fileId: string }) {
           </section>
         </div>
       ) : null}
+      <UploadTaskToast
+        onCancel={cancelUpload}
+        onDismiss={dismissUpload}
+        tasks={uploadTasks}
+      />
     </div>
   );
 }

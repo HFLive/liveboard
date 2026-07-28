@@ -13,6 +13,7 @@ import type { Readable } from "node:stream";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { requireResourceName } from "../../common/resource-name";
+import { putObjectWithCompensation } from "../storage/upload-compensation";
 import { DEFAULT_CLASSROOM_STORAGE_QUOTA_BYTES } from "../../common/storage-quota";
 import type {
   CreateClassroomAnnouncementDto,
@@ -459,6 +460,7 @@ export class ClassroomsService {
     userId: string | null,
     classroomId: string,
     file: UploadedClassroomFile | undefined,
+    signal?: AbortSignal,
   ) {
     const user = await this.requireUser(userId);
     await this.requireTeacher(user, classroomId);
@@ -466,12 +468,13 @@ export class ClassroomsService {
     if (file.size > MAX_CLASSROOM_FILE_SIZE_BYTES) {
       throw new BadRequestException("课堂文件不能超过 100MB");
     }
+    const filename = requireResourceName(file.originalname, "文件名称");
     if (looksLikeSvg(file)) {
       throw new BadRequestException("不支持上传 SVG 文件");
     }
     const classroom = await this.requireClassroom(classroomId);
-    const filename = sanitizeFilename(file.originalname);
-    const storageKey = `${classroom.workspaceId}/classrooms/${classroomId}/${randomUUID()}-${filename}`;
+    const storageFilename = sanitizeStorageFilename(filename);
+    const storageKey = `${classroom.workspaceId}/classrooms/${classroomId}/${randomUUID()}-${storageFilename}`;
     const backend = await this.storage.activeBackend();
 
     const record = await this.reserveClassroomFile(classroom, file.size, {
@@ -483,14 +486,15 @@ export class ClassroomsService {
       sizeBytes: file.size,
       uploadedBy: user.id,
     });
-    try {
-      await backend.putObject(storageKey, file.buffer, record.mimeType);
-    } catch (caught) {
-      await this.prisma.classroomFile
-        .delete({ where: { id: record.id } })
-        .catch(() => undefined);
-      throw caught;
-    }
+    await putObjectWithCompensation({
+      backend,
+      storageKey,
+      data: file.buffer,
+      mimeType: record.mimeType,
+      signal,
+      releaseReservation: () =>
+        this.prisma.classroomFile.delete({ where: { id: record.id } }),
+    });
     return {
       ...record,
       createdAt: record.createdAt.toISOString(),
@@ -643,6 +647,16 @@ export class ClassroomsService {
             _sum: { sizeBytes: true },
           }),
         ]);
+        const duplicate = await transaction.classroomFile.findFirst({
+          where: {
+            classroomId: classroom.id,
+            filename: data.filename,
+          },
+          select: { id: true },
+        });
+        if (duplicate) {
+          throw new ConflictException("当前课堂中已存在同名文件");
+        }
         const quotaBytes =
           classroom.storageQuotaBytes ??
           workspace?.classroomStorageQuotaBytes ??
@@ -719,7 +733,7 @@ function normalizeBadgeColor(value: string) {
     : ("gray" as const);
 }
 
-function sanitizeFilename(filename: string) {
+function sanitizeStorageFilename(filename: string) {
   return (filename || "classroom-file")
     .replace(/[^\w.\-\u4e00-\u9fa5]+/g, "_")
     .slice(0, 120);

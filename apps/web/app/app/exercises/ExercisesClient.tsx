@@ -161,6 +161,7 @@ export function ExercisesClient() {
                       <small>
                         <UserProfileLink
                           className="user-profile-link"
+                          compactBadges
                           user={exercise.createdBy}
                         />{" "}
                         · {exercise.questionCount} 道题 · 更新于{" "}

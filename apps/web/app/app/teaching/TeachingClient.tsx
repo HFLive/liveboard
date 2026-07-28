@@ -102,6 +102,7 @@ export function TeachingClient() {
                 <span>
                   <UserProfileLink
                     className="user-profile-link"
+                    compactBadges
                     user={deck.createdBy}
                   />{" "}
                   · 更新于 {formatRelativeTime(deck.updatedAt)}

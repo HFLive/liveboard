@@ -10,7 +10,7 @@ import {
   ChevronDown,
   Files,
   MessageSquare,
-  School,
+  Presentation,
   UserCircle,
   Users,
   X,
@@ -28,7 +28,7 @@ import { APP_ROUTES, userProfile } from "@/lib/routes";
 import { LogoutButton } from "./LogoutButton";
 
 const navItems = [
-  { href: APP_ROUTES.classrooms, label: "课堂", Icon: School },
+  { href: APP_ROUTES.classrooms, label: "课堂", Icon: Presentation },
   { href: APP_ROUTES.content, label: "文档", Icon: Files },
   { href: APP_ROUTES.forum, label: "论坛", Icon: MessageSquare },
   { href: APP_ROUTES.admin, label: "管理", Icon: Users },
@@ -38,26 +38,17 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-const USAGE_HOVER_DELAY_MS = 150;
-
 export function AppNav() {
   const pathname = usePathname();
   const isPresentationRoute =
     /^\/app\/(?:content\/[^/]+|teaching\/[^/]+)\/present$/.test(pathname);
   const [user, setUser] = useState<UserSummary | null>(null);
   const [userLoaded, setUserLoaded] = useState(false);
-  const [usageOpen, setUsageOpen] = useState(false);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
   const [activityUnreadCount, setActivityUnreadCount] = useState(0);
   const [activityOpen, setActivityOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [usagePosition, setUsagePosition] = useState<{
-    left: number;
-    bottom: number;
-  } | null>(null);
-  const accountLinkRef = useRef<HTMLAnchorElement | null>(null);
   const activeNavLinkRef = useRef<HTMLAnchorElement | null>(null);
-  const usageHoverTimerRef = useRef<number | null>(null);
   const displayName = userLoaded ? (user?.displayName ?? "未登录") : "账户信息";
   const userInitial = userLoaded
     ? displayName.trim().slice(0, 1).toUpperCase() || "L"
@@ -150,14 +141,6 @@ export function AppNav() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  useEffect(() => {
-    return () => {
-      if (usageHoverTimerRef.current !== null) {
-        window.clearTimeout(usageHoverTimerRef.current);
-      }
-    };
-  }, []);
-
   async function loadActivity() {
     try {
       const result = await listActivity();
@@ -174,7 +157,6 @@ export function AppNav() {
     const nextOpen = !activityOpen;
     setActivityOpen(nextOpen);
     setMobileMenuOpen(false);
-    setUsageOpen(false);
     if (nextOpen) {
       const result = await loadActivity();
       if ((result?.unreadCount ?? activityUnreadCount) > 0) {
@@ -204,40 +186,6 @@ export function AppNav() {
     } catch {
       await loadActivity();
     }
-  }
-
-  function onAccountMouseEnter() {
-    if (!user) {
-      return;
-    }
-
-    if (usageHoverTimerRef.current !== null) {
-      window.clearTimeout(usageHoverTimerRef.current);
-    }
-
-    usageHoverTimerRef.current = window.setTimeout(() => {
-      usageHoverTimerRef.current = null;
-      const rect = accountLinkRef.current?.getBoundingClientRect();
-
-      if (!rect) {
-        return;
-      }
-
-      setUsagePosition({
-        left: rect.left,
-        bottom: window.innerHeight - rect.top + 8,
-      });
-      setUsageOpen(true);
-    }, USAGE_HOVER_DELAY_MS);
-  }
-
-  function onAccountMouseLeave() {
-    if (usageHoverTimerRef.current !== null) {
-      window.clearTimeout(usageHoverTimerRef.current);
-      usageHoverTimerRef.current = null;
-    }
-
-    setUsageOpen(false);
   }
 
   if (isPresentationRoute) {
@@ -359,9 +307,6 @@ export function AppNav() {
                 : "rail-user"
             }
             href={user ? userProfile(user.id) : APP_ROUTES.profile}
-            onMouseEnter={onAccountMouseEnter}
-            onMouseLeave={onAccountMouseLeave}
-            ref={accountLinkRef}
             rel="noopener noreferrer"
             target="_blank"
             title={displayName}
@@ -377,25 +322,6 @@ export function AppNav() {
           <LogoutButton />
         </div>
       </div>
-
-      {usageOpen && user && usagePosition ? (
-        <div
-          className="rail-usage-popover"
-          role="status"
-          style={{ left: usagePosition.left, bottom: usagePosition.bottom }}
-        >
-          <div className="rail-usage-user">
-            <span className="rail-avatar" aria-hidden="true">
-              {user.avatarUrl ? (
-                <img alt="" src={apiResourceUrl(user.avatarUrl)} />
-              ) : (
-                userInitial
-              )}
-            </span>
-            <strong>{displayName}</strong>
-          </div>
-        </div>
-      ) : null}
 
       {activityOpen ? (
         <div className="rail-activity-popover" role="dialog" aria-label="消息">
@@ -452,7 +378,5 @@ export function AppNav() {
 }
 
 function activityKindLabel(kind: ActivityItem["kind"]) {
-  return { exercise: "练习", grading: "批改", document: "文档", forum: "论坛" }[
-    kind
-  ];
+  return { exercise: "练习", grading: "批改", forum: "论坛" }[kind];
 }
