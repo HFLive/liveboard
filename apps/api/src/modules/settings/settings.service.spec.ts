@@ -12,6 +12,15 @@ describe("SettingsService", () => {
     faviconStorageKey: null,
     faviconMimeType: null,
     faviconUpdatedAt: null,
+    faviconStorageBackend: "minio" as const,
+    faviconLightStorageKey: null,
+    faviconLightMimeType: null,
+    faviconLightUpdatedAt: null,
+    faviconLightStorageBackend: "minio" as const,
+    faviconDarkStorageKey: null,
+    faviconDarkMimeType: null,
+    faviconDarkUpdatedAt: null,
+    faviconDarkStorageBackend: "minio" as const,
     updatedAt: new Date("2026-07-14T00:00:00Z"),
   };
   const prisma = {
@@ -133,6 +142,8 @@ describe("SettingsService", () => {
       workspaceSlug: "liveboard",
       timeZone: "Asia/Shanghai",
       faviconUrl: null,
+      faviconLightUrl: null,
+      faviconDarkUrl: null,
       updatedAt: "2026-07-14T00:00:00.000Z",
     });
   });
@@ -178,13 +189,55 @@ describe("SettingsService", () => {
     });
 
     expect(backend.putObject).toHaveBeenCalledWith(
-      expect.stringMatching(/^site\/favicon\/.+\.png$/),
+      expect.stringMatching(/^site\/favicon\/default\/.+\.png$/),
       buffer,
       "image/png",
     );
     expect(result.faviconUrl).toBe(
       `/settings/favicon?v=${new Date("2026-07-23T15:00:00Z").getTime()}`,
     );
+  });
+
+  it("stores an optional dark icon without replacing the default icon", async () => {
+    prisma.workspace.update.mockResolvedValue({
+      ...workspace,
+      faviconDarkStorageKey: "site/favicon/dark/new.png",
+      faviconDarkMimeType: "image/png",
+      faviconDarkUpdatedAt: new Date("2026-07-23T15:00:00Z"),
+      updatedAt: new Date("2026-07-23T15:00:00Z"),
+    });
+    const buffer = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+
+    const result = await service.updateFavicon(
+      "admin-1",
+      {
+        originalname: "icon-dark.png",
+        mimetype: "image/png",
+        size: buffer.length,
+        buffer,
+      },
+      "dark",
+    );
+
+    expect(backend.putObject).toHaveBeenCalledWith(
+      expect.stringMatching(/^site\/favicon\/dark\/.+\.png$/),
+      buffer,
+      "image/png",
+    );
+    expect(prisma.workspace.update).toHaveBeenCalledWith({
+      where: { id: "workspace-1" },
+      data: expect.objectContaining({
+        faviconDarkStorageKey: expect.stringMatching(
+          /^site\/favicon\/dark\/.+\.png$/,
+        ),
+        faviconDarkMimeType: "image/png",
+        faviconDarkStorageBackend: "minio",
+      }),
+    });
+    expect(result.faviconDarkUrl).toContain("/settings/favicon/dark?v=");
+    expect(result.faviconUrl).toBeNull();
   });
 
   it("resets the favicon to the browser default and removes the stored object", async () => {

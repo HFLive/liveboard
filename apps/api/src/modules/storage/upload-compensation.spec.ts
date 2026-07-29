@@ -12,7 +12,7 @@ describe("putObjectWithCompensation", () => {
     getObject: jest.fn(),
     removeObject: jest.fn(),
     presignGet: jest.fn(),
-    presignPut: jest.fn(),
+    presignUpload: jest.fn(),
     statObject: jest.fn(),
     healthCheck: jest.fn(),
   } satisfies ObjectStorageBackend;

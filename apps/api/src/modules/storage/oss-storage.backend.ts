@@ -78,12 +78,32 @@ export class OssStorageBackend implements ObjectStorageBackend {
     );
   }
 
-  presignPut(key: string, options: { expirySeconds: number }) {
-    return this.presignClient.presignedPutObject(
-      this.bucket,
-      key,
-      options.expirySeconds,
-    );
+  async presignUpload(
+    key: string,
+    options: {
+      expirySeconds: number;
+      sizeBytes: number;
+      mimeType: string;
+    },
+  ) {
+    const policy = this.presignClient.newPostPolicy();
+    policy.setBucket(this.bucket);
+    policy.setKey(key);
+    policy.setExpires(new Date(Date.now() + options.expirySeconds * 1000));
+    // OSS 在接收表单时执行这两个条件，不能由浏览器绕过。使用精确
+    // 长度可以阻止“声明小文件、实际上传超大对象”的存储滥用。
+    policy.setContentLengthRange(options.sizeBytes, options.sizeBytes);
+    policy.setContentType(options.mimeType);
+    const signed = await this.presignClient.presignedPostPolicy(policy);
+    return {
+      url: signed.postURL,
+      fields: Object.fromEntries(
+        Object.entries(signed.formData).map(([name, value]) => [
+          name,
+          String(value),
+        ]),
+      ),
+    };
   }
 
   async statObject(key: string) {

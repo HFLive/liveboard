@@ -3,6 +3,7 @@
 import { MouseEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowLeft,
   Download,
   File,
   Image,
@@ -243,6 +244,7 @@ export function LibraryClient() {
   return (
     <div className="workspace library-workspace">
       <Link className="page-back-link" href={APP_ROUTES.content}>
+        <ArrowLeft aria-hidden="true" />
         返回文档
       </Link>
       <header className="page-head">
@@ -264,6 +266,7 @@ export function LibraryClient() {
             <label className="search-field">
               <Search aria-hidden="true" />
               <input
+                aria-label="搜索文件"
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="搜索文件名或类型"
                 value={query}
@@ -271,6 +274,7 @@ export function LibraryClient() {
             </label>
             <div className="toolbar-row">
               <select
+                aria-label="筛选文件类型"
                 className="select compact-select"
                 value={kindFilter}
                 onChange={(event) =>

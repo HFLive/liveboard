@@ -1376,11 +1376,6 @@ button:disabled {
   font-weight: 600;
 }
 
-.tree-inline-form {
-  border-color: var(--line);
-  background: var(--fill-subtle);
-}
-
 .breadcrumb {
   margin-top: 5px;
   font-size: 12px;
@@ -2609,7 +2604,6 @@ body,
 }
 
 .modal-foot,
-.tree-inline-form,
 .doc-add-block,
 .forum-post-author {
   background: var(--fill-subtle);
@@ -3702,10 +3696,6 @@ body,
   justify-content: flex-end;
 }
 
-.forum-thread-detail .forum-thread-edit-form {
-  grid-column: 1 / -1;
-}
-
 .forum-thread-detail .forum-post-row,
 .forum-thread-detail .forum-main-post {
   min-height: 0;
@@ -4738,11 +4728,6 @@ body .success-text::before {
 
 .workspace .library-view-toggle button.active {
   box-shadow: none;
-}
-
-.workspace :is(.tree-inline-form) {
-  border-color: transparent;
-  background: var(--fill-subtle);
 }
 
 .workspace .forum-category-picker button {

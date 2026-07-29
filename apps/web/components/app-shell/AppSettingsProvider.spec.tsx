@@ -2,7 +2,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiResourceUrl, getPublicSettings } from "@/lib/api";
 import { setAppTimeZone } from "@/lib/labels";
-import { AppSettingsProvider, setAppFavicon } from "./AppSettingsProvider";
+import {
+  AppSettingsProvider,
+  resetAppIconSettingsForTest,
+  setAppFavicon,
+  setAppIconSettings,
+} from "./AppSettingsProvider";
 
 vi.mock("@/lib/api", () => ({
   apiResourceUrl: vi.fn((path: string) => `http://api.test${path}`),
@@ -16,6 +21,8 @@ const settingsResult = {
     workspaceSlug: "liveboard",
     timeZone: "Asia/Shanghai",
     faviconUrl: null,
+    faviconLightUrl: null,
+    faviconDarkUrl: null,
     updatedAt: "2026-07-14T00:00:00.000Z",
   },
 };
@@ -23,6 +30,7 @@ const settingsResult = {
 describe("AppSettingsProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetAppIconSettingsForTest();
     document.head
       .querySelectorAll("link[rel~='icon']")
       .forEach((link) => link.remove());
@@ -86,6 +94,31 @@ describe("AppSettingsProvider", () => {
         .querySelector<HTMLLinkElement>("link[data-liveboard-favicon='true']")
         ?.getAttribute("href"),
     ).toBe("/favicon.ico?v=liveboard-default-1");
+  });
+
+  it("installs optional light and dark variants for favicons and brand marks", () => {
+    setAppIconSettings({
+      faviconUrl: "/settings/favicon?v=1",
+      faviconLightUrl: "/settings/favicon/light?v=2",
+      faviconDarkUrl: "/settings/favicon/dark?v=3",
+    });
+
+    const links = Array.from(
+      document.head.querySelectorAll<HTMLLinkElement>(
+        "link[data-liveboard-favicon='true']",
+      ),
+    );
+    expect(links).toHaveLength(3);
+    expect(links[1]).toHaveAttribute("media", "(prefers-color-scheme: light)");
+    expect(links[2]).toHaveAttribute("media", "(prefers-color-scheme: dark)");
+    expect(document.documentElement).toHaveAttribute(
+      "data-site-brand-icon-light",
+      "true",
+    );
+    expect(document.documentElement).toHaveAttribute(
+      "data-site-brand-icon-dark",
+      "true",
+    );
   });
 
   it("removes conflicting route-level favicon declarations", () => {

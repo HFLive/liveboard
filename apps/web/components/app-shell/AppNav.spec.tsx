@@ -1,10 +1,12 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getMe, listActivity } from "@/lib/api";
 import { AppNav } from "./AppNav";
 
+const navigationState = vi.hoisted(() => ({ pathname: "/app/forum" }));
+
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/app/forum",
+  usePathname: () => navigationState.pathname,
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -22,6 +24,7 @@ vi.mock("./LogoutButton", () => ({
 describe("AppNav", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    navigationState.pathname = "/app/forum";
     Object.defineProperty(Element.prototype, "scrollIntoView", {
       configurable: true,
       value: vi.fn(),
@@ -44,6 +47,22 @@ describe("AppNav", () => {
     });
   });
 
+  it.each(["/app/ai", "/app/library"])(
+    "keeps document navigation active for its tool route %s",
+    (pathname) => {
+      navigationState.pathname = pathname;
+      render(<AppNav />);
+
+      expect(screen.getByRole("link", { name: "文档" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      expect(
+        screen.getByRole("button", { name: "打开主菜单" }),
+      ).toHaveTextContent("文档");
+    },
+  );
+
   it("shows the current section and exposes a compact mobile menu toggle", () => {
     render(<AppNav />);
 
@@ -62,5 +81,34 @@ describe("AppNav", () => {
         .getAllByRole("button", { name: "关闭主菜单" })
         .find((button) => button.hasAttribute("aria-expanded")),
     ).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("uses the account avatar beside personal-home labels on mobile", async () => {
+    navigationState.pathname = "/app/users/user-1";
+    vi.mocked(getMe).mockResolvedValue({
+      user: {
+        id: "user-1",
+        username: "admin",
+        displayName: "管理员",
+        avatarUrl: "/users/user-1/avatar",
+        bannerUrl: null,
+        bio: null,
+        systemRole: "admin",
+        status: "active",
+      },
+    });
+
+    const view = render(<AppNav />);
+
+    await waitFor(() =>
+      expect(
+        view.container.querySelectorAll(
+          ".rail-mobile-profile-avatar img[src='/users/user-1/avatar']",
+        ),
+      ).toHaveLength(2),
+    );
+    expect(
+      screen.getByRole("button", { name: "打开主菜单" }),
+    ).toHaveTextContent("个人主页");
   });
 });

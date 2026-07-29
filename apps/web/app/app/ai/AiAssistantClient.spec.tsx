@@ -49,6 +49,15 @@ describe("AiAssistantClient keyboard input", () => {
     expect(screen.getByText("测试默认发送")).toBeInTheDocument();
   });
 
+  it("links desktop and mobile headers back to documents", () => {
+    render(<AiAssistantClient />);
+
+    expect(screen.getAllByRole("link", { name: "返回文档" })).toHaveLength(2);
+    for (const link of screen.getAllByRole("link", { name: "返回文档" })) {
+      expect(link).toHaveAttribute("href", "/app/content");
+    }
+  });
+
   it("keeps editing when Shift and Enter are pressed together", async () => {
     render(<AiAssistantClient />);
     const input = await screen.findByPlaceholderText("询问资料中的专业问题...");

@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ForumThreadDetail } from "@liveboard/shared";
-import { getForumThread, listForumOverview } from "@/lib/api";
+import { getForumThread } from "@/lib/api";
 import { ForumThreadClient } from "./ForumThreadClient";
 
 vi.mock("next/navigation", () => ({
@@ -13,8 +13,6 @@ vi.mock("@/lib/api", () => ({
   deleteForumPost: vi.fn(),
   deleteForumThread: vi.fn(),
   getForumThread: vi.fn(),
-  listForumOverview: vi.fn(),
-  updateForumPost: vi.fn(),
   updateForumThread: vi.fn(),
   uploadForumPostImages: vi.fn(),
   voteForumPost: vi.fn(),
@@ -86,10 +84,6 @@ describe("ForumThreadClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getForumThread).mockResolvedValue({ thread });
-    vi.mocked(listForumOverview).mockResolvedValue({
-      categories: [thread.category],
-      threads: [],
-    });
   });
 
   it("uses a compact reading header and collects moderation actions", async () => {
@@ -116,8 +110,8 @@ describe("ForumThreadClient", () => {
     const moreMenu = container.querySelector(".forum-thread-more-menu");
     expect(moreMenu).not.toBeNull();
     expect(
-      within(moreMenu as HTMLElement).getByText("编辑帖子"),
-    ).toBeInTheDocument();
+      within(moreMenu as HTMLElement).queryByText("编辑帖子"),
+    ).not.toBeInTheDocument();
     expect(
       within(moreMenu as HTMLElement).getByText("锁定帖子"),
     ).toBeInTheDocument();

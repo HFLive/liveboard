@@ -36,7 +36,14 @@ export class MinioStorageBackend implements ObjectStorageBackend {
     return Promise.resolve(null);
   }
 
-  presignPut(_key: string, _options: { expirySeconds: number }) {
+  presignUpload(
+    _key: string,
+    _options: {
+      expirySeconds: number;
+      sizeBytes: number;
+      mimeType: string;
+    },
+  ) {
     return Promise.resolve(null);
   }
 

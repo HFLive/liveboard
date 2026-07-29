@@ -2,7 +2,10 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -56,12 +59,15 @@ export interface StorageFileDistribution {
 
 const SETTINGS_CACHE_TTL_MS = 30_000;
 const PRESIGN_EXPIRY_SECONDS = 600;
+const PENDING_UPLOAD_CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
+const PENDING_UPLOAD_CLEANUP_BATCH_SIZE = 100;
 const BACKENDS: StorageBackendName[] = ["minio", "oss"];
 const DOWNLOAD_MODES: StorageDownloadMode[] = ["proxy", "direct"];
 const UPLOAD_MODES: StorageUploadMode[] = ["relay", "direct"];
 
 @Injectable()
-export class StorageService {
+export class StorageService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(StorageService.name);
   private readonly minioClient: Client;
   private readonly minioBucket: string;
   private readonly minioEndpointDisplay: string;
@@ -72,6 +78,7 @@ export class StorageService {
   } | null = null;
   private settingsCache: { at: number; value: StorageSettings | null } | null =
     null;
+  private pendingUploadCleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -105,6 +112,58 @@ export class StorageService {
       secretKey,
       partSize: ATOMIC_UPLOAD_PART_SIZE_BYTES,
     });
+  }
+
+  onModuleInit() {
+    void this.cleanupExpiredPendingUploads().catch((caught: unknown) => {
+      this.logger.warn(
+        `清理过期 OSS 上传任务失败: ${caught instanceof Error ? caught.message : String(caught)}`,
+      );
+    });
+    this.pendingUploadCleanupTimer = setInterval(() => {
+      void this.cleanupExpiredPendingUploads().catch((caught: unknown) => {
+        this.logger.warn(
+          `清理过期 OSS 上传任务失败: ${caught instanceof Error ? caught.message : String(caught)}`,
+        );
+      });
+    }, PENDING_UPLOAD_CLEANUP_INTERVAL_MS);
+    this.pendingUploadCleanupTimer.unref();
+  }
+
+  onModuleDestroy() {
+    if (this.pendingUploadCleanupTimer) {
+      clearInterval(this.pendingUploadCleanupTimer);
+      this.pendingUploadCleanupTimer = null;
+    }
+  }
+
+  /**
+   * 全局回收过期的 OSS 直传任务。先删除对象、再删除任务行；对象删除失败
+   * 时保留任务供下轮重试，避免把占用空间的对象变成不可追踪孤儿。
+   */
+  async cleanupExpiredPendingUploads() {
+    const expired = await this.prisma.pendingUpload.findMany({
+      where: { expiresAt: { lte: new Date() } },
+      orderBy: { expiresAt: "asc" },
+      take: PENDING_UPLOAD_CLEANUP_BATCH_SIZE,
+    });
+    if (expired.length === 0) return 0;
+
+    const backend = await this.backendFor("oss");
+    let cleaned = 0;
+    for (const pending of expired) {
+      // S3/OSS DeleteObject 对不存在的 Key 也按成功处理，因此可安全重试。
+      const removed = await backend
+        .removeObject(pending.storageKey)
+        .then(() => true)
+        .catch(() => false);
+      if (!removed) continue;
+      const result = await this.prisma.pendingUpload.deleteMany({
+        where: { id: pending.id, expiresAt: { lte: new Date() } },
+      });
+      cleaned += result.count;
+    }
+    return cleaned;
   }
 
   /** 当前激活的上传后端。 */
@@ -144,18 +203,22 @@ export class StorageService {
   }
 
   /**
-   * 签名直入模式下为对象生成预签名 PUT 地址;中转模式、非 OSS
+   * 签名直入模式下生成带服务端约束的 POST Policy;中转模式、非 OSS
    * 后端或后端不支持时返回 null,调用方回退到服务器中转上传。
    */
   async presignUpload(
     storageBackend: StorageBackendName,
     key: string,
-  ): Promise<string | null> {
+    options: { sizeBytes: number; mimeType: string },
+  ) {
     if (storageBackend !== "oss") return null;
     const settings = await this.getSettings();
     if ((settings?.uploadMode ?? "relay") !== "direct") return null;
     const backend = await this.backendFor(storageBackend);
-    return backend.presignPut(key, { expirySeconds: PRESIGN_EXPIRY_SECONDS });
+    return backend.presignUpload(key, {
+      expirySeconds: PRESIGN_EXPIRY_SECONDS,
+      ...options,
+    });
   }
 
   /**

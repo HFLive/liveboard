@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   API_URL,
   ApiError,
-  putWithProgress,
+  postToObjectStorageWithProgress,
   request,
   shouldRedirectToLogin,
   uploadFormData,
@@ -16,6 +16,7 @@ class FakeXMLHttpRequest extends EventTarget {
   withCredentials = false;
   method = "";
   url = "";
+  body: unknown = null;
 
   constructor() {
     super();
@@ -33,7 +34,9 @@ class FakeXMLHttpRequest extends EventTarget {
     this.headers[name] = value;
   }
 
-  send(_body: unknown) {}
+  send(body: unknown) {
+    this.body = body;
+  }
 
   abort() {
     this.dispatchEvent(new Event("abort"));
@@ -173,13 +176,16 @@ describe("API request client", () => {
     await expect(promise).rejects.toMatchObject({ name: "AbortError" });
   });
 
-  it("putWithProgress sends a credentialess PUT with real progress", async () => {
+  it("posts the signed policy fields before the file with real progress", async () => {
     vi.stubGlobal("XMLHttpRequest", FakeXMLHttpRequest);
     const onProgress = vi.fn();
     const file = new File(["hello"], "notes.txt", { type: "text/plain" });
-    const promise = putWithProgress("https://oss.example/signed-put", file, {
-      onProgress,
-    });
+    const promise = postToObjectStorageWithProgress(
+      "https://oss.example/upload",
+      { key: "workspace/notes.txt", policy: "signed-policy" },
+      file,
+      { onProgress },
+    );
     const xhr = FakeXMLHttpRequest.latest!;
 
     xhr.upload.dispatchEvent(
@@ -193,18 +199,26 @@ describe("API request client", () => {
     xhr.dispatchEvent(new Event("load"));
 
     await expect(promise).resolves.toBeUndefined();
-    expect(xhr.method).toBe("PUT");
-    expect(xhr.url).toBe("https://oss.example/signed-put");
+    expect(xhr.method).toBe("POST");
+    expect(xhr.url).toBe("https://oss.example/upload");
     expect(xhr.withCredentials).toBe(false);
-    expect(xhr.headers["Content-Type"]).toBe("text/plain");
+    expect(xhr.body).toBeInstanceOf(FormData);
+    const entries = [...(xhr.body as FormData).entries()];
+    expect(entries.slice(0, -1)).toEqual([
+      ["key", "workspace/notes.txt"],
+      ["policy", "signed-policy"],
+    ]);
+    expect(entries.at(-1)?.[0]).toBe("file");
+    expect(entries.at(-1)?.[1]).toBe(file);
     expect(onProgress).toHaveBeenNthCalledWith(1, 80);
     expect(onProgress).toHaveBeenLastCalledWith(100);
   });
 
-  it("putWithProgress rejects on a non-2xx response so callers can fall back", async () => {
+  it("direct object storage upload rejects on a non-2xx response", async () => {
     vi.stubGlobal("XMLHttpRequest", FakeXMLHttpRequest);
-    const promise = putWithProgress(
-      "https://oss.example/signed-put",
+    const promise = postToObjectStorageWithProgress(
+      "https://oss.example/upload",
+      { policy: "signed-policy" },
       new File(["hello"], "notes.txt", { type: "text/plain" }),
     );
     const xhr = FakeXMLHttpRequest.latest!;
@@ -215,11 +229,12 @@ describe("API request client", () => {
     await expect(promise).rejects.toThrow("直传对象存储失败(403)");
   });
 
-  it("putWithProgress rejects with AbortError when cancelled", async () => {
+  it("direct object storage upload rejects with AbortError when cancelled", async () => {
     vi.stubGlobal("XMLHttpRequest", FakeXMLHttpRequest);
     const controller = new AbortController();
-    const promise = putWithProgress(
-      "https://oss.example/signed-put",
+    const promise = postToObjectStorageWithProgress(
+      "https://oss.example/upload",
+      { policy: "signed-policy" },
       new File(["hello"], "notes.txt", { type: "text/plain" }),
       { signal: controller.signal },
     );

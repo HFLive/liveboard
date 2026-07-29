@@ -148,13 +148,12 @@ export function ClassroomsClient() {
             value={query}
           />
         </label>
-        {!loading ? (
-          <span className="classroom-count">共 {classrooms.length} 个课堂</span>
-        ) : null}
         {canCreate ? (
           <button
-            className="button"
+            aria-label="新建课堂"
+            className="button mobile-icon-action"
             onClick={() => setShowCreate(true)}
+            title="新建课堂"
             type="button"
           >
             <Plus aria-hidden="true" className="button-icon" />

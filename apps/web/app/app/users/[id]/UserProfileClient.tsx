@@ -70,7 +70,7 @@ export function UserProfileClient({ userId }: { userId: string }) {
               {isOwnProfile ? (
                 <Link className="button secondary" href={APP_ROUTES.profile}>
                   <Settings aria-hidden="true" className="button-icon" />
-                  编辑个人主页
+                  资料设置
                 </Link>
               ) : null}
             </div>

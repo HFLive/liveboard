@@ -3,6 +3,7 @@ import { ArrowUpRight } from "lucide-react";
 import { LoginForm } from "./LoginForm";
 import "./login.css";
 import type { Metadata } from "next";
+import { SiteBrandMark } from "@/components/app-shell/SiteBrandMark";
 
 export const metadata: Metadata = { title: "登录" };
 
@@ -11,7 +12,7 @@ export default function LoginPage() {
     <main className="login-wrap">
       <aside className="login-aside">
         <Link className="login-brand-link" href="/">
-          <span>LB</span>
+          <SiteBrandMark tone="dark" />
           <strong>LiveBoard</strong>
         </Link>
         <div className="login-aside-copy">

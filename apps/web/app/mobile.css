@@ -257,6 +257,26 @@
     color: var(--muted);
   }
 
+  .rail-mobile-profile-avatar {
+    display: grid;
+    flex: 0 0 18px;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--fill-active);
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 750;
+  }
+
+  .rail-mobile-profile-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
   .rail-footer {
     display: flex;
     align-items: center;
@@ -313,6 +333,63 @@
 
   .workspace :is(.button, .select, .input, .search-field) {
     min-height: 36px;
+  }
+
+  /* Mobile actions keep their intrinsic width. The legacy responsive table
+     rules made every button full-width, which turned compact toolbars into a
+     stack of one-action rows across otherwise unrelated routes. */
+  .workspace :is(.button, .button.secondary, .button.danger) {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .workspace :is(.button-row, .toolbar-row, .inline-actions) {
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .workspace .button-row > * {
+    flex: 0 0 auto;
+  }
+
+  .workspace .button.mobile-icon-action,
+  .workspace .button.secondary.mobile-icon-action,
+  .workspace .button.danger.mobile-icon-action {
+    display: inline-flex;
+    flex: 0 0 44px;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    border-color: transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-soft);
+    box-shadow: none;
+    gap: 0;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .workspace .button.mobile-icon-action:hover,
+  .workspace .button.secondary.mobile-icon-action:hover,
+  .workspace .button.danger.mobile-icon-action:hover,
+  .workspace .button.mobile-icon-action:active,
+  .workspace .button.secondary.mobile-icon-action:active,
+  .workspace .button.danger.mobile-icon-action:active {
+    border-color: transparent;
+    background: var(--fill-hover);
+    color: var(--text);
+    box-shadow: none;
+  }
+
+  .workspace .mobile-icon-action .button-icon {
+    width: 18px;
+    height: 18px;
+    margin: 0;
   }
 
   .workspace :is(.panel-head, .list-toolbar) {
@@ -599,27 +676,88 @@
 
   /* Document browser: one compact row per folder or document. */
   .content-workspace .content-path-head {
-    gap: 6px;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 8px 4px;
     padding-inline: 0;
   }
 
+  .content-workspace .breadcrumb-back {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
   .content-workspace .breadcrumb {
+    grid-column: 2;
+    grid-row: 2;
     font-size: 12px;
   }
 
-  .content-workspace .new-content-menu > .button {
-    width: 34px;
-    min-width: 34px;
-    padding: 0;
-    font-size: 0;
+  .content-workspace .content-path-head > .content-action-bar {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 4px;
+    width: 100%;
+    max-width: 100%;
+    overflow: visible;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+    padding: 0 0 8px;
   }
 
+  .content-workspace
+    .content-action-bar
+    > :is(.button.mobile-icon-action, .sort-icon-control),
+  .content-workspace
+    .content-action-bar
+    > .new-content-menu
+    > .button.mobile-icon-action {
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-soft);
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .content-workspace
+    .content-action-bar
+    > :is(.button.mobile-icon-action, .sort-icon-control):hover {
+    background: var(--fill-hover);
+    color: var(--text);
+  }
+
+  .content-workspace .content-action-bar > .new-content-menu {
+    position: relative;
+    z-index: 30;
+    flex: 0 0 44px;
+    margin-left: auto;
+  }
+
+  .content-workspace .content-path-head .sort-icon-control > span,
   .content-workspace .new-content-menu > .button svg:last-child {
     display: none;
   }
 
+  .content-workspace .content-action-bar .new-content-options {
+    z-index: 100;
+    top: calc(100% + 8px);
+  }
+
   .content-workspace .content-mobile-tabs {
-    margin: 0;
+    margin: -4px 0 0;
   }
 
   .app-main .workspace.content-workspace .files-layout {
@@ -689,8 +827,8 @@
   }
 
   .app-main .workspace.content-workspace .content-items-table tbody tr {
-    min-height: 58px;
-    padding: 8px 6px;
+    min-height: 54px;
+    padding: 6px 2px 6px 6px;
   }
 
   .app-main .workspace.content-workspace .content-items-table td:nth-child(2) {
@@ -700,6 +838,10 @@
 
   .app-main .workspace.content-workspace .content-items-table td:nth-child(3) {
     align-self: center;
+  }
+
+  .app-main .workspace.content-workspace .content-items-table {
+    border-spacing: 0 2px;
   }
 
   .app-main .workspace.content-workspace .content-pinned-row > td {
@@ -771,7 +913,8 @@
   }
 
   .teaching-list-panel .list-toolbar {
-    display: block;
+    display: flex;
+    align-items: center;
   }
 
   .teaching-list-panel .teaching-deck-row {
@@ -801,12 +944,14 @@
 
   /* Exercise list keeps the decision-making fields and drops admin columns. */
   .exercises-workspace .list-toolbar {
-    align-items: stretch;
+    align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
   }
 
   .exercises-workspace .exercise-toolbar-actions {
-    width: 100%;
+    width: auto;
+    max-width: 100%;
     overflow-x: auto;
   }
 
@@ -865,38 +1010,84 @@
     text-align: left;
   }
 
-  /* Library controls stay on two compact rows; cards form a small gallery. */
+  /* The file library uses one search row and one compact control row. */
   .library-workspace .library-layout .list-toolbar {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
+    padding: 4px 0 8px;
+  }
+
+  .library-workspace .library-layout .list-toolbar > .search-field {
+    min-height: 44px;
   }
 
   .library-workspace .library-layout .list-toolbar .toolbar-row {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-    gap: 6px;
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 4px;
     width: 100%;
   }
 
-  .library-workspace .library-layout .list-toolbar .toolbar-row > .button {
-    width: 36px;
-    min-width: 36px;
+  .library-workspace .library-layout .list-toolbar .toolbar-row > .select {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    min-height: 44px;
+  }
+
+  .library-workspace
+    .library-layout
+    .list-toolbar
+    .toolbar-row
+    > .sort-icon-control {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
     padding: 0;
-    font-size: 0;
+  }
+
+  .library-workspace .library-layout .library-view-toggle {
+    grid-column: auto;
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    height: 44px;
+    box-sizing: border-box;
+    padding: 2px;
+  }
+
+  .library-workspace .library-layout .library-view-toggle button {
+    flex: 0 0 40px;
+    width: 40px;
+    min-width: 40px;
+    height: 38px;
+    min-height: 38px;
   }
 
   .library-workspace .library-layout .asset-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
-    padding: 8px 0;
+    padding: 8px 0 16px;
   }
 
   .library-workspace .asset-card {
+    grid-template-rows: 104px auto;
     min-width: 0;
     border: 0;
     border-radius: 10px;
     background: transparent;
+  }
+
+  .library-workspace .asset-preview {
+    border: 0;
+    border-radius: 10px;
+  }
+
+  .library-workspace .asset-info {
+    gap: 2px;
+    padding: 8px 2px;
   }
 
   .library-workspace .asset-info strong {
@@ -904,9 +1095,35 @@
   }
 
   .library-workspace .asset-info span,
-  .library-workspace .asset-info small,
-  .library-workspace .asset-actions {
+  .library-workspace .asset-info small {
     font-size: 10px;
+  }
+
+  .library-workspace .asset-actions {
+    display: none;
+  }
+
+  .library-workspace .asset-list {
+    gap: 2px;
+    padding: 6px 0 14px;
+  }
+
+  .library-workspace .asset-list-row {
+    grid-template-columns: 24px minmax(0, 1fr) 24px;
+    gap: 8px;
+    min-height: 56px;
+    border-radius: 0;
+    padding: 8px 4px;
+  }
+
+  .library-workspace .asset-list-row > em,
+  .library-workspace .asset-list-row > .asset-reference-button {
+    display: none;
+  }
+
+  .library-workspace .asset-list-row > input {
+    grid-column: 3;
+    justify-self: center;
   }
 
   .app-main .workspace.library-workspace .asset-detail-backdrop {

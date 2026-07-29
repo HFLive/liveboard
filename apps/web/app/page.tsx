@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import "./home.css";
+import { SiteBrandMark } from "@/components/app-shell/SiteBrandMark";
 
 const FEATURES = [
   {
@@ -30,7 +31,7 @@ export default function HomePage() {
     <main className="marketing-page">
       <nav className="marketing-nav" aria-label="首页导航">
         <Link className="marketing-brand" href="/">
-          <span>LB</span>
+          <SiteBrandMark tone="light" />
           <strong>LiveBoard</strong>
         </Link>
         <Link className="marketing-login-link" href="/login">

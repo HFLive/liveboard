@@ -31,7 +31,7 @@ export interface UploadedClassroomFile {
 }
 
 export const MAX_CLASSROOM_FILE_SIZE_BYTES = 100 * 1024 * 1024;
-/** 签名直入预留的有效期;超时未确认的预留会被惰性清理。 */
+/** 签名直入预留的有效期;超时未确认的预留会被定时及惰性清理。 */
 const PENDING_UPLOAD_TTL_MS = 60 * 60 * 1000;
 
 export interface SignClassroomUploadInput {
@@ -513,7 +513,7 @@ export class ClassroomsService {
 
   /**
    * 签名直入第一步:校验并预留 PendingUpload,返回浏览器直传 OSS 的
-   * 预签名 PUT 地址。配额与重名的原子保证在 confirm 时由
+   * 带大小约束的 POST Policy。配额与重名的原子保证在 confirm 时由
    * reserveClassroomFile 完成,这里只做 UX 预检。
    */
   async signFileUpload(
@@ -540,8 +540,11 @@ export class ClassroomsService {
     const backend = await this.storage.activeBackend();
     const storageFilename = sanitizeStorageFilename(filename);
     const storageKey = `${classroom.workspaceId}/classrooms/${classroomId}/${randomUUID()}-${storageFilename}`;
-    const url = await this.storage.presignUpload(backend.name, storageKey);
-    if (!url) {
+    const upload = await this.storage.presignUpload(backend.name, storageKey, {
+      sizeBytes: input.sizeBytes,
+      mimeType,
+    });
+    if (!upload) {
       throw new NotImplementedException(
         "当前存储配置不支持签名直入,请改用服务器中转上传",
       );
@@ -568,7 +571,7 @@ export class ClassroomsService {
       },
     });
 
-    return { uploadId: pending.id, url };
+    return { uploadId: pending.id, ...upload };
   }
 
   /** 签名直入第三步:对象校验通过后原子创建文件记录并释放预留。 */

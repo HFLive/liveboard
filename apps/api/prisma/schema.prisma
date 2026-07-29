@@ -178,6 +178,14 @@ model Workspace {
   faviconMimeType            String?
   faviconUpdatedAt           DateTime?
   faviconStorageBackend      StorageBackend @default(minio)
+  faviconLightStorageKey     String?
+  faviconLightMimeType       String?
+  faviconLightUpdatedAt      DateTime?
+  faviconLightStorageBackend StorageBackend @default(minio)
+  faviconDarkStorageKey      String?
+  faviconDarkMimeType        String?
+  faviconDarkUpdatedAt       DateTime?
+  faviconDarkStorageBackend  StorageBackend @default(minio)
   memberAttachmentQuotaBytes Int?
   classroomStorageQuotaBytes Int?
   createdAt                  DateTime       @default(now())
@@ -656,21 +664,21 @@ model FileAsset {
 }
 
 model StorageSettings {
-  id                 String              @id @default(cuid())
-  workspaceId        String              @unique
-  backend            StorageBackend      @default(minio)
-  downloadMode       StorageDownloadMode @default(proxy)
-  uploadMode         StorageUploadMode   @default(relay)
-  ossRegion          String?
-  ossBucket          String?
-  ossEndpoint        String?
-  ossAccessKeyId     String?
-  ossAccessKeySecret String?
-  ossInternal        Boolean             @default(false)
+  id                  String              @id @default(cuid())
+  workspaceId         String              @unique
+  backend             StorageBackend      @default(minio)
+  downloadMode        StorageDownloadMode @default(proxy)
+  uploadMode          StorageUploadMode   @default(relay)
+  ossRegion           String?
+  ossBucket           String?
+  ossEndpoint         String?
+  ossAccessKeyId      String?
+  ossAccessKeySecret  String?
+  ossInternal         Boolean             @default(false)
   ossInternalEndpoint String?
-  updatedById        String?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  updatedById         String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
@@ -680,19 +688,19 @@ model StorageSettings {
  * 超时未确认的行由后续签名请求惰性清理,对象尽力删除。
  */
 model PendingUpload {
-  id           String            @id @default(cuid())
-  kind         PendingUploadKind
-  workspaceId  String
-  folderId     String?
-  fileId       String?
-  classroomId  String?
-  filename     String
-  mimeType     String
-  sizeBytes    Int
-  storageKey   String            @unique
-  uploadedBy   String
-  createdAt    DateTime          @default(now())
-  expiresAt    DateTime
+  id          String            @id @default(cuid())
+  kind        PendingUploadKind
+  workspaceId String
+  folderId    String?
+  fileId      String?
+  classroomId String?
+  filename    String
+  mimeType    String
+  sizeBytes   Int
+  storageKey  String            @unique
+  uploadedBy  String
+  createdAt   DateTime          @default(now())
+  expiresAt   DateTime
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 

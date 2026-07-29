@@ -100,6 +100,11 @@
   padding: 12px;
 }
 
+.system-settings-page .favicon-variant-list {
+  display: grid;
+  gap: 8px;
+}
+
 .system-settings-page
   :is(.https-enabled-panel, .https-unavailable-panel, .https-enable-form) {
   min-width: 0;
@@ -326,6 +331,11 @@
   background: var(--bg);
 }
 
+.system-settings-page .favicon-preview.is-dark {
+  background: var(--text);
+  color: #fff;
+}
+
 .system-settings-page .favicon-preview :is(img, svg) {
   width: 28px;
   height: 28px;
@@ -334,6 +344,16 @@
 
 .system-settings-page .favicon-setting-card strong {
   font-size: 13px;
+}
+
+.system-settings-page .favicon-setting-card strong small {
+  margin-left: 6px;
+  border-radius: 999px;
+  background: var(--fill-active);
+  color: var(--muted);
+  padding: 2px 6px;
+  font-size: 9px;
+  font-weight: 650;
 }
 
 .system-settings-page .favicon-setting-card p {

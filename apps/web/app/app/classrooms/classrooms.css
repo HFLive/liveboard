@@ -4,6 +4,10 @@
   min-width: 0;
 }
 
+.classrooms-workspace {
+  gap: 0;
+}
+
 .classroom-detail-workspace {
   width: min(960px, 100%);
 }
@@ -16,10 +20,8 @@
   padding: 4px 0 12px;
 }
 
-.classroom-count {
-  margin-right: auto;
-  color: var(--muted);
-  font-size: 12.5px;
+.workspace .classrooms-toolbar {
+  padding-bottom: 8px;
 }
 
 .classroom-resource-list,
@@ -41,7 +43,7 @@
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 12px;
   min-width: 0;
-  padding-top: 14px;
+  padding-top: 0;
 }
 
 .classroom-row {
@@ -132,32 +134,10 @@
   font-size: 13.5px;
 }
 
-.classroom-detail-head dl {
-  display: flex;
-  gap: 20px;
-  margin: 0;
-}
-
 .classroom-detail-meta {
   display: flex;
   align-items: center;
   gap: 18px;
-}
-
-.classroom-detail-head dl div {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-}
-
-.classroom-detail-head dt {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.classroom-detail-head dd {
-  margin: 0;
-  font-weight: 700;
 }
 
 /* —— 详情标签页：收缩为内容宽度，不再拉满 —— */
@@ -366,6 +346,13 @@
 
 .classroom-members-panel {
   min-width: 0;
+}
+
+.classroom-member-summary {
+  margin: 0;
+  padding: 2px 10px 8px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .classroom-add-members-empty {
@@ -600,33 +587,82 @@
 }
 
 @media (max-width: 760px) {
-  .classroom-list {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
+  .workspace .classrooms-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
   }
 
-  .classroom-detail-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .classroom-detail-meta {
-    align-items: flex-start;
-    flex-wrap: wrap;
+  .classrooms-toolbar .search-field {
+    grid-column: 1;
+    grid-row: 1;
     width: 100%;
   }
 
-  .classroom-detail-meta > .button {
+  .classrooms-toolbar > .mobile-icon-action {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .classroom-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding-top: 0;
+  }
+
+  .classroom-detail-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .classroom-detail-head > div:first-child {
+    min-width: 0;
+  }
+
+  .classroom-detail-meta {
+    align-items: center;
     width: auto;
   }
 
   .classroom-content-toolbar {
-    align-items: stretch;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
   }
 
   .classroom-content-toolbar .search-field {
+    grid-column: 1;
+    grid-row: 1;
     width: 100%;
+  }
+
+  .classroom-content-toolbar .classroom-section-caption {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-width: 0;
+  }
+
+  .classroom-content-toolbar > .mobile-icon-action {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .classroom-tabs {
+    width: 100%;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .classroom-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .classroom-tabs > button {
+    flex: 0 0 auto;
   }
 
   .classroom-member-row {

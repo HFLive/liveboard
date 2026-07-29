@@ -12,9 +12,11 @@
     "typecheck": "next typegen && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@fontsource/noto-serif-sc": "5.3.0",
     "@liveboard/shared": "workspace:*",
     "katex": "^0.17.0",
     "lucide-react": "^1.21.0",
+    "lxgw-wenkai-lite-webfont": "1.7.0",
     "next": "^15.5.20",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
