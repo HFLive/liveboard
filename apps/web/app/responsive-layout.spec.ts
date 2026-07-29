@@ -17,6 +17,18 @@ const viewerCss = readFileSync(
 );
 const forumCss = readFileSync("app/app/forum/forum-clean.css", "utf8");
 const classroomsCss = readFileSync("app/app/classrooms/classrooms.css", "utf8");
+const assetPreviewCss = readFileSync(
+  "components/asset-preview/AssetPreviewDialog.css",
+  "utf8",
+);
+const quizBuilderCss = readFileSync(
+  "app/app/exercises/new/quiz-builder.css",
+  "utf8",
+);
+const reviewCss = readFileSync(
+  "app/app/exercises/[id]/submissions/review.css",
+  "utf8",
+);
 
 describe("responsive workspace contracts", () => {
   it("uses a top navigation and a single-column profile at mobile widths", () => {
@@ -34,10 +46,42 @@ describe("responsive workspace contracts", () => {
       /@media \(max-width: 760px\)[\s\S]*?\.rail-mobile-footer-row\s*{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto/,
     );
     expect(mobileCss).toMatch(
+      /\.rail-mobile-profile-avatar\s*{[\s\S]*?border: 1px solid var\(--line-strong\)/,
+    );
+    expect(redesignCss).toMatch(
+      /\.rail-avatar\s*{[\s\S]*?border-color: var\(--line-strong\)/,
+    );
+    expect(mobileCss).toMatch(
       /@media \(max-width: 760px\)[\s\S]*?\.content-workspace \.content-items-table tbody tr\s*{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) 44px/,
     );
     expect(mobileCss).toMatch(
       /@media \(max-width: 760px\)[\s\S]*?\.content-row-menu-button,[\s\S]*?\.history-more-button[\s\S]*?width: 44px;[\s\S]*?height: 44px/,
+    );
+  });
+
+  it("prevents accidental mobile zoom without disabling pinch zoom", () => {
+    expect(mobileCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?html,[\s\S]*?body\s*{\s*touch-action: manipulation/,
+    );
+    expect(mobileCss).toMatch(
+      /textarea,[\s\S]*?select,[\s\S]*?\[contenteditable="true"\]\s*{\s*font-size: 16px !important/,
+    );
+    expect(mobileCss).not.toContain("user-scalable=no");
+    expect(mobileCss).not.toContain("maximum-scale=1");
+  });
+
+  it("keeps file preview dialogs the same size across workspaces", () => {
+    expect(assetPreviewCss).toMatch(
+      /\.workspace \.modal-panel\.asset-preview-dialog--image\s*{\s*width: min\(860px, calc\(100vw - 28px\)\)/,
+    );
+    expect(assetPreviewCss).toMatch(
+      /\.workspace \.modal-panel\.asset-preview-dialog--document\s*{\s*width: min\(960px, calc\(100vw - 28px\)\)/,
+    );
+    expect(assetPreviewCss).toMatch(
+      /@media \(max-width: 720px\)[\s\S]*?\.workspace[\s\S]*?\.modal-backdrop:has\(\.modal-panel\.asset-preview-dialog\)\s*{[\s\S]*?place-items: center;[\s\S]*?padding: 12px/,
+    );
+    expect(assetPreviewCss).toMatch(
+      /\.workspace \.modal-panel\.asset-preview-dialog--image,[\s\S]*?\.workspace \.modal-panel\.asset-preview-dialog--document\s*{[\s\S]*?height: min\(88dvh, 860px\)/,
     );
   });
 
@@ -71,6 +115,24 @@ describe("responsive workspace contracts", () => {
     );
     expect(mobileCss).not.toMatch(
       /\.content-workspace[\s\S]*?\.new-content-menu[\s\S]*?background: var\(--text\)/,
+    );
+  });
+
+  it("keeps mobile row menus inside the viewport", () => {
+    expect(redesignCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.editor-more-menu > \.context-menu\s*{[\s\S]*?top: auto;[\s\S]*?right: 0;[\s\S]*?bottom: calc\(100% \+ 6px\);[\s\S]*?left: auto;[\s\S]*?max-width: min\(220px, calc\(100vw - 24px\)\);[\s\S]*?max-height: calc\(100dvh - 88px\)/,
+    );
+  });
+
+  it("exposes compact mobile entry points for enabled editors", () => {
+    expect(viewerCss).toMatch(
+      /@media \(max-width: 720px\)[\s\S]*?\.workspace\.content-viewer \.content-viewer-edit-link\s*{[\s\S]*?display: inline-grid;[\s\S]*?width: 42px;[\s\S]*?height: 42px/,
+    );
+    expect(viewerCss).toMatch(
+      /\.workspace\.content-viewer \.content-viewer-edit-link > span\s*{\s*display: none/,
+    );
+    expect(mobileCss).not.toMatch(
+      /\.teaching-list-panel \.list-toolbar > \.button,[\s\S]*?\.exercises-workspace \.exercise-toolbar-actions > \.button\s*{\s*display: none/,
     );
   });
 
@@ -108,6 +170,9 @@ describe("responsive workspace contracts", () => {
     expect(classroomsCss).toMatch(/\.classroom-list\s*{[\s\S]*?padding-top: 0/);
     expect(classroomsCss).toMatch(
       /@media \(max-width: 760px\)[\s\S]*?\.classroom-detail-head\s*{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;[\s\S]*?align-items: center/,
+    );
+    expect(classroomsCss).toMatch(
+      /\.classroom-resource-link\s*{[\s\S]*?padding: 1px 2px;[\s\S]*?max-width: calc\(100% \+ 4px\);[\s\S]*?line-height: 1\.4/,
     );
   });
 
@@ -153,12 +218,36 @@ describe("responsive workspace contracts", () => {
     );
   });
 
-  it("keeps teaching and document editing in a readable single column", () => {
+  it("uses one focused editor pane at a time on mobile", () => {
+    expect(mobileCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.mobile-editor-pane-switch\s*{[\s\S]*?display: flex;[\s\S]*?justify-content: flex-start/,
+    );
     expect(teachingCss).toMatch(
-      /@media \(max-width: 1080px\)[\s\S]*?\.teaching-editor-split[\s\S]*?grid-template-columns: minmax\(0, 1fr\)/,
+      /@media \(max-width: 760px\)[\s\S]*?\.teaching-editor-split > \.editor-pane:not\(\.mobile-pane-active\)\s*{[\s\S]*?display: none/,
+    );
+    expect(teachingCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.teaching-item-row\s*{[\s\S]*?grid-template-columns: 24px minmax\(0, 1fr\) auto;[\s\S]*?min-height: 52px/,
+    );
+    expect(teachingCss).toMatch(
+      /\.teaching-item-actions\s*{[\s\S]*?grid-column: 3;[\s\S]*?grid-row: 1/,
+    );
+    expect(teachingCss).toMatch(
+      /\.teaching-editor-workspace \.teaching-save-label\s*{[\s\S]*?display: none/,
     );
     expect(editorCss).toMatch(
-      /@media \(max-width: 760px\)[\s\S]*?\.editor-split[\s\S]*?grid-template-columns: minmax\(0, 1fr\)/,
+      /@media \(max-width: 760px\)[\s\S]*?\.content-editor-workspace[\s\S]*?\.editor-pane:not\(\.mobile-pane-active\)\s*{[\s\S]*?display: none/,
+    );
+    expect(editorCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.content-editor-workspace \.editor-outline\s*{\s*padding-inline: 14px/,
+    );
+    expect(editorCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.content-editor-workspace \.editor-more-menu \.context-menu\s*{[\s\S]*?position: absolute;[\s\S]*?top: calc\(100% \+ 6px\);[\s\S]*?right: 0;[\s\S]*?bottom: auto;[\s\S]*?left: auto/,
+    );
+    expect(quizBuilderCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.quiz-builder-split > \.editor-pane:not\(\.mobile-pane-active\)\s*{[\s\S]*?display: none/,
+    );
+    expect(reviewCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.review-workspace[\s\S]*?:not\(\.mobile-pane-active\)\s*{[\s\S]*?display: none/,
     );
   });
 });

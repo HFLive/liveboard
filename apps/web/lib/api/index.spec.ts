@@ -8,11 +8,50 @@ import {
   disableHttps,
   downloadMarkdown,
   enableHttps,
+  fetchAssetPreview,
   getHttpsStatus,
   getMe,
   importMarkdown,
   setHttpsAutoRenew,
 } from "./index";
+
+describe("Asset preview API", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches preview bytes with the current session", async () => {
+    const response = new Response("preview", { status: 200 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchAssetPreview("asset-1")).resolves.toBe(response);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${API_URL}/assets/asset-1/preview`,
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("surfaces preview validation errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ message: "PDF 超过 25MB，请下载后查看" }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      ),
+    );
+
+    await expect(fetchAssetPreview("asset-1")).rejects.toMatchObject({
+      message: "PDF 超过 25MB，请下载后查看",
+      status: 400,
+    });
+  });
+});
 
 describe("Current user API", () => {
   afterEach(() => {

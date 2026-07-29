@@ -229,14 +229,7 @@ export function AppNav() {
         }}
         type="button"
       >
-        {isProfileRoute ? (
-          <MobileProfileAvatar
-            avatarUrl={user?.avatarUrl}
-            fallback={userInitial}
-          />
-        ) : (
-          <ActiveNavIcon aria-hidden="true" />
-        )}
+        <ActiveNavIcon aria-hidden="true" />
         <span>{currentNavItem.label}</span>
         {mobileMenuOpen ? (
           <X aria-hidden="true" />

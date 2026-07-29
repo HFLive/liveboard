@@ -241,12 +241,21 @@
 }
 
 .classroom-resource-link {
+  appearance: none;
   align-self: flex-start;
-  max-width: 100%;
+  box-sizing: border-box;
+  margin: -1px -2px;
+  padding: 1px 2px;
+  border: 0;
+  background: transparent;
+  max-width: calc(100% + 4px);
   overflow: hidden;
   color: var(--text);
+  cursor: pointer;
+  font: inherit;
   font-size: 14px;
   font-weight: 600;
+  line-height: 1.4;
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;

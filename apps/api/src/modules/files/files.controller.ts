@@ -517,6 +517,31 @@ export class FilesController {
     };
   }
 
+  @Get("assets/:id/preview")
+  async previewAsset(
+    @CurrentUserId() userId: string | null,
+    @Param("id") assetId: string,
+    @Res() response: Response,
+  ) {
+    const preview = await this.assetsService.getAssetForPreview(
+      userId,
+      assetId,
+    );
+    const contentType =
+      preview.kind === "pdf"
+        ? "application/pdf"
+        : preview.kind === "markdown"
+          ? "text/markdown; charset=utf-8"
+          : "text/plain; charset=utf-8";
+    response.setHeader("Content-Type", contentType);
+    response.setHeader("Content-Disposition", "inline");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Cross-Origin-Resource-Policy", "same-site");
+    response.setHeader("Content-Security-Policy", "sandbox");
+    response.setHeader("Cache-Control", "private, max-age=3600, immutable");
+    response.send(preview.content);
+  }
+
   @Get("assets/:id")
   async getAsset(
     @CurrentUserId() userId: string | null,

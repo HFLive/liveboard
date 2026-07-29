@@ -1,18 +1,30 @@
 "use client";
 
+import "./AssetPreviewDialog.css";
 import { useEffect } from "react";
 import { Download, File as FileIcon, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import { apiResourceUrl, assetDownloadUrl } from "@/lib/api";
+
+const AssetTextPreview = dynamic(
+  () => import("./AssetTextPreview").then((module) => module.AssetTextPreview),
+  { ssr: false },
+);
+const PdfAssetPreview = dynamic(
+  () => import("./PdfAssetPreview").then((module) => module.PdfAssetPreview),
+  { ssr: false },
+);
 
 export type AssetPreviewTarget = {
   id: string;
   filename: string;
   mimeType: string;
   sizeBytes: number;
+  downloadPath?: string;
+  imagePath?: string;
+  previewPath?: string;
 };
 
-// 与 API 的 SAFE_INLINE_IMAGE_MIMES 保持一致：只有这些类型会被内联返回，
-// 其余类型按附件下载，因此只有它们能在应用内直接预览。
 const PREVIEWABLE_IMAGE_MIMES = new Set([
   "image/gif",
   "image/jpeg",
@@ -20,8 +32,37 @@ const PREVIEWABLE_IMAGE_MIMES = new Set([
   "image/webp",
 ]);
 
-export function canPreviewAssetInline(mimeType: string) {
-  return PREVIEWABLE_IMAGE_MIMES.has(mimeType);
+export type AssetPreviewKind =
+  "image" | "pdf" | "markdown" | "text" | "unsupported";
+
+export function getAssetPreviewKind(
+  filename: string,
+  mimeType: string,
+): AssetPreviewKind {
+  const lowerName = filename.trim().toLowerCase();
+  const normalizedMime = mimeType.trim().toLowerCase();
+  if (PREVIEWABLE_IMAGE_MIMES.has(normalizedMime)) return "image";
+  if (
+    lowerName.endsWith(".pdf") &&
+    ["application/pdf", "application/octet-stream"].includes(normalizedMime)
+  ) {
+    return "pdf";
+  }
+  if (
+    (lowerName.endsWith(".md") || lowerName.endsWith(".markdown")) &&
+    ["text/markdown", "text/plain", "application/octet-stream"].includes(
+      normalizedMime,
+    )
+  ) {
+    return "markdown";
+  }
+  if (
+    lowerName.endsWith(".txt") &&
+    ["text/plain", "application/octet-stream"].includes(normalizedMime)
+  ) {
+    return "text";
+  }
+  return "unsupported";
 }
 
 function formatSize(sizeBytes: number) {
@@ -73,8 +114,14 @@ export function AssetPreviewDialog({
 
   if (!asset) return null;
 
-  const canPreview = canPreviewAssetInline(asset.mimeType);
+  const previewKind = getAssetPreviewKind(asset.filename, asset.mimeType);
+  const canPreview = previewKind !== "unsupported";
   const fileKind = formatFileKind(asset.filename);
+  const downloadUrl = asset.downloadPath
+    ? apiResourceUrl(asset.downloadPath)
+    : assetDownloadUrl(asset.id);
+  const imageUrl = apiResourceUrl(asset.imagePath ?? `/assets/${asset.id}`);
+  const previewPath = asset.previewPath ?? `/assets/${asset.id}/preview`;
 
   return (
     <div className="modal-backdrop" onClick={onClose} role="presentation">
@@ -83,9 +130,11 @@ export function AssetPreviewDialog({
         aria-labelledby="asset-preview-title"
         aria-modal="true"
         className={`modal-panel asset-preview-dialog ${
-          canPreview
+          previewKind === "image"
             ? "asset-preview-dialog--image"
-            : "asset-preview-dialog--file"
+            : canPreview
+              ? "asset-preview-dialog--document"
+              : "asset-preview-dialog--file"
         }`}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
@@ -105,12 +154,19 @@ export function AssetPreviewDialog({
           </button>
         </div>
         <div className="modal-body asset-preview-body">
-          {canPreview ? (
+          {previewKind === "image" ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               alt={asset.filename}
               className="asset-preview-image"
-              src={apiResourceUrl(`/assets/${asset.id}`)}
+              src={imageUrl}
+            />
+          ) : previewKind === "pdf" ? (
+            <PdfAssetPreview previewPath={previewPath} />
+          ) : previewKind === "markdown" || previewKind === "text" ? (
+            <AssetTextPreview
+              markdown={previewKind === "markdown"}
+              previewPath={previewPath}
             />
           ) : (
             <div className="asset-preview-fallback">
@@ -132,7 +188,7 @@ export function AssetPreviewDialog({
             {fileKind} <i aria-hidden="true">·</i> {formatSize(asset.sizeBytes)}
           </span>
           <div className="button-row">
-            <a className="button" href={assetDownloadUrl(asset.id)}>
+            <a className="button" href={downloadUrl}>
               <Download aria-hidden="true" />
               下载
             </a>

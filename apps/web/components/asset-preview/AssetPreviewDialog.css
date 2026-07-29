@@ -1,0 +1,436 @@
+.modal-backdrop:has(.asset-preview-dialog) {
+  background: rgba(26, 27, 23, 0.38);
+  backdrop-filter: blur(3px);
+}
+
+.asset-preview-dialog {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 78%, transparent);
+  background: var(--bg);
+  box-shadow: 0 24px 70px rgba(20, 20, 17, 0.2);
+}
+
+.asset-preview-dialog--file {
+  width: min(456px, 100%);
+}
+
+.asset-preview-dialog--image {
+  width: min(860px, 100%);
+}
+
+.asset-preview-dialog--document {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(960px, 100%);
+  height: min(820px, calc(100dvh - 48px));
+}
+
+/* redesign.css intentionally narrows ordinary workspace dialogs to 430px.
+   File previews are media viewers, so explicitly override that generic rule
+   for every page using this shared component. */
+@media (min-width: 721px) {
+  .workspace .modal-panel.asset-preview-dialog--file {
+    width: min(456px, calc(100vw - 28px));
+  }
+
+  .workspace .modal-panel.asset-preview-dialog--image {
+    width: min(860px, calc(100vw - 28px));
+  }
+
+  .workspace .modal-panel.asset-preview-dialog--document {
+    width: min(960px, calc(100vw - 28px));
+  }
+}
+
+.asset-preview-dialog .modal-head {
+  min-height: 58px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  padding: 14px 18px 13px;
+}
+
+.asset-preview-dialog .modal-head h2 {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 680;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-preview-dialog .modal-head .icon-button {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.asset-preview-dialog .modal-head .icon-button:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.asset-preview-dialog .asset-preview-body {
+  place-items: stretch;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+  padding: 0;
+}
+
+.asset-preview-dialog--image .asset-preview-body {
+  place-items: center;
+  min-height: 220px;
+  background: var(--fill-subtle);
+  padding: 18px;
+}
+
+.asset-preview-dialog .asset-preview-image {
+  border-radius: 8px;
+}
+
+.asset-preview-status {
+  display: grid;
+  place-content: center;
+  gap: 7px;
+  min-height: 220px;
+  padding: 28px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.asset-preview-status strong {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.asset-preview-pdf {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  background: var(--fill-subtle);
+}
+
+.asset-preview-pdf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  padding: 6px 12px;
+}
+
+.asset-preview-pdf-toolbar button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-soft);
+}
+
+.asset-preview-pdf-toolbar button:hover:not(:disabled) {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.asset-preview-pdf-toolbar button:disabled {
+  opacity: 0.35;
+}
+
+.asset-preview-pdf-toolbar button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.asset-preview-pdf-toolbar span {
+  min-width: 58px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.asset-preview-pdf-toolbar i {
+  flex: 1 1 auto;
+}
+
+.asset-preview-pdf-viewport {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  text-align: center;
+}
+
+.asset-preview-pdf-viewport canvas {
+  display: inline-block;
+  max-width: none;
+  background: white;
+  box-shadow: 0 3px 18px rgba(20, 20, 17, 0.14);
+  vertical-align: top;
+}
+
+.asset-preview-plain-text,
+.asset-preview-markdown {
+  box-sizing: border-box;
+  width: min(780px, 100%);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 30px clamp(22px, 5vw, 56px) 48px;
+}
+
+.asset-preview-plain-text {
+  overflow-wrap: normal;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  tab-size: 2;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.asset-preview-markdown {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.asset-preview-markdown > :first-child {
+  margin-top: 0;
+}
+
+.asset-preview-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.asset-preview-markdown h1,
+.asset-preview-markdown h2,
+.asset-preview-markdown h3,
+.asset-preview-markdown h4 {
+  margin: 1.5em 0 0.6em;
+  line-height: 1.3;
+}
+
+.asset-preview-markdown h1 {
+  font-size: 1.75em;
+}
+
+.asset-preview-markdown h2 {
+  font-size: 1.4em;
+}
+
+.asset-preview-markdown p,
+.asset-preview-markdown ul,
+.asset-preview-markdown ol,
+.asset-preview-markdown blockquote,
+.asset-preview-markdown pre,
+.asset-preview-markdown table {
+  margin: 0.8em 0;
+}
+
+.asset-preview-markdown code {
+  border-radius: 5px;
+  background: var(--fill-subtle);
+  padding: 0.12em 0.35em;
+  font-size: 0.9em;
+}
+
+.asset-preview-markdown pre {
+  overflow-x: auto;
+  border-radius: 9px;
+  background: var(--fill-subtle);
+  padding: 14px 16px;
+}
+
+.asset-preview-markdown pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.asset-preview-markdown blockquote {
+  border-left: 3px solid var(--line-strong);
+  margin-left: 0;
+  padding-left: 14px;
+  color: var(--text-soft);
+}
+
+.asset-preview-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.asset-preview-markdown th,
+.asset-preview-markdown td {
+  border: 1px solid var(--line);
+  padding: 7px 9px;
+  text-align: left;
+}
+
+.asset-preview-markdown-image {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.asset-preview-dialog .asset-preview-fallback {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  justify-items: stretch;
+  gap: 18px;
+  min-width: 0;
+  padding: 38px 28px 40px;
+  text-align: left;
+}
+
+.asset-preview-file-mark {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  width: 58px;
+  height: 68px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--fill-subtle);
+  color: var(--text-soft);
+}
+
+.asset-preview-file-mark svg {
+  width: 23px;
+  height: 23px;
+  color: currentColor;
+}
+
+.asset-preview-file-mark span {
+  max-width: 48px;
+  overflow: hidden;
+  color: var(--accent-dark);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-preview-message {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.asset-preview-message strong {
+  font-size: 17px;
+  font-weight: 680;
+  letter-spacing: -0.015em;
+}
+
+.asset-preview-message span {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.asset-preview-dialog .modal-foot {
+  min-height: 58px;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  padding: 11px 14px 11px 18px;
+}
+
+.asset-preview-meta {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.035em;
+}
+
+.asset-preview-meta i {
+  padding: 0 3px;
+  font-style: normal;
+}
+
+.asset-preview-dialog .modal-foot .button {
+  min-height: 36px;
+  border-radius: 9px;
+  padding-inline: 14px;
+}
+
+.asset-preview-dialog .modal-foot .button svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 720px) {
+  .workspace .modal-backdrop:has(.modal-panel.asset-preview-dialog) {
+    place-items: center;
+    padding: 12px;
+  }
+
+  .workspace .modal-panel.asset-preview-dialog {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - 24px);
+    border: 0;
+    border-radius: 18px;
+  }
+
+  .workspace .modal-panel.asset-preview-dialog--image,
+  .workspace .modal-panel.asset-preview-dialog--document {
+    height: min(88dvh, 860px);
+  }
+
+  .workspace .modal-panel.asset-preview-dialog--file {
+    height: auto;
+  }
+
+  .asset-preview-dialog .modal-head {
+    min-height: 54px;
+    padding: 12px 14px;
+  }
+
+  .asset-preview-dialog .modal-head h2 {
+    font-size: 15px;
+  }
+
+  .asset-preview-dialog--image .asset-preview-body {
+    padding: 12px;
+  }
+
+  .asset-preview-pdf-toolbar {
+    padding-inline: 8px;
+  }
+
+  .asset-preview-pdf-viewport {
+    padding: 10px;
+  }
+
+  .asset-preview-plain-text,
+  .asset-preview-markdown {
+    padding: 22px 18px 38px;
+  }
+
+  .asset-preview-dialog .asset-preview-fallback {
+    grid-template-columns: 50px minmax(0, 1fr);
+    gap: 14px;
+    padding: 30px 20px 34px;
+  }
+
+  .asset-preview-file-mark {
+    width: 50px;
+    height: 60px;
+  }
+
+  .asset-preview-dialog .modal-foot {
+    min-height: 56px;
+    padding: 10px 12px;
+  }
+}

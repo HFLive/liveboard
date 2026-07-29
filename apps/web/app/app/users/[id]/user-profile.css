@@ -6,7 +6,8 @@
 }
 
 .user-profile-page .user-profile-avatar {
-  border: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
   box-shadow: 0 9px 26px color-mix(in srgb, var(--text) 18%, transparent);
 }
 

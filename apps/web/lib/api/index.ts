@@ -57,6 +57,28 @@ export function assetDownloadUrl(assetId: string) {
   return apiResourceUrl(`/assets/${assetId}?download=1`);
 }
 
+export async function fetchFilePreview(path: string, signal?: AbortSignal) {
+  const response = await fetch(apiResourceUrl(path), {
+    credentials: "include",
+    signal,
+  });
+  if (!response.ok) {
+    redirectToLoginOnUnauthorized(response.status, path);
+    const body = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    const message = Array.isArray(body?.message)
+      ? body.message.join("；")
+      : body?.message;
+    throw new ApiError(message ?? "无法加载文件预览", response.status);
+  }
+  return response;
+}
+
+export function fetchAssetPreview(assetId: string, signal?: AbortSignal) {
+  return fetchFilePreview(`/assets/${assetId}/preview`, signal);
+}
+
 // 内容块里的附件链接指向 /assets/:id，点击图片类附件会打开裸图页；
 // 统一补 download=1 强制下载，外部链接原样返回。
 export function attachmentDownloadUrl(url: string) {

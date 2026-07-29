@@ -83,7 +83,7 @@ describe("AppNav", () => {
     ).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("uses the account avatar beside personal-home labels on mobile", async () => {
+  it("keeps the account avatar in the expanded menu on profile routes", async () => {
     navigationState.pathname = "/app/users/user-1";
     vi.mocked(getMe).mockResolvedValue({
       user: {
@@ -105,10 +105,20 @@ describe("AppNav", () => {
         view.container.querySelectorAll(
           ".rail-mobile-profile-avatar img[src='/users/user-1/avatar']",
         ),
-      ).toHaveLength(2),
+      ).toHaveLength(1),
     );
+    const toggle = screen.getByRole("button", { name: "打开主菜单" });
+    expect(toggle).toHaveTextContent("个人主页");
+    expect(toggle.querySelector(".rail-mobile-profile-avatar")).toBeNull();
+    expect(toggle.querySelector("svg")).not.toBeNull();
+
+    fireEvent.click(toggle);
+    const profileLink = screen.getByRole("link", { name: "个人主页" });
     expect(
-      screen.getByRole("button", { name: "打开主菜单" }),
-    ).toHaveTextContent("个人主页");
+      profileLink.querySelector(".rail-mobile-profile-avatar img"),
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector(".rail-mobile-account-actions button"),
+    ).not.toBeNull();
   });
 });

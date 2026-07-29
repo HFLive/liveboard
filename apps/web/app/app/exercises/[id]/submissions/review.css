@@ -166,16 +166,124 @@
   align-items: start;
 }
 
-@media (max-width: 720px) {
+.review-mobile-back {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .review-page {
+    gap: 0;
+  }
+
+  .review-page > .page-back-link {
+    margin-bottom: 10px;
+  }
+
+  .review-page > .page-head {
+    padding-bottom: 4px;
+  }
+
+  .review-page > .page-head h1 {
+    font-size: 22px;
+  }
+
+  .review-page > .page-head .muted {
+    display: none;
+  }
+
+  .review-page .review-workspace {
+    display: block;
+    padding-top: 16px;
+  }
+
+  .review-page
+    .review-workspace
+    > :is(.review-queue, .review-detail):not(.mobile-pane-active) {
+    display: none;
+  }
+
+  .review-page .review-queue .panel-head {
+    padding: 8px 0 10px;
+  }
+
+  .review-page .review-queue-tools {
+    gap: 8px;
+  }
+
+  .review-page .review-queue-tools .segmented-control,
+  .review-page .review-queue-tools .segmented-control button {
+    min-height: 44px;
+  }
+
+  .review-page .submission-list {
+    display: grid;
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    gap: 0;
+    max-height: none;
+    overflow: visible;
+    padding: 4px 0 0;
+  }
+
+  .review-page .submission-row {
+    min-height: 64px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    padding: 10px 4px;
+  }
+
   .review-page .review-detail-head {
     align-items: stretch;
     flex-direction: column;
+    gap: 10px;
+    padding: 4px 0 12px;
   }
 
   .review-page .review-detail-actions {
     align-items: stretch;
     flex-wrap: wrap;
     justify-content: flex-start;
+  }
+
+  .review-page .review-mobile-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+    min-height: 44px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    margin-left: -8px;
+    padding: 0 8px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .review-page .review-mobile-back svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .review-page .review-switcher button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .review-page .review-detail-actions > .button {
+    margin-left: auto;
+    min-height: 44px;
+  }
+
+  .review-page .review-form-body {
+    padding: 14px 0 88px;
+  }
+
+  .review-page .answer-review {
+    gap: 12px;
+    padding-block: 16px;
   }
 
   .review-page .answer-grade-grid {

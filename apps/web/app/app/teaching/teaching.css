@@ -1397,3 +1397,218 @@
     display: none;
   }
 }
+
+@media (max-width: 760px) {
+  .teaching-editor-workspace {
+    gap: 0;
+  }
+
+  .teaching-editor-workspace > .page-back-link {
+    margin-bottom: 10px;
+  }
+
+  .teaching-editor-workspace .editor-title-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 12px;
+  }
+
+  .teaching-editor-workspace .editor-title-bar > .button-row {
+    flex-wrap: nowrap;
+  }
+
+  .teaching-editor-workspace .editor-title-bar .button {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    min-height: 42px;
+    border-color: transparent;
+    border-radius: 9px;
+    background: var(--fill-active);
+    color: var(--text-soft);
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .teaching-editor-workspace .editor-title-bar .button:hover:not(:disabled) {
+    border-color: transparent;
+    background: var(--fill-hover);
+    color: var(--text);
+    box-shadow: none;
+  }
+
+  .teaching-editor-workspace .editor-title-bar .button-icon {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+  }
+
+  .teaching-editor-workspace .teaching-save-label {
+    display: none;
+  }
+
+  .teaching-editor-workspace .title-input {
+    width: 100%;
+    margin-left: -6px;
+    padding-inline: 6px;
+    font-size: 21px;
+  }
+
+  .teaching-editor-workspace .editor-meta-strip {
+    gap: 5px 10px;
+    margin-top: 5px;
+    background: transparent;
+    padding: 0;
+    font-size: 11px;
+  }
+
+  .teaching-editor-workspace > .mobile-editor-pane-switch {
+    top: 58px;
+    margin-top: 14px;
+  }
+
+  .teaching-editor-workspace > .mobile-editor-pane-switch button {
+    min-height: 38px;
+  }
+
+  .teaching-editor-split {
+    gap: 0;
+    margin-top: 0;
+    border-top: 0;
+    padding-top: 16px;
+  }
+
+  .teaching-editor-split > .editor-pane:not(.mobile-pane-active) {
+    display: none;
+  }
+
+  .teaching-item-empty {
+    padding: 26px 4px;
+    line-height: 1.65;
+  }
+
+  .teaching-item-row {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    min-height: 52px;
+    border: 0;
+    border-radius: 8px;
+    padding: 6px 4px;
+  }
+
+  .teaching-item-drag {
+    display: none;
+  }
+
+  .teaching-item-index {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+    padding-top: 0;
+  }
+
+  .teaching-item-main {
+    grid-column: 2;
+    grid-row: 1;
+    gap: 2px;
+  }
+
+  .teaching-item-actions {
+    grid-column: 3;
+    grid-row: 1;
+    justify-content: flex-end;
+    gap: 0;
+    opacity: 1;
+  }
+
+  .teaching-item-actions button {
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+  }
+
+  .teaching-item-actions button:disabled {
+    display: none;
+  }
+
+  .teaching-item-actions svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .teaching-item-line {
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .teaching-item-line > strong {
+    flex: 1 1 auto;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .teaching-item-line > small {
+    font-size: 10px;
+  }
+
+  .teaching-image-fit {
+    flex: 0 0 auto;
+  }
+
+  .teaching-image-fit select {
+    min-height: 32px;
+    max-width: 112px;
+    padding: 4px 24px 4px 8px;
+    font-size: 12px;
+  }
+
+  .teaching-item-group {
+    margin: 12px 0 3px;
+    font-size: 10px;
+  }
+
+  .workspace .teaching-editor-split > .teaching-source-pane {
+    gap: 12px;
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .teaching-source-tabs,
+  .teaching-source-tabs button {
+    min-height: 44px;
+  }
+
+  .teaching-picker-list {
+    max-height: none;
+    margin-inline: 0;
+  }
+
+  .teaching-pick-row {
+    min-height: 52px;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    padding: 10px 4px;
+  }
+
+  .teaching-pick-row input {
+    width: 18px;
+    height: 18px;
+  }
+
+  .teaching-source-actions {
+    position: sticky;
+    z-index: 20;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    background: linear-gradient(transparent, var(--bg) 18px);
+    padding-top: 26px;
+  }
+
+  .teaching-source-actions .button {
+    min-height: 46px;
+  }
+}

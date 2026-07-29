@@ -1,5 +1,6 @@
 import type { PrismaService } from "../prisma/prisma.service";
 import type { StorageService } from "../storage/storage.service";
+import { Readable } from "node:stream";
 import { ClassroomsService } from "./classrooms.service";
 
 describe("ClassroomsService", () => {
@@ -295,6 +296,84 @@ describe("ClassroomsService", () => {
     ).rejects.toThrow("当前课堂中已存在同名文件");
     expect(prisma.classroomFile.create).not.toHaveBeenCalled();
     expect(backend.putObject).not.toHaveBeenCalled();
+  });
+
+  it("previews a UTF-8 classroom text file for a classroom member", async () => {
+    const content = Buffer.from("第一行\n第二行");
+    prisma.user.findUnique.mockResolvedValue({
+      id: "student-1",
+      status: "active",
+      systemRole: "member",
+    });
+    prisma.classroomMember.findUnique.mockResolvedValue({
+      classroomId: "classroom-1",
+      userId: "student-1",
+      role: "student",
+    });
+    prisma.classroomFile.findFirst.mockResolvedValue({
+      id: "file-1",
+      classroomId: "classroom-1",
+      filename: "讲义.txt",
+      mimeType: "text/plain",
+      sizeBytes: content.length,
+      storageBackend: "minio",
+      storageKey: "classrooms/file-1",
+    });
+    backend.getObject.mockResolvedValue(Readable.from(content));
+
+    await expect(
+      service.previewFile("student-1", "classroom-1", "file-1"),
+    ).resolves.toMatchObject({
+      kind: "text",
+      content: "第一行\n第二行",
+    });
+  });
+
+  it("proxies safe classroom images inline instead of issuing a signed URL", async () => {
+    const content = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    prisma.user.findUnique.mockResolvedValue({
+      id: "student-1",
+      status: "active",
+      systemRole: "member",
+    });
+    prisma.classroomMember.findUnique.mockResolvedValue({
+      classroomId: "classroom-1",
+      userId: "student-1",
+      role: "student",
+    });
+    prisma.classroomFile.findFirst.mockResolvedValue({
+      id: "file-1",
+      classroomId: "classroom-1",
+      filename: "课堂截图.png",
+      mimeType: "image/png",
+      sizeBytes: content.length,
+      storageBackend: "oss",
+      storageKey: "classrooms/file-1",
+    });
+    backend.getObject.mockResolvedValue(Readable.from(content));
+
+    await expect(
+      service.downloadFile("student-1", "classroom-1", "file-1", true),
+    ).resolves.toMatchObject({
+      inline: true,
+      redirectUrl: null,
+    });
+    expect(storage.presignDownload).not.toHaveBeenCalled();
+    expect(backend.getObject).toHaveBeenCalledWith("classrooms/file-1");
+  });
+
+  it("does not read a classroom preview for a non-member", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "outsider-1",
+      status: "active",
+      systemRole: "member",
+    });
+    prisma.classroomMember.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.previewFile("outsider-1", "classroom-1", "file-1"),
+    ).rejects.toThrow("你不在这个课堂中");
+    expect(backend.getObject).not.toHaveBeenCalled();
   });
 });
 

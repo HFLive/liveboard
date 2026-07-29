@@ -38,6 +38,8 @@ export interface SignAssetUploadInput extends UploadAssetInput {
 }
 
 export const MAX_ASSET_SIZE_BYTES = 50 * 1024 * 1024;
+export const MAX_PDF_PREVIEW_SIZE_BYTES = 25 * 1024 * 1024;
+export const MAX_TEXT_PREVIEW_SIZE_BYTES = 2 * 1024 * 1024;
 /** 签名直入预留的有效期;超时未确认的预留会被定时及惰性清理。 */
 const PENDING_UPLOAD_TTL_MS = 60 * 60 * 1000;
 export const MAX_FORUM_IMAGES = 9;
@@ -52,6 +54,37 @@ const SAFE_INLINE_IMAGE_MIMES = new Set([
 
 export function isSafeInlineAssetMime(mimeType: string) {
   return SAFE_INLINE_IMAGE_MIMES.has(mimeType);
+}
+
+export type AssetPreviewKind = "pdf" | "markdown" | "text";
+
+export function getAssetPreviewKind(
+  filename: string,
+  mimeType: string,
+): AssetPreviewKind | null {
+  const lowerName = filename.trim().toLowerCase();
+  const normalizedMime = mimeType.trim().toLowerCase();
+  if (
+    lowerName.endsWith(".pdf") &&
+    ["application/pdf", "application/octet-stream"].includes(normalizedMime)
+  ) {
+    return "pdf";
+  }
+  if (
+    (lowerName.endsWith(".md") || lowerName.endsWith(".markdown")) &&
+    ["text/markdown", "text/plain", "application/octet-stream"].includes(
+      normalizedMime,
+    )
+  ) {
+    return "markdown";
+  }
+  if (
+    lowerName.endsWith(".txt") &&
+    ["text/plain", "application/octet-stream"].includes(normalizedMime)
+  ) {
+    return "text";
+  }
+  return null;
 }
 
 @Injectable()
@@ -403,6 +436,57 @@ export class AssetsService {
       redirectUrl: null,
       stream: stream as Readable,
     };
+  }
+
+  async getAssetForPreview(userId: string | null, assetId: string) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    const asset = await this.prisma.fileAsset.findUnique({
+      where: { id: assetId },
+    });
+    if (!asset) {
+      throw new NotFoundException("Asset not found");
+    }
+    await this.assertCanViewAsset(userId, asset);
+
+    const kind = getAssetPreviewKind(asset.filename, asset.mimeType);
+    if (!kind) {
+      throw new BadRequestException("该文件类型不支持在线预览");
+    }
+    const maxBytes =
+      kind === "pdf" ? MAX_PDF_PREVIEW_SIZE_BYTES : MAX_TEXT_PREVIEW_SIZE_BYTES;
+    if (asset.sizeBytes > maxBytes) {
+      throw new BadRequestException(
+        kind === "pdf"
+          ? "PDF 超过 25MB，请下载后查看"
+          : "文本文件超过 2MB，请下载后查看",
+      );
+    }
+
+    const backend = await this.storage.backendFor(asset.storageBackend);
+    const stream = await backend.getObject(asset.storageKey);
+    const buffer = await readPreviewBuffer(stream, maxBytes);
+    if (buffer.length !== asset.sizeBytes) {
+      throw new BadRequestException("文件内容不完整，无法预览");
+    }
+
+    if (kind === "pdf") {
+      if (!buffer.subarray(0, 1024).includes(Buffer.from("%PDF-"))) {
+        throw new BadRequestException("文件内容不是有效的 PDF");
+      }
+      return { asset, kind, content: buffer };
+    }
+
+    try {
+      const content = new TextDecoder("utf-8", { fatal: true })
+        .decode(buffer)
+        .replace(/^\uFEFF/, "");
+      return { asset, kind, content };
+    } catch {
+      throw new BadRequestException("文本文件必须使用 UTF-8 编码");
+    }
   }
 
   async uploadForumPostImages(
@@ -1183,6 +1267,21 @@ function detectSafeRasterMime(buffer: Buffer) {
     return "image/webp";
   }
   return null;
+}
+
+export async function readPreviewBuffer(stream: Readable, maxBytes: number) {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of stream) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.length;
+    if (total > maxBytes) {
+      stream.destroy();
+      throw new BadRequestException("文件过大，无法在线预览");
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks, total);
 }
 
 export function readWebpDimensions(buffer: Buffer) {

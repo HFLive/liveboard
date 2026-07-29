@@ -40,6 +40,7 @@ export function SubmissionsClient({
   const [saving, setSaving] = useState(false);
   const [exerciseTitle, setExerciseTitle] = useState("练习");
   const [classroomId, setClassroomId] = useState("");
+  const [mobilePane, setMobilePane] = useState<"queue" | "detail">("queue");
 
   const filteredSubmissions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -147,6 +148,11 @@ export function SubmissionsClient({
     }
   }
 
+  function selectSubmission(submissionId: string) {
+    setSelectedId(submissionId);
+    setMobilePane("detail");
+  }
+
   return (
     <div className="workspace review-page">
       <Link
@@ -171,8 +177,12 @@ export function SubmissionsClient({
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
 
-      <section className="review-workspace">
-        <aside className="review-queue">
+      <section className={`review-workspace mobile-review-${mobilePane}`}>
+        <aside
+          className={`review-queue ${
+            mobilePane === "queue" ? "mobile-pane-active" : ""
+          }`}
+        >
           <div className="panel-head compact">
             <div>
               <h2>提交队列</h2>
@@ -212,11 +222,11 @@ export function SubmissionsClient({
                   selectedSubmission?.id === submission.id ? "active" : ""
                 }`}
                 key={submission.id}
-                onClick={() => setSelectedId(submission.id)}
+                onClick={() => selectSubmission(submission.id)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    setSelectedId(submission.id);
+                    selectSubmission(submission.id);
                   }
                 }}
                 role="button"
@@ -255,7 +265,11 @@ export function SubmissionsClient({
           </div>
         </aside>
 
-        <main className="review-detail">
+        <main
+          className={`review-detail ${
+            mobilePane === "detail" ? "mobile-pane-active" : ""
+          }`}
+        >
           {selectedSubmission ? (
             <form
               className="review-form"
@@ -263,6 +277,14 @@ export function SubmissionsClient({
             >
               <div className="review-detail-head">
                 <div>
+                  <button
+                    className="review-mobile-back"
+                    onClick={() => setMobilePane("queue")}
+                    type="button"
+                  >
+                    <ArrowLeft aria-hidden="true" />
+                    提交队列
+                  </button>
                   <h2>
                     <UserProfileLink
                       className="user-profile-link"
@@ -283,7 +305,7 @@ export function SubmissionsClient({
                       disabled={selectedIndex <= 0}
                       onClick={() => {
                         const previous = filteredSubmissions[selectedIndex - 1];
-                        if (previous) setSelectedId(previous.id);
+                        if (previous) selectSubmission(previous.id);
                       }}
                       title="上一份（K）"
                       type="button"
@@ -298,7 +320,7 @@ export function SubmissionsClient({
                       disabled={selectedIndex >= filteredSubmissions.length - 1}
                       onClick={() => {
                         const next = filteredSubmissions[selectedIndex + 1];
-                        if (next) setSelectedId(next.id);
+                        if (next) selectSubmission(next.id);
                       }}
                       title="下一份（J）"
                       type="button"

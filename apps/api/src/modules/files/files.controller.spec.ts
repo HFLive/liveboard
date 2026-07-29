@@ -6,6 +6,7 @@ import type { FilesService } from "./files.service";
 describe("FilesController Markdown endpoints", () => {
   const assetsService = {
     getAssetForDownload: jest.fn(),
+    getAssetForPreview: jest.fn(),
   };
   const filesService = {
     importMarkdown: jest.fn(),
@@ -109,6 +110,41 @@ describe("FilesController Markdown endpoints", () => {
       "sandbox",
     );
   });
+
+  it.each([
+    ["pdf", "application/pdf", Buffer.from("%PDF-1.7")],
+    ["markdown", "text/markdown; charset=utf-8", "# 标题"],
+    ["text", "text/plain; charset=utf-8", "正文"],
+  ])(
+    "returns authenticated %s preview content with isolated headers",
+    async (kind, contentType, content) => {
+      assetsService.getAssetForPreview.mockResolvedValue({
+        asset: { filename: "preview" },
+        kind,
+        content,
+      });
+
+      await controller.previewAsset(
+        "user-1",
+        "asset-1",
+        response as unknown as Response,
+      );
+
+      expect(assetsService.getAssetForPreview).toHaveBeenCalledWith(
+        "user-1",
+        "asset-1",
+      );
+      expect(response.setHeader).toHaveBeenCalledWith(
+        "Content-Type",
+        contentType,
+      );
+      expect(response.setHeader).toHaveBeenCalledWith(
+        "Content-Security-Policy",
+        "sandbox",
+      );
+      expect(response.send).toHaveBeenCalledWith(content);
+    },
+  );
 
   it("forwards the uploaded Markdown buffer and current folder", async () => {
     filesService.importMarkdown.mockResolvedValue({
