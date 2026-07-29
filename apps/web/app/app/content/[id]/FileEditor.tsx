@@ -28,7 +28,9 @@ import {
   Upload,
   GripVertical,
   Image,
+  Eye,
   MoreHorizontal,
+  Pencil,
   Plus,
   RotateCcw,
   Send,
@@ -680,6 +682,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
     x: number;
     y: number;
   } | null>(null);
+  const [mobilePane, setMobilePane] = useState<"edit" | "preview">("edit");
   const [permissionUsers, setPermissionUsers] = useState<UserSummary[]>([]);
   const [permissionTags, setPermissionTags] = useState<UserTagSummary[]>([]);
   const [grants, setGrants] = useState<PermissionGrantSummary[]>([]);
@@ -1453,7 +1456,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
               <Image aria-hidden="true" />
               <span>
                 <strong>选择图片或附件</strong>
-                <small>从电脑上传，或从网盘选择</small>
+                <small>从设备上传，或从文件页选择</small>
               </span>
             </button>
           )}
@@ -1532,7 +1535,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
               <Image aria-hidden="true" />
               <span>
                 <strong>选择图片或附件</strong>
-                <small>从电脑上传，或从网盘选择</small>
+                <small>从设备上传，或从文件页选择</small>
               </span>
             </button>
           )}
@@ -1682,12 +1685,14 @@ export function FileEditor({ fileId }: { fileId: string }) {
             <span className="publish-state-badge muted">已归档</span>
           ) : (
             <button
-              className="button secondary"
+              aria-label="发布文档"
+              className="button secondary content-editor-publish-button"
               onClick={onPublishFile}
+              title="发布文档"
               type="button"
             >
               <Send aria-hidden="true" className="button-icon" />
-              发布
+              <span>发布</span>
             </button>
           )}
           <details className="editor-more-menu">
@@ -1746,9 +1751,35 @@ export function FileEditor({ fileId }: { fileId: string }) {
       <FeedbackNotice notice={messageNotice} tone="success" />
 
       <section className="editor-workspace">
+        <div
+          aria-label="文档编辑视图"
+          className="segmented-control mobile-editor-pane-switch"
+          role="group"
+        >
+          <button
+            aria-pressed={mobilePane === "edit"}
+            className={mobilePane === "edit" ? "active" : ""}
+            onClick={() => setMobilePane("edit")}
+            type="button"
+          >
+            <Pencil aria-hidden="true" />
+            编辑
+          </button>
+          <button
+            aria-pressed={mobilePane === "preview"}
+            className={mobilePane === "preview" ? "active" : ""}
+            onClick={() => setMobilePane("preview")}
+            type="button"
+          >
+            <Eye aria-hidden="true" />
+            预览
+          </button>
+        </div>
         <div className="editor-split">
           <section
-            className="editor-pane editor-format-pane"
+            className={`editor-pane editor-format-pane ${
+              mobilePane === "edit" ? "mobile-pane-active" : ""
+            }`}
             aria-label="格式编辑"
           >
             <header className="editor-pane-head">
@@ -1998,7 +2029,9 @@ export function FileEditor({ fileId }: { fileId: string }) {
             </div>
           </section>
           <aside
-            className="editor-pane editor-preview-pane"
+            className={`editor-pane editor-preview-pane ${
+              mobilePane === "preview" ? "mobile-pane-active" : ""
+            }`}
             aria-label="格式预览"
           >
             <header className="editor-pane-head">

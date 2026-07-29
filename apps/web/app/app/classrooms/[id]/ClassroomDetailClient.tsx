@@ -72,6 +72,10 @@ import {
   FeedbackNotice,
   useFeedbackNotice,
 } from "@/components/system/FeedbackNotice";
+import {
+  AssetPreviewDialog,
+  type AssetPreviewTarget,
+} from "@/components/asset-preview/AssetPreviewDialog";
 
 export type ClassroomTab =
   "announcements" | "teaching" | "exercises" | "files" | "members";
@@ -87,6 +91,9 @@ export function ClassroomDetailClient({
   const [decks, setDecks] = useState<TeachingDeckSummary[]>([]);
   const [exercises, setExercises] = useState<ExerciseSetSummary[]>([]);
   const [files, setFiles] = useState<ClassroomFileSummary[]>([]);
+  const [previewFile, setPreviewFile] = useState<AssetPreviewTarget | null>(
+    null,
+  );
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [tags, setTags] = useState<UserTagSummary[]>([]);
   const [memberTagFilter, setMemberTagFilter] = useState("all");
@@ -793,12 +800,23 @@ export function ClassroomDetailClient({
           {filteredFiles.map((file) => (
             <article className="classroom-resource-row" key={file.id}>
               <span className="classroom-resource-main">
-                <a
+                <button
                   className="classroom-resource-link"
-                  href={apiResourceUrl(file.url)}
+                  onClick={() =>
+                    setPreviewFile({
+                      id: file.id,
+                      filename: file.filename,
+                      mimeType: file.mimeType,
+                      sizeBytes: file.sizeBytes,
+                      downloadPath: file.url,
+                      imagePath: `${file.url}?inline=1`,
+                      previewPath: `/classrooms/${classroomId}/files/${file.id}/preview`,
+                    })
+                  }
+                  type="button"
                 >
                   {file.filename}
-                </a>
+                </button>
                 <small>
                   {formatFileSize(file.sizeBytes)} ·{" "}
                   {formatDateTime(file.createdAt)}
@@ -1172,6 +1190,10 @@ export function ClassroomDetailClient({
         onCancel={cancelUpload}
         onDismiss={dismissUpload}
         tasks={uploadTasks}
+      />
+      <AssetPreviewDialog
+        asset={previewFile}
+        onClose={() => setPreviewFile(null)}
       />
     </div>
   );

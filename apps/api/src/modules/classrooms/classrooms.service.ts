@@ -16,6 +16,13 @@ import { StorageService } from "../storage/storage.service";
 import { requireResourceName } from "../../common/resource-name";
 import { putObjectWithCompensation } from "../storage/upload-compensation";
 import { DEFAULT_CLASSROOM_STORAGE_QUOTA_BYTES } from "../../common/storage-quota";
+import {
+  getAssetPreviewKind,
+  isSafeInlineAssetMime,
+  MAX_PDF_PREVIEW_SIZE_BYTES,
+  MAX_TEXT_PREVIEW_SIZE_BYTES,
+  readPreviewBuffer,
+} from "../files/assets.service";
 import type {
   CreateClassroomAnnouncementDto,
   CreateClassroomDto,
@@ -742,6 +749,7 @@ export class ClassroomsService {
     userId: string | null,
     classroomId: string,
     fileId: string,
+    forceInline = false,
   ) {
     const user = await this.requireUser(userId);
     await this.requireClassroomAccess(user, classroomId);
@@ -749,20 +757,75 @@ export class ClassroomsService {
       where: { id: fileId, classroomId },
     });
     if (!file) throw new NotFoundException("课堂文件不存在");
-    const redirectUrl = await this.storage.presignDownload(
-      file.storageBackend,
-      file.storageKey,
-      { filename: file.filename, mimeType: file.mimeType, inline: false },
-    );
+    if (forceInline && !isSafeInlineAssetMime(file.mimeType)) {
+      throw new BadRequestException("该文件类型不支持图片预览");
+    }
+    const redirectUrl = forceInline
+      ? null
+      : await this.storage.presignDownload(
+          file.storageBackend,
+          file.storageKey,
+          { filename: file.filename, mimeType: file.mimeType, inline: false },
+        );
     if (redirectUrl) {
       return { file, redirectUrl, stream: null };
     }
     const backend = await this.storage.backendFor(file.storageBackend);
     return {
       file,
+      inline: forceInline,
       redirectUrl: null,
       stream: (await backend.getObject(file.storageKey)) as Readable,
     };
+  }
+
+  async previewFile(
+    userId: string | null,
+    classroomId: string,
+    fileId: string,
+  ) {
+    const user = await this.requireUser(userId);
+    await this.requireClassroomAccess(user, classroomId);
+    const file = await this.prisma.classroomFile.findFirst({
+      where: { id: fileId, classroomId },
+    });
+    if (!file) throw new NotFoundException("课堂文件不存在");
+
+    const kind = getAssetPreviewKind(file.filename, file.mimeType);
+    if (!kind) {
+      throw new BadRequestException("该文件类型不支持在线预览");
+    }
+    const maxBytes =
+      kind === "pdf" ? MAX_PDF_PREVIEW_SIZE_BYTES : MAX_TEXT_PREVIEW_SIZE_BYTES;
+    if (file.sizeBytes > maxBytes) {
+      throw new BadRequestException(
+        kind === "pdf"
+          ? "PDF 超过 25MB，请下载后查看"
+          : "文本文件超过 2MB，请下载后查看",
+      );
+    }
+
+    const backend = await this.storage.backendFor(file.storageBackend);
+    const stream = (await backend.getObject(file.storageKey)) as Readable;
+    const buffer = await readPreviewBuffer(stream, maxBytes);
+    if (buffer.length !== file.sizeBytes) {
+      throw new BadRequestException("文件内容不完整，无法预览");
+    }
+    if (kind === "pdf") {
+      if (!buffer.subarray(0, 1024).includes(Buffer.from("%PDF-"))) {
+        throw new BadRequestException("文件内容不是有效的 PDF");
+      }
+      return { file, kind, content: buffer };
+    }
+
+    try {
+      const content = new TextDecoder("utf-8", { fatal: true })
+        .decode(buffer)
+        .replace(/^\uFEFF/, "");
+      return { file, kind, content };
+    } catch {
+      throw new BadRequestException("文本文件必须使用 UTF-8 编码");
+    }
   }
 
   async deleteFile(userId: string | null, classroomId: string, fileId: string) {

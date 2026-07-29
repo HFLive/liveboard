@@ -1,13 +1,34 @@
 import { BadRequestException, ConflictException } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
+import { Readable } from "node:stream";
 import type { PermissionsService } from "../permissions/permissions.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { StorageService } from "../storage/storage.service";
 import {
   AssetsService,
+  getAssetPreviewKind,
   normalizeAssetMimeType,
   readWebpDimensions,
 } from "./assets.service";
+
+describe("asset preview classification", () => {
+  it.each([
+    ["handout.pdf", "application/pdf", "pdf"],
+    ["notes.md", "application/octet-stream", "markdown"],
+    ["readme.markdown", "text/plain", "markdown"],
+    ["list.txt", "text/plain", "text"],
+  ])("classifies %s with %s as %s", (filename, mimeType, expected) => {
+    expect(getAssetPreviewKind(filename, mimeType)).toBe(expected);
+  });
+
+  it.each([
+    ["fake.pdf.exe", "application/pdf"],
+    ["page.html", "text/plain"],
+    ["vector.svg", "text/plain"],
+  ])("does not preview unsupported file %s", (filename, mimeType) => {
+    expect(getAssetPreviewKind(filename, mimeType)).toBeNull();
+  });
+});
 
 describe("asset MIME normalization", () => {
   const file = (name: string, mime: string, bytes: Buffer) => ({
@@ -242,6 +263,69 @@ describe("AssetsService consistency", () => {
       service.getAssetForDownload("user-1", "asset-1"),
     ).rejects.toThrow("No permission to view asset");
     expect(backend.getObject).not.toHaveBeenCalled();
+  });
+
+  it("returns a validated PDF preview through the permission path", async () => {
+    const pdf = Buffer.from("%PDF-1.7\npreview");
+    prisma.fileAsset.findUnique.mockResolvedValue({
+      id: "asset-1",
+      uploadedBy: "teacher-1",
+      folderId: "folder-1",
+      fileId: null,
+      forumPostId: null,
+      storageKey: "asset-key",
+      storageBackend: "minio",
+      filename: "handout.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: pdf.length,
+    });
+    prisma.contentBlock.findMany.mockResolvedValue([]);
+    prisma.teachingDeckItem.findMany.mockResolvedValue([]);
+    prisma.teachingDeckItem.findFirst.mockResolvedValue(null);
+    prisma.user.findUnique.mockResolvedValue({
+      status: "active",
+      systemRole: "member",
+    });
+    permissions.getEffectiveLevelForFolder.mockResolvedValue("viewer");
+    backend.getObject.mockResolvedValue(Readable.from([pdf]));
+
+    await expect(
+      service.getAssetForPreview("user-1", "asset-1"),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        kind: "pdf",
+        content: pdf,
+      }),
+    );
+  });
+
+  it("rejects invalid UTF-8 text instead of rendering it", async () => {
+    const bytes = Buffer.from([0xc3, 0x28]);
+    prisma.fileAsset.findUnique.mockResolvedValue({
+      id: "asset-1",
+      uploadedBy: "teacher-1",
+      folderId: "folder-1",
+      fileId: null,
+      forumPostId: null,
+      storageKey: "asset-key",
+      storageBackend: "minio",
+      filename: "notes.txt",
+      mimeType: "text/plain",
+      sizeBytes: bytes.length,
+    });
+    prisma.contentBlock.findMany.mockResolvedValue([]);
+    prisma.teachingDeckItem.findMany.mockResolvedValue([]);
+    prisma.teachingDeckItem.findFirst.mockResolvedValue(null);
+    prisma.user.findUnique.mockResolvedValue({
+      status: "active",
+      systemRole: "member",
+    });
+    permissions.getEffectiveLevelForFolder.mockResolvedValue("viewer");
+    backend.getObject.mockResolvedValue(Readable.from([bytes]));
+
+    await expect(
+      service.getAssetForPreview("user-1", "asset-1"),
+    ).rejects.toThrow("文本文件必须使用 UTF-8 编码");
   });
 
   it("blocks deletion and returns the referencing teaching deck", async () => {

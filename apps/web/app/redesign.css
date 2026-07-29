@@ -408,7 +408,7 @@ textarea {
 .rail-avatar {
   width: 30px;
   height: 30px;
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: var(--line-strong);
   background: rgba(255, 255, 255, 0.09);
   font-size: 12px;
   overflow: hidden;
@@ -3839,8 +3839,16 @@ body,
   }
 
   .editor-more-menu > .context-menu {
-    right: auto;
-    left: 0;
+    top: auto;
+    right: 0;
+    bottom: calc(100% + 6px);
+    left: auto;
+    box-sizing: border-box;
+    width: max-content;
+    min-width: 160px;
+    max-width: min(220px, calc(100vw - 24px));
+    max-height: calc(100dvh - 88px);
+    overflow-y: auto;
   }
 
   .panel-head {
@@ -5121,6 +5129,7 @@ body .success-text::before {
   right: 0;
   bottom: calc(100% + 6px);
   left: 0;
+  width: auto;
 }
 
 .user-profile-activity {

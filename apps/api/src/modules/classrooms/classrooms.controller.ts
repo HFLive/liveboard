@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   Req,
   Res,
   UploadedFile,
@@ -264,23 +265,66 @@ export class ClassroomsController {
     @Param("id") classroomId: string,
     @Param("fileId") fileId: string,
     @Res() response: Response,
+    @Query("inline") inline?: string,
   ) {
+    const forceInline = inline === "1";
     const { file, stream, redirectUrl } =
-      await this.classroomsService.downloadFile(userId, classroomId, fileId);
+      await this.classroomsService.downloadFile(
+        userId,
+        classroomId,
+        fileId,
+        forceInline,
+      );
     if (redirectUrl) {
       response.redirect(302, redirectUrl);
       return;
     }
-    response.setHeader("Content-Type", "application/octet-stream");
+    response.setHeader(
+      "Content-Type",
+      forceInline ? file.mimeType : "application/octet-stream",
+    );
     response.setHeader("X-Content-Type-Options", "nosniff");
-    response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    response.setHeader(
+      "Cross-Origin-Resource-Policy",
+      forceInline ? "same-site" : "same-origin",
+    );
     response.setHeader("Content-Security-Policy", "sandbox");
     response.setHeader(
       "Content-Disposition",
-      `attachment; filename="${encodeURIComponent(file.filename)}"`,
+      `${forceInline ? "inline" : "attachment"}; filename="${encodeURIComponent(
+        file.filename,
+      )}"`,
     );
     response.setHeader("Content-Length", String(file.sizeBytes));
     stream!.pipe(response);
+  }
+
+  @Get(":id/files/:fileId/preview")
+  async previewFile(
+    @CurrentUserId() userId: string | null,
+    @Param("id") classroomId: string,
+    @Param("fileId") fileId: string,
+    @Res() response: Response,
+  ) {
+    const { kind, content } = await this.classroomsService.previewFile(
+      userId,
+      classroomId,
+      fileId,
+    );
+    response.setHeader(
+      "Content-Type",
+      kind === "pdf"
+        ? "application/pdf"
+        : kind === "markdown"
+          ? "text/markdown; charset=utf-8"
+          : "text/plain; charset=utf-8",
+    );
+    response.setHeader("Content-Disposition", "inline");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Cross-Origin-Resource-Policy", "same-site");
+    response.setHeader("Content-Security-Policy", "sandbox");
+    response.setHeader("Cache-Control", "private, max-age=3600, immutable");
+    response.send(content);
   }
 
   @Delete(":id/files/:fileId")

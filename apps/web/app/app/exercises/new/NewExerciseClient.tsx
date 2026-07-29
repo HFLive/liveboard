@@ -107,6 +107,9 @@ export function NewExerciseClient({
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [bulkImportText, setBulkImportText] = useState("");
   const [draftRecovered, setDraftRecovered] = useState(false);
+  const [mobilePane, setMobilePane] = useState<"questions" | "settings">(
+    "questions",
+  );
 
   const needsOptions = type === "single_choice" || type === "multiple_choice";
   const totalScore = useMemo(
@@ -787,19 +790,31 @@ export function NewExerciseClient({
         </div>
         <div className="button-row">
           <button
+            aria-label={
+              loading
+                ? exerciseId
+                  ? "正在保存练习"
+                  : "正在创建练习"
+                : exerciseId
+                  ? "保存练习"
+                  : "创建练习"
+            }
             className="button"
             disabled={loading}
             onClick={() => void publish()}
+            title={exerciseId ? "保存练习" : "创建练习"}
             type="button"
           >
             <Check aria-hidden="true" className="button-icon" />
-            {loading
-              ? exerciseId
-                ? "保存中"
-                : "创建中"
-              : exerciseId
-                ? "保存练习"
-                : "创建练习"}
+            <span className="quiz-publish-label">
+              {loading
+                ? exerciseId
+                  ? "保存中"
+                  : "创建中"
+                : exerciseId
+                  ? "保存练习"
+                  : "创建练习"}
+            </span>
           </button>
         </div>
       </header>
@@ -810,8 +825,37 @@ export function NewExerciseClient({
         </p>
       ) : null}
 
+      <div
+        aria-label="练习编辑视图"
+        className="segmented-control mobile-editor-pane-switch"
+        role="group"
+      >
+        <button
+          aria-pressed={mobilePane === "questions"}
+          className={mobilePane === "questions" ? "active" : ""}
+          onClick={() => setMobilePane("questions")}
+          type="button"
+        >
+          题目
+          <span>{questions.length}</span>
+        </button>
+        <button
+          aria-pressed={mobilePane === "settings"}
+          className={mobilePane === "settings" ? "active" : ""}
+          onClick={() => setMobilePane("settings")}
+          type="button"
+        >
+          设置
+        </button>
+      </div>
+
       <div className="editor-split quiz-builder-split">
-        <section className="editor-pane quiz-question-pane" aria-label="题目">
+        <section
+          className={`editor-pane quiz-question-pane ${
+            mobilePane === "questions" ? "mobile-pane-active" : ""
+          }`}
+          aria-label="题目"
+        >
           <div className="editor-pane-head">
             <strong>题目</strong>
             <div className="quiz-pane-actions">
@@ -928,7 +972,12 @@ export function NewExerciseClient({
           </div>
         </section>
 
-        <aside className="editor-pane quiz-setting-pane" aria-label="练习设置">
+        <aside
+          className={`editor-pane quiz-setting-pane ${
+            mobilePane === "settings" ? "mobile-pane-active" : ""
+          }`}
+          aria-label="练习设置"
+        >
           <div className="editor-pane-head">
             <strong>设置</strong>
             <span>时间与作答规则</span>

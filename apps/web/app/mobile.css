@@ -11,6 +11,10 @@
   display: none;
 }
 
+.mobile-editor-pane-switch {
+  display: none;
+}
+
 .mobile-route-content {
   display: contents;
 }
@@ -21,6 +25,26 @@
 }
 
 @media (max-width: 760px) {
+  /* `manipulation` removes the delayed double-tap zoom gesture while keeping
+     normal scrolling and explicit two-finger pinch zoom available. */
+  html,
+  body {
+    touch-action: manipulation;
+  }
+
+  /* Mobile Safari zooms the whole page when a focused form control computes
+     below 16px. Keep editing stable without disabling accessibility zoom. */
+  input:not([type="button"]):not([type="submit"]):not([type="reset"]):not(
+      [type="checkbox"]
+    ):not([type="radio"]):not([type="range"]):not([type="color"]):not(
+      [type="file"]
+    ),
+  textarea,
+  select,
+  [contenteditable="true"] {
+    font-size: 16px !important;
+  }
+
   .app-rail {
     position: sticky;
     z-index: 700;
@@ -261,9 +285,11 @@
     display: grid;
     flex: 0 0 18px;
     place-items: center;
+    box-sizing: border-box;
     width: 18px;
     height: 18px;
     overflow: hidden;
+    border: 1px solid var(--line-strong);
     border-radius: 999px;
     background: var(--fill-active);
     color: var(--muted);
@@ -335,6 +361,48 @@
     min-height: 36px;
   }
 
+  /* Editors use one primary pane at a time on compact screens. This avoids
+     turning a desktop two-pane workspace into an extremely long stacked page. */
+  .mobile-editor-pane-switch {
+    position: sticky;
+    z-index: 60;
+    top: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    width: 100%;
+    min-height: 46px;
+    border-radius: 0;
+    background: color-mix(in srgb, var(--bg) 96%, transparent);
+    padding: 4px 0 8px;
+    box-shadow: 0 1px 0 var(--line);
+    backdrop-filter: blur(12px);
+  }
+
+  .mobile-editor-pane-switch button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    min-width: 0;
+    min-height: 38px;
+    border-radius: 8px;
+    padding-inline: 14px;
+    font-size: 13px;
+  }
+
+  .mobile-editor-pane-switch button > svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .mobile-editor-pane-switch button > span {
+    color: var(--muted);
+    font-size: 11px;
+  }
+
   /* Mobile actions keep their intrinsic width. The legacy responsive table
      rules made every button full-width, which turned compact toolbars into a
      stack of one-action rows across otherwise unrelated routes. */
@@ -396,7 +464,8 @@
     min-height: 38px;
   }
 
-  /* Dense creation and administration workflows deliberately stop here. */
+  /* System administration remains desktop-only; content creation and teaching
+     workflows provide dedicated compact layouts below their route styles. */
   .mobile-route-content.is-desktop-only {
     display: none;
   }
@@ -899,17 +968,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .content-viewer .content-viewer-header .button-row {
-    display: none;
-  }
-
-  /* Browsing and presentation stay available; complex editors do not. */
-  .teaching-list-panel .list-toolbar > .button,
-  .teaching-list-panel .teaching-empty .button,
-  .exercises-workspace .exercise-toolbar-actions > .button {
-    display: none;
   }
 
   .teaching-list-panel .list-toolbar {

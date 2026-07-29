@@ -222,11 +222,13 @@ export function FileViewer({ fileId }: { fileId: string }) {
               </details>
               {canEditContent(file.permission) ? (
                 <Link
+                  aria-label="编辑"
                   className="button secondary content-viewer-edit-link"
                   href={contentEdit(fileId)}
+                  title="编辑文档"
                 >
                   <Edit3 aria-hidden="true" className="button-icon" />
-                  编辑
+                  <span>编辑</span>
                 </Link>
               ) : null}
             </div>

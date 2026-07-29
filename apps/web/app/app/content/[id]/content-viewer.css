@@ -518,7 +518,21 @@
   }
 
   .workspace.content-viewer .content-viewer-edit-link {
+    display: inline-grid;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    min-height: 42px;
+    padding: 0;
+    place-items: center;
+  }
+
+  .workspace.content-viewer .content-viewer-edit-link > span {
     display: none;
+  }
+
+  .workspace.content-viewer .content-viewer-edit-link .button-icon {
+    margin: 0;
   }
 
   .reader-settings-popover {

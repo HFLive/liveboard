@@ -82,6 +82,9 @@ export function TeachingEditor({
     "document",
   );
   const [draggingItemKey, setDraggingItemKey] = useState<string | null>(null);
+  const [mobilePane, setMobilePane] = useState<"outline" | "source">(
+    deckId ? "outline" : "source",
+  );
   const [error, setError] = useState<string | null>(null);
 
   const selectedFile = useMemo(
@@ -186,6 +189,7 @@ export function TeachingEditor({
       if (!next.length) return;
       editItems((current) => [...current, ...next]);
       setSelectedBlockIds(new Set());
+      setMobilePane("outline");
       return;
     }
     const next = exercises
@@ -200,6 +204,7 @@ export function TeachingEditor({
     if (!next.length) return;
     editItems((current) => [...current, ...next]);
     setSelectedExerciseIds(new Set());
+    setMobilePane("outline");
   }
 
   function toggleId(
@@ -336,27 +341,57 @@ export function TeachingEditor({
         </div>
         <div className="button-row">
           <button
+            aria-label={saveState === "saving" ? "正在保存课件" : "保存课件"}
             className="button"
             disabled={saveState === "saving"}
             onClick={() => void save()}
+            title="保存课件"
             type="button"
           >
             <Save aria-hidden="true" className="button-icon" />
-            {saveState === "saving" ? "保存中" : "保存课件"}
+            <span className="teaching-save-label">
+              {saveState === "saving" ? "保存中" : "保存课件"}
+            </span>
           </button>
         </div>
       </header>
 
       {error ? <p className="error-text">{error}</p> : null}
 
+      <div
+        aria-label="课件编辑视图"
+        className="segmented-control mobile-editor-pane-switch"
+        role="group"
+      >
+        <button
+          aria-pressed={mobilePane === "outline"}
+          className={mobilePane === "outline" ? "active" : ""}
+          onClick={() => setMobilePane("outline")}
+          type="button"
+        >
+          课件大纲
+          <span>{items.length}</span>
+        </button>
+        <button
+          aria-pressed={mobilePane === "source"}
+          className={mobilePane === "source" ? "active" : ""}
+          onClick={() => setMobilePane("source")}
+          type="button"
+        >
+          添加内容
+        </button>
+      </div>
+
       <div className="editor-split teaching-editor-split">
         <section
-          className="editor-pane teaching-outline-pane"
+          className={`editor-pane teaching-outline-pane ${
+            mobilePane === "outline" ? "mobile-pane-active" : ""
+          }`}
           aria-label="课件大纲"
         >
           {items.length === 0 ? (
             <p className="teaching-item-empty">
-              课件还是空的。在右侧勾选文档段落或练习添加到这里，之后可拖动调整顺序。
+              课件还是空的。切换到“添加内容”，勾选文档段落或练习加入课件，之后可调整顺序。
             </p>
           ) : (
             <ol className="teaching-item-list">
@@ -394,39 +429,43 @@ export function TeachingEditor({
                       <div className="teaching-item-main">
                         <span className="teaching-item-line">
                           <strong>{item.label}</strong>
-                          <small>
-                            {item.type === "content_block"
-                              ? getBlockLabel(item.blockType)
-                              : "练习"}
-                          </small>
-                        </span>
-                        {item.type === "content_block" &&
-                        item.blockType === "image" ? (
-                          <label className="teaching-image-fit">
-                            图片展示
-                            <select
-                              onChange={(event) =>
-                                editItems((current) =>
-                                  current.map((currentItem) =>
-                                    currentItem.key === item.key &&
-                                    currentItem.type === "content_block"
-                                      ? {
-                                          ...currentItem,
-                                          imageFit: event.target.value as
-                                            "fit" | "fill" | "original",
-                                        }
-                                      : currentItem,
-                                  ),
-                                )
-                              }
-                              value={item.imageFit}
+                          {item.type === "content_block" &&
+                          item.blockType === "image" ? (
+                            <label
+                              className="teaching-image-fit"
+                              title="图片展示方式"
                             >
-                              <option value="fit">适应画布</option>
-                              <option value="fill">填满区域</option>
-                              <option value="original">原始比例</option>
-                            </select>
-                          </label>
-                        ) : null}
+                              <select
+                                aria-label={`“${item.label}”的图片展示方式`}
+                                onChange={(event) =>
+                                  editItems((current) =>
+                                    current.map((currentItem) =>
+                                      currentItem.key === item.key &&
+                                      currentItem.type === "content_block"
+                                        ? {
+                                            ...currentItem,
+                                            imageFit: event.target.value as
+                                              "fit" | "fill" | "original",
+                                          }
+                                        : currentItem,
+                                    ),
+                                  )
+                                }
+                                value={item.imageFit}
+                              >
+                                <option value="fit">适应画布</option>
+                                <option value="fill">填满区域</option>
+                                <option value="original">原始比例</option>
+                              </select>
+                            </label>
+                          ) : (
+                            <small>
+                              {item.type === "content_block"
+                                ? getBlockLabel(item.blockType)
+                                : "练习"}
+                            </small>
+                          )}
+                        </span>
                       </div>
                       <div className="teaching-item-actions">
                         <button
@@ -474,7 +513,9 @@ export function TeachingEditor({
         </section>
 
         <aside
-          className="editor-pane teaching-source-pane"
+          className={`editor-pane teaching-source-pane ${
+            mobilePane === "source" ? "mobile-pane-active" : ""
+          }`}
           aria-label="内容素材"
         >
           <div
