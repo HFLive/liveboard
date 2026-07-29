@@ -5,6 +5,7 @@ import type { ServerMetricPoint, ServerStatusSummary } from "@liveboard/shared";
 import { Cpu, Database, MemoryStick, RefreshCw } from "lucide-react";
 import { getServerStatus } from "@/lib/api";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 const ranges = [
   { hours: 1, label: "1 小时" },
@@ -21,7 +22,7 @@ export function ServerStatusClient() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useDocumentTitle("服务器状态");
+  useDocumentTitle("运行状态");
 
   const loadStatus = useCallback(
     async (showRefreshing = false) => {
@@ -64,14 +65,12 @@ export function ServerStatusClient() {
   }, [status]);
 
   return (
-    <div className="workspace admin-workspace server-status-page">
-      <header className="page-head">
-        <div>
-          <p className="page-eyebrow">管理中心</p>
-          <h1>服务器状态</h1>
-          <p className="muted">查看当前资源占用与最近一段时间的变化。</p>
-        </div>
-      </header>
+    <div className="workspace admin-workspace admin-page admin-page--standard server-status-page">
+      <AdminPageHeader
+        category="系统与服务"
+        description="查看 CPU、内存和磁盘用量。"
+        title="运行状态"
+      />
 
       {error ? <p className="error-text">{error}</p> : null}
 
@@ -105,7 +104,7 @@ export function ServerStatusClient() {
               : undefined
           }
           icon={Database}
-          label="硬盘"
+          label="磁盘"
           loading={loading}
           percent={status?.current.disk.usagePercent}
         />
@@ -116,7 +115,7 @@ export function ServerStatusClient() {
           <div>
             <h2>占用率趋势</h2>
             <p className="muted">
-              每 {status?.sampleIntervalSeconds ?? 60} 秒记录一次，历史保留{" "}
+              每 {status?.sampleIntervalSeconds ?? 60} 秒采样，保留{" "}
               {Math.round((status?.retentionHours ?? 168) / 24)} 天。
             </p>
           </div>
@@ -153,7 +152,7 @@ export function ServerStatusClient() {
         <div className="server-chart-legend" aria-label="图例">
           <span className="cpu">CPU</span>
           <span className="memory">内存</span>
-          <span className="disk">硬盘</span>
+          <span className="disk">磁盘</span>
         </div>
 
         {loading && !status ? (
@@ -165,7 +164,7 @@ export function ServerStatusClient() {
         <p className="server-sampled-at">
           {status
             ? `当前值采样于 ${formatSampleTime(status.current.sampledAt)}`
-            : "等待首次采样"}
+            : "等待采样"}
         </p>
       </section>
     </div>
@@ -246,7 +245,7 @@ function UsageChart({
   return (
     <div className="server-chart-wrap">
       <svg
-        aria-label={`最近 ${hours} 小时 CPU、内存和硬盘占用率曲线`}
+        aria-label={`最近 ${hours} 小时 CPU、内存和磁盘占用率曲线`}
         className="server-chart"
         preserveAspectRatio="none"
         role="img"

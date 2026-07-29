@@ -261,6 +261,7 @@ textarea {
   bottom: 12px;
   left: 116px;
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   width: min(390px, calc(100vw - 132px));
   max-height: min(620px, calc(100dvh - 24px));
   overflow: hidden;
@@ -277,6 +278,22 @@ textarea {
   justify-content: space-between;
   border-bottom: 1px solid var(--line);
   padding: 11px 13px;
+}
+
+.rail-activity-head > span {
+  display: grid;
+  gap: 1px;
+}
+
+.rail-activity-head > span small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.rail-activity-head > div {
+  display: flex;
+  gap: 2px;
 }
 
 .rail-activity-head button {
@@ -300,87 +317,70 @@ textarea {
   height: 15px;
 }
 
-.rail-activity-list {
-  display: grid;
+.rail-activity-head button:disabled {
+  opacity: 0.35;
+}
+
+.rail-activity-filters {
+  display: flex;
   gap: 2px;
-  overflow-y: auto;
-  padding: 6px;
+  border-bottom: 1px solid var(--line);
+  padding: 6px 10px;
 }
 
-.rail-activity-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
-  align-items: start;
-  border-radius: 9px;
+.rail-activity-filters button {
+  min-height: 27px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 8px;
+  font-size: 9px;
 }
 
-.rail-activity-item > a {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 8px;
-  padding: 8px;
-}
-
-.rail-activity-item:hover {
+.rail-activity-filters button:hover {
   background: var(--fill-hover);
   color: var(--text);
 }
 
-.rail-activity-item > a > span:last-child,
+.rail-activity-filters button[aria-pressed="true"] {
+  background: var(--fill-active);
+  color: var(--text);
+}
+
+.rail-activity-list {
+  display: grid;
+  align-content: start;
+  overflow-y: auto;
+}
+
 .rail-activity-empty {
   display: grid;
   gap: 3px;
   min-width: 0;
-}
-
-.rail-activity-dismiss {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  margin-top: 4px;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  opacity: 0.55;
-}
-
-.rail-activity-dismiss:hover {
-  color: var(--text);
-  opacity: 1;
-}
-
-.rail-activity-dismiss svg {
-  width: 14px;
-  height: 14px;
-}
-
-.rail-activity-list strong {
-  overflow: hidden;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rail-activity-list small,
-.rail-activity-empty span {
+  padding: 22px 12px;
   color: var(--muted);
   font-size: 10px;
   line-height: 1.45;
-}
-
-.activity-kind {
-  border-radius: 5px;
-  background: var(--fill-subtle);
-  color: var(--text-soft);
-  padding: 3px 5px;
-  font-size: 9px;
-}
-
-.rail-activity-empty {
-  padding: 22px 12px;
   text-align: center;
+}
+
+.rail-activity-empty strong {
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.rail-activity-all {
+  border-top: 1px solid var(--line);
+  color: var(--text-soft);
+  padding: 9px 12px;
+  font-size: 10px;
+  text-align: center;
+}
+
+.rail-activity-all:hover {
+  background: var(--fill-hover);
+  color: var(--text);
 }
 
 .rail-account-row {
@@ -462,6 +462,13 @@ textarea {
   border-color: transparent;
   background: rgba(255, 255, 255, 0.07);
   color: #fff;
+}
+
+.rail-user.profile-context,
+.rail-user.profile-context:hover {
+  border-color: transparent;
+  background: transparent;
+  color: inherit;
 }
 
 .nav-button:hover {

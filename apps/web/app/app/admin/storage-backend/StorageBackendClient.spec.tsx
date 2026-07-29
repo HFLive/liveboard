@@ -58,7 +58,7 @@ describe("StorageBackendClient", () => {
     render(<StorageBackendClient />);
 
     const internalToggle = await screen.findByRole("checkbox", {
-      name: "启用内网 Endpoint（服务器与 OSS 同地域时免流量费）",
+      name: "使用内网 Endpoint",
     });
     const directDownload = screen.getByRole("button", { name: "签名直出" });
 
@@ -79,7 +79,7 @@ describe("StorageBackendClient", () => {
     render(<StorageBackendClient />);
 
     const internalToggle = await screen.findByRole("checkbox", {
-      name: "启用内网 Endpoint（服务器与 OSS 同地域时免流量费）",
+      name: "使用内网 Endpoint",
     });
     expect(
       screen.queryByRole("textbox", { name: "自定义内网 Endpoint（可选）" }),
@@ -96,7 +96,7 @@ describe("StorageBackendClient", () => {
     );
 
     fireEvent.change(input, { target: { value: "oss-vpc.example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存存储设置" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
 
     expect(updateStorageSettings).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -114,11 +114,11 @@ describe("StorageBackendClient", () => {
     const directUpload = await screen.findByRole("button", {
       name: "签名直入",
     });
-    expect(screen.queryByText(/配置跨域规则/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/需配置 Bucket CORS/)).not.toBeInTheDocument();
 
     fireEvent.click(directUpload);
 
     expect(directUpload).toHaveClass("active");
-    expect(screen.getByText(/配置跨域规则/)).toBeInTheDocument();
+    expect(screen.getByText(/需配置 Bucket CORS/)).toBeInTheDocument();
   });
 });

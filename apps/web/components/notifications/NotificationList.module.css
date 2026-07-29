@@ -1,0 +1,172 @@
+.list {
+  display: grid;
+  min-width: 0;
+}
+
+.item {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+}
+
+.item:last-child {
+  border-bottom: 0;
+}
+
+.item:hover {
+  background: var(--fill-hover);
+}
+
+.unread::before {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 2px;
+  background: var(--accent);
+  content: "";
+}
+
+.link {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  padding: 11px 6px 11px 12px;
+  color: inherit;
+}
+
+.leading {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--fill-subtle);
+  color: var(--text-soft);
+}
+
+.leading img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.leading svg {
+  width: 16px;
+  height: 16px;
+}
+
+.content {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.titleRow {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.titleRow strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titleRow time {
+  flex: none;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.detail {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 8px 7px 8px 0;
+  opacity: 0;
+}
+
+.item:hover .actions,
+.item:focus-within .actions {
+  opacity: 1;
+}
+
+.actions button {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.actions button:hover {
+  background: var(--fill-active);
+  color: var(--text);
+}
+
+.actions svg {
+  width: 13px;
+  height: 13px;
+}
+
+.compact .link {
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 8px;
+  padding-block: 9px;
+}
+
+.compact .leading {
+  width: 28px;
+  height: 28px;
+}
+
+.compact .actions {
+  position: absolute;
+  top: 5px;
+  right: 3px;
+  border-radius: 8px;
+  background: var(--fill-hover);
+}
+
+.compact .item:hover .titleRow time,
+.compact .item:focus-within .titleRow time {
+  visibility: hidden;
+}
+
+@media (max-width: 720px) {
+  .actions {
+    opacity: 1;
+  }
+
+  .link {
+    padding-block: 12px;
+  }
+}

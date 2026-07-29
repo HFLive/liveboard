@@ -12,6 +12,7 @@ describe("ExercisesService", () => {
       findMany: jest.fn(),
       findUnique: jest.fn(),
     },
+    classroom: { findUnique: jest.fn() },
     teachingDeckItem: { count: jest.fn() },
     submission: {
       findUnique: jest.fn(),
@@ -19,6 +20,7 @@ describe("ExercisesService", () => {
     },
     $transaction: jest.fn(),
   };
+  const notifications = { create: jest.fn() };
   let service: ExercisesService;
 
   beforeEach(() => {
@@ -34,11 +36,16 @@ describe("ExercisesService", () => {
       Promise.resolve(where.id.in.map((id: string) => ({ id }))),
     );
     prisma.teachingDeckItem.count.mockResolvedValue(0);
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
+    prisma.classroom.findUnique.mockResolvedValue({
+      members: [],
+    });
     service = new ExercisesService(
       prisma as unknown as PrismaService,
       {
         requireTeacher: jest.fn().mockResolvedValue({}),
       } as never,
+      notifications as never,
     );
   });
 
@@ -91,7 +98,13 @@ describe("ExercisesService", () => {
       title: "练习",
       createdById: "teacher-1",
       classroomId: "classroom-1",
-      classroom: { name: "课堂", members: [{ role: "student" }] },
+      classroom: {
+        name: "课堂",
+        members: [
+          { userId: "learner-1", role: "student" },
+          { userId: "teacher-1", role: "teacher" },
+        ],
+      },
       showAnswerAfterSubmit: true,
       submissions: [],
       questions: [
@@ -154,6 +167,13 @@ describe("ExercisesService", () => {
     expect(prisma.exerciseSet.create.mock.calls[0][0].data).not.toHaveProperty(
       "fileId",
     );
+    expect(notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "exercise_published",
+        targetId: "exercise-1",
+      }),
+      prisma,
+    );
   });
 
   it("refuses to replace questions after a student has submitted", async () => {
@@ -185,7 +205,13 @@ describe("ExercisesService", () => {
       title: "练习",
       createdById: "teacher-1",
       classroomId: "classroom-1",
-      classroom: { name: "课堂", members: [{ role: "student" }] },
+      classroom: {
+        name: "课堂",
+        members: [
+          { userId: "learner-1", role: "student" },
+          { userId: "teacher-1", role: "teacher" },
+        ],
+      },
       showAnswerAfterSubmit: true,
       submissions: [{ id: "submission-1" }],
       questions: [
@@ -209,7 +235,13 @@ describe("ExercisesService", () => {
       title: "练习",
       createdById: "teacher-1",
       classroomId: "classroom-1",
-      classroom: { name: "课堂", members: [{ role: "student" }] },
+      classroom: {
+        name: "课堂",
+        members: [
+          { userId: "learner-1", role: "student" },
+          { userId: "teacher-1", role: "teacher" },
+        ],
+      },
       openAt: null,
       dueAt: null,
       allowMultipleSubmissions: false,
@@ -244,6 +276,14 @@ describe("ExercisesService", () => {
     expect(prisma.$transaction).toHaveBeenCalledWith(
       expect.any(Function),
       expect.objectContaining({ isolationLevel: "Serializable" }),
+    );
+    expect(notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "submission_received",
+        recipientIds: ["teacher-1"],
+        groupKey: "submission:exercise-1",
+      }),
+      transaction,
     );
   });
 

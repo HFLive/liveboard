@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getMe, listActivity } from "@/lib/api";
+import {
+  getMe,
+  listNotifications,
+  markAllNotificationsRead,
+  setNotificationRead,
+} from "@/lib/api";
 import { AppNav } from "./AppNav";
 
 const navigationState = vi.hoisted(() => ({ pathname: "/app/forum" }));
@@ -11,10 +16,11 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/api", () => ({
   apiResourceUrl: (path: string) => path,
-  dismissActivity: vi.fn(),
+  archiveNotification: vi.fn(),
   getMe: vi.fn(),
-  listActivity: vi.fn(),
-  markActivityRead: vi.fn(),
+  listNotifications: vi.fn(),
+  markAllNotificationsRead: vi.fn(),
+  setNotificationRead: vi.fn(),
 }));
 
 vi.mock("./LogoutButton", () => ({
@@ -41,9 +47,10 @@ describe("AppNav", () => {
         status: "active",
       },
     });
-    vi.mocked(listActivity).mockResolvedValue({
+    vi.mocked(listNotifications).mockResolvedValue({
       items: [],
       unreadCount: 0,
+      nextCursor: null,
     });
   });
 
@@ -120,5 +127,65 @@ describe("AppNav", () => {
     expect(
       view.container.querySelector(".rail-mobile-account-actions button"),
     ).not.toBeNull();
+  });
+
+  it.each(["/app/users/user-1", "/app/profile"])(
+    "suppresses the persistent desktop avatar hover treatment on %s",
+    async (pathname) => {
+      navigationState.pathname = pathname;
+      const view = render(<AppNav />);
+
+      await waitFor(() =>
+        expect(view.container.querySelector(".rail-user")).toHaveClass(
+          "profile-context",
+        ),
+      );
+      expect(view.container.querySelector(".rail-user")).not.toHaveClass(
+        "active",
+      );
+    },
+  );
+
+  it("does not mark messages as read merely by opening the panel", async () => {
+    vi.mocked(listNotifications).mockResolvedValue({
+      items: [
+        {
+          id: "notification-1",
+          type: "submission_graded",
+          category: "feedback",
+          priority: "important",
+          title: "第一章练习",
+          detail: "批改已完成 · 18/20 分",
+          href: "/app/exercises/exercise-1",
+          classroomId: "classroom-1",
+          classroomName: "高一物理",
+          actor: null,
+          aggregateCount: 1,
+          occurredAt: "2026-07-29T12:00:00.000Z",
+          unread: true,
+        },
+      ],
+      unreadCount: 1,
+      nextCursor: null,
+    });
+    render(<AppNav />);
+
+    const button = await screen.findByRole("button", {
+      name: "消息，1 条未读",
+    });
+    fireEvent.click(button);
+
+    expect(
+      await screen.findByRole("dialog", { name: "消息" }),
+    ).toBeInTheDocument();
+    expect(markAllNotificationsRead).not.toHaveBeenCalled();
+    expect(setNotificationRead).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "将“第一章练习”标为已读" }),
+    );
+    await waitFor(() =>
+      expect(setNotificationRead).toHaveBeenCalledWith("notification-1", true),
+    );
   });
 });

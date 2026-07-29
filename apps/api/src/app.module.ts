@@ -3,7 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { ActiveUserGuard } from "./common/active-user.guard";
 import { AiModule } from "./modules/ai/ai.module";
-import { ActivityModule } from "./modules/activity/activity.module";
+import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { ExercisesModule } from "./modules/exercises/exercises.module";
 import { FilesModule } from "./modules/files/files.module";
@@ -34,7 +34,7 @@ import { BadgesModule } from "./modules/badges/badges.module";
     ServerStatusModule,
     StorageModule,
     AiModule,
-    ActivityModule,
+    NotificationsModule,
     ClassroomsModule,
     TeachingModule,
     BadgesModule,

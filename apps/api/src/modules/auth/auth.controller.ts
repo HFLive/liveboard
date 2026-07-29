@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   Res,
   UploadedFile,
@@ -13,6 +14,11 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
+import {
+  isVersionedResourceRequest,
+  PRIVATE_IMMUTABLE_CACHE_CONTROL,
+  PRIVATE_REVALIDATED_CACHE_CONTROL,
+} from "../../common/cache-control";
 import { Public } from "../../common/public.decorator";
 import {
   createSessionCookieValue,
@@ -144,18 +150,24 @@ export class AuthController {
     @CurrentUserId() userId: string | null,
     @Param("id") targetUserId: string,
     @Res() res: Response,
+    @Query("v") version?: string,
   ) {
     const { mimeType, stream, redirectUrl } = await this.authService.getAvatar(
       userId,
       targetUserId,
     );
 
+    res.setHeader(
+      "Cache-Control",
+      isVersionedResourceRequest(version)
+        ? PRIVATE_IMMUTABLE_CACHE_CONTROL
+        : PRIVATE_REVALIDATED_CACHE_CONTROL,
+    );
     if (redirectUrl) {
       res.redirect(302, redirectUrl);
       return;
     }
     res.setHeader("Content-Type", mimeType);
-    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cross-Origin-Resource-Policy", "same-site");
     stream!.pipe(res);
@@ -166,18 +178,24 @@ export class AuthController {
     @CurrentUserId() userId: string | null,
     @Param("id") targetUserId: string,
     @Res() res: Response,
+    @Query("v") version?: string,
   ) {
     const { mimeType, stream, redirectUrl } = await this.authService.getBanner(
       userId,
       targetUserId,
     );
 
+    res.setHeader(
+      "Cache-Control",
+      isVersionedResourceRequest(version)
+        ? PRIVATE_IMMUTABLE_CACHE_CONTROL
+        : PRIVATE_REVALIDATED_CACHE_CONTROL,
+    );
     if (redirectUrl) {
       res.redirect(302, redirectUrl);
       return;
     }
     res.setHeader("Content-Type", mimeType);
-    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cross-Origin-Resource-Policy", "same-site");
     stream!.pipe(res);

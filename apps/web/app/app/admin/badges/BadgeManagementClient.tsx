@@ -18,6 +18,7 @@ import {
 } from "@/lib/api";
 import { UserBadges } from "@/components/UserBadges";
 import { UserProfileLink } from "@/components/UserProfileLink";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 const colorOptions: Array<{ value: BadgeColor; label: string }> = [
   { value: "gold", label: "金色" },
@@ -196,20 +197,21 @@ export function BadgeManagementClient() {
   }
 
   return (
-    <div className="workspace admin-badges-page">
+    <div className="workspace admin-workspace admin-page admin-page--standard admin-badges-page">
+      <AdminPageHeader
+        actions={
+          <button className="button" onClick={openCreate} type="button">
+            <Plus aria-hidden="true" className="button-icon" />
+            新建徽章
+          </button>
+        }
+        category="人员与权限"
+        description="创建徽章并分配给成员，成员最多佩戴 3 个。"
+        title="徽章管理"
+      />
+
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
-
-      <header className="compact-page-head">
-        <div>
-          <h1>徽章认证</h1>
-          <p>设置公开徽章并派发给成员；成员最多同时佩戴 3 个。</p>
-        </div>
-        <button className="button" onClick={openCreate} type="button">
-          <Plus aria-hidden="true" className="button-icon" />
-          新建徽章
-        </button>
-      </header>
 
       <section className="badge-admin-layout">
         <div className="badge-catalog">
@@ -246,7 +248,9 @@ export function BadgeManagementClient() {
               <div className="panel-head badge-detail-head">
                 <div>
                   <UserBadges badges={[selectedBadge]} />
-                  <p>{selectedBadge.description || "暂无说明"}</p>
+                  {selectedBadge.description ? (
+                    <p>{selectedBadge.description}</p>
+                  ) : null}
                 </div>
                 <div className="inline-actions">
                   <button
@@ -313,19 +317,19 @@ export function BadgeManagementClient() {
                         ))}
                       </span>
                       <span className="muted">
-                        {awarded ? "已派发" : "未派发"}
+                        {awarded ? "已分配" : "未分配"}
                       </span>
                     </label>
                   );
                 })}
                 {filteredUsers.length === 0 ? (
-                  <p className="empty-cell">没有符合筛选条件的成员。</p>
+                  <p className="empty-cell">没有匹配的成员</p>
                 ) : null}
               </div>
             </>
           ) : (
             <div className="empty-panel">
-              <span>选择或新建徽章后管理派发成员。</span>
+              <span>选择或新建徽章后分配成员。</span>
             </div>
           )}
         </div>
@@ -373,7 +377,7 @@ export function BadgeManagementClient() {
                       description: event.target.value,
                     }))
                   }
-                  placeholder="说明获得该徽章所代表的身份或荣誉"
+                  placeholder="可选，用于说明徽章含义"
                   rows={3}
                   value={draft.description}
                 />

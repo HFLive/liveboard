@@ -9,6 +9,7 @@ import {
   updateStorageSettings,
 } from "@/lib/api";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 type BackendChoice = "minio" | "oss";
@@ -119,16 +120,12 @@ export function StorageBackendClient() {
   }
 
   return (
-    <div className="workspace admin-workspace storage-backend-page">
-      <header className="page-head">
-        <div>
-          <p className="page-eyebrow">管理中心</p>
-          <h1>存储后端</h1>
-          <p className="muted">
-            选择上传文件保存在服务器本地存储还是阿里云对象存储。
-          </p>
-        </div>
-      </header>
+    <div className="workspace admin-workspace admin-page admin-page--focused storage-backend-page">
+      <AdminPageHeader
+        category="系统与服务"
+        description="配置文件存储、上传和下载方式。"
+        title="存储后端"
+      />
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
@@ -214,12 +211,8 @@ export function StorageBackendClient() {
             <section className="storage-backend-section">
               <div className="panel-head">
                 <div>
-                  <h2>OSS 设置</h2>
-                  <p>
-                    选择文件保存在本机存储还是阿里云 OSS，并填写 OSS
-                    连接参数。Bucket
-                    需提前在阿里云控制台创建并保持私有；保存时会执行真实读写探测，失败不会保存。
-                  </p>
+                  <h2>存储位置</h2>
+                  <p>使用 OSS 前请创建私有 Bucket；保存时会测试读写。</p>
                 </div>
               </div>
               <div className="storage-backend-choices">
@@ -238,8 +231,7 @@ export function StorageBackendClient() {
                   <span>
                     <strong>服务器存储</strong>
                     <small>
-                      文件保存在本机 MinIO（{settings.minio.endpoint}
-                      ），离线环境可用，无需额外配置。
+                      使用本机 MinIO（{settings.minio.endpoint}），无需配置。
                     </small>
                   </span>
                 </label>
@@ -257,16 +249,14 @@ export function StorageBackendClient() {
                   <Cloud aria-hidden="true" />
                   <span>
                     <strong>阿里云 OSS</strong>
-                    <small>
-                      文件保存在阿里云对象存储，减轻服务器磁盘与带宽压力，需要公网访问。
-                    </small>
+                    <small>使用阿里云对象存储，减少服务器磁盘占用。</small>
                   </span>
                 </label>
               </div>
               {backend === "oss" ? (
                 <>
                   <details className="storage-backend-guide">
-                    <summary>第一次用 OSS？查看完整开通教程</summary>
+                    <summary>OSS 配置指南</summary>
                     <div className="storage-backend-guide-body">
                       <h3>第 1 步：创建 Bucket</h3>
                       <ol>
@@ -420,7 +410,7 @@ export function StorageBackendClient() {
                           }
                           type="checkbox"
                         />
-                        启用内网 Endpoint（服务器与 OSS 同地域时免流量费）
+                        使用内网 Endpoint
                       </label>
                       {internal ? (
                         <label className="label">
@@ -442,8 +432,7 @@ export function StorageBackendClient() {
                         id="storage-internal-endpoint-hint"
                       >
                         服务器与 OSS
-                        之间的读写（中转上传/下载、文件预览、直入确认与清理）都走内网；签名直出与签名直入的地址仍走公网
-                        Endpoint，浏览器才能访问。
+                        同地域时可减少公网流量；浏览器直传和直下仍使用公网地址。
                       </small>
                     </div>
                     <label className="label">
@@ -494,10 +483,8 @@ export function StorageBackendClient() {
                 <div>
                   <h2>上传设置</h2>
                   <p>
-                    服务器中转由服务器接力上传（浏览器 → 服务器 →
-                    存储），稳定但占用服务器带宽；签名直入让浏览器直传
-                    OSS，不占服务器带宽，需要 Bucket
-                    配置跨域（CORS），直传失败会自动回退中转。
+                    中转上传兼容性更好；签名直入不占服务器带宽，但需要配置
+                    CORS。直传失败时会自动改用中转。
                   </p>
                 </div>
               </div>
@@ -521,18 +508,13 @@ export function StorageBackendClient() {
                   </div>
                   {uploadMode === "direct" ? (
                     <small className="field-hint storage-backend-inline-hint">
-                      需要在 OSS 控制台为 Bucket
-                      配置跨域规则：来源填本站地址，允许 Methods 勾选 POST，允许
-                      Headers 填
-                      *；未配置时上传会自动回退服务器中转。配置步骤见上方 OSS
-                      教程第 4 步。
+                      需配置 Bucket CORS：来源为本站地址，允许 POST，允许
+                      Headers 填 *。详见上方指南。
                     </small>
                   ) : null}
                 </div>
               ) : (
-                <p className="field-hint">
-                  当前使用服务器存储，文件直接写入本机 MinIO，没有额外选项。
-                </p>
+                <p className="field-hint">服务器存储固定使用中转上传。</p>
               )}
             </section>
 
@@ -541,9 +523,8 @@ export function StorageBackendClient() {
                 <div>
                   <h2>下载设置</h2>
                   <p>
-                    签名直出让浏览器直接从对象存储下载，不占服务器带宽；签名地址
-                    10 分钟内有效，仅对 OSS
-                    中的文件生效，服务器存储的文件始终由服务器中转。
+                    签名直出不占服务器带宽，链接 10
+                    分钟内有效；服务器存储始终使用中转。
                   </p>
                 </div>
               </div>
@@ -567,7 +548,7 @@ export function StorageBackendClient() {
 
             <div className="storage-backend-actions">
               <button className="button" disabled={saving}>
-                {saving ? "保存中" : "保存存储设置"}
+                {saving ? "保存中" : "保存设置"}
               </button>
             </div>
           </form>

@@ -10,6 +10,7 @@ import {
   updateForumCategory,
 } from "@/lib/api";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 type CategoryDraft = {
@@ -133,14 +134,12 @@ export function ForumSettingsClient() {
   }
 
   return (
-    <div className="workspace admin-workspace forum-admin-page">
-      <header className="page-head">
-        <div>
-          <p className="page-eyebrow">管理中心</p>
-          <h1>论坛版块</h1>
-          <p className="muted">维护版块名称、说明和论坛中的展示顺序。</p>
-        </div>
-      </header>
+    <div className="workspace admin-workspace admin-page admin-page--standard forum-admin-page">
+      <AdminPageHeader
+        category="内容与资源"
+        description="创建、编辑和排序论坛版块。"
+        title="版块管理"
+      />
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
@@ -182,7 +181,7 @@ export function ForumSettingsClient() {
               >
                 <span>
                   <strong>{category.name}</strong>
-                  <small>{category.description ?? "暂无描述"}</small>
+                  <small>{category.description || "—"}</small>
                 </span>
                 <em>{category.threadCount}</em>
               </button>
@@ -190,7 +189,7 @@ export function ForumSettingsClient() {
             {!loadingCategories && categories.length === 0 ? (
               <div className="empty-panel compact">
                 <strong>还没有论坛版块</strong>
-                <span>创建第一个版块后，成员才能发布帖子。</span>
+                <span>创建版块后即可发布帖子。</span>
               </div>
             ) : null}
           </div>
@@ -268,8 +267,8 @@ export function ForumSettingsClient() {
                   <strong>删除版块</strong>
                   <span>
                     {selectedCategory.threadCount > 0
-                      ? `该版块已有 ${selectedCategory.threadCount} 个帖子，无法删除。`
-                      : "仅空版块可以删除，删除后无法恢复。"}
+                      ? `已有 ${selectedCategory.threadCount} 个帖子，无法删除。`
+                      : "空版块可删除，且无法恢复。"}
                   </span>
                 </div>
                 {selectedCategory.threadCount === 0 ? (
@@ -287,7 +286,7 @@ export function ForumSettingsClient() {
           ) : (
             <div className="empty-panel">
               <strong>暂无版块</strong>
-              <span>先创建一个论坛版块。</span>
+              <span>请先创建版块。</span>
             </div>
           )}
         </section>
@@ -353,7 +352,7 @@ export function ForumSettingsClient() {
                     }))
                   }
                 />
-                <small className="field-hint">数值越小，展示位置越靠前。</small>
+                <small className="field-hint">数值越小越靠前。</small>
               </label>
             </div>
             <div className="modal-foot">

@@ -4,10 +4,10 @@
 
 .system-settings-page .system-settings-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 20px;
-  width: min(1020px, 100%);
+  width: min(760px, 100%);
+  margin-inline: auto;
 }
 
 .system-settings-page .system-settings-sections {
@@ -396,13 +396,6 @@
 
 .system-settings-page .system-settings-actions .button {
   flex: 0 0 auto;
-}
-
-.system-settings-page .system-settings-side {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  min-width: 0;
 }
 
 @media (max-width: 980px) {

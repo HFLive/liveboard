@@ -12,6 +12,7 @@ import { Prisma } from "@prisma/client";
 import { requireResourceName } from "../../common/resource-name";
 import { PrismaService } from "../prisma/prisma.service";
 import { ClassroomsService } from "../classrooms/classrooms.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import type {
   CreateExerciseSetDto,
   GradeSubmissionDto,
@@ -24,6 +25,7 @@ export class ExercisesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly classrooms: ClassroomsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async listExerciseSets(userId: string | null, classroomId?: string) {
@@ -145,28 +147,64 @@ export class ExercisesService {
       this.validateQuestion(question, index);
     });
 
-    return this.prisma.exerciseSet.create({
-      data: {
-        classroomId: input.classroomId,
-        title,
-        createdById: user.id,
-        openAt,
-        dueAt,
-        allowMultipleSubmissions: input.allowMultipleSubmissions ?? false,
-        showAnswerAfterSubmit: input.showAnswerAfterSubmit ?? false,
-        questions: {
-          create: input.questions.map((question, index) => ({
-            type: question.type,
-            promptJson: question.promptJson as Prisma.InputJsonValue,
-            optionsJson: question.optionsJson as Prisma.InputJsonValue,
-            answerJson: question.answerJson as Prisma.InputJsonValue,
-            score: question.score,
-            required: question.required ?? true,
-            sortOrder: index,
-          })),
+    return this.prisma.$transaction(async (transaction) => {
+      const classroom = await transaction.classroom.findUnique({
+        where: { id: input.classroomId },
+        select: {
+          members: {
+            where: { role: "student" },
+            select: { userId: true },
+          },
         },
-      },
-      include: { questions: true },
+      });
+      if (!classroom) throw new NotFoundException("课堂不存在");
+      const exercise = await transaction.exerciseSet.create({
+        data: {
+          classroomId: input.classroomId,
+          title,
+          createdById: user.id,
+          openAt,
+          dueAt,
+          allowMultipleSubmissions: input.allowMultipleSubmissions ?? false,
+          showAnswerAfterSubmit: input.showAnswerAfterSubmit ?? false,
+          questions: {
+            create: input.questions.map((question, index) => ({
+              type: question.type,
+              promptJson: question.promptJson as Prisma.InputJsonValue,
+              optionsJson: question.optionsJson as Prisma.InputJsonValue,
+              answerJson: question.answerJson as Prisma.InputJsonValue,
+              score: question.score,
+              required: question.required ?? true,
+              sortOrder: index,
+            })),
+          },
+        },
+        include: { questions: true },
+      });
+      await this.notifications.create(
+        {
+          type: "exercise_published",
+          category: "task",
+          priority: "important",
+          actorId: user.id,
+          classroomId: input.classroomId,
+          targetType: "exercise",
+          targetId: exercise.id,
+          title: `新练习：${title}`,
+          detail: dueAt
+            ? `新练习已发布 · ${dueAt.toLocaleString("zh-CN", {
+                month: "numeric",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })} 截止`
+            : "新练习已发布",
+          href: `/app/exercises/${encodeURIComponent(exercise.id)}`,
+          recipientIds: classroom.members.map(({ userId: id }) => id),
+        },
+        transaction,
+      );
+      return exercise;
     });
   }
 
@@ -240,7 +278,7 @@ export class ExercisesService {
       include: {
         classroom: {
           include: {
-            members: { where: { userId: user.id }, select: { role: true } },
+            members: { select: { userId: true, role: true } },
           },
         },
         questions: {
@@ -304,7 +342,7 @@ export class ExercisesService {
       include: {
         classroom: {
           include: {
-            members: { where: { userId: user.id }, select: { role: true } },
+            members: { select: { userId: true, role: true } },
           },
         },
         questions: true,
@@ -319,7 +357,10 @@ export class ExercisesService {
       throw new NotFoundException("Exercise set not found");
     }
 
-    if (exerciseSet.classroom.members[0]?.role !== "student") {
+    if (
+      exerciseSet.classroom.members.find((member) => member.userId === user.id)
+        ?.role !== "student"
+    ) {
       throw new ForbiddenException("No permission to submit exercise");
     }
 
@@ -414,7 +455,7 @@ export class ExercisesService {
                 );
               }
             }
-            return tx.submission.create({
+            const submission = await tx.submission.create({
               data: {
                 exerciseSetId,
                 userId: user.id,
@@ -428,6 +469,28 @@ export class ExercisesService {
               },
               include: { answers: true },
             });
+            await this.notifications.create(
+              {
+                type: "submission_received",
+                category: "task",
+                priority: needsManualReview ? "important" : "normal",
+                actorId: user.id,
+                classroomId: exerciseSet.classroomId,
+                targetType: "exercise",
+                targetId: exerciseSet.id,
+                title: exerciseSet.title,
+                detail: `${user.displayName}提交了练习`,
+                href: `/app/exercises/${encodeURIComponent(exerciseSet.id)}/submissions`,
+                recipientIds: exerciseSet.classroom.members
+                  .filter(({ role }) => role === "teacher")
+                  .map(({ userId: id }) => id),
+                groupKey: `submission:${exerciseSet.id}`,
+                groupWindowMs: 10 * 60 * 1000,
+                aggregatedDetail: "有 {count} 份新提交等待查看",
+              },
+              tx,
+            );
+            return submission;
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );
@@ -660,7 +723,7 @@ export class ExercisesService {
         0,
       );
 
-      return transaction.submission.update({
+      const graded = await transaction.submission.update({
         where: { id: submissionId },
         data: {
           status: "graded",
@@ -671,6 +734,23 @@ export class ExercisesService {
         },
         include: { answers: true },
       });
+      await this.notifications.create(
+        {
+          type: "submission_graded",
+          category: "feedback",
+          priority: "important",
+          actorId: user.id,
+          classroomId: submission.exerciseSet.classroomId,
+          targetType: "exercise",
+          targetId: submission.exerciseSet.id,
+          title: submission.exerciseSet.title,
+          detail: `批改已完成 · ${totalScore}/${submission.maxScore} 分`,
+          href: `/app/exercises/${encodeURIComponent(submission.exerciseSet.id)}`,
+          recipientIds: [submission.userId],
+        },
+        transaction,
+      );
+      return graded;
     });
   }
 

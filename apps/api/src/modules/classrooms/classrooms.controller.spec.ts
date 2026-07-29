@@ -1,4 +1,8 @@
 import type { Response } from "express";
+import {
+  PRIVATE_IMMUTABLE_CACHE_CONTROL,
+  PRIVATE_NO_STORE_CACHE_CONTROL,
+} from "../../common/cache-control";
 import { ClassroomsController } from "./classrooms.controller";
 import type { ClassroomsService } from "./classrooms.service";
 
@@ -52,6 +56,10 @@ describe("ClassroomsController file preview", () => {
       "Content-Security-Policy",
       "sandbox",
     );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Cache-Control",
+      PRIVATE_IMMUTABLE_CACHE_CONTROL,
+    );
     expect(response.send).toHaveBeenCalledWith(content);
   });
 
@@ -93,6 +101,35 @@ describe("ClassroomsController file preview", () => {
       "Content-Disposition",
       'inline; filename="%E8%AF%BE%E5%A0%82%E6%88%AA%E5%9B%BE.png"',
     );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Cache-Control",
+      PRIVATE_IMMUTABLE_CACHE_CONTROL,
+    );
     expect(stream.pipe).toHaveBeenCalledWith(response);
+  });
+
+  it("does not cache classroom attachment downloads", async () => {
+    const stream = { pipe: jest.fn() };
+    classroomsService.downloadFile.mockResolvedValue({
+      file: {
+        filename: "讲义.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 4,
+      },
+      redirectUrl: null,
+      stream,
+    });
+
+    await controller.downloadFile(
+      "user-1",
+      "classroom-1",
+      "file-1",
+      response as unknown as Response,
+    );
+
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Cache-Control",
+      PRIVATE_NO_STORE_CACHE_CONTROL,
+    );
   });
 });

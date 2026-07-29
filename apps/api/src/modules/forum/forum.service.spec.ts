@@ -42,6 +42,7 @@ describe("ForumService", () => {
       prisma as unknown as PrismaService,
       assets as unknown as AssetsService,
       permissions as unknown as PermissionsService,
+      { create: jest.fn() } as never,
     );
     prisma.forumPost.findMany.mockResolvedValue([]);
     prisma.$transaction.mockImplementation(

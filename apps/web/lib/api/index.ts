@@ -1,7 +1,6 @@
 import type {
   AdminUserSummary,
   AdminBadgeSummary,
-  ActivityItem,
   AiProviderConfigSummary,
   AiSettingsSummary,
   AiUsageSummary,
@@ -20,6 +19,8 @@ import type {
   ForumThreadDetail,
   ForumThreadSummary,
   ForumThreadStatus,
+  NotificationCategory,
+  NotificationListResult,
   PermissionLevel,
   PermissionTargetType,
   QuestionType,
@@ -144,19 +145,39 @@ export function getUserPublicActivity(userId: string) {
   return request<UserPublicActivity>(`/auth/profile/${userId}/activity`);
 }
 
-export function listActivity() {
-  return request<{ items: ActivityItem[]; unreadCount: number }>("/activity");
+export function listNotifications(input?: {
+  status?: "all" | "unread";
+  category?: NotificationCategory;
+  cursor?: string;
+  limit?: number;
+}) {
+  const params = new URLSearchParams();
+  if (input?.status && input.status !== "all") {
+    params.set("status", input.status);
+  }
+  if (input?.category) params.set("category", input.category);
+  if (input?.cursor) params.set("cursor", input.cursor);
+  if (input?.limit) params.set("limit", String(input.limit));
+  const query = params.size > 0 ? `?${params.toString()}` : "";
+  return request<NotificationListResult>(`/notifications${query}`);
 }
 
-export function markActivityRead() {
-  return request<{ activityReadAt: string }>("/activity/read", {
+export function markAllNotificationsRead() {
+  return request<{ updatedCount: number }>("/notifications/read", {
     method: "POST",
   });
 }
 
-export function dismissActivity(activityId: string) {
-  return request<{ dismissed: true }>(
-    `/activity/${encodeURIComponent(activityId)}`,
+export function setNotificationRead(notificationId: string, read: boolean) {
+  return request<{ read: boolean }>(
+    `/notifications/${encodeURIComponent(notificationId)}/read`,
+    { method: read ? "POST" : "DELETE" },
+  );
+}
+
+export function archiveNotification(notificationId: string) {
+  return request<{ archived: true }>(
+    `/notifications/${encodeURIComponent(notificationId)}`,
     { method: "DELETE" },
   );
 }

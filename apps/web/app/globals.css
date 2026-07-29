@@ -296,6 +296,10 @@ strong {
   background-size: contain;
 }
 
+html:not([data-site-brand-icons-ready]) .site-brand-mark {
+  visibility: hidden;
+}
+
 html[data-site-brand-icon-light="true"]
   .site-brand-mark[data-brand-tone="light"]
   .site-brand-fallback,
@@ -3726,6 +3730,15 @@ p.muted {
 .render-image {
   max-width: 100%;
   border: 1px solid var(--line);
+}
+
+.render-image-expandable {
+  cursor: zoom-in;
+}
+
+.render-image-expandable:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
 }
 
 .render-attachment {

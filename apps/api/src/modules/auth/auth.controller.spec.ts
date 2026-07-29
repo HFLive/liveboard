@@ -1,4 +1,8 @@
 import type { Request, Response } from "express";
+import {
+  PRIVATE_IMMUTABLE_CACHE_CONTROL,
+  PRIVATE_REVALIDATED_CACHE_CONTROL,
+} from "../../common/cache-control";
 import type { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 
@@ -6,6 +10,8 @@ describe("AuthController session cookies", () => {
   const originalSecureSetting = process.env.SESSION_COOKIE_SECURE;
   const originalSecret = process.env.SESSION_SECRET;
   const authService = {
+    getAvatar: jest.fn(),
+    getBanner: jest.fn(),
     validateLogin: jest.fn(),
   };
   const request = {
@@ -15,6 +21,8 @@ describe("AuthController session cookies", () => {
   const response = {
     clearCookie: jest.fn(),
     cookie: jest.fn(),
+    redirect: jest.fn(),
+    setHeader: jest.fn(),
   } as unknown as Response;
   let controller: AuthController;
 
@@ -64,6 +72,43 @@ describe("AuthController session cookies", () => {
       expect.objectContaining({ httpOnly: true, secure: true }),
     );
   });
+
+  it.each([
+    ["avatar", "getAvatar"],
+    ["banner", "getBanner"],
+  ] as const)(
+    "uses immutable caching only for versioned %s URLs",
+    async (resource, serviceMethod) => {
+      const stream = { pipe: jest.fn() };
+      authService[serviceMethod].mockResolvedValue({
+        mimeType: "image/png",
+        redirectUrl: null,
+        stream,
+      });
+
+      if (resource === "avatar") {
+        await controller.getAvatar("user-1", "user-1", response, "7");
+      } else {
+        await controller.getBanner("user-1", "user-1", response, "7");
+      }
+
+      expect(response.setHeader).toHaveBeenCalledWith(
+        "Cache-Control",
+        PRIVATE_IMMUTABLE_CACHE_CONTROL,
+      );
+
+      jest.mocked(response.setHeader).mockClear();
+      if (resource === "avatar") {
+        await controller.getAvatar("user-1", "user-1", response);
+      } else {
+        await controller.getBanner("user-1", "user-1", response);
+      }
+      expect(response.setHeader).toHaveBeenCalledWith(
+        "Cache-Control",
+        PRIVATE_REVALIDATED_CACHE_CONTROL,
+      );
+    },
+  );
 });
 
 function restoreEnvironmentVariable(key: string, value: string | undefined) {

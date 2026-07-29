@@ -1,4 +1,8 @@
 import type { Response } from "express";
+import {
+  PRIVATE_IMMUTABLE_CACHE_CONTROL,
+  PRIVATE_NO_STORE_CACHE_CONTROL,
+} from "../../common/cache-control";
 import type { AssetsService } from "./assets.service";
 import { FilesController } from "./files.controller";
 import type { FilesService } from "./files.service";
@@ -47,6 +51,10 @@ describe("FilesController Markdown endpoints", () => {
       "Content-Disposition",
       'inline; filename="preview.png"',
     );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Cache-Control",
+      PRIVATE_IMMUTABLE_CACHE_CONTROL,
+    );
     expect(stream.pipe).toHaveBeenCalledWith(response);
   });
 
@@ -80,6 +88,10 @@ describe("FilesController Markdown endpoints", () => {
     expect(response.setHeader).toHaveBeenCalledWith(
       "Cross-Origin-Resource-Policy",
       "same-origin",
+    );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Cache-Control",
+      PRIVATE_NO_STORE_CACHE_CONTROL,
     );
     expect(stream.pipe).toHaveBeenCalledWith(response);
   });
@@ -141,6 +153,10 @@ describe("FilesController Markdown endpoints", () => {
       expect(response.setHeader).toHaveBeenCalledWith(
         "Content-Security-Policy",
         "sandbox",
+      );
+      expect(response.setHeader).toHaveBeenCalledWith(
+        "Cache-Control",
+        PRIVATE_IMMUTABLE_CACHE_CONTROL,
       );
       expect(response.send).toHaveBeenCalledWith(content);
     },
@@ -215,6 +231,10 @@ describe("FilesController Markdown endpoints", () => {
     expect(response.setHeader).toHaveBeenCalledWith(
       "X-Content-Type-Options",
       "nosniff",
+    );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Cache-Control",
+      PRIVATE_NO_STORE_CACHE_CONTROL,
     );
     expect(response.send).toHaveBeenCalledWith("# 第一讲\n");
   });

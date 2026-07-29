@@ -8,6 +8,7 @@
   gap: 28px;
   min-width: 0;
   width: min(720px, 100%);
+  margin-inline: auto;
 }
 
 .storage-backend-page .storage-backend-section {

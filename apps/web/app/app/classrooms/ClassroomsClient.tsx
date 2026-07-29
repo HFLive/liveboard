@@ -16,7 +16,6 @@ import {
   listVisibilityUsers,
 } from "@/lib/api";
 import { classroomDetail } from "@/lib/routes";
-import { formatRelativeTime } from "@/lib/labels";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 type DraftRole = ClassroomMemberRole | "none";
@@ -186,11 +185,7 @@ export function ClassroomsClient() {
               </small>
             ) : null}
             <span className="classroom-row-stats">
-              <span>
-                教师 {classroom.teacherCount} · 学生 {classroom.studentCount} ·
-                课件 {classroom.deckCount} · 练习 {classroom.exerciseCount}
-              </span>
-              <span>更新于 {formatRelativeTime(classroom.updatedAt)}</span>
+              课件 {classroom.deckCount} · 练习 {classroom.exerciseCount}
             </span>
           </Link>
         ))}

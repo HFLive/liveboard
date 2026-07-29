@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ContentBlock } from "@/lib/api";
 import { RenderBlockContent, buildBlockData } from "./ContentBlockRenderer";
@@ -61,6 +61,45 @@ describe("ContentBlockRenderer", () => {
       text: "E = mc^2",
       display: true,
     });
+  });
+
+  it("opens document images in a zoomable and rotatable viewer", () => {
+    render(
+      <RenderBlockContent
+        block={block("image", {
+          text: "线路图",
+          url: "/assets/image-1",
+          widthPercent: 60,
+        })}
+      />,
+    );
+
+    const image = screen.getByRole("button", { name: "线路图" });
+    expect(image).toHaveStyle({ width: "60%" });
+    fireEvent.click(image);
+
+    expect(
+      screen.getByRole("dialog", { name: "查看大图：线路图" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "放大图片" }));
+    expect(screen.getByLabelText("当前缩放比例")).toHaveTextContent("125%");
+    const rotateButton = screen.getByRole("button", {
+      name: "顺时针旋转图片",
+    });
+    const previewImage = screen.getAllByAltText("线路图")[1];
+    fireEvent.click(rotateButton);
+    expect(previewImage).toHaveStyle({
+      transform: "scale(1.25) rotate(90deg)",
+    });
+    fireEvent.click(rotateButton);
+    fireEvent.click(rotateButton);
+    fireEvent.click(rotateButton);
+    expect(previewImage).toHaveStyle({
+      transform: "scale(1.25) rotate(360deg)",
+    });
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("renders only normalized Bilibili player embeds", () => {

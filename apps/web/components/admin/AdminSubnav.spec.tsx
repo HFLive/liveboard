@@ -39,11 +39,11 @@ describe("AdminSubnav", () => {
     await waitFor(() =>
       expect(screen.getByText("系统与服务")).toBeInTheDocument(),
     );
-    expect(screen.getByRole("link", { name: "成员" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "成员管理" })).toHaveAttribute(
       "aria-current",
       "page",
     );
-    expect(screen.queryByText("管理总览")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "管理总览" })).toBeInTheDocument();
     expect(screen.queryByText("权限组")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "文档权限" })).toBeInTheDocument();
   });

@@ -22,7 +22,7 @@ import {
   type AiProviderConfig,
   type AiSettings,
 } from "@/lib/api";
-import { formatDateTime } from "@/lib/labels";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 const providerOptions = [
@@ -399,14 +399,12 @@ export function AiSettingsClient() {
   }
 
   return (
-    <div className="workspace admin-workspace ai-settings-page">
-      <header className="page-head">
-        <div>
-          <p className="page-eyebrow">管理中心</p>
-          <h1>AI 服务</h1>
-          <p className="muted">管理模型配置、回答范围和成员默认调用限额。</p>
-        </div>
-      </header>
+    <div className="workspace admin-workspace admin-page admin-page--focused ai-settings-page">
+      <AdminPageHeader
+        category="系统与服务"
+        description="配置模型、资料范围和每日调用限额。"
+        title="AI 服务"
+      />
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
@@ -419,7 +417,6 @@ export function AiSettingsClient() {
           <div className="panel-head">
             <div>
               <h2 id="ai-service-settings-title">服务设置</h2>
-              <p>控制 AI 是否可用、回答资料范围和成员默认用量。</p>
             </div>
           </div>
 
@@ -490,9 +487,7 @@ export function AiSettingsClient() {
                       每日默认调用限额
                     </label>
                   </div>
-                  <p>
-                    每位成员每天的调用上限，按系统时区归零；成员管理中可设置例外。
-                  </p>
+                  <p>每人每天的调用上限；可在成员管理中单独调整。</p>
                 </div>
                 <div className="ai-call-limit-control">
                   <input
@@ -530,7 +525,7 @@ export function AiSettingsClient() {
           <div className="panel-head">
             <div>
               <h2 id="ai-provider-settings-title">模型配置</h2>
-              <p>管理模型服务连接；API Key 加密保存且不会再次完整显示。</p>
+              <p>API Key 加密保存，之后不会完整显示。</p>
             </div>
             <button className="button" onClick={startNewConfig} type="button">
               <Plus aria-hidden="true" className="button-icon" />
@@ -588,7 +583,7 @@ export function AiSettingsClient() {
                 })
               ) : (
                 <div className="ai-config-empty">
-                  <p>还没有模型配置，添加后即可连接 AI 服务。</p>
+                  <p>添加配置后即可启用 AI。</p>
                   <button
                     className="button secondary"
                     onClick={startNewConfig}
@@ -604,10 +599,7 @@ export function AiSettingsClient() {
 
         <div className="ai-policy-note">
           <ShieldCheck aria-hidden="true" />
-          <p>
-            AI 只检索提问用户有权限访问的文件；回答稳定性由系统统一设置为
-            0.2。最近更新：{settings ? formatDateTime(settings.updatedAt) : "-"}
-          </p>
+          <p>AI 只会检索提问者有权访问的文件。</p>
         </div>
       </section>
 
@@ -623,8 +615,7 @@ export function AiSettingsClient() {
             <div className="modal-head">
               <div>
                 <h2 id="ai-context-title">回答范围</h2>
-                <span className="ai-risk-label low">影响成本与引用范围</span>
-                <p>控制每次问答最多读取的资料数量和文本长度。</p>
+                <p>设置单次问答可读取的资料数量和文本长度。</p>
               </div>
               <button
                 aria-label="关闭回答范围设置"
@@ -720,7 +711,6 @@ export function AiSettingsClient() {
                     </span>
                   ) : null}
                 </div>
-                <p>保存连接信息；切换当前配置需要在配置列表中操作。</p>
               </div>
               <button
                 aria-label="关闭模型配置"

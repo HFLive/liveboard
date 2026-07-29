@@ -37,6 +37,7 @@ describe("ClassroomsService", () => {
     presignDownload: jest.fn(),
     healthCheckActive: jest.fn(),
   };
+  const notifications = { create: jest.fn() };
   let service: ClassroomsService;
 
   beforeEach(() => {
@@ -48,6 +49,7 @@ describe("ClassroomsService", () => {
     service = new ClassroomsService(
       prisma as unknown as PrismaService,
       storage as unknown as StorageService,
+      notifications as never,
     );
   });
 
@@ -86,6 +88,9 @@ describe("ClassroomsService", () => {
       userId: author.id,
       role: "teacher",
     });
+    prisma.classroom.findUnique.mockResolvedValue({
+      members: [{ userId: author.id }, { userId: "student-1" }],
+    });
     prisma.classroomAnnouncement.create.mockResolvedValue({
       id: "announcement-1",
       classroomId: "classroom-1",
@@ -95,6 +100,7 @@ describe("ClassroomsService", () => {
       createdAt: new Date("2026-07-26T01:00:00.000Z"),
       updatedAt: new Date("2026-07-26T01:00:00.000Z"),
     });
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
 
     await expect(
       service.createAnnouncement("teacher-1", "classroom-1", {
@@ -105,6 +111,13 @@ describe("ClassroomsService", () => {
       id: "announcement-1",
       author: { id: "teacher-1" },
     });
+    expect(notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "classroom_announcement",
+        recipientIds: ["teacher-1", "student-1"],
+      }),
+      prisma,
+    );
   });
 
   it("rejects announcement creation from a classroom student", async () => {
@@ -437,6 +450,7 @@ describe("ClassroomsService direct upload", () => {
     service = new ClassroomsService(
       prisma as unknown as PrismaService,
       storage as unknown as StorageService,
+      { create: jest.fn() } as never,
     );
     prisma.user.findUnique.mockResolvedValue(teacher);
     prisma.classroomMember.findUnique.mockResolvedValue({
