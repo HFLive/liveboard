@@ -194,9 +194,7 @@ export class AssetsService {
     const pending = await this.requirePendingUpload(userId, uploadId, "asset");
     const backend = await this.storage.backendFor("oss");
 
-    const stat = await backend
-      .statObject(pending.storageKey)
-      .catch(() => null);
+    const stat = await backend.statObject(pending.storageKey).catch(() => null);
     if (!stat) {
       await this.discardPendingUpload(pending);
       throw new BadRequestException("对象存储中未找到已上传的文件,请重新上传");
@@ -242,11 +240,7 @@ export class AssetsService {
     const pending = await this.prisma.pendingUpload.findUnique({
       where: { id: uploadId },
     });
-    if (
-      pending &&
-      pending.kind === "asset" &&
-      pending.uploadedBy === userId
-    ) {
+    if (pending && pending.kind === "asset" && pending.uploadedBy === userId) {
       await this.discardPendingUpload(pending);
     }
     return { ok: true as const };
@@ -295,7 +289,12 @@ export class AssetsService {
   /** 直入签名的 UX 预检:重名与配额(含未确认的直入预留)。 */
   private async assertDirectUploadQuotaAvailable(
     userId: string,
-    context: { workspaceId: string; folderId: string | null; fileId: string | null; kind: "embedded" | "standalone" },
+    context: {
+      workspaceId: string;
+      folderId: string | null;
+      fileId: string | null;
+      kind: "embedded" | "standalone";
+    },
     filename: string,
     incomingBytes: number,
   ) {

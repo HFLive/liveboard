@@ -156,7 +156,8 @@ export function putWithProgress(
   });
 }
 
-function parseJsonResponse(value: string): unknown {  if (!value) return null;
+function parseJsonResponse(value: string): unknown {
+  if (!value) return null;
   try {
     return JSON.parse(value);
   } catch {

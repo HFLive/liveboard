@@ -733,7 +733,10 @@ export function ContentClient() {
     setMessage(null);
     try {
       const outcomes = await uploadFiles(jobs, (job, options) =>
-        uploadAssetDirect({ file: job.file, folderId: activeFolderId }, options),
+        uploadAssetDirect(
+          { file: job.file, folderId: activeFolderId },
+          options,
+        ),
       );
       const successCount = outcomes.filter(
         (outcome) => outcome.result !== undefined,

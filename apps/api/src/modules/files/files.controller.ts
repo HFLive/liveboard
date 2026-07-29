@@ -464,7 +464,9 @@ export class FilesController {
     @CurrentUserId() userId: string | null,
     @Body() body: ConfirmAssetUploadDto,
   ) {
-    return { asset: await this.assetsService.confirmAssetUpload(userId, body.uploadId) };
+    return {
+      asset: await this.assetsService.confirmAssetUpload(userId, body.uploadId),
+    };
   }
 
   @Post("assets/upload-abort")

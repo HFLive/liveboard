@@ -35,7 +35,10 @@ export interface ObjectStorageBackend {
    * 返回 null 表示该后端不支持签名直入（例如只监听内网的 MinIO），
    * 调用方应回退到服务器中转上传。
    */
-  presignPut(key: string, options: { expirySeconds: number }): Promise<string | null>;
+  presignPut(
+    key: string,
+    options: { expirySeconds: number },
+  ): Promise<string | null>;
   /** 读取对象元信息，用于直入上传后的存在性与大小校验。 */
   statObject(key: string): Promise<{ size: number }>;
   healthCheck(): Promise<void>;

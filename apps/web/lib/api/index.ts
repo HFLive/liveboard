@@ -1291,7 +1291,8 @@ export async function uploadAssetDirect(
   });
 }
 
-export function listLibraryAssets() {  return request<{ assets: FileAssetSummary[] }>("/assets/library");
+export function listLibraryAssets() {
+  return request<{ assets: FileAssetSummary[] }>("/assets/library");
 }
 
 export function listAssetReferences(assetId: string) {

@@ -552,7 +552,6 @@ describe("AssetsService consistency", () => {
   });
 });
 
-
 describe("AssetsService direct upload", () => {
   const prisma = {
     user: { findUnique: jest.fn() },

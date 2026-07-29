@@ -587,9 +587,7 @@ export class ClassroomsService {
     const classroom = await this.requireClassroom(classroomId);
     const backend = await this.storage.backendFor("oss");
 
-    const stat = await backend
-      .statObject(pending.storageKey)
-      .catch(() => null);
+    const stat = await backend.statObject(pending.storageKey).catch(() => null);
     if (!stat) {
       await this.discardPendingUpload(pending);
       throw new BadRequestException("对象存储中未找到已上传的文件,请重新上传");

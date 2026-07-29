@@ -350,9 +350,7 @@ describe("StorageService", () => {
     // 内网配置下应额外创建一个公网 Endpoint 的签名客户端
     const clientConfigs = MockedMinioClient.mock.calls.map(([arg]) => arg);
     expect(
-      clientConfigs.some((arg) =>
-        String(arg.endPoint).includes("-internal"),
-      ),
+      clientConfigs.some((arg) => String(arg.endPoint).includes("-internal")),
     ).toBe(true);
     expect(
       clientConfigs.some(
@@ -432,9 +430,7 @@ describe("StorageService", () => {
       updatedAt: new Date("2026-07-27T00:00:00Z"),
     });
 
-    await expect(
-      service.presignUpload("oss", "some/key"),
-    ).resolves.toBeNull();
+    await expect(service.presignUpload("oss", "some/key")).resolves.toBeNull();
     expect(mockMinioClient.presignedPutObject).not.toHaveBeenCalled();
   });
 
@@ -459,9 +455,9 @@ describe("StorageService", () => {
       updatedAt: new Date("2026-07-27T00:00:00Z"),
     });
 
-    await expect(service.presignUpload("oss", "ws/2026-07-29/a.pdf")).resolves.toBe(
-      "https://oss.example/signed-put-url",
-    );
+    await expect(
+      service.presignUpload("oss", "ws/2026-07-29/a.pdf"),
+    ).resolves.toBe("https://oss.example/signed-put-url");
     expect(mockMinioClient.presignedPutObject).toHaveBeenCalledWith(
       "liveboard",
       "ws/2026-07-29/a.pdf",

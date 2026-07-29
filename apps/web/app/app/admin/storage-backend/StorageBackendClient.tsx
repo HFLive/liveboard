@@ -174,7 +174,8 @@ export function StorageBackendClient() {
               <div>
                 <dt>上传方式</dt>
                 <dd>
-                  {settings.backend === "oss" && settings.uploadMode === "direct"
+                  {settings.backend === "oss" &&
+                  settings.uploadMode === "direct"
                     ? "签名直入"
                     : "服务器中转"}
                 </dd>
@@ -352,9 +353,9 @@ export function StorageBackendClient() {
                           cn-hangzhou。
                         </li>
                         <li>
-                          ECS 与 Bucket
-                          同地域时，建议在下方启用「内网 Endpoint」，服务器与
-                          OSS 之间的读写不产生公网流量费；自定义 Endpoint
+                          ECS 与 Bucket 同地域时，建议在下方启用「内网
+                          Endpoint」，服务器与 OSS
+                          之间的读写不产生公网流量费；自定义 Endpoint
                           一般留空即可。
                         </li>
                         <li>
@@ -440,7 +441,8 @@ export function StorageBackendClient() {
                         className="field-hint storage-backend-inline-hint"
                         id="storage-internal-endpoint-hint"
                       >
-                        服务器与 OSS 之间的读写（中转上传/下载、文件预览、直入确认与清理）都走内网；签名直出与签名直入的地址仍走公网
+                        服务器与 OSS
+                        之间的读写（中转上传/下载、文件预览、直入确认与清理）都走内网；签名直出与签名直入的地址仍走公网
                         Endpoint，浏览器才能访问。
                       </small>
                     </div>
@@ -494,7 +496,8 @@ export function StorageBackendClient() {
                   <p>
                     服务器中转由服务器接力上传（浏览器 → 服务器 →
                     存储），稳定但占用服务器带宽；签名直入让浏览器直传
-                    OSS，不占服务器带宽，需要 Bucket 配置跨域（CORS），直传失败会自动回退中转。
+                    OSS，不占服务器带宽，需要 Bucket
+                    配置跨域（CORS），直传失败会自动回退中转。
                   </p>
                 </div>
               </div>
@@ -518,8 +521,9 @@ export function StorageBackendClient() {
                   </div>
                   {uploadMode === "direct" ? (
                     <small className="field-hint storage-backend-inline-hint">
-                      需要在 OSS 控制台为 Bucket 配置跨域规则：来源填本站地址，允许
-                      Methods 勾选 PUT，允许 Headers 填
+                      需要在 OSS 控制台为 Bucket
+                      配置跨域规则：来源填本站地址，允许 Methods 勾选 PUT，允许
+                      Headers 填
                       *；未配置时上传会自动回退服务器中转。配置步骤见上方 OSS
                       教程第 4 步。
                     </small>
