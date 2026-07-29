@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
-import { APP_ROUTES } from "@/lib/routes";
+import { AdminOverviewClient } from "./AdminOverviewClient";
 
 export default function AdminPage() {
-  redirect(APP_ROUTES.adminUsers);
+  return <AdminOverviewClient />;
 }

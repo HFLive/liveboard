@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Post,
+  Query,
   Res,
   UploadedFile,
   UseInterceptors,
@@ -23,6 +24,11 @@ import {
 } from "class-validator";
 import type { Response } from "express";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
+import {
+  isVersionedResourceRequest,
+  PUBLIC_IMMUTABLE_CACHE_CONTROL,
+  PUBLIC_REVALIDATED_CACHE_CONTROL,
+} from "../../common/cache-control";
 import { Public } from "../../common/public.decorator";
 import {
   MAX_FAVICON_SIZE_BYTES,
@@ -79,15 +85,16 @@ export class SettingsController {
 
   @Get("settings/public")
   @Public()
-  async publicSettings() {
+  async publicSettings(@Res({ passthrough: true }) response: Response) {
+    response.setHeader("Cache-Control", PUBLIC_REVALIDATED_CACHE_CONTROL);
     return { settings: await this.settingsService.getPublicSettings() };
   }
 
   @Get("settings/favicon")
   @Public()
-  async favicon(@Res() response: Response) {
+  async favicon(@Res() response: Response, @Query("v") version?: string) {
     const favicon = await this.settingsService.getFavicon();
-    this.sendFavicon(response, favicon);
+    this.sendFavicon(response, favicon, version);
   }
 
   @Get("settings/favicon/:variant")
@@ -95,23 +102,30 @@ export class SettingsController {
   async faviconVariant(
     @Param("variant") variant: string,
     @Res() response: Response,
+    @Query("v") version?: string,
   ) {
     const favicon = await this.settingsService.getFavicon(
       parseFaviconVariant(variant),
     );
-    this.sendFavicon(response, favicon);
+    this.sendFavicon(response, favicon, version);
   }
 
   private sendFavicon(
     response: Response,
     favicon: Awaited<ReturnType<SettingsService["getFavicon"]>>,
+    version?: string,
   ) {
+    response.setHeader(
+      "Cache-Control",
+      isVersionedResourceRequest(version)
+        ? PUBLIC_IMMUTABLE_CACHE_CONTROL
+        : PUBLIC_REVALIDATED_CACHE_CONTROL,
+    );
     if (favicon.redirectUrl) {
       response.redirect(302, favicon.redirectUrl);
       return;
     }
     response.setHeader("Content-Type", favicon.mimeType);
-    response.setHeader("Cache-Control", "public, max-age=3600");
     response.setHeader("Cross-Origin-Resource-Policy", "same-site");
     response.setHeader("X-Content-Type-Options", "nosniff");
     favicon.stream!.pipe(response);

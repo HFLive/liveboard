@@ -49,6 +49,9 @@ describe("AppSettingsProvider", () => {
     await waitFor(() =>
       expect(setAppTimeZone).toHaveBeenCalledWith("Asia/Shanghai"),
     );
+    expect(document.documentElement).toHaveAttribute(
+      "data-site-brand-icons-ready",
+    );
     expect(
       document.head
         .querySelector<HTMLLinkElement>("link[data-liveboard-favicon='true']")
@@ -63,6 +66,83 @@ describe("AppSettingsProvider", () => {
 
     await waitFor(() => expect(getPublicSettings).toHaveBeenCalledTimes(1));
     expect(setAppTimeZone).not.toHaveBeenCalled();
+    expect(document.documentElement).not.toHaveAttribute(
+      "data-site-brand-icons-ready",
+    );
+  });
+
+  it("keeps brand marks pending until icon settings are known", async () => {
+    let resolveSettings: ((value: typeof settingsResult) => void) | undefined;
+    vi.mocked(getPublicSettings).mockReturnValue(
+      new Promise((resolve) => {
+        resolveSettings = resolve;
+      }),
+    );
+
+    render(<AppSettingsProvider>内容</AppSettingsProvider>);
+
+    expect(document.documentElement).not.toHaveAttribute(
+      "data-site-brand-icons-ready",
+    );
+
+    resolveSettings?.(settingsResult);
+    await waitFor(() =>
+      expect(document.documentElement).toHaveAttribute(
+        "data-site-brand-icons-ready",
+      ),
+    );
+  });
+
+  it("restores a validated uploaded icon from local cache before revalidation", () => {
+    vi.mocked(getPublicSettings).mockReturnValue(
+      new Promise<typeof settingsResult>(() => undefined),
+    );
+    window.localStorage.setItem(
+      "liveboard:site-icon-settings:v1",
+      JSON.stringify({
+        faviconUrl: "/settings/favicon?v=7",
+        faviconLightUrl: null,
+        faviconDarkUrl: null,
+      }),
+    );
+
+    render(<AppSettingsProvider>内容</AppSettingsProvider>);
+
+    expect(document.documentElement).toHaveAttribute(
+      "data-site-brand-icons-ready",
+    );
+    expect(document.documentElement).toHaveAttribute(
+      "data-site-brand-icon-light",
+      "true",
+    );
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--site-brand-icon-light",
+      ),
+    ).toContain("http://api.test/settings/favicon?v=7");
+  });
+
+  it("ignores invalid icon paths stored by the browser", () => {
+    vi.mocked(getPublicSettings).mockReturnValue(
+      new Promise<typeof settingsResult>(() => undefined),
+    );
+    window.localStorage.setItem(
+      "liveboard:site-icon-settings:v1",
+      JSON.stringify({
+        faviconUrl: "https://tracker.example/icon.png",
+        faviconLightUrl: null,
+        faviconDarkUrl: null,
+      }),
+    );
+
+    render(<AppSettingsProvider>内容</AppSettingsProvider>);
+
+    expect(document.documentElement).not.toHaveAttribute(
+      "data-site-brand-icons-ready",
+    );
+    expect(
+      window.localStorage.getItem("liveboard:site-icon-settings:v1"),
+    ).toBeNull();
   });
 
   it("installs the uploaded workspace favicon", async () => {
@@ -83,6 +163,11 @@ describe("AppSettingsProvider", () => {
       ).toBe("http://api.test/settings/favicon?v=1"),
     );
     expect(apiResourceUrl).toHaveBeenCalledWith("/settings/favicon?v=1");
+    expect(
+      JSON.parse(
+        window.localStorage.getItem("liveboard:site-icon-settings:v1") ?? "{}",
+      ),
+    ).toMatchObject({ faviconUrl: "/settings/favicon?v=1" });
   });
 
   it("replaces the uploaded favicon with one consistent default URL", () => {
@@ -94,6 +179,9 @@ describe("AppSettingsProvider", () => {
         .querySelector<HTMLLinkElement>("link[data-liveboard-favicon='true']")
         ?.getAttribute("href"),
     ).toBe("/favicon.ico?v=liveboard-default-1");
+    expect(
+      window.localStorage.getItem("liveboard:site-icon-settings:v1"),
+    ).toBeNull();
   });
 
   it("installs optional light and dark variants for favicons and brand marks", () => {

@@ -2,7 +2,7 @@
    紧凑控件。页面关系由固定侧栏表达，内容层级由留白而不是大卡片表达。 */
 .admin-shell {
   display: grid;
-  grid-template-columns: 188px minmax(0, 1fr);
+  grid-template-columns: 216px minmax(0, 1fr);
   align-items: start;
   width: 100%;
   min-width: 0;
@@ -10,49 +10,46 @@
 
 .admin-context-nav {
   position: sticky;
-  top: 0;
+  top: var(--page-gutter);
+  align-self: start;
   display: grid;
   align-content: start;
-  gap: 20px;
+  gap: 16px;
   min-width: 0;
-  min-height: calc(100dvh - (var(--page-gutter) * 2));
+  height: calc(100dvh - (var(--page-gutter) * 2));
+  min-height: 0;
   max-height: calc(100dvh - (var(--page-gutter) * 2));
   overflow-y: auto;
   border-right: 1px solid var(--line);
-  padding: 2px 18px 24px 0;
+  padding: 2px 20px 24px 0;
   scrollbar-width: thin;
 }
 
 .admin-context-head {
   display: grid;
-  gap: 3px;
-  padding: 2px 9px 0;
+  gap: 4px;
+  padding: 2px 10px 12px;
 }
 
 .admin-context-head strong {
   color: var(--text);
-  font-size: 16px;
+  font-size: 17px;
+  font-weight: 700;
   letter-spacing: -0.01em;
-}
-
-.admin-context-head span {
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.45;
 }
 
 .admin-nav-group {
   display: grid;
-  gap: 6px;
+  gap: 7px;
 }
 
 .admin-nav-group h2 {
   margin: 0;
-  padding: 0 9px;
+  padding: 0 10px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 650;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.055em;
 }
 
 .admin-nav-group > div {
@@ -66,10 +63,10 @@
   grid-template-columns: 20px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  min-height: 34px;
+  min-height: 38px;
   border-radius: 9px;
   color: var(--text-soft);
-  padding: 6px 9px;
+  padding: 7px 10px;
   text-decoration: none;
 }
 
@@ -107,70 +104,194 @@
 
 .admin-context-nav a span {
   overflow: hidden;
-  font-size: 12px;
+  font-size: 12.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .admin-shell-main {
   min-width: 0;
-  padding-left: 24px;
+  padding-left: clamp(24px, 3vw, 44px);
 }
 
 .admin-workspace {
-  gap: 18px;
+  gap: 22px;
   width: 100%;
   max-width: none;
+  margin-inline: auto;
 }
 
-/* 全站隐藏普通页面标题；管理中心需要一个克制的上下文标题，避免用户只能
-   依靠导航选中态猜测当前工具。这里恢复为紧凑文字，不恢复旧的大标题区。 */
-.admin-shell-main .admin-workspace > .page-head {
-  display: flex !important;
+.admin-page--wide {
+  max-width: 1280px;
+}
+
+.admin-page--standard {
+  max-width: 1060px;
+}
+
+.admin-page--focused {
+  max-width: 960px;
+}
+
+.admin-page-header {
+  display: flex;
   align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
   min-height: 0;
-  border: 0;
-  padding: 0 0 4px;
+  border-bottom: 1px solid var(--line-strong);
+  padding: 0 0 18px;
 }
 
-.admin-shell-main
-  .admin-workspace
-  > .page-head:not(:has(.title-input))
-  > div:first-child {
-  display: grid !important;
-  gap: 3px;
+.admin-page-title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
 }
 
-.admin-shell-main .admin-workspace > .page-head .page-eyebrow {
-  display: none;
+.admin-page-kicker {
+  color: var(--accent-dark);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
-.admin-shell-main .admin-workspace > .page-head h1 {
-  font-size: 20px;
-  font-weight: 680;
+.admin-page-title h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
   line-height: 1.25;
-  letter-spacing: -0.012em;
+  letter-spacing: -0.018em;
 }
 
-.admin-shell-main .admin-workspace > .page-head > div > p.muted {
-  display: block;
+.admin-page-title p {
   max-width: 680px;
   margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.admin-page-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding-top: 14px;
+}
+
+.admin-workspace .panel-head {
+  min-height: 42px;
+  padding-block: 0 12px;
+}
+
+.admin-workspace .panel-head h2 {
+  font-size: 15px;
+  font-weight: 680;
+}
+
+.admin-workspace .panel-head p {
+  max-width: 640px;
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.admin-workspace
+  :is(.error-text, .success-text)
+  + :is(.error-text, .success-text) {
+  margin-top: -14px;
+}
+
+.admin-overview-groups {
+  display: grid;
+  gap: 28px;
+}
+
+.admin-overview-group {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.admin-overview-group-head {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+}
+
+.admin-overview-group-head h2,
+.admin-overview-group-head p {
+  margin: 0;
+}
+
+.admin-overview-group-head h2 {
+  font-size: 14px;
+}
+
+.admin-overview-group-head p {
+  color: var(--muted);
   font-size: 11px;
   line-height: 1.55;
 }
 
-.admin-workspace .panel-head {
-  min-height: 38px;
+.admin-overview-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.admin-workspace .panel-head h2 {
-  font-size: 14px;
+.admin-overview-links a {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--text);
+  padding: 12px;
+  text-decoration: none;
 }
 
-.admin-workspace .panel-head p {
-  margin-top: 3px;
-  font-size: 11px;
+.admin-overview-links a:hover {
+  border-color: var(--line-strong);
+  background: var(--fill-hover);
+}
+
+.admin-overview-links a > svg:first-child {
+  width: 17px;
+  height: 17px;
+  box-sizing: content-box;
+  border-radius: 8px;
+  background: var(--fill-active);
+  color: var(--text-soft);
+  padding: 8px;
+}
+
+.admin-overview-links a > svg:last-child {
+  width: 15px;
+  color: var(--muted);
+}
+
+.admin-overview-links a > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.admin-overview-links strong {
+  font-size: 13px;
+}
+
+.admin-overview-links small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .admin-list-heading {
@@ -370,7 +491,7 @@
 
 @media (max-width: 1180px) {
   .admin-shell {
-    grid-template-columns: 166px minmax(0, 1fr);
+    grid-template-columns: 188px minmax(0, 1fr);
   }
 
   .admin-shell-main {
@@ -394,10 +515,105 @@
 
   .admin-context-nav {
     position: static;
+    display: flex;
+    min-height: 0;
+    max-height: none;
+    align-items: center;
+    gap: 6px;
+    margin: 0 calc(var(--page-gutter) * -1) 22px;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 0 var(--page-gutter) 12px;
+    scrollbar-width: none;
+  }
+
+  .admin-context-nav::-webkit-scrollbar {
     display: none;
+  }
+
+  .admin-context-head,
+  .admin-nav-group h2 {
+    display: none;
+  }
+
+  .admin-nav-group,
+  .admin-nav-group > div {
+    display: flex;
+    flex: none;
+    gap: 6px;
+  }
+
+  .admin-context-nav a {
+    display: flex;
+    flex: none;
+    min-height: 36px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 7px 10px;
+  }
+
+  .admin-context-nav a.active {
+    border-color: var(--line-strong);
+  }
+
+  .admin-context-nav a.active::before {
+    display: none;
+  }
+
+  .admin-context-nav a span {
+    font-size: 12px;
   }
 
   .admin-shell-main {
     padding-left: 0;
+  }
+
+  .admin-page-header {
+    gap: 14px;
+    padding-bottom: 15px;
+  }
+
+  .admin-page-title h1 {
+    font-size: 20px;
+  }
+
+  .admin-page-actions {
+    padding-top: 12px;
+  }
+
+  .admin-overview-group {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .admin-overview-group-head p {
+    max-width: 520px;
+  }
+}
+
+@media (max-width: 620px) {
+  .admin-workspace {
+    gap: 18px;
+  }
+
+  .admin-page-header {
+    display: grid;
+  }
+
+  .admin-page-actions {
+    padding-top: 0;
+  }
+
+  .admin-page-actions .button {
+    width: auto;
+  }
+
+  .admin-overview-links {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-overview-links a {
+    padding: 11px;
   }
 }

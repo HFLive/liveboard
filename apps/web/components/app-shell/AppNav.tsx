@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   Bot,
   Bell,
+  CheckCheck,
   ChevronDown,
   Files,
   MessageSquare,
@@ -15,16 +15,22 @@ import {
   Users,
   X,
 } from "lucide-react";
-import type { ActivityItem, UserSummary } from "@liveboard/shared";
+import type { NotificationItem, UserSummary } from "@liveboard/shared";
 import {
   apiResourceUrl,
-  dismissActivity,
+  archiveNotification,
   getMe,
-  listActivity,
-  markActivityRead,
+  listNotifications,
+  markAllNotificationsRead,
+  setNotificationRead,
 } from "@/lib/api";
-import { formatRelativeTime } from "@/lib/labels";
 import { APP_ROUTES, userProfile } from "@/lib/routes";
+import {
+  broadcastNotificationsUpdated,
+  NOTIFICATIONS_UPDATED_EVENT,
+  type NotificationUpdateSource,
+} from "@/lib/notifications";
+import { NotificationList } from "@/components/notifications/NotificationList";
 import { LogoutButton } from "./LogoutButton";
 import { SiteBrandMark } from "./SiteBrandMark";
 
@@ -56,9 +62,12 @@ export function AppNav() {
     /^\/app\/(?:content\/[^/]+|teaching\/[^/]+)\/present$/.test(pathname);
   const [user, setUser] = useState<UserSummary | null>(null);
   const [userLoaded, setUserLoaded] = useState(false);
-  const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
+  const [activityItems, setActivityItems] = useState<NotificationItem[]>([]);
   const [activityUnreadCount, setActivityUnreadCount] = useState(0);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [activityFilter, setActivityFilter] = useState<
+    "all" | "unread" | "task"
+  >("all");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const activeNavLinkRef = useRef<HTMLAnchorElement | null>(null);
   const displayName = userLoaded ? (user?.displayName ?? "未登录") : "账户信息";
@@ -71,6 +80,7 @@ export function AppNav() {
       : navItems.filter((item) => item.href !== APP_ROUTES.admin);
   const isProfileRoute =
     pathname === APP_ROUTES.profile || pathname.startsWith("/app/users/");
+  const isNotificationsRoute = pathname === APP_ROUTES.notifications;
   const activeNavItem = visibleNavItems.find((item) =>
     isPrimaryNavActive(pathname, item.href),
   );
@@ -78,7 +88,9 @@ export function AppNav() {
     activeNavItem ??
     (isProfileRoute
       ? { label: "个人主页", Icon: UserCircle }
-      : { label: "LiveBoard", Icon: Bot });
+      : isNotificationsRoute
+        ? { label: "消息", Icon: Bell }
+        : { label: "LiveBoard", Icon: Bot });
   const ActiveNavIcon = currentNavItem.Icon;
 
   useEffect(() => {
@@ -127,7 +139,7 @@ export function AppNav() {
   useEffect(() => {
     if (!user) return;
 
-    const loadSecondaryNavigationData = () => void loadActivity();
+    const loadSecondaryNavigationData = () => void loadActivity("all");
     const usesIdleCallback = typeof window.requestIdleCallback === "function";
     const idleCallback: number = usesIdleCallback
       ? window.requestIdleCallback(loadSecondaryNavigationData, {
@@ -150,14 +162,42 @@ export function AppNav() {
 
   useEffect(() => {
     if (!user) return;
-    const timer = window.setInterval(() => void loadActivity(), 60_000);
+    const timer = window.setInterval(
+      () => void loadActivity(activityFilter),
+      60_000,
+    );
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [activityFilter, user]);
 
-  async function loadActivity() {
+  useEffect(() => {
+    if (!user) return;
+    const onNotificationsUpdated = (event: Event) => {
+      if ((event as CustomEvent<NotificationUpdateSource>).detail !== "nav") {
+        void loadActivity(activityFilter);
+      }
+    };
+    window.addEventListener(
+      NOTIFICATIONS_UPDATED_EVENT,
+      onNotificationsUpdated,
+    );
+    return () =>
+      window.removeEventListener(
+        NOTIFICATIONS_UPDATED_EVENT,
+        onNotificationsUpdated,
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activityFilter, user]);
+
+  async function loadActivity(
+    filter: "all" | "unread" | "task" = activityFilter,
+  ) {
     try {
-      const result = await listActivity();
+      const result = await listNotifications({
+        status: filter === "unread" ? "unread" : "all",
+        category: filter === "task" ? "task" : undefined,
+        limit: 12,
+      });
       setActivityItems(result.items);
       setActivityUnreadCount(result.unreadCount);
       return result;
@@ -172,22 +212,11 @@ export function AppNav() {
     setActivityOpen(nextOpen);
     setMobileMenuOpen(false);
     if (nextOpen) {
-      const result = await loadActivity();
-      if ((result?.unreadCount ?? activityUnreadCount) > 0) {
-        try {
-          await markActivityRead();
-          setActivityUnreadCount(0);
-          setActivityItems((current) =>
-            current.map((item) => ({ ...item, unread: false })),
-          );
-        } catch {
-          // 保留未读状态，下次打开时重试。
-        }
-      }
+      await loadActivity();
     }
   }
 
-  async function onDismissActivity(item: ActivityItem) {
+  async function onArchiveActivity(item: NotificationItem) {
     setActivityItems((current) =>
       current.filter((candidate) => candidate.id !== item.id),
     );
@@ -196,10 +225,63 @@ export function AppNav() {
     }
 
     try {
-      await dismissActivity(item.id);
+      await archiveNotification(item.id);
+      broadcastNotificationsUpdated("nav");
     } catch {
       await loadActivity();
     }
+  }
+
+  async function onToggleActivityRead(item: NotificationItem) {
+    const read = item.unread;
+    setActivityItems((current) =>
+      current
+        .map((candidate) =>
+          candidate.id === item.id
+            ? { ...candidate, unread: !read }
+            : candidate,
+        )
+        .filter((candidate) => activityFilter !== "unread" || candidate.unread),
+    );
+    setActivityUnreadCount((current) => Math.max(0, current + (read ? -1 : 1)));
+    try {
+      await setNotificationRead(item.id, read);
+      broadcastNotificationsUpdated("nav");
+    } catch {
+      await loadActivity();
+    }
+  }
+
+  function onOpenActivity(item: NotificationItem) {
+    setActivityOpen(false);
+    if (!item.unread) return;
+    setActivityUnreadCount((current) => Math.max(0, current - 1));
+    void setNotificationRead(item.id, true)
+      .then(() => broadcastNotificationsUpdated("nav"))
+      .catch(() => {
+        void loadActivity();
+      });
+  }
+
+  async function onMarkAllActivityRead() {
+    if (activityUnreadCount === 0) return;
+    try {
+      await markAllNotificationsRead();
+      setActivityUnreadCount(0);
+      setActivityItems((current) =>
+        activityFilter === "unread"
+          ? []
+          : current.map((item) => ({ ...item, unread: false })),
+      );
+      broadcastNotificationsUpdated("nav");
+    } catch {
+      await loadActivity();
+    }
+  }
+
+  async function changeActivityFilter(filter: "all" | "unread" | "task") {
+    setActivityFilter(filter);
+    await loadActivity(filter);
   }
 
   if (isPresentationRoute) {
@@ -295,7 +377,7 @@ export function AppNav() {
               : "消息"
           }
           className={
-            activityOpen
+            activityOpen || isNotificationsRoute
               ? "rail-activity-button active"
               : "rail-activity-button"
           }
@@ -317,9 +399,7 @@ export function AppNav() {
                 : undefined
             }
             className={
-              user && isActive(pathname, userProfile(user.id))
-                ? "rail-user active"
-                : "rail-user"
+              isProfileRoute ? "rail-user profile-context" : "rail-user"
             }
             href={user ? userProfile(user.id) : APP_ROUTES.profile}
             rel="noopener noreferrer"
@@ -341,51 +421,75 @@ export function AppNav() {
       {activityOpen ? (
         <div className="rail-activity-popover" role="dialog" aria-label="消息">
           <div className="rail-activity-head">
-            <strong>消息</strong>
-            <button
-              aria-label="关闭消息"
-              onClick={() => setActivityOpen(false)}
-              title="关闭"
-              type="button"
-            >
-              <X aria-hidden="true" />
-            </button>
+            <span>
+              <strong>消息</strong>
+              {activityUnreadCount > 0 ? (
+                <small>{activityUnreadCount} 条未读</small>
+              ) : null}
+            </span>
+            <div>
+              <button
+                aria-label="全部标为已读"
+                disabled={activityUnreadCount === 0}
+                onClick={() => void onMarkAllActivityRead()}
+                title="全部已读"
+                type="button"
+              >
+                <CheckCheck aria-hidden="true" />
+              </button>
+              <button
+                aria-label="关闭消息"
+                onClick={() => setActivityOpen(false)}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+          <div className="rail-activity-filters" aria-label="消息筛选">
+            {(
+              [
+                ["all", "全部"],
+                ["unread", "未读"],
+                ["task", "待处理"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                aria-pressed={activityFilter === value}
+                key={value}
+                onClick={() => void changeActivityFilter(value)}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
           </div>
           <div className="rail-activity-list">
-            {activityItems.map((item) => (
-              <div className="rail-activity-item" key={item.id}>
-                <Link
-                  href={item.href as Route}
-                  onClick={() => setActivityOpen(false)}
-                >
-                  <span className={`activity-kind ${item.kind}`}>
-                    {activityKindLabel(item.kind)}
-                  </span>
-                  <span>
-                    <strong>{item.title}</strong>
-                    <small>
-                      {item.detail} · {formatRelativeTime(item.occurredAt)}
-                    </small>
-                  </span>
-                </Link>
-                <button
-                  aria-label={`移除消息“${item.title}”`}
-                  className="rail-activity-dismiss"
-                  onClick={() => void onDismissActivity(item)}
-                  title="移除消息"
-                  type="button"
-                >
-                  <X aria-hidden="true" />
-                </button>
-              </div>
-            ))}
-            {activityItems.length === 0 ? (
+            {activityItems.length > 0 ? (
+              <NotificationList
+                compact
+                items={activityItems}
+                onArchive={(item) => void onArchiveActivity(item)}
+                onOpen={onOpenActivity}
+                onToggleRead={(item) => void onToggleActivityRead(item)}
+              />
+            ) : (
               <div className="rail-activity-empty">
-                <strong>暂无消息</strong>
-                <span>练习、批改、文档和论坛消息会显示在这里。</span>
+                <strong>
+                  {activityFilter === "unread" ? "没有未读消息" : "暂无消息"}
+                </strong>
+                <span>课堂、练习、反馈和论坛动态会显示在这里。</span>
               </div>
-            ) : null}
+            )}
           </div>
+          <Link
+            className="rail-activity-all"
+            href={APP_ROUTES.notifications}
+            onClick={() => setActivityOpen(false)}
+          >
+            查看全部消息
+          </Link>
         </div>
       ) : null}
     </aside>
@@ -404,8 +508,4 @@ function MobileProfileAvatar({
       {avatarUrl ? <img alt="" src={apiResourceUrl(avatarUrl)} /> : fallback}
     </span>
   );
-}
-
-function activityKindLabel(kind: ActivityItem["kind"]) {
-  return { exercise: "练习", grading: "批改", forum: "论坛" }[kind];
 }

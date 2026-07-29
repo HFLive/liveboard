@@ -17,6 +17,7 @@ import {
 } from "@/lib/api";
 import { permissionLabel } from "@/lib/labels";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 const permissionOptions: Array<{
   value: PermissionLevel;
@@ -112,13 +113,12 @@ export function ContentPermissionsClient() {
   }
 
   return (
-    <div className="workspace content-permissions-workspace">
-      <header className="admin-page-head">
-        <div>
-          <h1>文档权限</h1>
-          <p>管理员默认可编辑，普通成员默认可查看；此处设置成员例外。</p>
-        </div>
-      </header>
+    <div className="workspace admin-workspace admin-page admin-page--focused content-permissions-workspace">
+      <AdminPageHeader
+        category="人员与权限"
+        description="设置成员对文档空间的默认权限。"
+        title="文档权限"
+      />
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
@@ -127,7 +127,7 @@ export function ContentPermissionsClient() {
         <div className="panel-head content-permission-head">
           <div>
             <h2>{workspace?.name ?? "文档默认权限"}</h2>
-            <p>文件夹与文档会继承这里的成员例外，仍可在资源菜单中继续覆盖。</p>
+            <p>文件夹和文档会继承此处设置，也可单独覆盖。</p>
           </div>
           <span>{grants.length} 项例外</span>
         </div>
@@ -203,7 +203,7 @@ export function ContentPermissionsClient() {
           {filteredUsers.length === 0 ? (
             <div className="empty-panel compact">
               <strong>没有匹配的成员</strong>
-              <span>可更换标签或搜索关键词。</span>
+              <span>请调整搜索或筛选条件。</span>
             </div>
           ) : null}
         </div>

@@ -56,7 +56,7 @@ describe("ServerStatusClient", () => {
     expect(screen.getByText("60.0%")).toBeInTheDocument();
     expect(
       screen.getByRole("img", {
-        name: "最近 24 小时 CPU、内存和硬盘占用率曲线",
+        name: "最近 24 小时 CPU、内存和磁盘占用率曲线",
       }),
     ).toBeInTheDocument();
 

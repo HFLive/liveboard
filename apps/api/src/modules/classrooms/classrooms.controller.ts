@@ -25,6 +25,10 @@ import {
 } from "class-validator";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import {
+  PRIVATE_IMMUTABLE_CACHE_CONTROL,
+  PRIVATE_NO_STORE_CACHE_CONTROL,
+} from "../../common/cache-control";
+import {
   CreateClassroomAnnouncementDto,
   CreateClassroomDto,
   UpdateClassroomAnnouncementDto,
@@ -276,6 +280,7 @@ export class ClassroomsController {
         forceInline,
       );
     if (redirectUrl) {
+      response.setHeader("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL);
       response.redirect(302, redirectUrl);
       return;
     }
@@ -296,6 +301,12 @@ export class ClassroomsController {
       )}"`,
     );
     response.setHeader("Content-Length", String(file.sizeBytes));
+    response.setHeader(
+      "Cache-Control",
+      forceInline
+        ? PRIVATE_IMMUTABLE_CACHE_CONTROL
+        : PRIVATE_NO_STORE_CACHE_CONTROL,
+    );
     stream!.pipe(response);
   }
 
@@ -323,7 +334,7 @@ export class ClassroomsController {
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("Cross-Origin-Resource-Policy", "same-site");
     response.setHeader("Content-Security-Policy", "sandbox");
-    response.setHeader("Cache-Control", "private, max-age=3600, immutable");
+    response.setHeader("Cache-Control", PRIVATE_IMMUTABLE_CACHE_CONTROL);
     response.send(content);
   }
 

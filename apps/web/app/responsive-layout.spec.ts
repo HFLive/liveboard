@@ -29,6 +29,7 @@ const reviewCss = readFileSync(
   "app/app/exercises/[id]/submissions/review.css",
   "utf8",
 );
+const adminCss = readFileSync("app/app/admin/admin.css", "utf8");
 
 describe("responsive workspace contracts", () => {
   it("uses a top navigation and a single-column profile at mobile widths", () => {
@@ -68,6 +69,24 @@ describe("responsive workspace contracts", () => {
     );
     expect(mobileCss).not.toContain("user-scalable=no");
     expect(mobileCss).not.toContain("maximum-scale=1");
+  });
+
+  it("keeps management navigation reachable on narrow screens", () => {
+    expect(adminCss).toMatch(
+      /@media \(max-width: 820px\)[\s\S]*?\.admin-context-nav\s*{[\s\S]*?display: flex;[\s\S]*?overflow-x: auto/,
+    );
+    expect(adminCss).not.toMatch(
+      /@media \(max-width: 820px\)[\s\S]*?\.admin-context-nav\s*{\s*display: none/,
+    );
+    expect(adminCss).toContain(".admin-page--focused");
+    expect(adminCss).toContain(".admin-page--standard");
+    expect(adminCss).toContain(".admin-page--wide");
+  });
+
+  it("keeps the desktop management sidebar at its initial viewport offset", () => {
+    expect(adminCss).toMatch(
+      /\.admin-context-nav\s*{[\s\S]*?position: sticky;[\s\S]*?top: var\(--page-gutter\);[\s\S]*?align-self: start;[\s\S]*?height: calc\(100dvh - \(var\(--page-gutter\) \* 2\)\);/,
+    );
   });
 
   it("keeps file preview dialogs the same size across workspaces", () => {

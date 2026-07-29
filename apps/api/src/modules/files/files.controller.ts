@@ -32,6 +32,10 @@ import type { FileType } from "@liveboard/shared";
 import type { ContentBlockType } from "@liveboard/shared";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import {
+  PRIVATE_IMMUTABLE_CACHE_CONTROL,
+  PRIVATE_NO_STORE_CACHE_CONTROL,
+} from "../../common/cache-control";
+import {
   AssetsService,
   isSafeInlineAssetMime,
   MAX_ASSET_SIZE_BYTES,
@@ -353,6 +357,7 @@ export class FilesController {
     const result = await this.filesService.exportMarkdown(userId, fileId);
     const encodedFilename = encodeURIComponent(result.filename);
     response.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    response.setHeader("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL);
     response.setHeader(
       "Content-Disposition",
       `attachment; filename="content.md"; filename*=UTF-8''${encodedFilename}`,
@@ -538,7 +543,7 @@ export class FilesController {
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("Cross-Origin-Resource-Policy", "same-site");
     response.setHeader("Content-Security-Policy", "sandbox");
-    response.setHeader("Cache-Control", "private, max-age=3600, immutable");
+    response.setHeader("Cache-Control", PRIVATE_IMMUTABLE_CACHE_CONTROL);
     response.send(preview.content);
   }
 
@@ -558,6 +563,7 @@ export class FilesController {
       );
 
     if (redirectUrl) {
+      res.setHeader("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL);
       res.redirect(302, redirectUrl);
       return;
     }
@@ -570,7 +576,9 @@ export class FilesController {
     if (inline) {
       // 资产内容不可变（id 固定对应一个对象），让浏览器缓存预览图，
       // 避免每次打开页面都重走一遍带宽受限的中转下载。
-      res.setHeader("Cache-Control", "private, max-age=86400, immutable");
+      res.setHeader("Cache-Control", PRIVATE_IMMUTABLE_CACHE_CONTROL);
+    } else {
+      res.setHeader("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL);
     }
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader(

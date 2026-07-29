@@ -13,6 +13,7 @@
   grid-template-columns: 300px minmax(0, 680px);
   gap: 24px;
   width: min(1020px, 100%);
+  margin-inline: auto;
 }
 
 .forum-admin-page .workbench-main {
@@ -102,7 +103,7 @@
     flex: 0 0 auto;
     gap: 32px;
     min-height: auto;
-    margin: 0;
+    margin-inline: auto;
   }
 
   .workspace.forum-admin-page .forum-admin-layout > :first-child,

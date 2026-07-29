@@ -12,6 +12,7 @@ import type { PendingUpload, Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { PrismaService } from "../prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { StorageService } from "../storage/storage.service";
 import { requireResourceName } from "../../common/resource-name";
 import { putObjectWithCompensation } from "../storage/upload-compensation";
@@ -52,6 +53,7 @@ export class ClassroomsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list(userId: string | null) {
@@ -207,20 +209,46 @@ export class ClassroomsService {
     const title = requireResourceName(input.title, "公告标题");
     const content = input.content.trim();
     if (!content) throw new BadRequestException("请输入公告内容");
-    const announcement = await this.prisma.classroomAnnouncement.create({
-      data: { classroomId, authorId: user.id, title, content },
-      include: {
-        author: {
-          include: {
-            badgeAssignments: {
-              where: { equippedOrder: { not: null } },
-              include: { badge: true },
-              orderBy: { equippedOrder: "asc" },
-              take: 3,
+    const announcement = await this.prisma.$transaction(async (transaction) => {
+      const classroom = await transaction.classroom.findUnique({
+        where: { id: classroomId },
+        select: {
+          members: { select: { userId: true } },
+        },
+      });
+      if (!classroom) throw new NotFoundException("课堂不存在");
+      const created = await transaction.classroomAnnouncement.create({
+        data: { classroomId, authorId: user.id, title, content },
+        include: {
+          author: {
+            include: {
+              badgeAssignments: {
+                where: { equippedOrder: { not: null } },
+                include: { badge: true },
+                orderBy: { equippedOrder: "asc" },
+                take: 3,
+              },
             },
           },
         },
-      },
+      });
+      await this.notifications.create(
+        {
+          type: "classroom_announcement",
+          category: "classroom",
+          priority: "important",
+          actorId: user.id,
+          classroomId,
+          targetType: "classroom_announcement",
+          targetId: created.id,
+          title: `课堂公告：${title}`,
+          detail: `${user.displayName}发布了新公告`,
+          href: `/app/classrooms/${encodeURIComponent(classroomId)}`,
+          recipientIds: classroom.members.map(({ userId: id }) => id),
+        },
+        transaction,
+      );
+      return created;
     });
     return this.toAnnouncementSummary(announcement);
   }
@@ -419,10 +447,35 @@ export class ClassroomsService {
         throw new ConflictException("课堂必须至少保留一名教师");
       }
     }
-    await this.prisma.classroomMember.upsert({
-      where: { classroomId_userId: { classroomId, userId: memberUserId } },
-      create: { classroomId, userId: memberUserId, role },
-      update: { role },
+    await this.prisma.$transaction(async (transaction) => {
+      const classroom = await transaction.classroom.findUnique({
+        where: { id: classroomId },
+        select: { name: true },
+      });
+      if (!classroom) throw new NotFoundException("课堂不存在");
+      await transaction.classroomMember.upsert({
+        where: { classroomId_userId: { classroomId, userId: memberUserId } },
+        create: { classroomId, userId: memberUserId, role },
+        update: { role },
+      });
+      await this.notifications.create(
+        {
+          type: existing ? "classroom_role_changed" : "classroom_joined",
+          category: "permission",
+          priority: "important",
+          actorId: actor.id,
+          classroomId,
+          targetType: "classroom",
+          targetId: classroomId,
+          title: existing ? "课堂身份已更新" : "已加入课堂",
+          detail: existing
+            ? `你在“${classroom.name}”中的身份已调整为${role === "teacher" ? "教师" : "学生"}`
+            : `你已作为${role === "teacher" ? "教师" : "学生"}加入“${classroom.name}”`,
+          href: `/app/classrooms/${encodeURIComponent(classroomId)}`,
+          recipientIds: [memberUserId],
+        },
+        transaction,
+      );
     });
     return this.get(actor.id, classroomId);
   }
@@ -446,8 +499,31 @@ export class ClassroomsService {
         throw new ConflictException("课堂必须至少保留一名教师");
       }
     }
-    await this.prisma.classroomMember.delete({
-      where: { classroomId_userId: { classroomId, userId: memberUserId } },
+    await this.prisma.$transaction(async (transaction) => {
+      const classroom = await transaction.classroom.findUnique({
+        where: { id: classroomId },
+        select: { name: true },
+      });
+      if (!classroom) throw new NotFoundException("课堂不存在");
+      await transaction.classroomMember.delete({
+        where: { classroomId_userId: { classroomId, userId: memberUserId } },
+      });
+      await this.notifications.create(
+        {
+          type: "classroom_removed",
+          category: "permission",
+          priority: "important",
+          actorId: actor.id,
+          classroomId,
+          targetType: "classroom",
+          targetId: classroomId,
+          title: "课堂成员关系已变更",
+          detail: `你已被移出“${classroom.name}”`,
+          href: "/app/classrooms",
+          recipientIds: [memberUserId],
+        },
+        transaction,
+      );
     });
     return this.get(actor.id, classroomId);
   }

@@ -29,6 +29,7 @@ import type {
 } from "./forum.dto";
 import { DEFAULT_FORUM_CATEGORIES } from "./forum-defaults";
 import { PermissionsService } from "../permissions/permissions.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 type ForumUserRecord = {
   id: string;
@@ -122,6 +123,7 @@ export class ForumService {
     private readonly prisma: PrismaService,
     private readonly assets: AssetsService,
     private readonly permissions: PermissionsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async listOverview(userId: string | null) {
@@ -419,6 +421,7 @@ export class ForumService {
           select: {
             id: true,
             parentId: true,
+            authorId: true,
           },
         })
       : null;
@@ -455,6 +458,24 @@ export class ForumService {
           updatedAt: created.createdAt,
         },
       });
+
+      await this.notifications.create(
+        {
+          type: "forum_reply",
+          category: "interaction",
+          actorId: input.isAnonymous ? null : user.id,
+          targetType: "forum_thread",
+          targetId: thread.id,
+          title: thread.title,
+          detail: `${input.isAnonymous ? "匿名用户" : user.displayName}回复了${parentPost ? "你" : "帖子"}`,
+          href: `/app/forum/${encodeURIComponent(thread.id)}`,
+          recipientIds: [
+            thread.authorId,
+            ...(parentPost ? [parentPost.authorId] : []),
+          ],
+        },
+        tx,
+      );
 
       return created;
     });

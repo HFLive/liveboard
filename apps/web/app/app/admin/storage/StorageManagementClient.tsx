@@ -15,6 +15,7 @@ import {
 import type { ClassroomSummary } from "@liveboard/shared";
 import { roleLabel } from "@/lib/labels";
 import { UserProfileLink } from "@/components/UserProfileLink";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { TableSkeletonRows } from "@/components/system/ProgressiveLoading";
 
 export function StorageManagementClient() {
@@ -231,16 +232,12 @@ export function StorageManagementClient() {
   }
 
   return (
-    <div className="workspace admin-workspace admin-storage-page">
-      <header className="page-head">
-        <div>
-          <p className="page-eyebrow">管理中心</p>
-          <h1>存储容量</h1>
-          <p className="muted">
-            统一设置成员文档附件与课堂文件的默认容量，并按需调整个别上限。
-          </p>
-        </div>
-      </header>
+    <div className="workspace admin-workspace admin-page admin-page--wide admin-storage-page">
+      <AdminPageHeader
+        category="内容与资源"
+        description="设置默认容量，并调整成员或课堂的独立上限。"
+        title="容量管理"
+      />
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
@@ -287,10 +284,7 @@ export function StorageManagementClient() {
               <Database aria-hidden="true" className="heading-icon" />
               默认容量
             </h2>
-            <p>
-              未单独设置上限的成员和课堂使用默认容量；恢复默认后回到系统内置的
-              128 MB 与 512 MB。
-            </p>
+            <p>未设置独立上限时使用这里的默认值。</p>
           </div>
         </div>
         <div className="quota-defaults">
@@ -299,7 +293,7 @@ export function StorageManagementClient() {
             onSubmit={(event) => void onSaveDefault(event, "member")}
           >
             <span className="quota-default-label">
-              成员文档附件默认容量
+              成员附件
               {defaults && !defaults.memberAttachmentQuotaCustom ? (
                 <small className="muted">（系统默认）</small>
               ) : null}
@@ -338,7 +332,7 @@ export function StorageManagementClient() {
             onSubmit={(event) => void onSaveDefault(event, "classroom")}
           >
             <span className="quota-default-label">
-              课堂文件默认容量
+              课堂文件
               {defaults && !defaults.classroomStorageQuotaCustom ? (
                 <small className="muted">（系统默认）</small>
               ) : null}
@@ -380,7 +374,7 @@ export function StorageManagementClient() {
           <div>
             <h2>
               <Database aria-hidden="true" className="heading-icon" />
-              成员文档附件容量
+              成员附件
             </h2>
           </div>
           <select
@@ -399,7 +393,7 @@ export function StorageManagementClient() {
             <thead>
               <tr>
                 <th>成员</th>
-                <th>系统权限</th>
+                <th>角色</th>
                 <th>附件数</th>
                 <th>已用</th>
                 <th>上限</th>
@@ -422,9 +416,7 @@ export function StorageManagementClient() {
                       </strong>
                     </span>
                   </td>
-                  <td data-label="系统权限">
-                    {roleLabel(item.user.systemRole)}
-                  </td>
+                  <td data-label="角色">{roleLabel(item.user.systemRole)}</td>
                   <td data-label="附件数">{item.assetCount}</td>
                   <td data-label="已用">
                     {formatStorageSize(item.storageUsedBytes)}
@@ -486,7 +478,7 @@ export function StorageManagementClient() {
               {!loading && items.length === 0 ? (
                 <tr>
                   <td className="empty-cell" colSpan={7}>
-                    暂无成员。
+                    暂无成员
                   </td>
                 </tr>
               ) : null}
@@ -500,7 +492,7 @@ export function StorageManagementClient() {
           <div>
             <h2>
               <School aria-hidden="true" className="heading-icon" />
-              课堂文件容量
+              课堂文件
             </h2>
           </div>
         </div>

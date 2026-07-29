@@ -123,7 +123,6 @@ model User {
   aiCallDateKey        String?
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
-  activityReadAt       DateTime?
 
   createdFolders          Folder[]                @relation("FolderCreatedBy")
   createdFiles            File[]                  @relation("FileCreatedBy")
@@ -145,18 +144,50 @@ model User {
   classroomMemberships    ClassroomMember[]
   uploadedClassroomFiles  ClassroomFile[]         @relation("ClassroomFileUploader")
   classroomAnnouncements  ClassroomAnnouncement[]
-  activityDismissals      ActivityDismissal[]
+  actedNotifications      Notification[]          @relation("NotificationActor")
+  notificationRecipients  NotificationRecipient[]
   forumPostVotes          ForumPostVote[]
 }
 
-model ActivityDismissal {
-  userId      String
-  activityId  String
-  dismissedAt DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+model Notification {
+  id             String    @id @default(cuid())
+  type           String
+  category       String
+  priority       String    @default("normal")
+  actorId        String?
+  classroomId    String?
+  targetType     String
+  targetId       String
+  title          String
+  detail         String
+  href           String
+  groupKey       String?
+  aggregateCount Int       @default(1)
+  occurredAt     DateTime  @default(now())
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
 
-  @@id([userId, activityId])
-  @@index([userId, dismissedAt])
+  actor      User?                   @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  classroom  Classroom?              @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  recipients NotificationRecipient[]
+
+  @@index([classroomId, occurredAt])
+  @@index([category, occurredAt])
+  @@index([groupKey, occurredAt])
+}
+
+model NotificationRecipient {
+  notificationId String
+  userId         String
+  readAt         DateTime?
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([notificationId, userId])
+  @@index([userId, archivedAt, readAt, createdAt])
 }
 
 model ServerMetricSample {
@@ -526,6 +557,7 @@ model Classroom {
   exercises     ExerciseSet[]
   files         ClassroomFile[]
   announcements ClassroomAnnouncement[]
+  notifications Notification[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, updatedAt])

@@ -2,6 +2,7 @@ import type { ContentBlockType } from "@liveboard/shared";
 import { normalizeBilibiliEmbedUrl } from "@liveboard/shared/bilibili";
 import { useEffect, useState } from "react";
 import { attachmentDownloadUrl, type ContentBlock } from "@/lib/api";
+import { DocumentImageViewer } from "./DocumentImageViewer";
 import { MathFormula, RichText } from "./RichText";
 
 export const blockTypeOptions: Array<{
@@ -310,12 +311,10 @@ export function RenderBlockContent({ block }: { block: ContentBlock }) {
       widthPercent === null ? 100 : Math.max(25, Math.min(100, widthPercent));
 
     return url ? (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        className="render-image"
-        src={url}
+      <DocumentImageViewer
         alt={text || "图片"}
-        style={{ width: `${imageWidth}%` }}
+        src={url}
+        widthPercent={imageWidth}
       />
     ) : (
       <div className="render-placeholder">图片：{text || "等待上传"}</div>

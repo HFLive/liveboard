@@ -24,6 +24,7 @@ import {
 import { roleLabel, userStatusLabel } from "@/lib/labels";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { TableSkeletonRows } from "@/components/system/ProgressiveLoading";
 
 type UserEditDraft = {
@@ -452,14 +453,12 @@ export function UserManagementClient() {
   }
 
   return (
-    <div className="workspace admin-workspace admin-users-page">
-      <header className="page-head">
-        <div>
-          <p className="page-eyebrow">管理中心</p>
-          <h1>成员管理</h1>
-          <p className="muted">创建、导入并维护平台成员的账号、角色和标签。</p>
-        </div>
-      </header>
+    <div className="workspace admin-workspace admin-page admin-page--wide admin-users-page">
+      <AdminPageHeader
+        category="人员与权限"
+        description="管理账号、角色和标签。"
+        title="成员管理"
+      />
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
@@ -511,7 +510,7 @@ export function UserManagementClient() {
               <Search aria-hidden="true" />
               <input
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索显示名或登录账号"
+                placeholder="搜索姓名或账号"
                 value={query}
               />
             </label>
@@ -529,14 +528,14 @@ export function UserManagementClient() {
               ))}
             </select>
             <select
-              aria-label="按系统权限筛选"
+              aria-label="按角色筛选"
               className="select compact-select"
               onChange={(event) =>
                 setRoleFilter(event.target.value as "all" | SystemRole)
               }
               value={roleFilter}
             >
-              <option value="all">全部权限</option>
+              <option value="all">全部角色</option>
               <option value="super_admin">最高管理员</option>
               <option value="admin">管理员</option>
               <option value="member">成员</option>
@@ -592,9 +591,9 @@ export function UserManagementClient() {
                   <th>显示名</th>
                   <th>登录账号</th>
                   <th>标签</th>
-                  <th>系统权限</th>
+                  <th>角色</th>
                   <th>状态</th>
-                  <th>今日 AI 调用</th>
+                  <th>今日 AI</th>
                   <th>操作</th>
                 </tr>
               </thead>
@@ -636,10 +635,10 @@ export function UserManagementClient() {
                         )}
                       </div>
                     </td>
-                    <td data-label="系统权限">{roleLabel(user.systemRole)}</td>
+                    <td data-label="角色">{roleLabel(user.systemRole)}</td>
                     <td data-label="状态">{userStatusLabel(user.status)}</td>
-                    <td data-label="今日 AI 调用">
-                      今日 {user.aiCallCount} 次
+                    <td data-label="今日 AI">
+                      {user.aiCallCount} 次
                       <span className="muted">
                         {" "}
                         /{" "}
@@ -665,9 +664,7 @@ export function UserManagementClient() {
                 {!loadingUsers && filteredUsers.length === 0 ? (
                   <tr>
                     <td className="empty-cell" colSpan={8}>
-                      {users.length
-                        ? "没有符合当前筛选条件的成员。"
-                        : "暂无成员。"}
+                      {users.length ? "没有匹配的成员" : "暂无成员"}
                     </td>
                   </tr>
                 ) : null}
@@ -721,7 +718,7 @@ export function UserManagementClient() {
                 />
               </label>
               <label className="label">
-                系统权限
+                角色
                 <select
                   className="select"
                   value={systemRole}
@@ -763,7 +760,7 @@ export function UserManagementClient() {
             <div className="modal-head">
               <div>
                 <h2>批量导入</h2>
-                <p className="muted">CSV 创建多个成员</p>
+                <p className="muted">从 CSV 创建成员</p>
               </div>
               <button
                 className="icon-button subtle"
@@ -818,7 +815,7 @@ export function UserManagementClient() {
               </div>
               <div className="import-preview">
                 <strong>预览：{parsedImport.rows.length} 个可导入成员</strong>
-                <span>字段：登录账号、显示名、初始密码、系统权限</span>
+                <span>登录账号、显示名、初始密码、角色</span>
                 {parsedImport.errors.length > 0 ? (
                   <ul>
                     {parsedImport.errors.slice(0, 4).map((item) => (
@@ -891,7 +888,7 @@ export function UserManagementClient() {
                   <strong>{editingUser.username}</strong>
                 </div>
                 <div>
-                  <span>当前系统权限</span>
+                  <span>当前角色</span>
                   <strong>{roleLabel(editingUser.systemRole)}</strong>
                 </div>
                 <div>
@@ -914,7 +911,7 @@ export function UserManagementClient() {
               </label>
               <div className="form-grid two">
                 <label className="label">
-                  系统权限
+                  角色
                   <select
                     className="select"
                     value={editDraft.systemRole}
@@ -987,8 +984,7 @@ export function UserManagementClient() {
                   }
                 />
                 <small className="field-hint">
-                  今日已使用 {editingUser.aiCallCount}{" "}
-                  次；留空则跟随每日默认限额。
+                  今日已用 {editingUser.aiCallCount} 次；留空使用默认限额。
                 </small>
               </label>
               <fieldset className="tag-choice-field">
@@ -1012,7 +1008,7 @@ export function UserManagementClient() {
                     </label>
                   ))}
                   {tags.length === 0 ? (
-                    <span className="muted">请先在标签管理中创建标签。</span>
+                    <span className="muted">暂无标签</span>
                   ) : null}
                 </div>
               </fieldset>
@@ -1039,10 +1035,7 @@ export function UserManagementClient() {
         <div className="modal-backdrop" role="presentation">
           <section className="modal-panel" role="dialog" aria-modal="true">
             <div className="modal-head">
-              <div>
-                <h2>标签管理</h2>
-                <p className="muted">标签用于组织成员和快速筛选。</p>
-              </div>
+              <h2>标签管理</h2>
               <button
                 className="icon-button subtle"
                 onClick={() => setShowTagModal(false)}

@@ -4,91 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { SystemRole } from "@liveboard/shared";
-import {
-  Bot,
-  BadgeCheck,
-  CloudCog,
-  Database,
-  MessageSquare,
-  MonitorCog,
-  Settings,
-  SlidersHorizontal,
-  Users,
-} from "lucide-react";
-import { APP_ROUTES } from "@/lib/routes";
 import { getMe } from "@/lib/api";
-
-const adminNavGroups = [
-  {
-    label: "人员与权限",
-    items: [
-      {
-        href: APP_ROUTES.adminUsers,
-        label: "成员",
-        icon: Users,
-      },
-      {
-        href: APP_ROUTES.adminContentPermissions,
-        label: "文档权限",
-        icon: SlidersHorizontal,
-      },
-      {
-        href: APP_ROUTES.adminBadges,
-        label: "徽章认证",
-        icon: BadgeCheck,
-        superAdminOnly: true,
-      },
-    ],
-  },
-  {
-    label: "内容与资源",
-    items: [
-      {
-        href: APP_ROUTES.adminStorage,
-        label: "存储容量",
-        icon: Database,
-      },
-      {
-        href: APP_ROUTES.adminForum,
-        label: "论坛版块",
-        icon: MessageSquare,
-      },
-    ],
-  },
-  {
-    label: "系统与服务",
-    items: [
-      {
-        href: APP_ROUTES.adminAi,
-        label: "AI 服务",
-        icon: Bot,
-        superAdminOnly: true,
-      },
-      {
-        href: APP_ROUTES.adminStorageBackend,
-        label: "存储后端",
-        icon: CloudCog,
-        superAdminOnly: true,
-      },
-      {
-        href: APP_ROUTES.adminServerStatus,
-        label: "服务器状态",
-        icon: MonitorCog,
-        superAdminOnly: true,
-      },
-      {
-        href: APP_ROUTES.adminSettings,
-        label: "系统设置",
-        icon: Settings,
-        superAdminOnly: true,
-      },
-    ],
-  },
-] as const;
+import { adminNavGroups, adminOverviewItem } from "./adminNavigation";
 
 export function AdminSubnav() {
   const pathname = usePathname();
   const [role, setRole] = useState<SystemRole | null>(null);
+  const OverviewIcon = adminOverviewItem.icon;
 
   useEffect(() => {
     getMe()
@@ -100,8 +22,19 @@ export function AdminSubnav() {
     <nav aria-label="管理中心导航" className="admin-context-nav">
       <div className="admin-context-head">
         <strong>管理中心</strong>
-        <span>工作区配置与运行状态</span>
       </div>
+      <Link
+        aria-current={pathname === adminOverviewItem.href ? "page" : undefined}
+        className={
+          pathname === adminOverviewItem.href
+            ? "admin-overview-nav active"
+            : "admin-overview-nav"
+        }
+        href={adminOverviewItem.href}
+      >
+        <OverviewIcon aria-hidden="true" />
+        <span>{adminOverviewItem.label}</span>
+      </Link>
       {adminNavGroups.map((group) => {
         const visibleItems = group.items.filter(
           (item) => !("superAdminOnly" in item) || role === "super_admin",

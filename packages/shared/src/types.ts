@@ -103,16 +103,31 @@ export interface UserPublicActivity {
   }>;
 }
 
-export type ActivityKind = "exercise" | "grading" | "forum";
+export type NotificationCategory =
+  "task" | "classroom" | "feedback" | "interaction" | "permission" | "system";
 
-export interface ActivityItem {
+export type NotificationPriority = "normal" | "important" | "critical";
+
+export interface NotificationItem {
   id: string;
-  kind: ActivityKind;
+  type: string;
+  category: NotificationCategory;
+  priority: NotificationPriority;
   title: string;
   detail: string;
   href: string;
+  classroomId: string | null;
+  classroomName: string | null;
+  actor: Pick<UserSummary, "id" | "displayName" | "avatarUrl"> | null;
+  aggregateCount: number;
   occurredAt: string;
   unread: boolean;
+}
+
+export interface NotificationListResult {
+  items: NotificationItem[];
+  unreadCount: number;
+  nextCursor: string | null;
 }
 
 // 管理端用户列表专用：在 UserSummary 基础上附带 AI 调用配额信息

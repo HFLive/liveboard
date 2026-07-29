@@ -29,6 +29,7 @@ import {
 import { formatDateTime, setAppTimeZone } from "@/lib/labels";
 import { waitForWebReady } from "@/lib/waitForWebReady";
 import { setAppIconSettings } from "@/components/app-shell/AppSettingsProvider";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 const fallbackTimeZones = [
@@ -72,19 +73,19 @@ const faviconVariants: Array<{
   {
     key: "default",
     title: "默认图标",
-    description: "浏览器标签页及其他版本未设置时使用。",
+    description: "浅色或深色版本未设置时使用。",
     optional: false,
   },
   {
     key: "light",
     title: "浅色界面",
-    description: "用于首页等浅色背景；未设置时使用默认图标。",
+    description: "用于浅色背景；未设置时使用默认图标。",
     optional: true,
   },
   {
     key: "dark",
     title: "深色界面",
-    description: "用于登录页和应用导航；未设置时使用默认图标。",
+    description: "用于深色背景；未设置时使用默认图标。",
     optional: true,
   },
 ];
@@ -471,14 +472,12 @@ export function SystemSettingsClient() {
   }
 
   return (
-    <div className="workspace admin-workspace system-settings-page">
-      <header className="page-head">
-        <div>
-          <p className="page-eyebrow">管理中心</p>
-          <h1>系统设置</h1>
-          <p className="muted">管理网站时区、HTTPS 和浏览器标签页图标。</p>
-        </div>
-      </header>
+    <div className="workspace admin-workspace admin-page admin-page--focused system-settings-page">
+      <AdminPageHeader
+        category="系统与服务"
+        description="设置时区、HTTPS 和网站图标。"
+        title="系统设置"
+      />
 
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
@@ -504,9 +503,7 @@ export function SystemSettingsClient() {
                       <Globe2 aria-hidden="true" className="heading-icon" />
                       网站时区
                     </h2>
-                    <p className="muted">
-                      统一所有页面的日期、更新时间和论坛时间显示。
-                    </p>
+                    <p className="muted">控制全站日期和时间显示。</p>
                   </div>
                 </div>
 
@@ -556,9 +553,6 @@ export function SystemSettingsClient() {
                 </div>
 
                 <div className="system-settings-actions">
-                  <p className="muted">
-                    仅保存网站时区，不影响下方的网站图标。
-                  </p>
                   <button className="button" type="submit">
                     <Save aria-hidden="true" className="button-icon" />
                     保存时区
@@ -580,8 +574,7 @@ export function SystemSettingsClient() {
                       HTTPS
                     </h2>
                     <p className="muted">
-                      自动尝试 ACME HTTP-01；TCP 80 无法验证时改用基于 TCP 443
-                      的 TLS-ALPN-01，不绑定域名服务商。
+                      为域名或公网 IPv4 配置证书并自动续期。
                     </p>
                   </div>
                 </div>
@@ -630,7 +623,7 @@ export function SystemSettingsClient() {
                         <label className="https-renew-control">
                           <span>
                             <strong>自动续期</strong>
-                            <small>定时检查并在证书接近到期时自动更新</small>
+                            <small>证书到期前自动更新</small>
                           </span>
                           <input
                             aria-label="自动续期"
@@ -705,9 +698,8 @@ export function SystemSettingsClient() {
                     </label>
                     <div className="https-enable-actions">
                       <p className="muted">
-                        域名需指向本服务器；公网 IPv4 将使用约 6
-                        天有效期的短证书。TCP 80 可达时优先使用 HTTP
-                        验证，否则自动通过 TCP 443 验证；配置失败会恢复原入口。
+                        域名需指向本服务器。IPv4 证书约 6
+                        天有效，建议开启自动续期；失败时保留原入口。
                       </p>
                       <button
                         className="button"
@@ -726,9 +718,8 @@ export function SystemSettingsClient() {
                   <div className="https-unavailable-panel">
                     <strong>当前部署不支持面板配置 HTTPS</strong>
                     <p className="muted">
-                      请先使用包含 HTTPS
-                      助手的新版生产安装包升级服务器。开发环境不会操作本机
-                      Nginx。
+                      需要使用包含 HTTPS
+                      助手的生产安装包；开发环境不支持此功能。
                     </p>
                   </div>
                 )}
@@ -746,8 +737,8 @@ export function SystemSettingsClient() {
                         </strong>
                         <p className="muted">
                           {httpsStatus.enabled
-                            ? "提前保存停用 HTTPS 后使用的地址，不会修改当前证书、Nginx HTTPS 或自动续期。"
-                            : "首选地址用于管理页面跳转；其他允许地址仍可直接访问本站。"}
+                            ? "设置停用 HTTPS 后使用的地址，不影响当前证书。"
+                            : "设置默认 HTTP 地址和其他允许访问的地址。"}
                         </p>
                       </div>
                     </div>
@@ -788,8 +779,7 @@ export function SystemSettingsClient() {
                     </div>
                     <div className="http-access-actions">
                       <p className="muted">
-                        最多保存 8 个地址。未知 Host
-                        不会自动加入；修改失败会保留原配置。
+                        最多 8 个地址；未知 Host 不会自动放行。
                       </p>
                       <button
                         className="button secondary"
@@ -819,7 +809,7 @@ export function SystemSettingsClient() {
                       网站图标
                     </h2>
                     <p className="muted">
-                      统一浏览器标签页和收藏夹中的网站标识，上传或恢复后立即生效。
+                      用于浏览器标签页、收藏夹和站内品牌标识。
                     </p>
                   </div>
                 </div>
@@ -916,37 +906,6 @@ export function SystemSettingsClient() {
             </>
           )}
         </div>
-
-        <aside className="action-panel quiet system-settings-side">
-          <h2>设置状态</h2>
-          <dl className="settings-status-list">
-            <div>
-              <dt>工作区</dt>
-              <dd>{settings?.workspaceName ?? "-"}</dd>
-            </div>
-            <div>
-              <dt>当前时区</dt>
-              <dd>{settings?.timeZone ?? "-"}</dd>
-            </div>
-            <div>
-              <dt>HTTPS</dt>
-              <dd>
-                {httpsStatus?.enabled
-                  ? httpsStatus.domain
-                  : httpsStatus?.available
-                    ? "未启用"
-                    : "不可用"}
-              </dd>
-            </div>
-            <div>
-              <dt>最近更新</dt>
-              <dd>{settings ? formatDateTime(settings.updatedAt) : "-"}</dd>
-            </div>
-          </dl>
-          <p className="muted">
-            保存后，新打开或刷新的页面会使用该时区；当前页面的时间预览会立即更新。
-          </p>
-        </aside>
       </section>
     </div>
   );

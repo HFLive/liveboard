@@ -5,18 +5,19 @@
 .badge-admin-layout {
   display: grid;
   grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
-  min-height: calc(100dvh - 150px);
+  gap: 22px;
+  min-height: 0;
 }
 
 .badge-catalog {
   min-width: 0;
-  border-right: 1px solid var(--line);
+  padding-right: 18px;
 }
 
 .badge-catalog .panel-head,
 .badge-detail .panel-head {
-  min-height: 54px;
-  padding: 10px var(--page-gutter);
+  min-height: 44px;
+  padding: 0 0 10px;
 }
 
 .badge-catalog .panel-head {
@@ -26,7 +27,7 @@
 }
 
 .badge-catalog-list {
-  padding: 4px 8px;
+  padding: 4px 0;
 }
 
 .badge-catalog-list > button {
@@ -89,7 +90,7 @@
   display: grid;
   grid-template-columns: minmax(180px, 320px) 150px;
   gap: 8px;
-  padding: 10px var(--page-gutter);
+  padding: 10px 0;
 }
 
 .badge-member-toolbar .search-field,
@@ -108,7 +109,7 @@
   gap: 10px;
   min-height: 50px;
   border-bottom: 1px solid var(--line);
-  padding: 7px var(--page-gutter);
+  padding: 8px 2px;
 }
 
 .badge-member-list > label:hover {
@@ -156,11 +157,37 @@
 }
 
 @media (max-width: 900px) {
+  .badge-admin-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .badge-catalog {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 0 0 18px;
+  }
+
   .badge-member-list > label {
     grid-template-columns: 18px minmax(130px, 1fr) auto;
   }
 
   .badge-member-list > label > .user-tag-list {
     display: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .badge-member-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .badge-member-list > label {
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 7px 10px;
+  }
+
+  .badge-member-list > label > :last-child {
+    grid-column: 2;
+    justify-self: start;
   }
 }
