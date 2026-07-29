@@ -153,11 +153,12 @@
 }
 
 .reader-font-options button > span[data-font="serif"] {
-  font-family: "Songti SC", STSong, SimSun, "Noto Serif CJK SC", serif;
+  font-family:
+    "Noto Serif SC", "Songti SC", STSong, SimSun, "Noto Serif CJK SC", serif;
 }
 
 .reader-font-options button > span[data-font="kai"] {
-  font-family: "Kaiti SC", STKaiti, KaiTi, serif;
+  font-family: "LXGW WenKai Lite", "Kaiti SC", STKaiti, KaiTi, cursive;
 }
 
 .reader-font-options button > span[data-font="sans"] {
@@ -322,14 +323,15 @@
   margin: 0 auto;
   padding: 40px 0 104px;
   color: var(--text-soft);
-  font-family: "Songti SC", STSong, SimSun, "Noto Serif CJK SC", serif;
+  font-family:
+    "Noto Serif SC", "Songti SC", STSong, SimSun, "Noto Serif CJK SC", serif;
   font-size: var(--reader-font-size);
   line-height: 1.88;
   text-rendering: optimizeLegibility;
 }
 
 .content-viewer-document[data-reader-font="kai"] {
-  font-family: "Kaiti SC", STKaiti, KaiTi, serif;
+  font-family: "LXGW WenKai Lite", "Kaiti SC", STKaiti, KaiTi, cursive;
 }
 
 .content-viewer-document[data-reader-font="sans"] {
@@ -376,6 +378,23 @@
   font-family: inherit;
   font-weight: 720;
   letter-spacing: -0.025em;
+}
+
+.content-viewer-document
+  :is(
+    .render-paragraph,
+    .render-list,
+    .render-list li,
+    .render-quote,
+    .render-todo,
+    .render-todo > span,
+    .render-question,
+    .render-placeholder,
+    .render-table,
+    .render-table th,
+    .render-table td
+  ) {
+  font-family: inherit;
 }
 
 .content-viewer-document .render-heading-xl {

@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Patch,
+  Param,
   Post,
   Res,
   UploadedFile,
@@ -25,6 +26,7 @@ import { CurrentUserId } from "../../common/current-user-id.decorator";
 import { Public } from "../../common/public.decorator";
 import {
   MAX_FAVICON_SIZE_BYTES,
+  parseFaviconVariant,
   SettingsService,
   type UploadedFaviconFile,
 } from "./settings.service";
@@ -85,6 +87,25 @@ export class SettingsController {
   @Public()
   async favicon(@Res() response: Response) {
     const favicon = await this.settingsService.getFavicon();
+    this.sendFavicon(response, favicon);
+  }
+
+  @Get("settings/favicon/:variant")
+  @Public()
+  async faviconVariant(
+    @Param("variant") variant: string,
+    @Res() response: Response,
+  ) {
+    const favicon = await this.settingsService.getFavicon(
+      parseFaviconVariant(variant),
+    );
+    this.sendFavicon(response, favicon);
+  }
+
+  private sendFavicon(
+    response: Response,
+    favicon: Awaited<ReturnType<SettingsService["getFavicon"]>>,
+  ) {
     if (favicon.redirectUrl) {
       response.redirect(302, favicon.redirectUrl);
       return;
@@ -126,10 +147,43 @@ export class SettingsController {
     };
   }
 
+  @Post("admin/settings/favicon/:variant")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: { fileSize: MAX_FAVICON_SIZE_BYTES, files: 1 },
+    }),
+  )
+  async updateFaviconVariant(
+    @CurrentUserId() userId: string | null,
+    @Param("variant") variant: string,
+    @UploadedFile() file?: UploadedFaviconFile,
+  ) {
+    return {
+      settings: await this.settingsService.updateFavicon(
+        userId,
+        file,
+        parseFaviconVariant(variant),
+      ),
+    };
+  }
+
   @Delete("admin/settings/favicon")
   async resetFavicon(@CurrentUserId() userId: string | null) {
     return {
       settings: await this.settingsService.resetFavicon(userId),
+    };
+  }
+
+  @Delete("admin/settings/favicon/:variant")
+  async resetFaviconVariant(
+    @CurrentUserId() userId: string | null,
+    @Param("variant") variant: string,
+  ) {
+    return {
+      settings: await this.settingsService.resetFavicon(
+        userId,
+        parseFaviconVariant(variant),
+      ),
     };
   }
 

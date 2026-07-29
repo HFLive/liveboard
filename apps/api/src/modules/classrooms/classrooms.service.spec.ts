@@ -384,7 +384,10 @@ describe("ClassroomsService direct upload", () => {
     prisma.pendingUpload.delete.mockResolvedValue(pendingRow);
     storage.activeBackend.mockResolvedValue(backend);
     storage.backendFor.mockResolvedValue(backend);
-    storage.presignUpload.mockResolvedValue("https://oss.example/put-url");
+    storage.presignUpload.mockResolvedValue({
+      url: "https://oss.example/upload",
+      fields: { policy: "signed-policy" },
+    });
     backend.statObject.mockResolvedValue({ size: 5 });
     backend.removeObject.mockResolvedValue(undefined);
   });
@@ -398,8 +401,16 @@ describe("ClassroomsService direct upload", () => {
 
     expect(result).toEqual({
       uploadId: "upload-1",
-      url: "https://oss.example/put-url",
+      url: "https://oss.example/upload",
+      fields: { policy: "signed-policy" },
     });
+    expect(storage.presignUpload).toHaveBeenCalledWith(
+      "oss",
+      expect.stringMatching(
+        /^workspace-1\/classrooms\/classroom-1\/.+-slides\.pdf$/,
+      ),
+      { sizeBytes: 5, mimeType: "application/pdf" },
+    );
     expect(prisma.pendingUpload.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         kind: "classroom",

@@ -473,28 +473,20 @@ export function ClassroomDetailClient({
           <h1>{classroom.name}</h1>
           <p>{classroom.description || "暂无课堂说明"}</p>
         </div>
-        <div className="classroom-detail-meta">
-          <dl>
-            <div>
-              <dt>教师</dt>
-              <dd>{classroom.teacherCount}</dd>
-            </div>
-            <div>
-              <dt>学生</dt>
-              <dd>{classroom.studentCount}</dd>
-            </div>
-          </dl>
-          {classroom.canEditClassroom ? (
+        {classroom.canEditClassroom ? (
+          <div className="classroom-detail-meta">
             <button
-              className="button secondary"
+              aria-label="编辑课堂"
+              className="button secondary mobile-icon-action"
               onClick={openClassroomEditor}
+              title="编辑课堂"
               type="button"
             >
               <Pencil aria-hidden="true" className="button-icon" />
               编辑课堂
             </button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </header>
       <FeedbackNotice notice={errorNotice} tone="error" />
       <FeedbackNotice notice={messageNotice} tone="success" />
@@ -560,8 +552,10 @@ export function ClassroomDetailClient({
           </label>
           {classroom.canEditContent && tab === "announcements" ? (
             <button
-              className="button"
+              aria-label="发布公告"
+              className="button mobile-icon-action"
               onClick={() => openAnnouncementEditor()}
+              title="发布公告"
               type="button"
             >
               <Plus aria-hidden="true" className="button-icon" />
@@ -569,13 +563,23 @@ export function ClassroomDetailClient({
             </button>
           ) : null}
           {classroom.canEditContent && tab === "teaching" ? (
-            <Link className="button" href={classroomTeachingNew(classroomId)}>
+            <Link
+              aria-label="创建课件"
+              className="button mobile-icon-action"
+              href={classroomTeachingNew(classroomId)}
+              title="创建课件"
+            >
               <Plus aria-hidden="true" className="button-icon" />
               创建课件
             </Link>
           ) : null}
           {classroom.canEditContent && tab === "exercises" ? (
-            <Link className="button" href={classroomExerciseNew(classroomId)}>
+            <Link
+              aria-label="创建练习"
+              className="button mobile-icon-action"
+              href={classroomExerciseNew(classroomId)}
+              title="创建练习"
+            >
               <Plus aria-hidden="true" className="button-icon" />
               创建练习
             </Link>
@@ -589,12 +593,14 @@ export function ClassroomDetailClient({
           {classroom.canEditContent && tab === "files" ? (
             <>
               <button
-                className="button classroom-upload-button"
+                aria-label={uploading ? "正在上传文件" : "上传文件"}
+                className="button classroom-upload-button mobile-icon-action"
                 disabled={
                   uploading ||
                   classroom.storageUsedBytes >= classroom.storageQuotaBytes
                 }
                 onClick={() => fileInputRef.current?.click()}
+                title={uploading ? "上传中" : "上传文件"}
                 type="button"
               >
                 <Upload aria-hidden="true" className="button-icon" />
@@ -839,6 +845,9 @@ export function ClassroomDetailClient({
 
       {tab === "members" && classroom.canManageMembers ? (
         <section className="classroom-members-panel">
+          <p className="classroom-member-summary">
+            {classroom.teacherCount} 位教师 · {classroom.studentCount} 位学生
+          </p>
           <div className="classroom-member-list">
             {classroom.members?.map((member) => (
               <div className="classroom-member-row" key={member.user.id}>

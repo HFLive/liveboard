@@ -95,12 +95,13 @@ export function uploadFormData<T>(
 }
 
 /**
- * 签名直入:浏览器 PUT 文件体到对象存储的预签名地址。
- * 预签名 URL 自带鉴权,不带 cookie;进度是真实的网络发送进度。
- * 失败时由调用方决定回退服务器中转,这里只报原始错误。
+ * 签名直入:浏览器按服务端签发的 POST Policy 上传到对象存储。
+ * Policy 在 OSS 侧强制校验对象 Key、精确大小与 MIME；file 必须最后
+ * 加入表单。请求不带站点 cookie，进度是真实的网络发送进度。
  */
-export function putWithProgress(
+export function postToObjectStorageWithProgress(
   url: string,
+  fields: Record<string, string>,
   file: File,
   options: UploadRequestOptions = {},
 ): Promise<void> {
@@ -127,10 +128,7 @@ export function putWithProgress(
       return;
     }
 
-    xhr.open("PUT", url);
-    if (file.type) {
-      xhr.setRequestHeader("Content-Type", file.type);
-    }
+    xhr.open("POST", url);
     xhr.upload.addEventListener("progress", (event) => {
       if (!event.lengthComputable) return;
       options.onProgress?.(
@@ -152,7 +150,12 @@ export function putWithProgress(
       finish(() => reject(new DOMException("上传已取消", "AbortError")));
     });
     options.signal?.addEventListener("abort", onAbort, { once: true });
-    xhr.send(file);
+    const formData = new FormData();
+    for (const [name, value] of Object.entries(fields)) {
+      formData.append(name, value);
+    }
+    formData.append("file", file);
+    xhr.send(formData);
   });
 }
 

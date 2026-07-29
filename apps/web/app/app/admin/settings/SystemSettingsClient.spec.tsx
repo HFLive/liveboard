@@ -26,7 +26,7 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/lib/waitForWebReady", () => readinessMocks);
 
 vi.mock("@/components/app-shell/AppSettingsProvider", () => ({
-  setAppFavicon: vi.fn(),
+  setAppIconSettings: vi.fn(),
 }));
 
 describe("SystemSettingsClient HTTPS settings", () => {
@@ -38,6 +38,8 @@ describe("SystemSettingsClient HTTPS settings", () => {
         workspaceSlug: "liveboard",
         timeZone: "Asia/Shanghai",
         faviconUrl: null,
+        faviconLightUrl: null,
+        faviconDarkUrl: null,
         updatedAt: "2026-07-26T00:00:00.000Z",
       },
     });
@@ -128,6 +130,18 @@ describe("SystemSettingsClient HTTPS settings", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("offers optional light and dark website icon variants", async () => {
+    render(<SystemSettingsClient />);
+
+    expect(await screen.findByText("默认图标")).toBeInTheDocument();
+    expect(screen.getByText("浅色界面")).toBeInTheDocument();
+    expect(screen.getByText("深色界面")).toBeInTheDocument();
+    expect(screen.getAllByText("可选")).toHaveLength(2);
+    expect(screen.getByLabelText("上传默认图标")).toBeInTheDocument();
+    expect(screen.getByLabelText("上传浅色界面")).toBeInTheDocument();
+    expect(screen.getByLabelText("上传深色界面")).toBeInTheDocument();
   });
 
   it("enables provider-neutral HTTPS from the system settings form", async () => {

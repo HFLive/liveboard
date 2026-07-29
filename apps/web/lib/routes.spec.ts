@@ -4,6 +4,7 @@ import { appRouteTitle } from "./routes";
 describe("appRouteTitle", () => {
   it("returns immediate titles for main and administration routes", () => {
     expect(appRouteTitle("/app/forum")).toBe("论坛");
+    expect(appRouteTitle("/app/library")).toBe("文件");
     expect(appRouteTitle("/app/admin/settings")).toBe("系统设置");
   });
 

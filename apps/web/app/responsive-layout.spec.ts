@@ -11,6 +11,12 @@ const editorCss = readFileSync(
   "app/app/content/[id]/edit/content-editor.css",
   "utf8",
 );
+const viewerCss = readFileSync(
+  "app/app/content/[id]/content-viewer.css",
+  "utf8",
+);
+const forumCss = readFileSync("app/app/forum/forum-clean.css", "utf8");
+const classroomsCss = readFileSync("app/app/classrooms/classrooms.css", "utf8");
 
 describe("responsive workspace contracts", () => {
   it("uses a top navigation and a single-column profile at mobile widths", () => {
@@ -37,10 +43,71 @@ describe("responsive workspace contracts", () => {
 
   it("keeps the content browser to one visible pane on narrow screens", () => {
     expect(contentCss).toMatch(
-      /@media \(max-width: 640px\)[\s\S]*?\.content-mobile-tabs/,
+      /@media \(max-width: 760px\)[\s\S]*?\.content-mobile-tabs/,
     );
     expect(contentCss).toMatch(
       /\.files-layout\.mobile-pane-tree > \.workbench-main,[\s\S]*?\.files-layout\.mobile-pane-contents > \.folder-panel\s*{[\s\S]*?display: none/,
+    );
+  });
+
+  it("keeps mobile actions compact instead of forcing one button per row", () => {
+    expect(mobileCss).toMatch(
+      /\.workspace :is\(\.button, \.button\.secondary, \.button\.danger\)\s*{[\s\S]*?width: auto/,
+    );
+    expect(mobileCss).toMatch(
+      /\.workspace \.button\.mobile-icon-action,[\s\S]*?\.workspace \.button\.danger\.mobile-icon-action\s*{[\s\S]*?width: 44px;[\s\S]*?min-height: 44px;[\s\S]*?font-size: 0/,
+    );
+    expect(mobileCss).toMatch(
+      /\.workspace \.button\.mobile-icon-action,[\s\S]*?background: transparent;[\s\S]*?color: var\(--text-soft\);[\s\S]*?box-shadow: none/,
+    );
+    expect(mobileCss).toMatch(
+      /\.content-workspace \.content-path-head > \.content-action-bar\s*{[\s\S]*?grid-row: 1;[\s\S]*?display: flex;[\s\S]*?width: 100%;[\s\S]*?overflow: visible;[\s\S]*?background: transparent/,
+    );
+    expect(mobileCss).toMatch(
+      /\.content-workspace \.breadcrumb\s*{[\s\S]*?grid-row: 2/,
+    );
+    expect(mobileCss).toMatch(
+      /\.content-workspace \.content-action-bar > \.new-content-menu\s*{[\s\S]*?margin-left: auto/,
+    );
+    expect(mobileCss).not.toMatch(
+      /\.content-workspace[\s\S]*?\.new-content-menu[\s\S]*?background: var\(--text\)/,
+    );
+  });
+
+  it("ships distinct reader fonts instead of relying on mobile system fonts", () => {
+    expect(viewerCss).toContain('"Noto Serif SC"');
+    expect(viewerCss).toContain('"LXGW WenKai Lite"');
+    expect(viewerCss).toMatch(
+      /\.content-viewer-document[\s\S]*?\.render-paragraph,[\s\S]*?font-family: inherit/,
+    );
+  });
+
+  it("keeps forum compose actions together on one mobile row", () => {
+    expect(forumCss).toMatch(
+      /\.forum-new-actions\s*{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto auto/,
+    );
+    expect(forumCss).toMatch(
+      /\.forum-new-actions \.button\.secondary\s*{[\s\S]*?grid-column: 2;[\s\S]*?grid-row: 1;[\s\S]*?width: auto/,
+    );
+  });
+
+  it("places classroom search and its primary action on the same mobile row", () => {
+    expect(classroomsCss).toMatch(/\.classrooms-workspace\s*{[\s\S]*?gap: 0/);
+    expect(classroomsCss).toMatch(
+      /\.workspace \.classrooms-toolbar\s*{[\s\S]*?padding-bottom: 8px/,
+    );
+    expect(classroomsCss).toMatch(
+      /\.classrooms-toolbar \.search-field\s*{[\s\S]*?grid-column: 1;[\s\S]*?grid-row: 1/,
+    );
+    expect(classroomsCss).toMatch(
+      /\.classrooms-toolbar > \.mobile-icon-action\s*{[\s\S]*?grid-column: 2;[\s\S]*?grid-row: 1/,
+    );
+    expect(classroomsCss).toMatch(
+      /\.classroom-content-toolbar > \.mobile-icon-action\s*{[\s\S]*?grid-column: 2;[\s\S]*?grid-row: 1/,
+    );
+    expect(classroomsCss).toMatch(/\.classroom-list\s*{[\s\S]*?padding-top: 0/);
+    expect(classroomsCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.classroom-detail-head\s*{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;[\s\S]*?align-items: center/,
     );
   });
 
@@ -71,6 +138,18 @@ describe("responsive workspace contracts", () => {
     );
     expect(libraryCss).toMatch(
       /@media \(min-width: 761px\)[\s\S]*?\.workspace\.library-workspace \.asset-detail-body\s*{[\s\S]*?padding-inline: 0/,
+    );
+  });
+
+  it("keeps file-library mobile controls compact and list rows aligned", () => {
+    expect(mobileCss).toMatch(
+      /\.library-workspace \.library-layout \.list-toolbar \.toolbar-row\s*{[\s\S]*?display: flex;[\s\S]*?flex-wrap: nowrap;[\s\S]*?width: 100%/,
+    );
+    expect(mobileCss).toMatch(
+      /\.library-workspace \.library-layout \.library-view-toggle\s*{[\s\S]*?grid-column: auto;[\s\S]*?width: auto;[\s\S]*?height: 44px/,
+    );
+    expect(mobileCss).toMatch(
+      /\.library-workspace \.asset-list-row\s*{[\s\S]*?grid-template-columns: 24px minmax\(0, 1fr\) 24px;[\s\S]*?min-height: 56px/,
     );
   });
 

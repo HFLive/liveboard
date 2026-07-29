@@ -380,7 +380,7 @@
   height: 36px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 760px) {
   .content-mobile-tabs {
     display: flex;
     width: fit-content;
@@ -600,7 +600,84 @@
   height: 16px;
 }
 
-@media (max-width: 640px) {
+.content-workspace .content-operation-dialog {
+  width: min(520px, 100%);
+}
+
+.content-workspace .content-move-dialog-body {
+  gap: 12px;
+}
+
+.content-workspace .content-current-location {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.content-workspace .content-location-picker {
+  display: grid;
+  max-height: min(380px, 48dvh);
+  margin: 0;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 6px;
+}
+
+.content-workspace .content-location-picker legend {
+  padding: 0 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.content-workspace .content-location-picker label {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  border-radius: 8px;
+  padding: 5px 9px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.content-workspace .content-location-picker label:hover {
+  background: var(--fill-hover);
+}
+
+.content-workspace .content-location-picker label:has(input:checked) {
+  background: var(--fill-active);
+}
+
+.content-workspace .content-location-picker input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.content-workspace .content-location-picker span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .content-workspace .content-operation-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 28px);
+  }
+
+  .content-workspace .content-operation-dialog .modal-body {
+    padding-inline: 14px;
+  }
+
+  .content-workspace .content-location-picker {
+    max-height: 44dvh;
+  }
+
   .content-workspace .modal-backdrop:has(.asset-preview-dialog) {
     align-items: end;
     padding: 10px;

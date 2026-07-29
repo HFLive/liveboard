@@ -43,6 +43,15 @@
   padding: 12px 10px 14px;
 }
 
+.ai-workspace .ai-sidebar-back-link {
+  margin: 0 8px 4px;
+}
+
+.ai-workspace .ai-chat-back-link {
+  display: none;
+  flex: 0 0 auto;
+}
+
 .ai-workspace .ai-sidebar-new {
   display: flex;
   align-items: center;
@@ -625,6 +634,14 @@
 }
 
 @media (max-width: 1040px) {
+  .ai-workspace .ai-sidebar-back-link {
+    display: none;
+  }
+
+  .ai-workspace .ai-chat-back-link {
+    display: inline-flex;
+  }
+
   .ai-workspace .ai-workbench {
     display: block;
     height: calc(100dvh - 112px);

@@ -53,6 +53,15 @@ describe("LibraryClient selection", () => {
     vi.mocked(listAssetReferences).mockResolvedValue({ references: [] });
   });
 
+  it("links the file page back to documents", () => {
+    render(<LibraryClient />);
+
+    expect(screen.getByRole("link", { name: "返回文档" })).toHaveAttribute(
+      "href",
+      "/app/content",
+    );
+  });
+
   it("starts unselected and clears selection from workspace background", async () => {
     const { container } = render(<LibraryClient />);
 

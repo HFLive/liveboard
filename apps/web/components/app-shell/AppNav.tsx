@@ -26,6 +26,7 @@ import {
 import { formatRelativeTime } from "@/lib/labels";
 import { APP_ROUTES, userProfile } from "@/lib/routes";
 import { LogoutButton } from "./LogoutButton";
+import { SiteBrandMark } from "./SiteBrandMark";
 
 const navItems = [
   { href: APP_ROUTES.classrooms, label: "课堂", Icon: Presentation },
@@ -36,6 +37,17 @@ const navItems = [
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function isPrimaryNavActive(pathname: string, href: string) {
+  if (
+    href === APP_ROUTES.content &&
+    (pathname === APP_ROUTES.ai || pathname === APP_ROUTES.library)
+  ) {
+    return true;
+  }
+
+  return isActive(pathname, href);
 }
 
 export function AppNav() {
@@ -57,12 +69,14 @@ export function AppNav() {
     user && ["super_admin", "admin"].includes(user.systemRole)
       ? navItems
       : navItems.filter((item) => item.href !== APP_ROUTES.admin);
+  const isProfileRoute =
+    pathname === APP_ROUTES.profile || pathname.startsWith("/app/users/");
   const activeNavItem = visibleNavItems.find((item) =>
-    isActive(pathname, item.href),
+    isPrimaryNavActive(pathname, item.href),
   );
   const currentNavItem =
     activeNavItem ??
-    (pathname === APP_ROUTES.profile || pathname.startsWith("/app/users/")
+    (isProfileRoute
       ? { label: "个人主页", Icon: UserCircle }
       : { label: "LiveBoard", Icon: Bot });
   const ActiveNavIcon = currentNavItem.Icon;
@@ -202,9 +216,7 @@ export function AppNav() {
         href={APP_ROUTES.classrooms}
         title="LiveBoard 首页"
       >
-        <span className="rail-mark" aria-hidden="true">
-          LB
-        </span>
+        <SiteBrandMark className="rail-mark" tone="dark" />
       </Link>
 
       <button
@@ -217,7 +229,14 @@ export function AppNav() {
         }}
         type="button"
       >
-        <ActiveNavIcon aria-hidden="true" />
+        {isProfileRoute ? (
+          <MobileProfileAvatar
+            avatarUrl={user?.avatarUrl}
+            fallback={userInitial}
+          />
+        ) : (
+          <ActiveNavIcon aria-hidden="true" />
+        )}
         <span>{currentNavItem.label}</span>
         {mobileMenuOpen ? (
           <X aria-hidden="true" />
@@ -238,7 +257,7 @@ export function AppNav() {
       <nav className="rail-nav" aria-label="主导航">
         {visibleNavItems.map((item) => {
           const Icon = item.Icon;
-          const active = isActive(pathname, item.href);
+          const active = isPrimaryNavActive(pathname, item.href);
 
           return (
             <Link
@@ -263,7 +282,10 @@ export function AppNav() {
               href={user ? userProfile(user.id) : APP_ROUTES.profile}
               onClick={() => setMobileMenuOpen(false)}
             >
-              <UserCircle aria-hidden="true" />
+              <MobileProfileAvatar
+                avatarUrl={user?.avatarUrl}
+                fallback={userInitial}
+              />
               <span>个人主页</span>
             </Link>
             <LogoutButton />
@@ -374,6 +396,20 @@ export function AppNav() {
         </div>
       ) : null}
     </aside>
+  );
+}
+
+function MobileProfileAvatar({
+  avatarUrl,
+  fallback,
+}: {
+  avatarUrl?: string | null;
+  fallback: string;
+}) {
+  return (
+    <span className="rail-mobile-profile-avatar" aria-hidden="true">
+      {avatarUrl ? <img alt="" src={apiResourceUrl(avatarUrl)} /> : fallback}
+    </span>
   );
 }
 

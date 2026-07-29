@@ -301,11 +301,15 @@ describe("Direct asset upload API", () => {
     FakeXMLHttpRequest.instances = [];
   });
 
-  it("runs the sign → PUT → confirm flow", async () => {
+  it("runs the sign → policy POST → confirm flow", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        jsonResponse({ uploadId: "u1", url: "https://oss.example/put" }),
+        jsonResponse({
+          uploadId: "u1",
+          url: "https://oss.example/upload",
+          fields: { key: "workspace/notes.txt", policy: "signed-policy" },
+        }),
       )
       .mockResolvedValueOnce(jsonResponse({ asset: { id: "asset-1" } }));
     vi.stubGlobal("fetch", fetchMock);
@@ -337,8 +341,8 @@ describe("Direct asset upload API", () => {
         }),
       }),
     );
-    expect(xhr.method).toBe("PUT");
-    expect(xhr.url).toBe("https://oss.example/put");
+    expect(xhr.method).toBe("POST");
+    expect(xhr.url).toBe("https://oss.example/upload");
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       `${API_URL}/assets/upload-confirm`,
@@ -374,11 +378,15 @@ describe("Direct asset upload API", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
-  it("aborts the reservation and falls back when the direct PUT fails", async () => {
+  it("aborts the reservation and falls back when the direct POST fails", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        jsonResponse({ uploadId: "u1", url: "https://oss.example/put" }),
+        jsonResponse({
+          uploadId: "u1",
+          url: "https://oss.example/upload",
+          fields: { key: "workspace/notes.txt", policy: "signed-policy" },
+        }),
       )
       .mockResolvedValueOnce(jsonResponse({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
@@ -388,7 +396,7 @@ describe("Direct asset upload API", () => {
       file: new File(["hello"], "notes.txt", { type: "text/plain" }),
       folderId: "folder-1",
     });
-    // 第一个 XHR 是直传 PUT,模拟 CORS/网络失败
+    // 第一个 XHR 是 OSS Policy 表单直传,模拟 CORS/网络失败
     await vi.waitFor(() => {
       expect(FakeXMLHttpRequest.instances.length).toBe(1);
     });

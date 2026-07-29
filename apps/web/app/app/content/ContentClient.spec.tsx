@@ -234,6 +234,16 @@ describe("ContentClient folder deletion", () => {
     expect(uploadAsset).not.toHaveBeenCalled();
   });
 
+  it("uses the system document picker for folder uploads", async () => {
+    render(<ContentClient />);
+    await enterFolderFromTree("课程资料");
+
+    const input = screen.getByLabelText("上传文件到当前文件夹");
+    expect(input).toHaveAttribute("type", "file");
+    expect(input).not.toHaveAttribute("accept");
+    expect(input).not.toHaveAttribute("capture");
+  });
+
   it("previews uploaded files in-app and downloads via attachment URL", async () => {
     vi.mocked(listFiles).mockResolvedValue({
       files: [],
@@ -355,7 +365,11 @@ describe("ContentClient folder deletion", () => {
       screen.getByRole("button", { name: "取消置顶" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重命名" }));
-    expect(within(table).getByDisplayValue("课程导读")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "重命名文档" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("文档名称")).toHaveValue("课程导读");
+    expect(table.querySelector(".content-inline-row")).toBeNull();
     fireEvent.click(moveDown);
 
     await waitFor(() =>
@@ -364,6 +378,34 @@ describe("ContentClient folder deletion", () => {
         { targetType: "folder", targetId: "folder-2" },
       ]),
     );
+  });
+
+  it("opens folder rename and move workflows in focused dialogs", async () => {
+    render(<ContentClient />);
+
+    const tree = getTree();
+    const menuButton = await within(tree).findByRole("button", {
+      name: "“课程资料”文件夹操作",
+    });
+    fireEvent.click(menuButton);
+    fireEvent.click(screen.getByRole("button", { name: "重命名" }));
+
+    expect(
+      screen.getByRole("heading", { name: "重命名文件夹" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("文件夹名称")).toHaveValue("课程资料");
+    expect(document.querySelector(".tree-inline-form")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭重命名文件夹" }));
+    fireEvent.click(menuButton);
+    fireEvent.click(screen.getByRole("button", { name: "移动到…" }));
+
+    expect(
+      screen.getByRole("heading", { name: "移动“课程资料”" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("选择目标位置")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "顶层" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "移动到这里" })).toBeDisabled();
   });
 
   it("shows pins only inside their own folder", async () => {
@@ -517,8 +559,10 @@ describe("ContentClient folder deletion", () => {
     render(<ContentClient />);
 
     await enterFolderFromTree("课程资料");
-    fireEvent.click(await screen.findByRole("button", { name: "新建" }));
+    const createButton = await screen.findByRole("button", { name: "新建" });
+    fireEvent.click(createButton);
 
+    expect(createButton).toHaveAttribute("aria-expanded", "true");
     expect(
       screen.getByRole("menuitem", { name: "新建文件夹" }),
     ).toBeInTheDocument();

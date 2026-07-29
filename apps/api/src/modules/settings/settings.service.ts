@@ -24,6 +24,7 @@ export interface UploadedFaviconFile {
 }
 
 export const MAX_FAVICON_SIZE_BYTES = 1024 * 1024;
+export type FaviconVariant = "default" | "light" | "dark";
 
 @Injectable()
 export class SettingsService {
@@ -69,6 +70,7 @@ export class SettingsService {
   async updateFavicon(
     userId: string | null,
     file: UploadedFaviconFile | undefined,
+    variant: FaviconVariant = "default",
   ) {
     await this.requireAdmin(userId);
     if (!file) throw new BadRequestException("请选择网站图标");
@@ -90,7 +92,7 @@ export class SettingsService {
           : mimeType === "image/webp"
             ? "webp"
             : "jpg";
-    const storageKey = `site/favicon/${randomUUID()}.${extension}`;
+    const storageKey = `site/favicon/${variant}/${randomUUID()}.${extension}`;
     const backend = await this.storage.activeBackend();
 
     await backend.putObject(storageKey, file.buffer, mimeType);
@@ -99,56 +101,43 @@ export class SettingsService {
     try {
       updated = await this.prisma.workspace.update({
         where: { id: workspace.id },
-        data: {
-          faviconStorageKey: storageKey,
-          faviconMimeType: mimeType,
-          faviconUpdatedAt: new Date(),
-          faviconStorageBackend: backend.name,
-        },
+        data: faviconUpdateData(variant, storageKey, mimeType, backend.name),
       });
     } catch (caught) {
       await backend.removeObject(storageKey).catch(() => undefined);
       throw caught;
     }
 
-    if (
-      workspace.faviconStorageKey &&
-      workspace.faviconStorageKey !== storageKey
-    ) {
-      const previous = await this.storage.backendFor(
-        workspace.faviconStorageBackend,
-      );
+    const previousIcon = storedFavicon(workspace, variant);
+    if (previousIcon.storageKey && previousIcon.storageKey !== storageKey) {
+      const previous = await this.storage.backendFor(previousIcon.backend);
       await previous
-        .removeObject(workspace.faviconStorageKey)
+        .removeObject(previousIcon.storageKey)
         .catch(() => undefined);
     }
 
     return this.toPublicSettings(updated);
   }
 
-  async resetFavicon(userId: string | null) {
+  async resetFavicon(
+    userId: string | null,
+    variant: FaviconVariant = "default",
+  ) {
     await this.requireAdmin(userId);
     const workspace = await this.getDefaultWorkspace();
+    const currentIcon = storedFavicon(workspace, variant);
 
-    if (!workspace.faviconStorageKey) {
+    if (!currentIcon.storageKey) {
       return this.toPublicSettings(workspace);
     }
 
     const updated = await this.prisma.workspace.update({
       where: { id: workspace.id },
-      data: {
-        faviconStorageKey: null,
-        faviconMimeType: null,
-        faviconUpdatedAt: null,
-      },
+      data: faviconResetData(variant),
     });
 
-    const previous = await this.storage.backendFor(
-      workspace.faviconStorageBackend,
-    );
-    await previous
-      .removeObject(workspace.faviconStorageKey)
-      .catch(() => undefined);
+    const previous = await this.storage.backendFor(currentIcon.backend);
+    await previous.removeObject(currentIcon.storageKey).catch(() => undefined);
 
     return this.toPublicSettings(updated);
   }
@@ -185,31 +174,28 @@ export class SettingsService {
     return this.httpsAgent.setAutoRenew(enabled);
   }
 
-  async getFavicon() {
+  async getFavicon(variant: FaviconVariant = "default") {
     const workspace = await this.getDefaultWorkspace();
-    if (!workspace.faviconStorageKey) {
+    const icon = storedFavicon(workspace, variant);
+    if (!icon.storageKey) {
       throw new NotFoundException("Website icon not found");
     }
 
-    const mimeType = workspace.faviconMimeType ?? "image/png";
+    const mimeType = icon.mimeType ?? "image/png";
     const redirectUrl = await this.storage.presignDownload(
-      workspace.faviconStorageBackend,
-      workspace.faviconStorageKey,
+      icon.backend,
+      icon.storageKey,
       { filename: "favicon", mimeType, inline: true },
     );
     if (redirectUrl) {
       return { mimeType, redirectUrl, stream: null };
     }
 
-    const backend = await this.storage.backendFor(
-      workspace.faviconStorageBackend,
-    );
+    const backend = await this.storage.backendFor(icon.backend);
     return {
       mimeType,
       redirectUrl: null,
-      stream: (await backend.getObject(
-        workspace.faviconStorageKey,
-      )) as Readable,
+      stream: (await backend.getObject(icon.storageKey)) as Readable,
     };
   }
 
@@ -246,6 +232,8 @@ export class SettingsService {
     slug: string;
     timeZone: string;
     faviconUpdatedAt?: Date | null;
+    faviconLightUpdatedAt?: Date | null;
+    faviconDarkUpdatedAt?: Date | null;
     updatedAt: Date;
   }) {
     return {
@@ -255,9 +243,110 @@ export class SettingsService {
       faviconUrl: workspace.faviconUpdatedAt
         ? `/settings/favicon?v=${workspace.faviconUpdatedAt.getTime()}`
         : null,
+      faviconLightUrl: workspace.faviconLightUpdatedAt
+        ? `/settings/favicon/light?v=${workspace.faviconLightUpdatedAt.getTime()}`
+        : null,
+      faviconDarkUrl: workspace.faviconDarkUpdatedAt
+        ? `/settings/favicon/dark?v=${workspace.faviconDarkUpdatedAt.getTime()}`
+        : null,
       updatedAt: workspace.updatedAt.toISOString(),
     };
   }
+}
+
+function storedFavicon(
+  workspace: {
+    faviconStorageKey: string | null;
+    faviconMimeType: string | null;
+    faviconStorageBackend: "minio" | "oss";
+    faviconLightStorageKey: string | null;
+    faviconLightMimeType: string | null;
+    faviconLightStorageBackend: "minio" | "oss";
+    faviconDarkStorageKey: string | null;
+    faviconDarkMimeType: string | null;
+    faviconDarkStorageBackend: "minio" | "oss";
+  },
+  variant: FaviconVariant,
+) {
+  if (variant === "light") {
+    return {
+      storageKey: workspace.faviconLightStorageKey,
+      mimeType: workspace.faviconLightMimeType,
+      backend: workspace.faviconLightStorageBackend,
+    };
+  }
+  if (variant === "dark") {
+    return {
+      storageKey: workspace.faviconDarkStorageKey,
+      mimeType: workspace.faviconDarkMimeType,
+      backend: workspace.faviconDarkStorageBackend,
+    };
+  }
+  return {
+    storageKey: workspace.faviconStorageKey,
+    mimeType: workspace.faviconMimeType,
+    backend: workspace.faviconStorageBackend,
+  };
+}
+
+function faviconUpdateData(
+  variant: FaviconVariant,
+  storageKey: string,
+  mimeType: string,
+  backend: "minio" | "oss",
+) {
+  const updatedAt = new Date();
+  if (variant === "light") {
+    return {
+      faviconLightStorageKey: storageKey,
+      faviconLightMimeType: mimeType,
+      faviconLightUpdatedAt: updatedAt,
+      faviconLightStorageBackend: backend,
+    };
+  }
+  if (variant === "dark") {
+    return {
+      faviconDarkStorageKey: storageKey,
+      faviconDarkMimeType: mimeType,
+      faviconDarkUpdatedAt: updatedAt,
+      faviconDarkStorageBackend: backend,
+    };
+  }
+  return {
+    faviconStorageKey: storageKey,
+    faviconMimeType: mimeType,
+    faviconUpdatedAt: updatedAt,
+    faviconStorageBackend: backend,
+  };
+}
+
+function faviconResetData(variant: FaviconVariant) {
+  if (variant === "light") {
+    return {
+      faviconLightStorageKey: null,
+      faviconLightMimeType: null,
+      faviconLightUpdatedAt: null,
+    };
+  }
+  if (variant === "dark") {
+    return {
+      faviconDarkStorageKey: null,
+      faviconDarkMimeType: null,
+      faviconDarkUpdatedAt: null,
+    };
+  }
+  return {
+    faviconStorageKey: null,
+    faviconMimeType: null,
+    faviconUpdatedAt: null,
+  };
+}
+
+export function parseFaviconVariant(value: string): FaviconVariant {
+  if (value === "default" || value === "light" || value === "dark") {
+    return value;
+  }
+  throw new BadRequestException("未知的网站图标版本");
 }
 
 function detectFaviconMimeType(buffer: Buffer) {

@@ -160,8 +160,10 @@ export function ForumClient() {
                 value={sortMode}
               />
               <Link
-                className="button forum-create-action"
+                aria-label="发布内容"
+                className="button forum-create-action mobile-icon-action"
                 href={APP_ROUTES.forumNew}
+                title="发布内容"
               >
                 <Plus aria-hidden="true" className="button-icon" />
                 <span className="forum-create-label">发内容</span>

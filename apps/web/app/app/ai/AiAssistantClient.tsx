@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import {
+  ArrowLeft,
   Check,
   Copy,
   MoreHorizontal,
@@ -41,7 +42,7 @@ import {
   type AiStatus,
 } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/labels";
-import { contentDetail } from "@/lib/routes";
+import { APP_ROUTES, contentDetail } from "@/lib/routes";
 import { AutoTextarea } from "@/components/AutoTextarea";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
@@ -549,6 +550,13 @@ export function AiAssistantClient() {
           aria-label="AI 历史记录"
         >
           <div className="ai-sidebar-primary">
+            <Link
+              className="page-back-link ai-sidebar-back-link"
+              href={APP_ROUTES.content}
+            >
+              <ArrowLeft aria-hidden="true" />
+              返回文档
+            </Link>
             <button
               className={
                 activeConversationId
@@ -718,6 +726,13 @@ export function AiAssistantClient() {
         <section className="ai-chat-panel" aria-label="AI 对话">
           <header className="ai-chat-toolbar">
             <div className="ai-chat-title">
+              <Link
+                className="page-back-link ai-chat-back-link"
+                href={APP_ROUTES.content}
+              >
+                <ArrowLeft aria-hidden="true" />
+                返回文档
+              </Link>
               <button
                 aria-controls="ai-history-drawer"
                 aria-expanded={mobileHistoryOpen}

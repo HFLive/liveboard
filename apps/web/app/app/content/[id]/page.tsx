@@ -1,3 +1,5 @@
+import "@fontsource/noto-serif-sc/400.css";
+import "lxgw-wenkai-lite-webfont/lxgwwenkailite-regular.css";
 import "./content-viewer.css";
 import { FileViewer } from "./FileViewer";
 import type { Metadata } from "next";

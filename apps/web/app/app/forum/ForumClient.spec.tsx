@@ -71,9 +71,12 @@ describe("ForumClient", () => {
         name: "课程交流 1",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "发内容" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "发布内容" })).toHaveAttribute(
       "href",
       "/app/forum/new",
+    );
+    expect(screen.getByRole("link", { name: "发布内容" })).toHaveClass(
+      "mobile-icon-action",
     );
     expect(
       screen.queryByRole("button", { name: "未读" }),

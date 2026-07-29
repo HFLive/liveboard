@@ -9,8 +9,6 @@ import {
   Lock,
   MessageSquareReply,
   MoreHorizontal,
-  Pencil,
-  Save,
   Send,
   Trash2,
   ThumbsDown,
@@ -18,19 +16,13 @@ import {
   Unlock,
   X,
 } from "lucide-react";
-import type {
-  ForumCategorySummary,
-  ForumPostSummary,
-  ForumThreadDetail,
-} from "@liveboard/shared";
+import type { ForumPostSummary, ForumThreadDetail } from "@liveboard/shared";
 import {
   createForumPost,
   deleteForumPost,
   deleteForumThread,
   getForumThread,
-  listForumOverview,
   uploadForumPostImages,
-  updateForumPost,
   updateForumThread,
   voteForumPost,
 } from "@/lib/api";
@@ -56,7 +48,6 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
   const router = useRouter();
   const [thread, setThread] = useState<ForumThreadDetail | null>(null);
   useDocumentTitle(thread?.title ?? null);
-  const [categories, setCategories] = useState<ForumCategorySummary[]>([]);
   const [reply, setReply] = useState("");
   const [activeReplyPostId, setActiveReplyPostId] = useState<string | null>(
     null,
@@ -72,11 +63,6 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
   const [pendingReplyPosts, setPendingReplyPosts] = useState<
     Record<string, ForumPostSummary>
   >({});
-  const [editingThread, setEditingThread] = useState(false);
-  const [threadTitleDraft, setThreadTitleDraft] = useState("");
-  const [threadCategoryDraft, setThreadCategoryDraft] = useState("");
-  const [editingPostId, setEditingPostId] = useState<string | null>(null);
-  const [postDraft, setPostDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -87,11 +73,10 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
   useEffect(() => {
     let mounted = true;
 
-    Promise.all([getForumThread(threadId), listForumOverview()])
-      .then(([threadResult, overview]) => {
+    getForumThread(threadId)
+      .then((threadResult) => {
         if (mounted) {
           setThread(threadResult.thread);
-          setCategories(overview.categories);
         }
       })
       .catch((caught) => {
@@ -284,40 +269,6 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     );
   }
 
-  function startEditThread() {
-    if (!thread) {
-      return;
-    }
-
-    setEditingThread(true);
-    setThreadTitleDraft(thread.title);
-    setThreadCategoryDraft(thread.categoryId);
-    setError(null);
-  }
-
-  async function saveThread(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!thread) {
-      return;
-    }
-
-    setActionLoading(true);
-    setError(null);
-
-    try {
-      const result = await updateForumThread(thread.id, {
-        title: threadTitleDraft,
-        categoryId: threadCategoryDraft,
-      });
-      setThread(result.thread);
-      setEditingThread(false);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "保存帖子失败");
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
   async function setThreadStatus(status: "open" | "locked") {
     if (!thread) {
       return;
@@ -352,37 +303,6 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       router.push(APP_ROUTES.forum);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "删除帖子失败");
-      setActionLoading(false);
-    }
-  }
-
-  function startEditPost(postId: string, body: string) {
-    setEditingPostId(postId);
-    setPostDraft(body);
-    setError(null);
-  }
-
-  async function savePost(postId: string) {
-    setActionLoading(true);
-    setError(null);
-
-    try {
-      const result = await updateForumPost(postId, { body: postDraft });
-      setThread((current) =>
-        current
-          ? {
-              ...current,
-              posts: current.posts.map((post) =>
-                post.id === postId ? result.post : post,
-              ),
-            }
-          : current,
-      );
-      setEditingPostId(null);
-      setPostDraft("");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "保存回复失败");
-    } finally {
       setActionLoading(false);
     }
   }
@@ -696,66 +616,13 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                 </em>
               ) : null}
             </div>
-            {editingThread ? (
-              <form className="forum-thread-edit-form" onSubmit={saveThread}>
-                <input
-                  className="input"
-                  maxLength={120}
-                  value={threadTitleDraft}
-                  onChange={(event) => setThreadTitleDraft(event.target.value)}
-                />
-                <select
-                  className="select"
-                  value={threadCategoryDraft}
-                  onChange={(event) =>
-                    setThreadCategoryDraft(event.target.value)
-                  }
-                >
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-                <div className="button-row left">
-                  <button
-                    className="button"
-                    disabled={actionLoading || !threadTitleDraft.trim()}
-                    type="submit"
-                  >
-                    <Save aria-hidden="true" className="button-icon" />
-                    保存
-                  </button>
-                  <button
-                    className="button secondary"
-                    onClick={() => setEditingThread(false)}
-                    type="button"
-                  >
-                    <X aria-hidden="true" className="button-icon" />
-                    取消
-                  </button>
-                </div>
-              </form>
-            ) : null}
             <div className="forum-thread-actions">
-              {(thread.canEdit && !editingThread) ||
-              thread.canModerate ||
-              thread.canDelete ? (
+              {thread.canModerate || thread.canDelete ? (
                 <details className="forum-thread-more">
                   <summary aria-label="更多帖子操作" title="更多帖子操作">
                     <MoreHorizontal aria-hidden="true" />
                   </summary>
                   <div className="forum-thread-more-menu">
-                    {thread.canEdit && !editingThread ? (
-                      <button
-                        disabled={actionLoading}
-                        onClick={startEditThread}
-                        type="button"
-                      >
-                        <Pencil aria-hidden="true" />
-                        编辑帖子
-                      </button>
-                    ) : null}
                     {thread.canModerate ? (
                       thread.status === "locked" ? (
                         <button
@@ -852,50 +719,13 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                   ) : null}
                 </header>
                 <div className="forum-post-content">
-                  {!editingThread ? (
-                    <>
-                      <span className="forum-main-post-category">
-                        {thread.category.name}
-                      </span>
-                      <h1 className="forum-main-post-title">{thread.title}</h1>
-                    </>
-                  ) : null}
-                  {editingPostId === postStructure.mainPost.id ? (
-                    <div className="forum-post-edit-form">
-                      <AutoTextarea
-                        className="textarea"
-                        maxLength={8000}
-                        value={postDraft}
-                        onChange={(event) => setPostDraft(event.target.value)}
-                      />
-                      <div className="button-row left">
-                        <button
-                          className="button"
-                          disabled={actionLoading || !postDraft.trim()}
-                          onClick={() => savePost(postStructure.mainPost!.id)}
-                          type="button"
-                        >
-                          <Save aria-hidden="true" className="button-icon" />
-                          保存
-                        </button>
-                        <button
-                          className="button secondary"
-                          onClick={() => {
-                            setEditingPostId(null);
-                            setPostDraft("");
-                          }}
-                          type="button"
-                        >
-                          <X aria-hidden="true" className="button-icon" />
-                          取消
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="forum-post-body">
-                      <p>{postStructure.mainPost.body}</p>
-                    </div>
-                  )}
+                  <span className="forum-main-post-category">
+                    {thread.category.name}
+                  </span>
+                  <h1 className="forum-main-post-title">{thread.title}</h1>
+                  <div className="forum-post-body">
+                    <p>{postStructure.mainPost.body}</p>
+                  </div>
                   <ForumPostImages images={postStructure.mainPost.images} />
                   <div className="forum-post-actions">
                     {renderPostVotes(postStructure.mainPost)}

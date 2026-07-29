@@ -13,7 +13,8 @@ const mockMinioClient = {
   getObject: jest.fn(),
   removeObject: jest.fn(),
   presignedGetObject: jest.fn(),
-  presignedPutObject: jest.fn(),
+  newPostPolicy: jest.fn(),
+  presignedPostPolicy: jest.fn(),
   statObject: jest.fn(),
 };
 
@@ -35,6 +36,10 @@ describe("StorageService", () => {
     },
     classroomFile: { groupBy: jest.fn() },
     fileAsset: { groupBy: jest.fn() },
+    pendingUpload: {
+      findMany: jest.fn(),
+      deleteMany: jest.fn(),
+    },
   };
   const secrets = {
     encrypt: jest.fn(),
@@ -74,9 +79,22 @@ describe("StorageService", () => {
     mockMinioClient.presignedGetObject.mockResolvedValue(
       "https://oss.example/signed-url",
     );
-    mockMinioClient.presignedPutObject.mockResolvedValue(
-      "https://oss.example/signed-put-url",
-    );
+    const postPolicy = {
+      setBucket: jest.fn(),
+      setKey: jest.fn(),
+      setExpires: jest.fn(),
+      setContentLengthRange: jest.fn(),
+      setContentType: jest.fn(),
+    };
+    mockMinioClient.newPostPolicy.mockReturnValue(postPolicy);
+    mockMinioClient.presignedPostPolicy.mockResolvedValue({
+      postURL: "https://oss.example/upload",
+      formData: {
+        key: "ws/2026-07-29/a.pdf",
+        policy: "signed-policy",
+        "x-amz-signature": "signature",
+      },
+    });
     mockMinioClient.statObject.mockResolvedValue({ size: 1 });
     service = new StorageService(
       prisma as unknown as PrismaService,
@@ -88,6 +106,8 @@ describe("StorageService", () => {
     prisma.storageSettings.findUnique.mockResolvedValue(null);
     prisma.classroomFile.groupBy.mockResolvedValue([]);
     prisma.fileAsset.groupBy.mockResolvedValue([]);
+    prisma.pendingUpload.findMany.mockResolvedValue([]);
+    prisma.pendingUpload.deleteMany.mockResolvedValue({ count: 1 });
   });
 
   it("returns MinIO defaults when no settings row exists", async () => {
@@ -107,6 +127,70 @@ describe("StorageService", () => {
         partSize: ATOMIC_UPLOAD_PART_SIZE_BYTES,
       }),
     );
+  });
+
+  it("globally removes expired OSS objects before deleting pending rows", async () => {
+    prisma.storageSettings.findUnique.mockResolvedValue({
+      backend: "oss",
+      downloadMode: "proxy",
+      uploadMode: "direct",
+      ossRegion: "cn-hangzhou",
+      ossBucket: "liveboard",
+      ossEndpoint: null,
+      ossInternal: false,
+      ossAccessKeyId: "ak",
+      ossAccessKeySecret: "enc:raw-secret",
+      updatedAt: new Date("2026-07-29T00:00:00Z"),
+    });
+    prisma.pendingUpload.findMany.mockResolvedValue([
+      {
+        id: "upload-1",
+        storageKey: "workspace/pending/file.bin",
+        expiresAt: new Date("2026-07-29T00:00:00Z"),
+      },
+    ]);
+
+    await expect(service.cleanupExpiredPendingUploads()).resolves.toBe(1);
+
+    expect(mockMinioClient.removeObject).toHaveBeenCalledWith(
+      "liveboard",
+      "workspace/pending/file.bin",
+    );
+    expect(prisma.pendingUpload.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: "upload-1",
+        expiresAt: { lte: expect.any(Date) },
+      },
+    });
+  });
+
+  it("retains an expired pending row when OSS deletion fails", async () => {
+    prisma.storageSettings.findUnique.mockResolvedValue({
+      backend: "oss",
+      downloadMode: "proxy",
+      uploadMode: "direct",
+      ossRegion: "cn-hangzhou",
+      ossBucket: "liveboard",
+      ossEndpoint: null,
+      ossInternal: false,
+      ossAccessKeyId: "ak",
+      ossAccessKeySecret: "enc:raw-secret",
+      updatedAt: new Date("2026-07-29T00:00:00Z"),
+    });
+    prisma.pendingUpload.findMany.mockResolvedValue([
+      {
+        id: "upload-1",
+        storageKey: "workspace/pending/file.bin",
+        expiresAt: new Date("2026-07-29T00:00:00Z"),
+      },
+    ]);
+    mockMinioClient.removeObject.mockRejectedValueOnce(
+      new Error("OSS unavailable"),
+    );
+
+    await expect(service.cleanupExpiredPendingUploads()).resolves.toBe(0);
+
+    expect(prisma.pendingUpload.deleteMany).not.toHaveBeenCalled();
   });
 
   it("aggregates file counts and sizes per storage backend", async () => {
@@ -430,15 +514,23 @@ describe("StorageService", () => {
       updatedAt: new Date("2026-07-27T00:00:00Z"),
     });
 
-    await expect(service.presignUpload("oss", "some/key")).resolves.toBeNull();
-    expect(mockMinioClient.presignedPutObject).not.toHaveBeenCalled();
+    await expect(
+      service.presignUpload("oss", "some/key", {
+        sizeBytes: 5,
+        mimeType: "text/plain",
+      }),
+    ).resolves.toBeNull();
+    expect(mockMinioClient.presignedPostPolicy).not.toHaveBeenCalled();
   });
 
   it("returns null for presigned uploads on the MinIO backend", async () => {
     await expect(
-      service.presignUpload("minio", "some/key"),
+      service.presignUpload("minio", "some/key", {
+        sizeBytes: 5,
+        mimeType: "text/plain",
+      }),
     ).resolves.toBeNull();
-    expect(mockMinioClient.presignedPutObject).not.toHaveBeenCalled();
+    expect(mockMinioClient.presignedPostPolicy).not.toHaveBeenCalled();
   });
 
   it("presigns uploads through the public endpoint in direct mode", async () => {
@@ -456,13 +548,24 @@ describe("StorageService", () => {
     });
 
     await expect(
-      service.presignUpload("oss", "ws/2026-07-29/a.pdf"),
-    ).resolves.toBe("https://oss.example/signed-put-url");
-    expect(mockMinioClient.presignedPutObject).toHaveBeenCalledWith(
-      "liveboard",
-      "ws/2026-07-29/a.pdf",
-      600,
-    );
+      service.presignUpload("oss", "ws/2026-07-29/a.pdf", {
+        sizeBytes: 1024,
+        mimeType: "application/pdf",
+      }),
+    ).resolves.toEqual({
+      url: "https://oss.example/upload",
+      fields: {
+        key: "ws/2026-07-29/a.pdf",
+        policy: "signed-policy",
+        "x-amz-signature": "signature",
+      },
+    });
+    const policy = mockMinioClient.newPostPolicy.mock.results[0]?.value;
+    expect(policy.setBucket).toHaveBeenCalledWith("liveboard");
+    expect(policy.setKey).toHaveBeenCalledWith("ws/2026-07-29/a.pdf");
+    expect(policy.setContentLengthRange).toHaveBeenCalledWith(1024, 1024);
+    expect(policy.setContentType).toHaveBeenCalledWith("application/pdf");
+    expect(mockMinioClient.presignedPostPolicy).toHaveBeenCalledWith(policy);
     // 内网配置下签名客户端必须走公网 Endpoint,浏览器才可达
     const clientConfigs = MockedMinioClient.mock.calls.map(([arg]) => arg);
     expect(

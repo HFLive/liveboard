@@ -20,6 +20,7 @@ import {
   getSystemSettings,
   resetSystemFavicon,
   setHttpsAutoRenew,
+  type FaviconVariant,
   type HttpsStatus,
   type SystemSettings,
   updateSystemSettings,
@@ -27,7 +28,7 @@ import {
 } from "@/lib/api";
 import { formatDateTime, setAppTimeZone } from "@/lib/labels";
 import { waitForWebReady } from "@/lib/waitForWebReady";
-import { setAppFavicon } from "@/components/app-shell/AppSettingsProvider";
+import { setAppIconSettings } from "@/components/app-shell/AppSettingsProvider";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 const fallbackTimeZones = [
@@ -60,6 +61,32 @@ const quickTimeZones = [
   { value: "Europe/London", label: "伦敦" },
   { value: "America/New_York", label: "纽约" },
   { value: "America/Los_Angeles", label: "洛杉矶" },
+];
+
+const faviconVariants: Array<{
+  key: FaviconVariant;
+  title: string;
+  description: string;
+  optional: boolean;
+}> = [
+  {
+    key: "default",
+    title: "默认图标",
+    description: "浏览器标签页及其他版本未设置时使用。",
+    optional: false,
+  },
+  {
+    key: "light",
+    title: "浅色界面",
+    description: "用于首页等浅色背景；未设置时使用默认图标。",
+    optional: true,
+  },
+  {
+    key: "dark",
+    title: "深色界面",
+    description: "用于登录页和应用导航；未设置时使用默认图标。",
+    optional: true,
+  },
 ];
 
 function getAvailableTimeZones(currentTimeZone: string) {
@@ -108,14 +135,26 @@ function formatTimeZoneLabel(timeZone: string) {
   return offset ? `${timeZone} (${offset})` : timeZone;
 }
 
+function faviconUrlForVariant(
+  settings: SystemSettings | null,
+  variant: FaviconVariant,
+) {
+  if (!settings) return null;
+  if (variant === "light") return settings.faviconLightUrl;
+  if (variant === "dark") return settings.faviconDarkUrl;
+  return settings.faviconUrl;
+}
+
 export function SystemSettingsClient() {
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [timeZone, setTimeZone] = useState("Asia/Shanghai");
   const [preview, setPreview] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [uploadingFavicon, setUploadingFavicon] = useState(false);
-  const [resettingFavicon, setResettingFavicon] = useState(false);
+  const [uploadingFavicon, setUploadingFavicon] =
+    useState<FaviconVariant | null>(null);
+  const [resettingFavicon, setResettingFavicon] =
+    useState<FaviconVariant | null>(null);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [httpsStatus, setHttpsStatus] = useState<HttpsStatus | null>(null);
   const [httpsDomain, setHttpsDomain] = useState("");
@@ -209,37 +248,48 @@ export function SystemSettingsClient() {
     }
   }
 
-  async function onFaviconChange(file: File | undefined) {
+  async function onFaviconChange(
+    file: File | undefined,
+    variant: FaviconVariant,
+  ) {
     if (!file) return;
-    setUploadingFavicon(true);
+    setUploadingFavicon(variant);
     setError(null);
     setMessage(null);
     try {
-      const result = await uploadSystemFavicon(file);
+      const result = await uploadSystemFavicon(file, variant);
       setSettings(result.settings);
-      setAppFavicon(result.settings.faviconUrl);
-      setMessage("网站图标已更新");
+      setAppIconSettings(result.settings);
+      setMessage(
+        variant === "default"
+          ? "默认网站图标已更新"
+          : `${variant === "light" ? "浅色" : "深色"}界面图标已更新`,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "网站图标上传失败");
     } finally {
-      setUploadingFavicon(false);
+      setUploadingFavicon(null);
     }
   }
 
-  async function onFaviconReset() {
-    if (!window.confirm("确定恢复浏览器默认图标吗？")) return;
-    setResettingFavicon(true);
+  async function onFaviconReset(variant: FaviconVariant) {
+    const label =
+      variant === "default"
+        ? "默认图标"
+        : `${variant === "light" ? "浅色" : "深色"}界面图标`;
+    if (!window.confirm(`确定移除${label}吗？`)) return;
+    setResettingFavicon(variant);
     setError(null);
     setMessage(null);
     try {
-      const result = await resetSystemFavicon();
+      const result = await resetSystemFavicon(variant);
       setSettings(result.settings);
-      setAppFavicon(null);
-      window.location.reload();
+      setAppIconSettings(result.settings);
+      setMessage(`${label}已移除`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "网站图标重置失败");
     } finally {
-      setResettingFavicon(false);
+      setResettingFavicon(null);
     }
   }
 
@@ -774,51 +824,93 @@ export function SystemSettingsClient() {
                   </div>
                 </div>
 
-                <div className="favicon-setting-card">
-                  <div className="favicon-preview" aria-label="当前网站图标">
-                    {settings?.faviconUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img alt="" src={apiResourceUrl(settings.faviconUrl)} />
-                    ) : (
-                      <Globe2 aria-hidden="true" />
-                    )}
-                  </div>
-                  <div className="favicon-setting-copy">
-                    <strong>
-                      {settings?.faviconUrl
-                        ? "当前使用自定义图标"
-                        : "当前使用浏览器默认图标"}
-                    </strong>
-                    <p className="muted">
-                      支持 ICO、PNG、JPEG 和 WebP，文件不超过 1MB。
-                    </p>
-                  </div>
-                  <div className="favicon-setting-actions">
-                    <label className="button secondary favicon-upload-button">
-                      <ImageUp aria-hidden="true" className="button-icon" />
-                      {uploadingFavicon ? "上传中" : "上传并替换"}
-                      <input
-                        accept=".ico,image/x-icon,image/png,image/jpeg,image/webp"
-                        disabled={uploadingFavicon || resettingFavicon}
-                        onChange={(event) => {
-                          void onFaviconChange(event.target.files?.[0]);
-                          event.currentTarget.value = "";
-                        }}
-                        type="file"
-                      />
-                    </label>
-                    {settings?.faviconUrl ? (
-                      <button
-                        className="button secondary"
-                        disabled={uploadingFavicon || resettingFavicon}
-                        onClick={() => void onFaviconReset()}
-                        type="button"
-                      >
-                        <RotateCcw aria-hidden="true" className="button-icon" />
-                        {resettingFavicon ? "重置中" : "恢复默认"}
-                      </button>
-                    ) : null}
-                  </div>
+                <div className="favicon-variant-list">
+                  {faviconVariants.map((variant) => {
+                    const configuredUrl = faviconUrlForVariant(
+                      settings,
+                      variant.key,
+                    );
+                    const previewUrl =
+                      configuredUrl ??
+                      (variant.key === "default"
+                        ? null
+                        : (settings?.faviconUrl ?? null));
+                    const busy =
+                      uploadingFavicon !== null || resettingFavicon !== null;
+
+                    return (
+                      <div className="favicon-setting-card" key={variant.key}>
+                        <div
+                          aria-label={`${variant.title}预览`}
+                          className={`favicon-preview ${
+                            variant.key === "dark" ? "is-dark" : ""
+                          }`.trim()}
+                        >
+                          {previewUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img alt="" src={apiResourceUrl(previewUrl)} />
+                          ) : (
+                            <Globe2 aria-hidden="true" />
+                          )}
+                        </div>
+                        <div className="favicon-setting-copy">
+                          <strong>
+                            {variant.title}
+                            {variant.optional ? <small>可选</small> : null}
+                          </strong>
+                          <p className="muted">
+                            {configuredUrl
+                              ? variant.description
+                              : variant.key === "default"
+                                ? "未上传时显示内置 LB 标记。"
+                                : variant.description}
+                          </p>
+                        </div>
+                        <div className="favicon-setting-actions">
+                          <label className="button secondary favicon-upload-button">
+                            <ImageUp
+                              aria-hidden="true"
+                              className="button-icon"
+                            />
+                            {uploadingFavicon === variant.key
+                              ? "上传中"
+                              : configuredUrl
+                                ? "替换"
+                                : "上传"}
+                            <input
+                              accept=".ico,image/x-icon,image/png,image/jpeg,image/webp"
+                              aria-label={`上传${variant.title}`}
+                              disabled={busy}
+                              onChange={(event) => {
+                                void onFaviconChange(
+                                  event.target.files?.[0],
+                                  variant.key,
+                                );
+                                event.currentTarget.value = "";
+                              }}
+                              type="file"
+                            />
+                          </label>
+                          {configuredUrl ? (
+                            <button
+                              className="button secondary"
+                              disabled={busy}
+                              onClick={() => void onFaviconReset(variant.key)}
+                              type="button"
+                            >
+                              <RotateCcw
+                                aria-hidden="true"
+                                className="button-icon"
+                              />
+                              {resettingFavicon === variant.key
+                                ? "移除中"
+                                : "移除"}
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             </>

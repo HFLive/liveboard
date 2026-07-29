@@ -37,7 +37,7 @@ import type {
 import {
   API_URL,
   ApiError,
-  putWithProgress,
+  postToObjectStorageWithProgress,
   redirectToLoginOnUnauthorized,
   request,
   uploadFormData,
@@ -474,8 +474,12 @@ export interface SystemSettings {
   workspaceSlug: string;
   timeZone: string;
   faviconUrl: string | null;
+  faviconLightUrl: string | null;
+  faviconDarkUrl: string | null;
   updatedAt: string;
 }
+
+export type FaviconVariant = "default" | "light" | "dark";
 
 export function getPublicSettings() {
   return request<{ settings: SystemSettings }>("/settings/public");
@@ -492,10 +496,16 @@ export function updateSystemSettings(input: Partial<{ timeZone: string }>) {
   });
 }
 
-export async function uploadSystemFavicon(file: File) {
+export async function uploadSystemFavicon(
+  file: File,
+  variant: FaviconVariant = "default",
+) {
   const formData = new FormData();
   formData.set("file", file);
-  const path = "/admin/settings/favicon";
+  const path =
+    variant === "default"
+      ? "/admin/settings/favicon"
+      : `/admin/settings/favicon/${variant}`;
   const response = await fetch(`${API_URL}${path}`, {
     method: "POST",
     body: formData,
@@ -516,10 +526,12 @@ export async function uploadSystemFavicon(file: File) {
   return (await response.json()) as { settings: SystemSettings };
 }
 
-export function resetSystemFavicon() {
-  return request<{ settings: SystemSettings }>("/admin/settings/favicon", {
-    method: "DELETE",
-  });
+export function resetSystemFavicon(variant: FaviconVariant = "default") {
+  const path =
+    variant === "default"
+      ? "/admin/settings/favicon"
+      : `/admin/settings/favicon/${variant}`;
+  return request<{ settings: SystemSettings }>(path, { method: "DELETE" });
 }
 
 export interface HttpsStatus {
@@ -911,13 +923,6 @@ export async function uploadForumPostImages(postId: string, images: File[]) {
   return (await response.json()) as { images: ForumImageSummary[] };
 }
 
-export function updateForumPost(postId: string, input: { body: string }) {
-  return request<{ post: ForumPostSummary }>(`/forum/posts/${postId}`, {
-    method: "PATCH",
-    body: JSON.stringify(input),
-  });
-}
-
 export function voteForumPost(postId: string, vote: "up" | "down") {
   return request<{
     postId: string;
@@ -1255,21 +1260,26 @@ export async function uploadAssetDirect(
   },
   options?: UploadRequestOptions,
 ) {
-  let signed: { uploadId: string; url: string };
+  let signed: {
+    uploadId: string;
+    url: string;
+    fields: Record<string, string>;
+  };
   try {
-    signed = await request<{ uploadId: string; url: string }>(
-      "/assets/upload-url",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          filename: input.file.name,
-          sizeBytes: input.file.size,
-          mimeType: input.file.type || undefined,
-          fileId: input.fileId,
-          folderId: input.folderId,
-        }),
-      },
-    );
+    signed = await request<{
+      uploadId: string;
+      url: string;
+      fields: Record<string, string>;
+    }>("/assets/upload-url", {
+      method: "POST",
+      body: JSON.stringify({
+        filename: input.file.name,
+        sizeBytes: input.file.size,
+        mimeType: input.file.type || undefined,
+        fileId: input.fileId,
+        folderId: input.folderId,
+      }),
+    });
   } catch (caught) {
     if (caught instanceof ApiError && caught.status === 501) {
       return uploadAsset(input, options);
@@ -1278,7 +1288,12 @@ export async function uploadAssetDirect(
   }
 
   try {
-    await putWithProgress(signed.url, input.file, options);
+    await postToObjectStorageWithProgress(
+      signed.url,
+      signed.fields,
+      input.file,
+      options,
+    );
   } catch (caught) {
     await abortAssetUpload(signed.uploadId);
     if (isAbortError(caught)) throw caught;
@@ -1598,19 +1613,24 @@ export async function uploadClassroomFileDirect(
   options?: UploadRequestOptions,
 ) {
   const base = `/classrooms/${classroomId}/files`;
-  let signed: { uploadId: string; url: string };
+  let signed: {
+    uploadId: string;
+    url: string;
+    fields: Record<string, string>;
+  };
   try {
-    signed = await request<{ uploadId: string; url: string }>(
-      `${base}/upload-url`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          filename: file.name,
-          sizeBytes: file.size,
-          mimeType: file.type || undefined,
-        }),
-      },
-    );
+    signed = await request<{
+      uploadId: string;
+      url: string;
+      fields: Record<string, string>;
+    }>(`${base}/upload-url`, {
+      method: "POST",
+      body: JSON.stringify({
+        filename: file.name,
+        sizeBytes: file.size,
+        mimeType: file.type || undefined,
+      }),
+    });
   } catch (caught) {
     if (caught instanceof ApiError && caught.status === 501) {
       return uploadClassroomFile(classroomId, file, options);
@@ -1619,7 +1639,12 @@ export async function uploadClassroomFileDirect(
   }
 
   try {
-    await putWithProgress(signed.url, file, options);
+    await postToObjectStorageWithProgress(
+      signed.url,
+      signed.fields,
+      file,
+      options,
+    );
   } catch (caught) {
     await request<{ ok: boolean }>(`${base}/upload-abort`, {
       method: "POST",

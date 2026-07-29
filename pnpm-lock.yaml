@@ -99,6 +99,9 @@ importers:
 
   apps/web:
     dependencies:
+      "@fontsource/noto-serif-sc":
+        specifier: 5.3.0
+        version: 5.3.0
       "@liveboard/shared":
         specifier: workspace:*
         version: link:../../packages/shared
@@ -108,6 +111,9 @@ importers:
       lucide-react:
         specifier: ^1.21.0
         version: 1.23.0(react@19.2.7)
+      lxgw-wenkai-lite-webfont:
+        specifier: 1.7.0
+        version: 1.7.0
       next:
         specifier: ^15.5.20
         version: 15.5.20(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -681,6 +687,12 @@ packages:
         integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==,
       }
     engines: { node: ^18.18.0 || ^20.9.0 || >=21.1.0 }
+
+  "@fontsource/noto-serif-sc@5.3.0":
+    resolution:
+      {
+        integrity: sha512-0/zaEFkidiWldE62rTeD74x8ygUsQvejiSNtO0LQxQk3qpaHnlMZ3w4C7yH80B4KTIg8VKeFP4oSgwWMchY9+g==,
+      }
 
   "@humanfs/core@0.19.2":
     resolution:
@@ -5464,6 +5476,12 @@ packages:
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
+  lxgw-wenkai-lite-webfont@1.7.0:
+    resolution:
+      {
+        integrity: sha512-VcQYNRpdXAxaZsJ18rfT1mmAreGqkIFNZ/9pdVLbT2Tkb+2lLWJDXq4zYxMEk9AcecSnxO31R2LHh5ieLlxjRg==,
+      }
+
   lz-string@1.5.0:
     resolution:
       {
@@ -8001,6 +8019,8 @@ snapshots:
     dependencies:
       "@eslint/core": 0.17.0
       levn: 0.4.1
+
+  "@fontsource/noto-serif-sc@5.3.0": {}
 
   "@humanfs/core@0.19.2":
     dependencies:
@@ -11278,6 +11298,8 @@ snapshots:
   lucide-react@1.23.0(react@19.2.7):
     dependencies:
       react: 19.2.7
+
+  lxgw-wenkai-lite-webfont@1.7.0: {}
 
   lz-string@1.5.0: {}
 

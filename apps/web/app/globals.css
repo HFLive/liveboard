@@ -290,6 +290,30 @@ strong {
   padding: 10px;
 }
 
+.site-brand-mark {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+html[data-site-brand-icon-light="true"]
+  .site-brand-mark[data-brand-tone="light"]
+  .site-brand-fallback,
+html[data-site-brand-icon-dark="true"]
+  .site-brand-mark[data-brand-tone="dark"]
+  .site-brand-fallback {
+  visibility: hidden;
+}
+
+html[data-site-brand-icon-light="true"]
+  .site-brand-mark[data-brand-tone="light"],
+html[data-site-brand-icon-dark="true"]
+  .site-brand-mark[data-brand-tone="dark"] {
+  border-color: transparent;
+  border-radius: 0;
+  background-color: transparent;
+}
+
 .rail-brand:hover {
   background: rgba(244, 242, 236, 0.07);
   color: var(--rail-ink);
@@ -302,7 +326,7 @@ strong {
   width: 40px;
   border: 1px solid rgba(244, 242, 236, 0.34);
   border-radius: var(--radius-md);
-  background: rgba(244, 242, 236, 0.06);
+  background-color: rgba(244, 242, 236, 0.06);
   font-weight: 800;
 }
 
@@ -2545,60 +2569,6 @@ p.muted {
   text-align: left;
 }
 
-.tree-inline-form {
-  display: grid;
-  gap: 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--panel-soft);
-  padding: 8px;
-}
-
-.tree-inline-form {
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  margin-left: calc(min(var(--tree-depth, 0), 7) * 14px);
-}
-
-.folder-move-form {
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-}
-
-.folder-move-form span {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.inline-move-file {
-  display: grid;
-  grid-template-columns: auto minmax(220px, 360px) auto auto;
-  gap: 8px;
-  align-items: center;
-  border-radius: var(--radius-md);
-  background: var(--panel-soft);
-  padding: 10px;
-}
-
-.inline-move-file span {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.inline-rename-file {
-  display: grid;
-  grid-template-columns: auto minmax(220px, 360px) auto auto;
-  gap: 8px;
-  align-items: center;
-  border-radius: var(--radius-md);
-  background: var(--panel-soft);
-  padding: 10px;
-}
-
-.inline-rename-file span {
-  color: var(--muted);
-  font-size: 13px;
-}
-
 .compact-input {
   min-height: 32px;
   padding: 6px 8px;
@@ -4427,22 +4397,10 @@ p.muted {
   font-size: 13px;
 }
 
-.forum-thread-actions,
-.forum-thread-edit-form,
-.forum-post-edit-form {
+.forum-thread-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.forum-thread-edit-form {
-  display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(180px, 260px);
-  align-items: center;
-}
-
-.forum-thread-edit-form .button-row {
-  grid-column: 1 / -1;
 }
 
 .forum-post-list {
@@ -4677,16 +4635,6 @@ p.muted {
   line-height: 1.55;
 }
 
-.forum-post-edit-form {
-  display: grid;
-}
-
-.forum-post-edit-form .textarea {
-  min-height: 130px;
-  background: #fff;
-  line-height: 1.55;
-}
-
 .forum-inline-notice {
   display: flex;
   align-items: center;
@@ -4909,10 +4857,6 @@ p.muted {
 
   .forum-thread-top h2 {
     font-size: 20px;
-  }
-
-  .forum-thread-edit-form {
-    grid-template-columns: 1fr;
   }
 
   .forum-post-row {
@@ -5270,11 +5214,6 @@ p.muted {
   .responsive-table .inline-icon-button {
     width: 40px;
     height: 40px;
-  }
-
-  .inline-move-file,
-  .inline-rename-file {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .tree-item {

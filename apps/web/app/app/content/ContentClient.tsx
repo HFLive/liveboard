@@ -313,6 +313,24 @@ export function ContentClient() {
     () => collectPinnedContent(activeFolder),
     [activeFolder],
   );
+  const fileBeingRenamed =
+    files.find((file) => file.id === renamingFileId) ??
+    pinnedItems.find(
+      (item): item is Extract<PinnedContentItem, { kind: "file" }> =>
+        item.kind === "file" && item.file.id === renamingFileId,
+    )?.file ??
+    null;
+  const fileBeingMoved =
+    files.find((file) => file.id === movingFileId) ??
+    pinnedItems.find(
+      (item): item is Extract<PinnedContentItem, { kind: "file" }> =>
+        item.kind === "file" && item.file.id === movingFileId,
+    )?.file ??
+    null;
+  const folderBeingRenamed =
+    flatFolders.find((folder) => folder.id === editingFolderId) ?? null;
+  const folderBeingMoved =
+    flatFolders.find((folder) => folder.id === movingFolderId) ?? null;
   const pinnedTargetKeys = useMemo(
     () =>
       new Set(
@@ -814,12 +832,8 @@ export function ContentClient() {
   }
 
   function beginMoveFile(file: FileSummary) {
-    const fallbackFolder =
-      flatFolders.find((folder) => folder.id !== file.folderId)?.id ??
-      file.folderId;
-
     setMovingFileId(file.id);
-    setMoveTargetFolderId(fallbackFolder);
+    setMoveTargetFolderId(file.folderId);
     setRenamingFileId(null);
     setOpenContentRowMenu(null);
   }
@@ -926,15 +940,8 @@ export function ContentClient() {
   }
 
   function beginMoveFolder(folder: FolderNode) {
-    const blockedIds = getFolderDescendantIds(folder.id);
-    const fallbackFolder =
-      flatFolders.find(
-        (candidate) =>
-          candidate.id !== folder.id && !blockedIds.has(candidate.id),
-      )?.id ?? "";
-
     setMovingFolderId(folder.id);
-    setFolderMoveTargetId(folder.parentId ?? fallbackFolder);
+    setFolderMoveTargetId(folder.parentId ?? "");
     setOpenContentRowMenu(null);
   }
 
@@ -1039,7 +1046,8 @@ export function ContentClient() {
     setError(null);
     setMessage(null);
 
-    if (!activeFolderId) {
+    const folderId = editingFolderId ?? activeFolderId;
+    if (!folderId) {
       setError("请先选择文件夹");
       return;
     }
@@ -1052,10 +1060,11 @@ export function ContentClient() {
 
     try {
       await updateFolder({
-        folderId: editingFolderId ?? activeFolderId,
+        folderId,
         name: normalizeResourceName(folderRename),
       });
       setEditingFolderId(null);
+      setFolderRename("");
       setMessage("文件夹已重命名");
       await load();
     } catch (caught) {
@@ -1343,81 +1352,6 @@ export function ContentClient() {
     );
   }
 
-  function renderFileInlineRows(file: FileSummary) {
-    return (
-      <>
-        {renamingFileId === file.id ? (
-          <tr className="content-inline-row">
-            <td colSpan={3}>
-              <form
-                className="inline-rename-file"
-                onSubmit={(event) => void onRenameFile(event, file)}
-              >
-                <span>文档名称</span>
-                <input
-                  autoFocus
-                  className="input"
-                  maxLength={120}
-                  value={fileRename}
-                  onChange={(event) => setFileRename(event.target.value)}
-                />
-                <button className="button secondary" type="submit">
-                  保存
-                </button>
-                <button
-                  className="button secondary"
-                  onClick={() => {
-                    setRenamingFileId(null);
-                    setFileRename("");
-                  }}
-                  type="button"
-                >
-                  取消
-                </button>
-              </form>
-            </td>
-          </tr>
-        ) : null}
-        {movingFileId === file.id ? (
-          <tr className="content-inline-row">
-            <td colSpan={3}>
-              <form
-                className="inline-move-file"
-                onSubmit={(event) => void onMoveFile(event, file)}
-              >
-                <span>移动到</span>
-                <select
-                  className="select"
-                  value={moveTargetFolderId}
-                  onChange={(event) =>
-                    setMoveTargetFolderId(event.target.value)
-                  }
-                >
-                  {flatFolders.map((folder) => (
-                    <option key={folder.id} value={folder.id}>
-                      {"  ".repeat(folder.depth)}
-                      {folder.name}
-                    </option>
-                  ))}
-                </select>
-                <button className="button secondary" type="submit">
-                  移动
-                </button>
-                <button
-                  className="button secondary"
-                  onClick={() => setMovingFileId(null)}
-                  type="button"
-                >
-                  取消
-                </button>
-              </form>
-            </td>
-          </tr>
-        ) : null}
-      </>
-    );
-  }
-
   function renderPinnedTableRow(item: PinnedContentItem, index: number) {
     const isFolder = item.kind === "folder";
     const id = isFolder ? item.folder.id : item.file.id;
@@ -1511,7 +1445,6 @@ export function ContentClient() {
             </div>
           </td>
         </tr>
-        {!isFolder ? renderFileInlineRows(item.file) : null}
       </Fragment>
     );
   }
@@ -1522,126 +1455,62 @@ export function ContentClient() {
 
     return (
       <div className="tree-row-wrap" key={`folder:${folder.id}`}>
-        {editingFolderId === folder.id ? (
-          <form
-            className="tree-inline-form"
-            onSubmit={onRenameFolder}
-            style={treeDepthStyle(folder.depth)}
+        <div
+          className={`tree-item tree-folder-item${folder.id === activeFolderId ? " active" : ""}`}
+          style={treeDepthStyle(folder.depth)}
+        >
+          {hasChildren ? (
+            <button
+              aria-label={`${isCollapsed ? "展开" : "折叠"}“${folder.name}”`}
+              className="tree-toggle-button"
+              onClick={() => toggleFolderCollapsed(folder.id)}
+              title={isCollapsed ? "展开" : "折叠"}
+              type="button"
+            >
+              {isCollapsed ? (
+                <ChevronRight aria-hidden="true" />
+              ) : (
+                <ChevronDown aria-hidden="true" />
+              )}
+            </button>
+          ) : (
+            <span aria-hidden="true" className="tree-toggle-spacer" />
+          )}
+          <button
+            className="tree-main-button"
+            onClick={() => void selectFolder(folder.id)}
+            type="button"
           >
-            <input
-              autoFocus
-              className="input compact-input"
-              value={folderRename}
-              onChange={(event) => setFolderRename(event.target.value)}
-            />
-            <button className="button secondary compact-button" type="submit">
-              保存
-            </button>
-            <button
-              className="button secondary compact-button"
-              onClick={() => setEditingFolderId(null)}
-              type="button"
-            >
-              取消
-            </button>
-          </form>
-        ) : (
-          <div
-            className={`tree-item tree-folder-item${folder.id === activeFolderId ? " active" : ""}`}
-            style={treeDepthStyle(folder.depth)}
+            <span className="tree-label">
+              <Folder aria-hidden="true" className="item-icon" />
+              <span title={folder.name}>{folder.name}</span>
+            </span>
+          </button>
+          {folder.fileCount > 0 ? (
+            <em aria-hidden="true" className="tree-count">
+              {folder.fileCount}
+            </em>
+          ) : null}
+          <button
+            aria-label={`“${folder.name}”文件夹操作`}
+            className="tree-row-menu-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleContentRowMenu(
+                "folder",
+                folder.id,
+                event.currentTarget,
+                "tree",
+                getContentRowMenuItemCount(),
+              );
+            }}
+            title="文件夹操作"
+            type="button"
           >
-            {hasChildren ? (
-              <button
-                aria-label={`${isCollapsed ? "展开" : "折叠"}“${folder.name}”`}
-                className="tree-toggle-button"
-                onClick={() => toggleFolderCollapsed(folder.id)}
-                title={isCollapsed ? "展开" : "折叠"}
-                type="button"
-              >
-                {isCollapsed ? (
-                  <ChevronRight aria-hidden="true" />
-                ) : (
-                  <ChevronDown aria-hidden="true" />
-                )}
-              </button>
-            ) : (
-              <span aria-hidden="true" className="tree-toggle-spacer" />
-            )}
-            <button
-              className="tree-main-button"
-              onClick={() => void selectFolder(folder.id)}
-              type="button"
-            >
-              <span className="tree-label">
-                <Folder aria-hidden="true" className="item-icon" />
-                <span title={folder.name}>{folder.name}</span>
-              </span>
-            </button>
-            {folder.fileCount > 0 ? (
-              <em aria-hidden="true" className="tree-count">
-                {folder.fileCount}
-              </em>
-            ) : null}
-            <button
-              aria-label={`“${folder.name}”文件夹操作`}
-              className="tree-row-menu-button"
-              onClick={(event) => {
-                event.stopPropagation();
-                toggleContentRowMenu(
-                  "folder",
-                  folder.id,
-                  event.currentTarget,
-                  "tree",
-                  getContentRowMenuItemCount(),
-                );
-              }}
-              title="文件夹操作"
-              type="button"
-            >
-              <MoreHorizontal aria-hidden="true" />
-            </button>
-            {renderContentRowContextMenu({ kind: "folder", folder }, "tree")}
-          </div>
-        )}
-        {movingFolderId === folder.id ? (
-          <form
-            className="tree-inline-form folder-move-form"
-            onSubmit={(event) => void onMoveFolder(event, folder)}
-            style={treeDepthStyle(folder.depth)}
-          >
-            <span>移动到</span>
-            <select
-              className="select"
-              value={folderMoveTargetId}
-              onChange={(event) => setFolderMoveTargetId(event.target.value)}
-            >
-              <option value="">顶层</option>
-              {flatFolders
-                .filter((candidate) => {
-                  const blockedIds = getFolderDescendantIds(folder.id);
-                  return (
-                    candidate.id !== folder.id && !blockedIds.has(candidate.id)
-                  );
-                })
-                .map((candidate) => (
-                  <option key={candidate.id} value={candidate.id}>
-                    {"  ".repeat(candidate.depth)}
-                    {candidate.name}
-                  </option>
-                ))}
-            </select>
-            <button className="button secondary compact-button" type="submit">
-              移动
-            </button>
-            <button
-              className="button secondary compact-button"
-              onClick={() => setMovingFolderId(null)}
-              type="button"
-            >
-              取消
-            </button>
-          </form>
-        ) : null}
+            <MoreHorizontal aria-hidden="true" />
+          </button>
+          {renderContentRowContextMenu({ kind: "folder", folder }, "tree")}
+        </div>
       </div>
     );
   }
@@ -1777,12 +1646,22 @@ export function ContentClient() {
             ))
           )}
         </div>
-        <div className="toolbar-row">
-          <Link className="button secondary" href={APP_ROUTES.ai}>
+        <div className="toolbar-row content-action-bar">
+          <Link
+            aria-label="打开 AI"
+            className="button secondary mobile-icon-action"
+            href={APP_ROUTES.ai}
+            title="AI"
+          >
             <Bot aria-hidden="true" className="button-icon" />
             AI
           </Link>
-          <Link className="button secondary" href={APP_ROUTES.library}>
+          <Link
+            aria-label="打开文件"
+            className="button secondary mobile-icon-action"
+            href={APP_ROUTES.library}
+            title="文件"
+          >
             <Paperclip aria-hidden="true" className="button-icon" />
             文件
           </Link>
@@ -1794,16 +1673,17 @@ export function ContentClient() {
           {activeFolderId && canCreateFileHere ? (
             <>
               <button
-                className="button secondary"
+                aria-label={uploadingAsset ? "正在上传文件" : "上传文件"}
+                className="button secondary mobile-icon-action"
                 disabled={uploadingAsset}
                 onClick={() => assetInputRef.current?.click()}
+                title={uploadingAsset ? "上传中" : "上传文件"}
                 type="button"
               >
                 <Upload aria-hidden="true" className="button-icon" />
                 {uploadingAsset ? "上传中" : "上传文件"}
               </button>
               <input
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,image/png,image/jpeg,image/gif,image/webp"
                 aria-label="上传文件到当前文件夹"
                 hidden
                 multiple
@@ -1816,13 +1696,15 @@ export function ContentClient() {
           {canCreateFolderHere || canCreateFileHere ? (
             <div className="new-content-menu" data-menu-root="true">
               <button
+                aria-label="新建"
                 aria-expanded={showCreateMenu}
                 aria-haspopup="menu"
-                className="button secondary"
+                className="button secondary mobile-icon-action"
                 onClick={() => {
                   setOpenContentRowMenu(null);
                   setShowCreateMenu((current) => !current);
                 }}
+                title="新建"
                 type="button"
               >
                 <Plus aria-hidden="true" className="button-icon" />
@@ -2035,7 +1917,6 @@ export function ContentClient() {
                         </div>
                       </td>
                     </tr>
-                    {renderFileInlineRows(file)}
                   </Fragment>
                 ))}
                 {sortedAssets.map((asset) => (
@@ -2442,6 +2323,285 @@ export function ContentClient() {
         onDismiss={dismissUpload}
         tasks={uploadTasks}
       />
+
+      {folderBeingRenamed ? (
+        <div className="modal-backdrop" role="presentation">
+          <form
+            aria-labelledby="rename-folder-title"
+            className="modal-panel content-operation-dialog"
+            onSubmit={onRenameFolder}
+          >
+            <div className="modal-head">
+              <h2 id="rename-folder-title">重命名文件夹</h2>
+              <button
+                aria-label="关闭重命名文件夹"
+                className="icon-button subtle"
+                onClick={() => {
+                  setEditingFolderId(null);
+                  setFolderRename("");
+                }}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <label className="label">
+                文件夹名称
+                <input
+                  autoFocus
+                  className="input"
+                  maxLength={120}
+                  onChange={(event) => setFolderRename(event.target.value)}
+                  value={folderRename}
+                />
+              </label>
+            </div>
+            <div className="modal-foot">
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  onClick={() => {
+                    setEditingFolderId(null);
+                    setFolderRename("");
+                  }}
+                  type="button"
+                >
+                  取消
+                </button>
+                <button
+                  className="button"
+                  disabled={
+                    normalizeResourceName(folderRename) ===
+                    folderBeingRenamed.name
+                  }
+                  type="submit"
+                >
+                  保存名称
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {fileBeingRenamed ? (
+        <div className="modal-backdrop" role="presentation">
+          <form
+            aria-labelledby="rename-document-title"
+            className="modal-panel content-operation-dialog"
+            onSubmit={(event) => void onRenameFile(event, fileBeingRenamed)}
+          >
+            <div className="modal-head">
+              <h2 id="rename-document-title">重命名文档</h2>
+              <button
+                aria-label="关闭重命名文档"
+                className="icon-button subtle"
+                onClick={() => {
+                  setRenamingFileId(null);
+                  setFileRename("");
+                }}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <label className="label">
+                文档名称
+                <input
+                  autoFocus
+                  className="input"
+                  maxLength={120}
+                  onChange={(event) => setFileRename(event.target.value)}
+                  value={fileRename}
+                />
+              </label>
+            </div>
+            <div className="modal-foot">
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  onClick={() => {
+                    setRenamingFileId(null);
+                    setFileRename("");
+                  }}
+                  type="button"
+                >
+                  取消
+                </button>
+                <button
+                  className="button"
+                  disabled={
+                    normalizeResourceName(fileRename) === fileBeingRenamed.title
+                  }
+                  type="submit"
+                >
+                  保存名称
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {folderBeingMoved ? (
+        <div className="modal-backdrop" role="presentation">
+          <form
+            aria-labelledby="move-folder-title"
+            className="modal-panel content-operation-dialog"
+            onSubmit={(event) => void onMoveFolder(event, folderBeingMoved)}
+          >
+            <div className="modal-head">
+              <h2 id="move-folder-title">移动“{folderBeingMoved.name}”</h2>
+              <button
+                aria-label="关闭移动文件夹"
+                className="icon-button subtle"
+                onClick={() => {
+                  setMovingFolderId(null);
+                  setFolderMoveTargetId("");
+                }}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body content-move-dialog-body">
+              <p className="content-current-location">
+                当前位置：
+                {folderBeingMoved.parentId
+                  ? folderPathLabel(folderBeingMoved.parentId)
+                  : "顶层"}
+              </p>
+              <fieldset className="content-location-picker">
+                <legend>选择目标位置</legend>
+                <label>
+                  <input
+                    checked={folderMoveTargetId === ""}
+                    name="folder-move-target"
+                    onChange={() => setFolderMoveTargetId("")}
+                    type="radio"
+                  />
+                  <span>顶层</span>
+                </label>
+                {flatFolders
+                  .filter((candidate) => {
+                    const blockedIds = getFolderDescendantIds(
+                      folderBeingMoved.id,
+                    );
+                    return (
+                      candidate.id !== folderBeingMoved.id &&
+                      !blockedIds.has(candidate.id)
+                    );
+                  })
+                  .map((candidate) => (
+                    <label key={candidate.id}>
+                      <input
+                        checked={folderMoveTargetId === candidate.id}
+                        name="folder-move-target"
+                        onChange={() => setFolderMoveTargetId(candidate.id)}
+                        type="radio"
+                      />
+                      <span>{folderPathLabel(candidate.id)}</span>
+                    </label>
+                  ))}
+              </fieldset>
+            </div>
+            <div className="modal-foot">
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  onClick={() => {
+                    setMovingFolderId(null);
+                    setFolderMoveTargetId("");
+                  }}
+                  type="button"
+                >
+                  取消
+                </button>
+                <button
+                  className="button"
+                  disabled={
+                    folderMoveTargetId === (folderBeingMoved.parentId ?? "")
+                  }
+                  type="submit"
+                >
+                  移动到这里
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {fileBeingMoved ? (
+        <div className="modal-backdrop" role="presentation">
+          <form
+            aria-labelledby="move-document-title"
+            className="modal-panel content-operation-dialog"
+            onSubmit={(event) => void onMoveFile(event, fileBeingMoved)}
+          >
+            <div className="modal-head">
+              <h2 id="move-document-title">移动“{fileBeingMoved.title}”</h2>
+              <button
+                aria-label="关闭移动文档"
+                className="icon-button subtle"
+                onClick={() => {
+                  setMovingFileId(null);
+                  setMoveTargetFolderId("");
+                }}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body content-move-dialog-body">
+              <p className="content-current-location">
+                当前位置：{folderPathLabel(fileBeingMoved.folderId)}
+              </p>
+              <fieldset className="content-location-picker">
+                <legend>选择目标文件夹</legend>
+                {flatFolders.map((folder) => (
+                  <label key={folder.id}>
+                    <input
+                      checked={moveTargetFolderId === folder.id}
+                      name="document-move-target"
+                      onChange={() => setMoveTargetFolderId(folder.id)}
+                      type="radio"
+                    />
+                    <span>{folderPathLabel(folder.id)}</span>
+                  </label>
+                ))}
+              </fieldset>
+            </div>
+            <div className="modal-foot">
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  onClick={() => {
+                    setMovingFileId(null);
+                    setMoveTargetFolderId("");
+                  }}
+                  type="button"
+                >
+                  取消
+                </button>
+                <button
+                  className="button"
+                  disabled={moveTargetFolderId === fileBeingMoved.folderId}
+                  type="submit"
+                >
+                  移动到这里
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      ) : null}
 
       {renamingAsset ? (
         <div className="modal-backdrop" role="presentation">

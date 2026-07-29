@@ -29,13 +29,13 @@
   text-decoration: none;
 }
 
-.login-brand-link span {
+.login-brand-link > .site-brand-mark {
   display: grid;
   place-items: center;
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: var(--rail-ink);
+  background-color: var(--rail-ink);
   color: var(--rail);
   font-size: 12px;
   font-weight: 750;

@@ -24,13 +24,13 @@
   text-decoration: none;
 }
 
-.marketing-page .marketing-brand span {
+.marketing-page .marketing-brand > .site-brand-mark {
   display: grid;
   place-items: center;
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: var(--rail);
+  background-color: var(--rail);
   color: var(--rail-ink);
   font-size: 12px;
   font-weight: 750;

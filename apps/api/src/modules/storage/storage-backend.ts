@@ -16,6 +16,11 @@ export interface PresignDownloadOptions {
   responseCacheControl?: string;
 }
 
+export interface PresignedUpload {
+  url: string;
+  fields: Record<string, string>;
+}
+
 export interface ObjectStorageBackend {
   readonly name: StorageBackendName;
   putObject(key: string, data: Buffer, mimeType: string): Promise<void>;
@@ -31,14 +36,18 @@ export interface ObjectStorageBackend {
     options: PresignDownloadOptions,
   ): Promise<string | null>;
   /**
-   * 生成浏览器可直接 PUT 上传的预签名地址。
+   * 生成带大小与 MIME 约束的浏览器表单直传凭据。
    * 返回 null 表示该后端不支持签名直入（例如只监听内网的 MinIO），
    * 调用方应回退到服务器中转上传。
    */
-  presignPut(
+  presignUpload(
     key: string,
-    options: { expirySeconds: number },
-  ): Promise<string | null>;
+    options: {
+      expirySeconds: number;
+      sizeBytes: number;
+      mimeType: string;
+    },
+  ): Promise<PresignedUpload | null>;
   /** 读取对象元信息，用于直入上传后的存在性与大小校验。 */
   statObject(key: string): Promise<{ size: number }>;
   healthCheck(): Promise<void>;

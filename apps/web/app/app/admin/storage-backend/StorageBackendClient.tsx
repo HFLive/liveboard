@@ -371,7 +371,7 @@ export function StorageBackendClient() {
                         <li>
                           「来源」填本站完整地址（例如
                           https://liveboard.example.com，不带结尾斜杠）；「允许
-                          Methods」勾选 PUT；「允许 Headers」填 *；「暴露
+                          Methods」勾选 POST；「允许 Headers」填 *；「暴露
                           Headers」填 ETag；其余默认，保存规则。
                         </li>
                         <li>
@@ -522,7 +522,7 @@ export function StorageBackendClient() {
                   {uploadMode === "direct" ? (
                     <small className="field-hint storage-backend-inline-hint">
                       需要在 OSS 控制台为 Bucket
-                      配置跨域规则：来源填本站地址，允许 Methods 勾选 PUT，允许
+                      配置跨域规则：来源填本站地址，允许 Methods 勾选 POST，允许
                       Headers 填
                       *；未配置时上传会自动回退服务器中转。配置步骤见上方 OSS
                       教程第 4 步。

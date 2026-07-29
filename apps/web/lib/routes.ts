@@ -96,6 +96,7 @@ export function appRouteTitle(pathname: string) {
   const exactTitles = new Map<string, string>([
     [APP_ROUTES.ai, "AI"],
     [APP_ROUTES.content, "文档"],
+    [APP_ROUTES.library, "文件"],
     [APP_ROUTES.classrooms, "课堂"],
     [APP_ROUTES.exercisesNew, "新建练习"],
     [APP_ROUTES.teaching, "课件"],

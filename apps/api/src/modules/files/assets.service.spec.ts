@@ -220,6 +220,30 @@ describe("AssetsService consistency", () => {
     );
   });
 
+  it("does not let the uploader bypass revoked folder access", async () => {
+    prisma.fileAsset.findUnique.mockResolvedValue({
+      id: "asset-1",
+      uploadedBy: "user-1",
+      folderId: "folder-1",
+      fileId: null,
+      forumPostId: null,
+      storageKey: "asset-key",
+    });
+    prisma.contentBlock.findMany.mockResolvedValue([]);
+    prisma.teachingDeckItem.findMany.mockResolvedValue([]);
+    prisma.teachingDeckItem.findFirst.mockResolvedValue(null);
+    prisma.user.findUnique.mockResolvedValue({
+      status: "active",
+      systemRole: "member",
+    });
+    permissions.getEffectiveLevelForFolder.mockResolvedValue("no_access");
+
+    await expect(
+      service.getAssetForDownload("user-1", "asset-1"),
+    ).rejects.toThrow("No permission to view asset");
+    expect(backend.getObject).not.toHaveBeenCalled();
+  });
+
   it("blocks deletion and returns the referencing teaching deck", async () => {
     prisma.fileAsset.findUnique.mockResolvedValue({
       id: "asset-1",
@@ -613,7 +637,10 @@ describe("AssetsService direct upload", () => {
     );
     storage.activeBackend.mockResolvedValue(backend);
     storage.backendFor.mockResolvedValue(backend);
-    storage.presignUpload.mockResolvedValue("https://oss.example/put-url");
+    storage.presignUpload.mockResolvedValue({
+      url: "https://oss.example/upload",
+      fields: { policy: "signed-policy" },
+    });
     backend.statObject.mockResolvedValue({ size: 5 });
     backend.removeObject.mockResolvedValue(undefined);
     permissions.getEffectiveLevelForFile.mockResolvedValue("editor");
@@ -647,8 +674,14 @@ describe("AssetsService direct upload", () => {
 
     expect(result).toEqual({
       uploadId: "upload-1",
-      url: "https://oss.example/put-url",
+      url: "https://oss.example/upload",
+      fields: { policy: "signed-policy" },
     });
+    expect(storage.presignUpload).toHaveBeenCalledWith(
+      "oss",
+      expect.stringMatching(/^workspace-1\/\d{4}-\d{2}-\d{2}\/.+-notes\.txt$/),
+      { sizeBytes: 5, mimeType: "text/plain" },
+    );
     expect(prisma.pendingUpload.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         kind: "asset",
