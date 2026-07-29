@@ -33,6 +33,11 @@ class OssSettingsDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(253)
+  internalEndpoint?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(128)
   accessKeyId?: string;
 
@@ -50,6 +55,10 @@ class UpdateStorageSettingsDto {
   @IsOptional()
   @IsIn(["proxy", "direct"])
   downloadMode?: string;
+
+  @IsOptional()
+  @IsIn(["relay", "direct"])
+  uploadMode?: string;
 
   @IsOptional()
   @ValidateNested()

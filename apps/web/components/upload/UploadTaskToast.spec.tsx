@@ -86,6 +86,31 @@ describe("UploadTaskToast", () => {
     expect(screen.getAllByRole("progressbar")).toHaveLength(2);
   });
 
+  it("shows server-processing state instead of a fake 100% while awaiting response", () => {
+    render(
+      <UploadTaskToast
+        onCancel={vi.fn()}
+        onDismiss={vi.fn()}
+        tasks={[
+          {
+            id: "task-1",
+            filename: "课程讲义.pdf",
+            progress: 90,
+            status: "uploading",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("正在保存")).toBeInTheDocument();
+    expect(screen.getByText("服务器处理中…")).toBeInTheDocument();
+    expect(screen.queryByText("90%")).not.toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuenow",
+      "90",
+    );
+  });
+
   it("keeps upload failures visible until dismissed", () => {
     const onDismiss = vi.fn();
 

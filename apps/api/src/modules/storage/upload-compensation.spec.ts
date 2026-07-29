@@ -12,6 +12,8 @@ describe("putObjectWithCompensation", () => {
     getObject: jest.fn(),
     removeObject: jest.fn(),
     presignGet: jest.fn(),
+    presignPut: jest.fn(),
+    statObject: jest.fn(),
     healthCheck: jest.fn(),
   } satisfies ObjectStorageBackend;
   const releaseReservation = jest.fn();

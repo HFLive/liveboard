@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   API_URL,
   ApiError,
+  putWithProgress,
   request,
   shouldRedirectToLogin,
   uploadFormData,
@@ -21,12 +22,18 @@ class FakeXMLHttpRequest extends EventTarget {
     FakeXMLHttpRequest.latest = this;
   }
 
+  headers: Record<string, string> = {};
+
   open(method: string, url: string) {
     this.method = method;
     this.url = url;
   }
 
-  send(_body: FormData) {}
+  setRequestHeader(name: string, value: string) {
+    this.headers[name] = value;
+  }
+
+  send(_body: unknown) {}
 
   abort() {
     this.dispatchEvent(new Event("abort"));
@@ -158,6 +165,62 @@ describe("API request client", () => {
       "/assets/upload",
       new FormData(),
       "上传失败",
+      { signal: controller.signal },
+    );
+
+    controller.abort();
+
+    await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("putWithProgress sends a credentialess PUT with real progress", async () => {
+    vi.stubGlobal("XMLHttpRequest", FakeXMLHttpRequest);
+    const onProgress = vi.fn();
+    const file = new File(["hello"], "notes.txt", { type: "text/plain" });
+    const promise = putWithProgress("https://oss.example/signed-put", file, {
+      onProgress,
+    });
+    const xhr = FakeXMLHttpRequest.latest!;
+
+    xhr.upload.dispatchEvent(
+      Object.assign(new Event("progress"), {
+        lengthComputable: true,
+        loaded: 4,
+        total: 5,
+      }),
+    );
+    xhr.status = 200;
+    xhr.dispatchEvent(new Event("load"));
+
+    await expect(promise).resolves.toBeUndefined();
+    expect(xhr.method).toBe("PUT");
+    expect(xhr.url).toBe("https://oss.example/signed-put");
+    expect(xhr.withCredentials).toBe(false);
+    expect(xhr.headers["Content-Type"]).toBe("text/plain");
+    expect(onProgress).toHaveBeenNthCalledWith(1, 80);
+    expect(onProgress).toHaveBeenLastCalledWith(100);
+  });
+
+  it("putWithProgress rejects on a non-2xx response so callers can fall back", async () => {
+    vi.stubGlobal("XMLHttpRequest", FakeXMLHttpRequest);
+    const promise = putWithProgress(
+      "https://oss.example/signed-put",
+      new File(["hello"], "notes.txt", { type: "text/plain" }),
+    );
+    const xhr = FakeXMLHttpRequest.latest!;
+
+    xhr.status = 403;
+    xhr.dispatchEvent(new Event("load"));
+
+    await expect(promise).rejects.toThrow("直传对象存储失败(403)");
+  });
+
+  it("putWithProgress rejects with AbortError when cancelled", async () => {
+    vi.stubGlobal("XMLHttpRequest", FakeXMLHttpRequest);
+    const controller = new AbortController();
+    const promise = putWithProgress(
+      "https://oss.example/signed-put",
+      new File(["hello"], "notes.txt", { type: "text/plain" }),
       { signal: controller.signal },
     );
 

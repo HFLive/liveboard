@@ -20,6 +20,7 @@ vi.mock("@/lib/api", () => ({
 const storageSettings = {
   backend: "oss" as const,
   downloadMode: "proxy" as const,
+  uploadMode: "relay" as const,
   minio: {
     endpoint: "minio:9000",
     bucket: "liveboard-assets",
@@ -29,6 +30,7 @@ const storageSettings = {
     bucket: "liveboard",
     endpoint: null,
     internal: false,
+    internalEndpoint: null,
     accessKeyId: "ak",
     secretConfigured: true,
   },
@@ -52,29 +54,71 @@ describe("StorageBackendClient", () => {
     });
   });
 
-  it("keeps internal endpoints and direct downloads mutually exclusive", async () => {
+  it("allows combining the internal endpoint with direct downloads", async () => {
     render(<StorageBackendClient />);
 
-    const internalEndpoint = await screen.findByRole("checkbox", {
-      name: "服务器与 OSS 同地域，使用内网 Endpoint（免流量费）",
+    const internalToggle = await screen.findByRole("checkbox", {
+      name: "启用内网 Endpoint（服务器与 OSS 同地域时免流量费）",
     });
     const directDownload = screen.getByRole("button", { name: "签名直出" });
 
-    expect(internalEndpoint).toBeEnabled();
+    expect(internalToggle).toBeEnabled();
     expect(directDownload).toBeEnabled();
 
-    fireEvent.click(internalEndpoint);
-    expect(internalEndpoint).toBeChecked();
-    expect(directDownload).toBeDisabled();
+    fireEvent.click(internalToggle);
+    expect(internalToggle).toBeChecked();
+    expect(directDownload).toBeEnabled();
 
-    fireEvent.click(internalEndpoint);
     fireEvent.click(directDownload);
     expect(directDownload).toHaveClass("active");
-    expect(internalEndpoint).toBeDisabled();
+    expect(internalToggle).toBeEnabled();
+    expect(internalToggle).toBeChecked();
+  });
+
+  it("reveals an optional custom internal endpoint field when enabled", async () => {
+    render(<StorageBackendClient />);
+
+    const internalToggle = await screen.findByRole("checkbox", {
+      name: "启用内网 Endpoint（服务器与 OSS 同地域时免流量费）",
+    });
     expect(
-      screen.getByText(
-        "签名直出需要浏览器访问公网 Endpoint，不能使用内网 Endpoint。",
-      ),
-    ).toBeInTheDocument();
+      screen.queryByRole("textbox", { name: "自定义内网 Endpoint（可选）" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(internalToggle);
+
+    const input = screen.getByRole("textbox", {
+      name: "自定义内网 Endpoint（可选）",
+    });
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "留空使用 s3.oss-cn-hangzhou-internal.aliyuncs.com",
+    );
+
+    fireEvent.change(input, { target: { value: "oss-vpc.example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存存储设置" }));
+
+    expect(updateStorageSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        oss: expect.objectContaining({
+          internal: true,
+          internalEndpoint: "oss-vpc.example.com",
+        }),
+      }),
+    );
+  });
+
+  it("shows a CORS hint when presigned direct upload is selected", async () => {
+    render(<StorageBackendClient />);
+
+    const directUpload = await screen.findByRole("button", {
+      name: "签名直入",
+    });
+    expect(screen.queryByText(/配置跨域规则/)).not.toBeInTheDocument();
+
+    fireEvent.click(directUpload);
+
+    expect(directUpload).toHaveClass("active");
+    expect(screen.getByText(/配置跨域规则/)).toBeInTheDocument();
   });
 });

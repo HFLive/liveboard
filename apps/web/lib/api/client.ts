@@ -94,6 +94,68 @@ export function uploadFormData<T>(
   });
 }
 
+/**
+ * 签名直入:浏览器 PUT 文件体到对象存储的预签名地址。
+ * 预签名 URL 自带鉴权,不带 cookie;进度是真实的网络发送进度。
+ * 失败时由调用方决定回退服务器中转,这里只报原始错误。
+ */
+export function putWithProgress(
+  url: string,
+  file: File,
+  options: UploadRequestOptions = {},
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    let settled = false;
+
+    const cleanup = () => {
+      options.signal?.removeEventListener("abort", onAbort);
+    };
+    const finish = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      action();
+    };
+    const onAbort = () => {
+      xhr.abort();
+      finish(() => reject(new DOMException("上传已取消", "AbortError")));
+    };
+
+    if (options.signal?.aborted) {
+      onAbort();
+      return;
+    }
+
+    xhr.open("PUT", url);
+    if (file.type) {
+      xhr.setRequestHeader("Content-Type", file.type);
+    }
+    xhr.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) return;
+      options.onProgress?.(
+        Math.min(100, Math.round((event.loaded / event.total) * 100)),
+      );
+    });
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        options.onProgress?.(100);
+        finish(() => resolve());
+        return;
+      }
+      finish(() => reject(new Error(`直传对象存储失败(${xhr.status})`)));
+    });
+    xhr.addEventListener("error", () => {
+      finish(() => reject(new Error("网络连接中断,直传对象存储失败")));
+    });
+    xhr.addEventListener("abort", () => {
+      finish(() => reject(new DOMException("上传已取消", "AbortError")));
+    });
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+    xhr.send(file);
+  });
+}
+
 function parseJsonResponse(value: string): unknown {
   if (!value) return null;
   try {

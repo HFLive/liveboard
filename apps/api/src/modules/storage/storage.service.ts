@@ -19,6 +19,7 @@ import type {
   ObjectStorageBackend,
   StorageBackendName,
   StorageDownloadMode,
+  StorageUploadMode,
 } from "./storage-backend";
 import { ATOMIC_UPLOAD_PART_SIZE_BYTES } from "./storage-backend";
 
@@ -27,6 +28,8 @@ export interface OssSettingsInput {
   bucket?: string;
   endpoint?: string;
   internal?: boolean;
+  /** 自定义内网 Endpoint;留空用阿里云默认内网域名 */
+  internalEndpoint?: string;
   accessKeyId?: string;
   /** 留空表示沿用已保存的密钥 */
   accessKeySecret?: string;
@@ -35,6 +38,7 @@ export interface OssSettingsInput {
 export interface UpdateStorageSettingsInput {
   backend?: string;
   downloadMode?: string;
+  uploadMode?: string;
   oss?: OssSettingsInput;
 }
 
@@ -54,6 +58,7 @@ const SETTINGS_CACHE_TTL_MS = 30_000;
 const PRESIGN_EXPIRY_SECONDS = 600;
 const BACKENDS: StorageBackendName[] = ["minio", "oss"];
 const DOWNLOAD_MODES: StorageDownloadMode[] = ["proxy", "direct"];
+const UPLOAD_MODES: StorageUploadMode[] = ["relay", "direct"];
 
 @Injectable()
 export class StorageService {
@@ -139,6 +144,21 @@ export class StorageService {
   }
 
   /**
+   * 签名直入模式下为对象生成预签名 PUT 地址;中转模式、非 OSS
+   * 后端或后端不支持时返回 null,调用方回退到服务器中转上传。
+   */
+  async presignUpload(
+    storageBackend: StorageBackendName,
+    key: string,
+  ): Promise<string | null> {
+    if (storageBackend !== "oss") return null;
+    const settings = await this.getSettings();
+    if ((settings?.uploadMode ?? "relay") !== "direct") return null;
+    const backend = await this.backendFor(storageBackend);
+    return backend.presignPut(key, { expirySeconds: PRESIGN_EXPIRY_SECONDS });
+  }
+
+  /**
    * 直出模式下为对象生成预签名地址；中转模式或后端不支持时返回 null，
    * 调用方回退到服务器流式中转。
    */
@@ -153,9 +173,6 @@ export class StorageService {
     // Banner 和 favicon 等 inline 资源统一由 API 中转，只有明确下载的
     // attachment 才签名直出，避免出现文件可下载但 <img> 无法显示。
     if (target.inline) return null;
-    // 历史配置可能同时启用了内网 Endpoint 与签名直出。内网地址无法由
-    // 公网浏览器访问，因此安全回退到调用方的服务器流式中转。
-    if (storageBackend === "oss" && settings?.ossInternal) return null;
     const backend = await this.backendFor(storageBackend);
     return backend.presignGet(key, {
       expirySeconds: PRESIGN_EXPIRY_SECONDS,
@@ -197,11 +214,13 @@ export class StorageService {
       DOWNLOAD_MODES,
       "下载模式",
     );
+    const uploadMode = parseEnum(input.uploadMode, UPLOAD_MODES, "上传模式");
     const existing = await this.getSettings();
     const workspace = await this.getDefaultWorkspace();
 
     const nextBackend = backend ?? existing?.backend ?? "minio";
     const nextDownloadMode = downloadMode ?? existing?.downloadMode ?? "proxy";
+    const nextUploadMode = uploadMode ?? existing?.uploadMode ?? "relay";
     const mergedOss = this.mergeOssInput(existing, input.oss);
     const effectiveConfig = this.resolveOssClientConfig(
       existing,
@@ -213,15 +232,6 @@ export class StorageService {
         "启用阿里云 OSS 前请完整填写地域、Bucket 和访问凭证",
       );
     }
-    if (
-      nextBackend === "oss" &&
-      nextDownloadMode === "direct" &&
-      effectiveConfig?.internal
-    ) {
-      throw new BadRequestException(
-        "签名直出需要浏览器访问公网 Endpoint，不能使用内网 Endpoint",
-      );
-    }
     // 启用 OSS 或修改 OSS 配置时，必须先通过真实读写探测才允许保存
     if (effectiveConfig && (nextBackend === "oss" || input.oss !== undefined)) {
       await this.probeOss(effectiveConfig);
@@ -230,10 +240,12 @@ export class StorageService {
     const data = {
       backend: nextBackend,
       downloadMode: nextDownloadMode,
+      uploadMode: nextUploadMode,
       ossRegion: mergedOss?.region ?? null,
       ossBucket: mergedOss?.bucket ?? null,
       ossEndpoint: mergedOss?.endpoint?.trim() || null,
       ossInternal: mergedOss?.internal ?? false,
+      ossInternalEndpoint: mergedOss?.internalEndpoint?.trim() || null,
       ossAccessKeyId: mergedOss?.accessKeyId ?? null,
       ossAccessKeySecret: mergedOss?.accessKeySecret
         ? this.secrets.encrypt(mergedOss.accessKeySecret)
@@ -302,6 +314,7 @@ export class StorageService {
             bucket: existing.ossBucket ?? undefined,
             endpoint: existing.ossEndpoint ?? undefined,
             internal: existing.ossInternal,
+            internalEndpoint: existing.ossInternalEndpoint ?? undefined,
             accessKeyId: existing.ossAccessKeyId ?? undefined,
           }
         : null;
@@ -314,6 +327,10 @@ export class StorageService {
           ? input.endpoint.trim() || undefined
           : (existing?.ossEndpoint ?? undefined),
       internal: input.internal ?? existing?.ossInternal ?? false,
+      internalEndpoint:
+        input.internalEndpoint !== undefined
+          ? input.internalEndpoint.trim() || undefined
+          : (existing?.ossInternalEndpoint ?? undefined),
       accessKeyId:
         input.accessKeyId?.trim() || (existing?.ossAccessKeyId ?? undefined),
       accessKeySecret: input.accessKeySecret?.trim() || undefined,
@@ -332,6 +349,7 @@ export class StorageService {
             bucket: settings.ossBucket ?? undefined,
             endpoint: settings.ossEndpoint ?? undefined,
             internal: settings.ossInternal,
+            internalEndpoint: settings.ossInternalEndpoint ?? undefined,
             accessKeyId: settings.ossAccessKeyId ?? undefined,
           }
         : null);
@@ -344,6 +362,7 @@ export class StorageService {
       bucket: source.bucket,
       endpoint: source.endpoint ?? null,
       internal: source.internal ?? false,
+      internalEndpoint: source.internalEndpoint ?? null,
       accessKeyId: source.accessKeyId,
       accessKeySecret: this.secrets.decrypt(encryptedSecret),
     };
@@ -420,6 +439,7 @@ export class StorageService {
     return {
       backend: settings?.backend ?? "minio",
       downloadMode: settings?.downloadMode ?? "proxy",
+      uploadMode: settings?.uploadMode ?? "relay",
       minio: {
         endpoint: this.minioEndpointDisplay,
         bucket: this.minioBucket,
@@ -429,6 +449,7 @@ export class StorageService {
         bucket: settings?.ossBucket ?? null,
         endpoint: settings?.ossEndpoint ?? null,
         internal: settings?.ossInternal ?? false,
+        internalEndpoint: settings?.ossInternalEndpoint ?? null,
         accessKeyId: settings?.ossAccessKeyId ?? null,
         secretConfigured: Boolean(settings?.ossAccessKeySecret),
       },

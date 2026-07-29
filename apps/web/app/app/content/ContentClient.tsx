@@ -69,7 +69,7 @@ import {
   updateFile,
   updateFolder,
   updateContentPins,
-  uploadAsset,
+  uploadAssetDirect,
   upsertPermissionGrant,
 } from "@/lib/api";
 import { formatRelativeTime, permissionLabel } from "@/lib/labels";
@@ -733,7 +733,10 @@ export function ContentClient() {
     setMessage(null);
     try {
       const outcomes = await uploadFiles(jobs, (job, options) =>
-        uploadAsset({ file: job.file, folderId: activeFolderId }, options),
+        uploadAssetDirect(
+          { file: job.file, folderId: activeFolderId },
+          options,
+        ),
       );
       const successCount = outcomes.filter(
         (outcome) => outcome.result !== undefined,

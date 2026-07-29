@@ -13,6 +13,8 @@ const mockMinioClient = {
   getObject: jest.fn(),
   removeObject: jest.fn(),
   presignedGetObject: jest.fn(),
+  presignedPutObject: jest.fn(),
+  statObject: jest.fn(),
 };
 
 jest.mock("minio", () => ({
@@ -72,6 +74,10 @@ describe("StorageService", () => {
     mockMinioClient.presignedGetObject.mockResolvedValue(
       "https://oss.example/signed-url",
     );
+    mockMinioClient.presignedPutObject.mockResolvedValue(
+      "https://oss.example/signed-put-url",
+    );
+    mockMinioClient.statObject.mockResolvedValue({ size: 1 });
     service = new StorageService(
       prisma as unknown as PrismaService,
       config as unknown as ConfigService,
@@ -199,24 +205,41 @@ describe("StorageService", () => {
     expect(prisma.storageSettings.upsert).not.toHaveBeenCalled();
   });
 
-  it("rejects direct downloads through an internal OSS endpoint", async () => {
-    await expect(
-      service.updateSettings("admin-1", {
-        backend: "oss",
-        downloadMode: "direct",
-        oss: {
-          region: "cn-hangzhou",
-          bucket: "liveboard",
-          internal: true,
-          accessKeyId: "ak",
-          accessKeySecret: "raw-secret",
-        },
+  it("allows direct downloads with an internal OSS endpoint", async () => {
+    prisma.storageSettings.upsert.mockResolvedValue({
+      backend: "oss",
+      downloadMode: "direct",
+      ossRegion: "cn-hangzhou",
+      ossBucket: "liveboard",
+      ossEndpoint: null,
+      ossInternal: true,
+      ossAccessKeyId: "ak",
+      ossAccessKeySecret: "enc:raw-secret",
+      updatedAt: new Date("2026-07-27T01:00:00Z"),
+    });
+
+    const result = await service.updateSettings("admin-1", {
+      backend: "oss",
+      downloadMode: "direct",
+      oss: {
+        region: "cn-hangzhou",
+        bucket: "liveboard",
+        internal: true,
+        accessKeyId: "ak",
+        accessKeySecret: "raw-secret",
+      },
+    });
+
+    expect(prisma.storageSettings.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          backend: "oss",
+          downloadMode: "direct",
+          ossInternal: true,
+        }),
       }),
-    ).rejects.toThrow(
-      "签名直出需要浏览器访问公网 Endpoint，不能使用内网 Endpoint",
     );
-    expect(mockMinioClient.putObject).not.toHaveBeenCalled();
-    expect(prisma.storageSettings.upsert).not.toHaveBeenCalled();
+    expect(result.downloadMode).toBe("direct");
   });
 
   it("probes OSS with a real write before saving the configuration", async () => {
@@ -295,7 +318,7 @@ describe("StorageService", () => {
     expect(mockMinioClient.presignedGetObject).not.toHaveBeenCalled();
   });
 
-  it("falls back to proxy downloads for a legacy direct and internal configuration", async () => {
+  it("presigns through the public endpoint when the internal endpoint is enabled", async () => {
     prisma.storageSettings.findUnique.mockResolvedValue({
       backend: "oss",
       downloadMode: "direct",
@@ -307,6 +330,9 @@ describe("StorageService", () => {
       ossAccessKeySecret: "enc:raw-secret",
       updatedAt: new Date("2026-07-27T00:00:00Z"),
     });
+    mockMinioClient.presignedGetObject.mockResolvedValue(
+      "https://liveboard.s3.oss-cn-hangzhou.aliyuncs.com/some/key?sig=1",
+    );
 
     await expect(
       service.presignDownload("oss", "some/key", {
@@ -314,8 +340,25 @@ describe("StorageService", () => {
         mimeType: "application/pdf",
         inline: false,
       }),
-    ).resolves.toBeNull();
-    expect(mockMinioClient.presignedGetObject).not.toHaveBeenCalled();
+    ).resolves.toContain("oss-cn-hangzhou.aliyuncs.com");
+    expect(mockMinioClient.presignedGetObject).toHaveBeenCalledWith(
+      "liveboard",
+      "some/key",
+      expect.any(Number),
+      expect.any(Object),
+    );
+    // 内网配置下应额外创建一个公网 Endpoint 的签名客户端
+    const clientConfigs = MockedMinioClient.mock.calls.map(([arg]) => arg);
+    expect(
+      clientConfigs.some((arg) => String(arg.endPoint).includes("-internal")),
+    ).toBe(true);
+    expect(
+      clientConfigs.some(
+        (arg) =>
+          String(arg.endPoint).includes("oss-cn-hangzhou") &&
+          !String(arg.endPoint).includes("-internal"),
+      ),
+    ).toBe(true);
   });
 
   it("proxies inline OSS resources because default OSS domains block previews", async () => {
@@ -371,6 +414,146 @@ describe("StorageService", () => {
     );
     const respHeaders = mockMinioClient.presignedGetObject.mock.calls[0]?.[3];
     expect(respHeaders).not.toHaveProperty("response-content-type");
+  });
+
+  it("returns null for presigned uploads in relay mode", async () => {
+    prisma.storageSettings.findUnique.mockResolvedValue({
+      backend: "oss",
+      downloadMode: "direct",
+      uploadMode: "relay",
+      ossRegion: "cn-hangzhou",
+      ossBucket: "liveboard",
+      ossEndpoint: null,
+      ossInternal: false,
+      ossAccessKeyId: "ak",
+      ossAccessKeySecret: "enc:raw-secret",
+      updatedAt: new Date("2026-07-27T00:00:00Z"),
+    });
+
+    await expect(service.presignUpload("oss", "some/key")).resolves.toBeNull();
+    expect(mockMinioClient.presignedPutObject).not.toHaveBeenCalled();
+  });
+
+  it("returns null for presigned uploads on the MinIO backend", async () => {
+    await expect(
+      service.presignUpload("minio", "some/key"),
+    ).resolves.toBeNull();
+    expect(mockMinioClient.presignedPutObject).not.toHaveBeenCalled();
+  });
+
+  it("presigns uploads through the public endpoint in direct mode", async () => {
+    prisma.storageSettings.findUnique.mockResolvedValue({
+      backend: "oss",
+      downloadMode: "proxy",
+      uploadMode: "direct",
+      ossRegion: "cn-hangzhou",
+      ossBucket: "liveboard",
+      ossEndpoint: null,
+      ossInternal: true,
+      ossAccessKeyId: "ak",
+      ossAccessKeySecret: "enc:raw-secret",
+      updatedAt: new Date("2026-07-27T00:00:00Z"),
+    });
+
+    await expect(
+      service.presignUpload("oss", "ws/2026-07-29/a.pdf"),
+    ).resolves.toBe("https://oss.example/signed-put-url");
+    expect(mockMinioClient.presignedPutObject).toHaveBeenCalledWith(
+      "liveboard",
+      "ws/2026-07-29/a.pdf",
+      600,
+    );
+    // 内网配置下签名客户端必须走公网 Endpoint,浏览器才可达
+    const clientConfigs = MockedMinioClient.mock.calls.map(([arg]) => arg);
+    expect(
+      clientConfigs.some(
+        (arg) =>
+          String(arg.endPoint).includes("oss-cn-hangzhou") &&
+          !String(arg.endPoint).includes("-internal"),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects an invalid upload mode when saving settings", async () => {
+    await expect(
+      service.updateSettings("admin-1", { uploadMode: "carrier-pigeon" }),
+    ).rejects.toThrow("无效的上传模式");
+    expect(prisma.storageSettings.upsert).not.toHaveBeenCalled();
+  });
+
+  it("uses a custom internal endpoint for server-side traffic only", async () => {
+    prisma.storageSettings.findUnique.mockResolvedValue({
+      backend: "oss",
+      downloadMode: "direct",
+      uploadMode: "relay",
+      ossRegion: "cn-hangzhou",
+      ossBucket: "liveboard",
+      ossEndpoint: null,
+      ossInternal: true,
+      ossInternalEndpoint: "http://oss-vpc.internal:9000",
+      ossAccessKeyId: "ak",
+      ossAccessKeySecret: "enc:raw-secret",
+      updatedAt: new Date("2026-07-27T00:00:00Z"),
+    });
+
+    await service.backendFor("oss");
+
+    const clientConfigs = MockedMinioClient.mock.calls.map(([arg]) => arg);
+    // 数据客户端走自定义内网地址
+    expect(
+      clientConfigs.some(
+        (arg) =>
+          arg.endPoint === "oss-vpc.internal" &&
+          arg.port === 9000 &&
+          arg.useSSL === false,
+      ),
+    ).toBe(true);
+    // 签名客户端仍走公网默认域名
+    expect(
+      clientConfigs.some(
+        (arg) =>
+          String(arg.endPoint).includes("oss-cn-hangzhou") &&
+          !String(arg.endPoint).includes("-internal"),
+      ),
+    ).toBe(true);
+  });
+
+  it("persists a custom internal endpoint when saving settings", async () => {
+    prisma.storageSettings.upsert.mockResolvedValue({
+      backend: "oss",
+      downloadMode: "proxy",
+      uploadMode: "relay",
+      ossRegion: "cn-hangzhou",
+      ossBucket: "liveboard",
+      ossEndpoint: null,
+      ossInternal: true,
+      ossInternalEndpoint: "oss-vpc.internal",
+      ossAccessKeyId: "ak",
+      ossAccessKeySecret: "enc:raw-secret",
+      updatedAt: new Date("2026-07-27T01:00:00Z"),
+    });
+
+    const result = await service.updateSettings("admin-1", {
+      backend: "oss",
+      oss: {
+        region: "cn-hangzhou",
+        bucket: "liveboard",
+        internal: true,
+        internalEndpoint: " oss-vpc.internal ",
+        accessKeyId: "ak",
+        accessKeySecret: "raw-secret",
+      },
+    });
+
+    expect(prisma.storageSettings.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          ossInternal: true,
+          ossInternalEndpoint: "oss-vpc.internal",
+        }),
+      }),
+    );
+    expect(result.oss.internalEndpoint).toBe("oss-vpc.internal");
   });
 
   it("fails downloads for OSS objects when OSS is no longer configured", async () => {

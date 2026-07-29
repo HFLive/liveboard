@@ -170,8 +170,15 @@
 }
 
 .storage-backend-page .storage-backend-inline-hint {
+  display: block;
+  margin-top: 4px;
+}
+
+.storage-backend-page .storage-backend-internal-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   grid-column: 1 / -1;
-  margin-top: -6px;
 }
 
 .storage-backend-page .storage-backend-test-row {
@@ -182,6 +189,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   margin-bottom: 16px;
+  margin-top: 16px;
   padding: 10px 14px;
 }
 

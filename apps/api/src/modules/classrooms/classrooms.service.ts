@@ -4,10 +4,11 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  NotImplementedException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { isSystemAdmin, type ClassroomMemberRole } from "@liveboard/shared";
-import type { Prisma } from "@prisma/client";
+import type { PendingUpload, Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { PrismaService } from "../prisma/prisma.service";
@@ -30,6 +31,14 @@ export interface UploadedClassroomFile {
 }
 
 export const MAX_CLASSROOM_FILE_SIZE_BYTES = 100 * 1024 * 1024;
+/** 签名直入预留的有效期;超时未确认的预留会被惰性清理。 */
+const PENDING_UPLOAD_TTL_MS = 60 * 60 * 1000;
+
+export interface SignClassroomUploadInput {
+  filename: string;
+  sizeBytes: number;
+  mimeType?: string;
+}
 
 @Injectable()
 export class ClassroomsService {
@@ -502,6 +511,230 @@ export class ClassroomsService {
     };
   }
 
+  /**
+   * 签名直入第一步:校验并预留 PendingUpload,返回浏览器直传 OSS 的
+   * 预签名 PUT 地址。配额与重名的原子保证在 confirm 时由
+   * reserveClassroomFile 完成,这里只做 UX 预检。
+   */
+  async signFileUpload(
+    userId: string | null,
+    classroomId: string,
+    input: SignClassroomUploadInput,
+  ) {
+    const user = await this.requireUser(userId);
+    await this.requireTeacher(user, classroomId);
+
+    const filename = requireResourceName(input.filename, "文件名称");
+    if (!Number.isInteger(input.sizeBytes) || input.sizeBytes <= 0) {
+      throw new BadRequestException("无效的文件大小");
+    }
+    if (input.sizeBytes > MAX_CLASSROOM_FILE_SIZE_BYTES) {
+      throw new BadRequestException("课堂文件不能超过 100MB");
+    }
+    if (looksLikeSvgDirect(filename, input.mimeType)) {
+      throw new BadRequestException("不支持上传 SVG 文件");
+    }
+    const mimeType = normalizeMimeType(input.mimeType ?? "");
+
+    const classroom = await this.requireClassroom(classroomId);
+    const backend = await this.storage.activeBackend();
+    const storageFilename = sanitizeStorageFilename(filename);
+    const storageKey = `${classroom.workspaceId}/classrooms/${classroomId}/${randomUUID()}-${storageFilename}`;
+    const url = await this.storage.presignUpload(backend.name, storageKey);
+    if (!url) {
+      throw new NotImplementedException(
+        "当前存储配置不支持签名直入,请改用服务器中转上传",
+      );
+    }
+
+    await this.reapExpiredPendingUploads(user.id);
+    await this.assertDirectUploadQuotaAvailable(
+      classroom,
+      filename,
+      input.sizeBytes,
+    );
+
+    const pending = await this.prisma.pendingUpload.create({
+      data: {
+        kind: "classroom",
+        workspaceId: classroom.workspaceId,
+        classroomId,
+        filename,
+        mimeType,
+        sizeBytes: input.sizeBytes,
+        storageKey,
+        uploadedBy: user.id,
+        expiresAt: new Date(Date.now() + PENDING_UPLOAD_TTL_MS),
+      },
+    });
+
+    return { uploadId: pending.id, url };
+  }
+
+  /** 签名直入第三步:对象校验通过后原子创建文件记录并释放预留。 */
+  async confirmFileUpload(
+    userId: string | null,
+    classroomId: string,
+    uploadId: string,
+  ) {
+    const user = await this.requireUser(userId);
+    await this.requireTeacher(user, classroomId);
+    const pending = await this.requirePendingUpload(
+      user.id,
+      uploadId,
+      classroomId,
+    );
+    const classroom = await this.requireClassroom(classroomId);
+    const backend = await this.storage.backendFor("oss");
+
+    const stat = await backend.statObject(pending.storageKey).catch(() => null);
+    if (!stat) {
+      await this.discardPendingUpload(pending);
+      throw new BadRequestException("对象存储中未找到已上传的文件,请重新上传");
+    }
+    if (stat.size !== pending.sizeBytes) {
+      await this.discardPendingUpload(pending);
+      throw new BadRequestException("上传内容不完整,请重新上传");
+    }
+
+    try {
+      const record = await this.reserveClassroomFile(
+        classroom,
+        pending.sizeBytes,
+        {
+          classroomId,
+          storageKey: pending.storageKey,
+          storageBackend: "oss",
+          filename: pending.filename,
+          mimeType: pending.mimeType,
+          sizeBytes: pending.sizeBytes,
+          uploadedBy: user.id,
+        },
+      );
+      await this.prisma.pendingUpload.delete({ where: { id: pending.id } });
+      return {
+        ...record,
+        createdAt: record.createdAt.toISOString(),
+        url: `/classrooms/${classroomId}/files/${record.id}`,
+      };
+    } catch (caught) {
+      await this.discardPendingUpload(pending);
+      throw caught;
+    }
+  }
+
+  /** 客户端取消或失败时释放预留并清理对象;重复调用安全。 */
+  async abortFileUpload(
+    userId: string | null,
+    classroomId: string,
+    uploadId: string,
+  ) {
+    const user = await this.requireUser(userId);
+    const pending = await this.prisma.pendingUpload.findUnique({
+      where: { id: uploadId },
+    });
+    if (
+      pending &&
+      pending.kind === "classroom" &&
+      pending.classroomId === classroomId &&
+      pending.uploadedBy === user.id
+    ) {
+      await this.discardPendingUpload(pending);
+    }
+    return { ok: true as const };
+  }
+
+  private async requirePendingUpload(
+    userId: string,
+    uploadId: string,
+    classroomId: string,
+  ) {
+    const pending = await this.prisma.pendingUpload.findUnique({
+      where: { id: uploadId },
+    });
+    if (
+      !pending ||
+      pending.kind !== "classroom" ||
+      pending.classroomId !== classroomId ||
+      pending.uploadedBy !== userId
+    ) {
+      throw new NotFoundException("上传任务不存在或已完成");
+    }
+    if (pending.expiresAt.getTime() <= Date.now()) {
+      await this.discardPendingUpload(pending);
+      throw new NotFoundException("上传任务已过期,请重新上传");
+    }
+    return pending;
+  }
+
+  /** 删除预留行并尽力清理对象;直入只签 OSS,因此固定回 OSS 后端。 */
+  private async discardPendingUpload(pending: PendingUpload) {
+    await this.prisma.pendingUpload
+      .delete({ where: { id: pending.id } })
+      .catch(() => undefined);
+    const backend = await this.storage.backendFor("oss").catch(() => null);
+    if (backend) {
+      await backend.removeObject(pending.storageKey).catch(() => undefined);
+    }
+  }
+
+  /** 惰性清理:签名新任务时回收该用户已过期的直入预留。 */
+  private async reapExpiredPendingUploads(userId: string) {
+    const expired = await this.prisma.pendingUpload.findMany({
+      where: { uploadedBy: userId, expiresAt: { lte: new Date() } },
+      take: 20,
+    });
+    for (const pending of expired) {
+      await this.discardPendingUpload(pending);
+    }
+  }
+
+  /** 直入签名的 UX 预检:重名与配额(含未确认的直入预留)。 */
+  private async assertDirectUploadQuotaAvailable(
+    classroom: {
+      id: string;
+      workspaceId: string;
+      storageQuotaBytes: number | null;
+    },
+    filename: string,
+    incomingBytes: number,
+  ) {
+    const duplicate = await this.prisma.classroomFile.findFirst({
+      where: { classroomId: classroom.id, filename },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new ConflictException("当前课堂中已存在同名文件");
+    }
+
+    const [fileUsage, pendingUsage] = await Promise.all([
+      this.prisma.classroomFile.aggregate({
+        where: { classroomId: classroom.id },
+        _sum: { sizeBytes: true },
+      }),
+      this.prisma.pendingUpload.aggregate({
+        where: {
+          classroomId: classroom.id,
+          kind: "classroom",
+          expiresAt: { gt: new Date() },
+        },
+        _sum: { sizeBytes: true },
+      }),
+    ]);
+    const quotaBytes =
+      classroom.storageQuotaBytes ??
+      (await this.getWorkspaceClassroomQuota(classroom.workspaceId));
+    const total =
+      (fileUsage._sum.sizeBytes ?? 0) +
+      (pendingUsage._sum.sizeBytes ?? 0) +
+      incomingBytes;
+    if (total > quotaBytes) {
+      throw new BadRequestException(
+        `课堂文件容量不足，当前上限为 ${formatStorageSize(quotaBytes)}`,
+      );
+    }
+  }
+
   async downloadFile(
     userId: string | null,
     classroomId: string,
@@ -744,6 +977,14 @@ function normalizeMimeType(value: string) {
   return /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(mimeType)
     ? mimeType
     : "application/octet-stream";
+}
+
+/** 直入拿不到文件内容,SVG 按扩展名/声明拒绝。 */
+function looksLikeSvgDirect(filename: string, declared?: string) {
+  return (
+    filename.toLowerCase().endsWith(".svg") ||
+    declared?.trim().toLowerCase() === "image/svg+xml"
+  );
 }
 
 function looksLikeSvg(file: UploadedClassroomFile) {

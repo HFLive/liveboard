@@ -297,3 +297,266 @@ describe("ClassroomsService", () => {
     expect(backend.putObject).not.toHaveBeenCalled();
   });
 });
+
+describe("ClassroomsService direct upload", () => {
+  const prisma = {
+    user: { findUnique: jest.fn() },
+    classroom: { findUnique: jest.fn() },
+    classroomMember: { findUnique: jest.fn() },
+    classroomFile: {
+      aggregate: jest.fn(),
+      findFirst: jest.fn(),
+    },
+    pendingUpload: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      delete: jest.fn(),
+      aggregate: jest.fn(),
+    },
+    workspace: { findUnique: jest.fn() },
+    $transaction: jest.fn(),
+  };
+  const backend = {
+    name: "oss" as const,
+    statObject: jest.fn(),
+    removeObject: jest.fn(),
+  };
+  const storage = {
+    activeBackend: jest.fn(),
+    backendFor: jest.fn(),
+    presignUpload: jest.fn(),
+  };
+  let service: ClassroomsService;
+
+  const teacher = {
+    id: "teacher-1",
+    username: "teacher",
+    displayName: "Teacher",
+    avatarUpdatedAt: null,
+    systemRole: "member" as const,
+    status: "active" as const,
+  };
+  const pendingRow = {
+    id: "upload-1",
+    kind: "classroom" as const,
+    workspaceId: "workspace-1",
+    folderId: null,
+    fileId: null,
+    classroomId: "classroom-1",
+    filename: "slides.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 5,
+    storageKey: "workspace-1/classrooms/classroom-1/abc-slides.pdf",
+    uploadedBy: "teacher-1",
+    createdAt: new Date("2026-07-29T00:00:00Z"),
+    expiresAt: new Date(Date.now() + 60_000),
+  };
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    service = new ClassroomsService(
+      prisma as unknown as PrismaService,
+      storage as unknown as StorageService,
+    );
+    prisma.user.findUnique.mockResolvedValue(teacher);
+    prisma.classroomMember.findUnique.mockResolvedValue({
+      classroomId: "classroom-1",
+      userId: teacher.id,
+      role: "teacher",
+    });
+    prisma.classroom.findUnique.mockResolvedValue({
+      id: "classroom-1",
+      workspaceId: "workspace-1",
+      storageQuotaBytes: null,
+    });
+    prisma.workspace.findUnique.mockResolvedValue(null);
+    prisma.classroomFile.findFirst.mockResolvedValue(null);
+    prisma.classroomFile.aggregate.mockResolvedValue({
+      _sum: { sizeBytes: 0 },
+    });
+    prisma.pendingUpload.findMany.mockResolvedValue([]);
+    prisma.pendingUpload.aggregate.mockResolvedValue({
+      _sum: { sizeBytes: 0 },
+    });
+    prisma.pendingUpload.create.mockResolvedValue(pendingRow);
+    prisma.pendingUpload.findUnique.mockResolvedValue(pendingRow);
+    prisma.pendingUpload.delete.mockResolvedValue(pendingRow);
+    storage.activeBackend.mockResolvedValue(backend);
+    storage.backendFor.mockResolvedValue(backend);
+    storage.presignUpload.mockResolvedValue("https://oss.example/put-url");
+    backend.statObject.mockResolvedValue({ size: 5 });
+    backend.removeObject.mockResolvedValue(undefined);
+  });
+
+  it("signs a direct classroom upload and reserves a pending row", async () => {
+    const result = await service.signFileUpload("teacher-1", "classroom-1", {
+      filename: "slides.pdf",
+      sizeBytes: 5,
+      mimeType: "application/pdf",
+    });
+
+    expect(result).toEqual({
+      uploadId: "upload-1",
+      url: "https://oss.example/put-url",
+    });
+    expect(prisma.pendingUpload.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        kind: "classroom",
+        classroomId: "classroom-1",
+        filename: "slides.pdf",
+        sizeBytes: 5,
+        uploadedBy: "teacher-1",
+        storageKey: expect.stringMatching(
+          /^workspace-1\/classrooms\/classroom-1\/.+-slides\.pdf$/,
+        ),
+      }),
+    });
+  });
+
+  it("rejects signing from a classroom student", async () => {
+    prisma.classroomMember.findUnique.mockResolvedValue({
+      classroomId: "classroom-1",
+      userId: teacher.id,
+      role: "student",
+    });
+
+    await expect(
+      service.signFileUpload("teacher-1", "classroom-1", {
+        filename: "slides.pdf",
+        sizeBytes: 5,
+      }),
+    ).rejects.toThrow("只有课堂教师可以执行此操作");
+    expect(prisma.pendingUpload.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects SVG files without reading object content", async () => {
+    await expect(
+      service.signFileUpload("teacher-1", "classroom-1", {
+        filename: "evil.svg",
+        sizeBytes: 5,
+        mimeType: "image/svg+xml",
+      }),
+    ).rejects.toThrow("不支持上传 SVG 文件");
+    expect(prisma.pendingUpload.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects signing when the storage configuration has no direct upload", async () => {
+    storage.presignUpload.mockResolvedValue(null);
+
+    await expect(
+      service.signFileUpload("teacher-1", "classroom-1", {
+        filename: "slides.pdf",
+        sizeBytes: 5,
+      }),
+    ).rejects.toThrow("当前存储配置不支持签名直入");
+    expect(prisma.pendingUpload.create).not.toHaveBeenCalled();
+  });
+
+  it("counts unexpired pending uploads toward the quota pre-check", async () => {
+    prisma.workspace.findUnique.mockResolvedValue({
+      classroomStorageQuotaBytes: 6,
+    });
+    prisma.pendingUpload.aggregate.mockResolvedValue({
+      _sum: { sizeBytes: 4 },
+    });
+
+    await expect(
+      service.signFileUpload("teacher-1", "classroom-1", {
+        filename: "slides.pdf",
+        sizeBytes: 5,
+      }),
+    ).rejects.toThrow("课堂文件容量不足");
+    expect(prisma.pendingUpload.create).not.toHaveBeenCalled();
+  });
+
+  it("confirm creates the record and releases the reservation", async () => {
+    const created = {
+      id: "file-1",
+      classroomId: "classroom-1",
+      filename: "slides.pdf",
+      createdAt: new Date("2026-07-29T01:00:00Z"),
+    };
+    const tx = {
+      workspace: { findUnique: jest.fn().mockResolvedValue(null) },
+      classroomFile: {
+        aggregate: jest.fn().mockResolvedValue({ _sum: { sizeBytes: 0 } }),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue(created),
+      },
+    };
+    prisma.$transaction.mockImplementation((callback) => callback(tx));
+
+    const result = await service.confirmFileUpload(
+      "teacher-1",
+      "classroom-1",
+      "upload-1",
+    );
+
+    expect(tx.classroomFile.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        classroomId: "classroom-1",
+        storageKey: pendingRow.storageKey,
+        storageBackend: "oss",
+        filename: "slides.pdf",
+        sizeBytes: 5,
+      }),
+    });
+    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
+      where: { id: "upload-1" },
+    });
+    expect(result.url).toBe("/classrooms/classroom-1/files/file-1");
+    expect(backend.removeObject).not.toHaveBeenCalled();
+  });
+
+  it("confirm discards the object when the size does not match", async () => {
+    backend.statObject.mockResolvedValue({ size: 10 });
+
+    await expect(
+      service.confirmFileUpload("teacher-1", "classroom-1", "upload-1"),
+    ).rejects.toThrow("上传内容不完整");
+    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
+      where: { id: "upload-1" },
+    });
+    expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("confirm discards the object when the filename duplicates", async () => {
+    const tx = {
+      workspace: { findUnique: jest.fn().mockResolvedValue(null) },
+      classroomFile: {
+        aggregate: jest.fn().mockResolvedValue({ _sum: { sizeBytes: 0 } }),
+        findFirst: jest.fn().mockResolvedValue({ id: "existing-file" }),
+        create: jest.fn(),
+      },
+    };
+    prisma.$transaction.mockImplementation((callback) => callback(tx));
+
+    await expect(
+      service.confirmFileUpload("teacher-1", "classroom-1", "upload-1"),
+    ).rejects.toThrow("当前课堂中已存在同名文件");
+    expect(tx.classroomFile.create).not.toHaveBeenCalled();
+    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
+      where: { id: "upload-1" },
+    });
+    expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
+  });
+
+  it("abort is idempotent and cleans up the object", async () => {
+    await expect(
+      service.abortFileUpload("teacher-1", "classroom-1", "upload-1"),
+    ).resolves.toEqual({ ok: true });
+    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
+      where: { id: "upload-1" },
+    });
+    expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
+
+    prisma.pendingUpload.findUnique.mockResolvedValue(null);
+    prisma.pendingUpload.delete.mockClear();
+    await expect(
+      service.abortFileUpload("teacher-1", "classroom-1", "upload-1"),
+    ).resolves.toEqual({ ok: true });
+    expect(prisma.pendingUpload.delete).not.toHaveBeenCalled();
+  });
+});

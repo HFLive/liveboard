@@ -14,6 +14,14 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from "class-validator";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import {
   CreateClassroomAnnouncementDto,
@@ -28,6 +36,28 @@ import {
   type UploadedClassroomFile,
 } from "./classrooms.service";
 import { createRequestAbortSignal } from "../../common/request-abort";
+
+class SignFileUploadDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  filename!: string;
+
+  @IsInt()
+  @Min(1)
+  sizeBytes!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  mimeType?: string;
+}
+
+class ConfirmFileUploadDto {
+  @IsString()
+  @IsNotEmpty()
+  uploadId!: string;
+}
 
 @Controller("classrooms")
 export class ClassroomsController {
@@ -191,6 +221,43 @@ export class ClassroomsController {
     }
   }
 
+  @Post(":id/files/upload-url")
+  async signFileUpload(
+    @CurrentUserId() userId: string | null,
+    @Param("id") classroomId: string,
+    @Body() body: SignFileUploadDto,
+  ) {
+    return this.classroomsService.signFileUpload(userId, classroomId, body);
+  }
+
+  @Post(":id/files/upload-confirm")
+  async confirmFileUpload(
+    @CurrentUserId() userId: string | null,
+    @Param("id") classroomId: string,
+    @Body() body: ConfirmFileUploadDto,
+  ) {
+    return {
+      file: await this.classroomsService.confirmFileUpload(
+        userId,
+        classroomId,
+        body.uploadId,
+      ),
+    };
+  }
+
+  @Post(":id/files/upload-abort")
+  async abortFileUpload(
+    @CurrentUserId() userId: string | null,
+    @Param("id") classroomId: string,
+    @Body() body: ConfirmFileUploadDto,
+  ) {
+    return this.classroomsService.abortFileUpload(
+      userId,
+      classroomId,
+      body.uploadId,
+    );
+  }
+
   @Get(":id/files/:fileId")
   async downloadFile(
     @CurrentUserId() userId: string | null,
@@ -212,6 +279,7 @@ export class ClassroomsController {
       "Content-Disposition",
       `attachment; filename="${encodeURIComponent(file.filename)}"`,
     );
+    response.setHeader("Content-Length", String(file.sizeBytes));
     stream!.pipe(response);
   }
 
