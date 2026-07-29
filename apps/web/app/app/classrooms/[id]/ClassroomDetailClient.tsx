@@ -44,7 +44,7 @@ import {
   listTeachingDecks,
   listVisibilityUsers,
   removeClassroomMember,
-  uploadClassroomFile,
+  uploadClassroomFileDirect,
   updateClassroomAnnouncement,
   updateClassroom,
   upsertClassroomMember,
@@ -220,7 +220,7 @@ export function ClassroomDetailClient({
     setError(null);
     try {
       const outcomes = await uploadFiles(jobs, (job, options) =>
-        uploadClassroomFile(classroomId, job.file, options),
+        uploadClassroomFileDirect(classroomId, job.file, options),
       );
       const uploadedFiles = outcomes.flatMap((outcome) =>
         outcome.result ? [outcome.result.file] : [],

@@ -36,6 +36,15 @@ export class MinioStorageBackend implements ObjectStorageBackend {
     return Promise.resolve(null);
   }
 
+  presignPut(_key: string, _options: { expirySeconds: number }) {
+    return Promise.resolve(null);
+  }
+
+  async statObject(key: string) {
+    const stat = await this.client.statObject(this.bucket, key);
+    return { size: stat.size };
+  }
+
   async healthCheck() {
     await this.client.listBuckets();
   }

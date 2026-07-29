@@ -10,6 +10,13 @@ import {
 const MAX_CONCURRENT_UPLOADS = 2;
 const AUTO_DISMISS_DELAY_MS = 2_800;
 
+/**
+ * XHR 的 upload progress 只计量浏览器交给本机协议栈的字节：本机缓冲充裕时
+ * 会瞬间“发完”，且字节到齐后服务器仍要转发对象存储才返回响应。两者都无法
+ * 体现在进度里，因此网络进度封顶 90%，只有拿到响应才跳到 100%。
+ */
+export const UPLOAD_PROGRESS_CAP = 90;
+
 export type UploadTaskStatus =
   "queued" | "uploading" | "success" | "error" | "cancelled";
 
@@ -177,7 +184,10 @@ export function useUploadTask() {
               onProgress: (progress) =>
                 updateTask(task.id, (current) =>
                   current.status === "uploading"
-                    ? { ...current, progress }
+                    ? {
+                        ...current,
+                        progress: Math.min(UPLOAD_PROGRESS_CAP, progress),
+                      }
                     : current,
                 ),
             });

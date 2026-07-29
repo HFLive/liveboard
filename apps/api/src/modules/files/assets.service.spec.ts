@@ -552,6 +552,276 @@ describe("AssetsService consistency", () => {
   });
 });
 
+
+describe("AssetsService direct upload", () => {
+  const prisma = {
+    user: { findUnique: jest.fn() },
+    workspace: { findUnique: jest.fn() },
+    file: { findUnique: jest.fn() },
+    folder: { findUnique: jest.fn() },
+    fileAsset: {
+      findFirst: jest.fn(),
+      aggregate: jest.fn(),
+    },
+    pendingUpload: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      delete: jest.fn(),
+      aggregate: jest.fn(),
+    },
+    $transaction: jest.fn(),
+  };
+  const permissions = {
+    getEffectiveLevelForFile: jest.fn(),
+    getEffectiveLevelForFolder: jest.fn(),
+  };
+  const backend = {
+    name: "oss" as const,
+    statObject: jest.fn(),
+    removeObject: jest.fn(),
+  };
+  const storage = {
+    activeBackend: jest.fn(),
+    backendFor: jest.fn(),
+    presignUpload: jest.fn(),
+  };
+  let service: AssetsService;
+
+  const pendingRow = {
+    id: "upload-1",
+    kind: "asset" as const,
+    workspaceId: "workspace-1",
+    folderId: "folder-1",
+    fileId: "file-1",
+    classroomId: null,
+    filename: "notes.txt",
+    mimeType: "text/plain",
+    sizeBytes: 5,
+    storageKey: "workspace-1/2026-07-29/abc-notes.txt",
+    uploadedBy: "user-1",
+    createdAt: new Date("2026-07-29T00:00:00Z"),
+    expiresAt: new Date(Date.now() + 60_000),
+  };
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    service = new AssetsService(
+      { get: (_key: string, fallback?: unknown) => fallback } as ConfigService,
+      prisma as unknown as PrismaService,
+      permissions as unknown as PermissionsService,
+      storage as unknown as StorageService,
+    );
+    storage.activeBackend.mockResolvedValue(backend);
+    storage.backendFor.mockResolvedValue(backend);
+    storage.presignUpload.mockResolvedValue("https://oss.example/put-url");
+    backend.statObject.mockResolvedValue({ size: 5 });
+    backend.removeObject.mockResolvedValue(undefined);
+    permissions.getEffectiveLevelForFile.mockResolvedValue("editor");
+    permissions.getEffectiveLevelForFolder.mockResolvedValue("editor");
+    prisma.file.findUnique.mockResolvedValue({
+      id: "file-1",
+      workspaceId: "workspace-1",
+      folderId: "folder-1",
+      status: "draft",
+    });
+    prisma.user.findUnique.mockResolvedValue({ storageQuotaBytes: null });
+    prisma.workspace.findUnique.mockResolvedValue(null);
+    prisma.fileAsset.findFirst.mockResolvedValue(null);
+    prisma.fileAsset.aggregate.mockResolvedValue({ _sum: { sizeBytes: 0 } });
+    prisma.pendingUpload.findMany.mockResolvedValue([]);
+    prisma.pendingUpload.aggregate.mockResolvedValue({
+      _sum: { sizeBytes: 0 },
+    });
+    prisma.pendingUpload.create.mockResolvedValue(pendingRow);
+    prisma.pendingUpload.findUnique.mockResolvedValue(pendingRow);
+    prisma.pendingUpload.delete.mockResolvedValue(pendingRow);
+  });
+
+  it("signs a direct upload and reserves a pending row", async () => {
+    const result = await service.signAssetUpload("user-1", {
+      filename: "notes.txt",
+      sizeBytes: 5,
+      mimeType: "text/plain",
+      fileId: "file-1",
+    });
+
+    expect(result).toEqual({
+      uploadId: "upload-1",
+      url: "https://oss.example/put-url",
+    });
+    expect(prisma.pendingUpload.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        kind: "asset",
+        workspaceId: "workspace-1",
+        fileId: "file-1",
+        filename: "notes.txt",
+        mimeType: "text/plain",
+        sizeBytes: 5,
+        uploadedBy: "user-1",
+        storageKey: expect.stringMatching(
+          /^workspace-1\/\d{4}-\d{2}-\d{2}\/.+-notes\.txt$/,
+        ),
+      }),
+    });
+  });
+
+  it("rejects SVG files without reading object content", async () => {
+    await expect(
+      service.signAssetUpload("user-1", {
+        filename: "evil.svg",
+        sizeBytes: 5,
+        mimeType: "image/svg+xml",
+        fileId: "file-1",
+      }),
+    ).rejects.toThrow("不支持上传 SVG 文件");
+    expect(prisma.pendingUpload.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects signing when the storage configuration has no direct upload", async () => {
+    storage.presignUpload.mockResolvedValue(null);
+
+    await expect(
+      service.signAssetUpload("user-1", {
+        filename: "notes.txt",
+        sizeBytes: 5,
+        mimeType: "text/plain",
+        fileId: "file-1",
+      }),
+    ).rejects.toThrow("当前存储配置不支持签名直入");
+    expect(prisma.pendingUpload.create).not.toHaveBeenCalled();
+  });
+
+  it("counts unexpired pending uploads toward the quota pre-check", async () => {
+    prisma.user.findUnique.mockResolvedValue({ storageQuotaBytes: 6 });
+    prisma.pendingUpload.aggregate.mockResolvedValue({
+      _sum: { sizeBytes: 4 },
+    });
+
+    await expect(
+      service.signAssetUpload("user-1", {
+        filename: "notes.txt",
+        sizeBytes: 5,
+        mimeType: "text/plain",
+        fileId: "file-1",
+      }),
+    ).rejects.toThrow("文档附件容量不足");
+    expect(prisma.pendingUpload.create).not.toHaveBeenCalled();
+  });
+
+  it("confirm creates the asset and releases the reservation", async () => {
+    const created = {
+      id: "asset-1",
+      fileId: "file-1",
+      filename: "notes.txt",
+    };
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ storageQuotaBytes: 1024 }),
+      },
+      workspace: { findUnique: jest.fn().mockResolvedValue(null) },
+      fileAsset: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { sizeBytes: 0 } }),
+        create: jest.fn().mockResolvedValue(created),
+      },
+    };
+    prisma.$transaction.mockImplementation((callback) => callback(tx));
+
+    const result = await service.confirmAssetUpload("user-1", "upload-1");
+
+    expect(tx.fileAsset.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        storageKey: pendingRow.storageKey,
+        storageBackend: "oss",
+        kind: "embedded",
+        filename: "notes.txt",
+        sizeBytes: 5,
+      }),
+    });
+    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
+      where: { id: "upload-1" },
+    });
+    expect(result.url).toContain("/assets/asset-1");
+    expect(backend.removeObject).not.toHaveBeenCalled();
+  });
+
+  it("confirm discards the object when the size does not match", async () => {
+    backend.statObject.mockResolvedValue({ size: 10 });
+
+    await expect(
+      service.confirmAssetUpload("user-1", "upload-1"),
+    ).rejects.toThrow("上传内容不完整");
+    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
+      where: { id: "upload-1" },
+    });
+    expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("confirm discards the object when the quota reservation fails", async () => {
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ storageQuotaBytes: 1 }),
+      },
+      workspace: { findUnique: jest.fn().mockResolvedValue(null) },
+      fileAsset: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { sizeBytes: 0 } }),
+        create: jest.fn(),
+      },
+    };
+    prisma.$transaction.mockImplementation((callback) => callback(tx));
+
+    await expect(
+      service.confirmAssetUpload("user-1", "upload-1"),
+    ).rejects.toThrow("文档附件容量不足");
+    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
+      where: { id: "upload-1" },
+    });
+    expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
+  });
+
+  it("confirm rejects an expired reservation and reaps it", async () => {
+    prisma.pendingUpload.findUnique.mockResolvedValue({
+      ...pendingRow,
+      expiresAt: new Date(Date.now() - 1000),
+    });
+
+    await expect(
+      service.confirmAssetUpload("user-1", "upload-1"),
+    ).rejects.toThrow("上传任务已过期");
+    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
+      where: { id: "upload-1" },
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("confirm rejects another user's reservation", async () => {
+    await expect(
+      service.confirmAssetUpload("user-2", "upload-1"),
+    ).rejects.toThrow("上传任务不存在或已完成");
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("abort is idempotent and cleans up the object", async () => {
+    await expect(
+      service.abortAssetUpload("user-1", "upload-1"),
+    ).resolves.toEqual({ ok: true });
+    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
+      where: { id: "upload-1" },
+    });
+    expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
+
+    prisma.pendingUpload.findUnique.mockResolvedValue(null);
+    prisma.pendingUpload.delete.mockClear();
+    await expect(
+      service.abortAssetUpload("user-1", "upload-1"),
+    ).resolves.toEqual({ ok: true });
+    expect(prisma.pendingUpload.delete).not.toHaveBeenCalled();
+  });
+});
+
 function makeVp8xWebp(width: number, height: number) {
   const webp = Buffer.alloc(30);
   webp.write("RIFF", 0, "ascii");

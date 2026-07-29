@@ -4,13 +4,14 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  NotImplementedException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { canEdit, isSuperAdmin, isSystemAdmin } from "@liveboard/shared";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
-import { Prisma } from "@prisma/client";
+import { Prisma, type PendingUpload } from "@prisma/client";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
@@ -30,7 +31,15 @@ export interface UploadAssetInput {
   fileId?: string;
 }
 
+export interface SignAssetUploadInput extends UploadAssetInput {
+  filename: string;
+  sizeBytes: number;
+  mimeType?: string;
+}
+
 export const MAX_ASSET_SIZE_BYTES = 50 * 1024 * 1024;
+/** 签名直入预留的有效期;超时未确认的预留会被惰性清理。 */
+const PENDING_UPLOAD_TTL_MS = 60 * 60 * 1000;
 export const MAX_FORUM_IMAGES = 9;
 export const MAX_FORUM_REPLY_IMAGES = 3;
 export const MAX_FORUM_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -113,6 +122,246 @@ export class AssetsService {
       ...asset,
       url: this.getAssetUrl(asset.id),
     };
+  }
+
+  /**
+   * 签名直入第一步:校验并预留 PendingUpload,返回浏览器直传 OSS 的
+   * 预签名 PUT 地址。配额与重名的原子保证在 confirm 时由
+   * reserveAssetWithinQuota 完成,这里只做 UX 预检。
+   */
+  async signAssetUpload(userId: string | null, input: SignAssetUploadInput) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    const filename = requireResourceName(input.filename, "文件名称");
+    if (!Number.isInteger(input.sizeBytes) || input.sizeBytes <= 0) {
+      throw new BadRequestException("无效的文件大小");
+    }
+    if (input.sizeBytes > MAX_ASSET_SIZE_BYTES) {
+      throw new BadRequestException("文件不能超过 50MB");
+    }
+    const mimeType = normalizeDirectUploadMime(filename, input.mimeType);
+
+    const context = await this.resolveUploadContext(userId, input);
+    if (context.kind === "standalone") {
+      assertStandaloneTypeAllowed(filename, mimeType);
+    }
+
+    const backend = await this.storage.activeBackend();
+    const storageFilename = sanitizeStorageFilename(filename);
+    const storageKey = `${context.workspaceId}/${new Date()
+      .toISOString()
+      .slice(0, 10)}/${randomUUID()}-${storageFilename}`;
+    const url = await this.storage.presignUpload(backend.name, storageKey);
+    if (!url) {
+      throw new NotImplementedException(
+        "当前存储配置不支持签名直入,请改用服务器中转上传",
+      );
+    }
+
+    await this.reapExpiredPendingUploads(userId);
+    await this.assertDirectUploadQuotaAvailable(
+      userId,
+      context,
+      filename,
+      input.sizeBytes,
+    );
+
+    const pending = await this.prisma.pendingUpload.create({
+      data: {
+        kind: "asset",
+        workspaceId: context.workspaceId,
+        folderId: context.folderId,
+        fileId: context.fileId,
+        filename,
+        mimeType,
+        sizeBytes: input.sizeBytes,
+        storageKey,
+        uploadedBy: userId,
+        expiresAt: new Date(Date.now() + PENDING_UPLOAD_TTL_MS),
+      },
+    });
+
+    return { uploadId: pending.id, url };
+  }
+
+  /** 签名直入第三步:对象校验通过后原子创建资产记录并释放预留。 */
+  async confirmAssetUpload(userId: string | null, uploadId: string) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+    const pending = await this.requirePendingUpload(userId, uploadId, "asset");
+    const backend = await this.storage.backendFor("oss");
+
+    const stat = await backend
+      .statObject(pending.storageKey)
+      .catch(() => null);
+    if (!stat) {
+      await this.discardPendingUpload(pending);
+      throw new BadRequestException("对象存储中未找到已上传的文件,请重新上传");
+    }
+    if (stat.size !== pending.sizeBytes) {
+      await this.discardPendingUpload(pending);
+      throw new BadRequestException("上传内容不完整,请重新上传");
+    }
+
+    try {
+      const asset = await this.reserveAssetWithinQuota(
+        userId,
+        pending.sizeBytes,
+        {
+          workspaceId: pending.workspaceId,
+          folderId: pending.folderId,
+          fileId: pending.fileId,
+          storageKey: pending.storageKey,
+          storageBackend: "oss",
+          kind: pending.fileId ? "embedded" : "standalone",
+          filename: pending.filename,
+          mimeType: pending.mimeType,
+          sizeBytes: pending.sizeBytes,
+          uploadedBy: userId,
+        },
+      );
+      await this.prisma.pendingUpload.delete({ where: { id: pending.id } });
+      return {
+        ...asset,
+        url: this.getAssetUrl(asset.id),
+      };
+    } catch (caught) {
+      await this.discardPendingUpload(pending);
+      throw caught;
+    }
+  }
+
+  /** 客户端取消或失败时释放预留并清理对象;重复调用安全。 */
+  async abortAssetUpload(userId: string | null, uploadId: string) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+    const pending = await this.prisma.pendingUpload.findUnique({
+      where: { id: uploadId },
+    });
+    if (
+      pending &&
+      pending.kind === "asset" &&
+      pending.uploadedBy === userId
+    ) {
+      await this.discardPendingUpload(pending);
+    }
+    return { ok: true as const };
+  }
+
+  private async requirePendingUpload(
+    userId: string,
+    uploadId: string,
+    kind: "asset" | "classroom",
+  ) {
+    const pending = await this.prisma.pendingUpload.findUnique({
+      where: { id: uploadId },
+    });
+    if (!pending || pending.kind !== kind || pending.uploadedBy !== userId) {
+      throw new NotFoundException("上传任务不存在或已完成");
+    }
+    if (pending.expiresAt.getTime() <= Date.now()) {
+      await this.discardPendingUpload(pending);
+      throw new NotFoundException("上传任务已过期,请重新上传");
+    }
+    return pending;
+  }
+
+  /** 删除预留行并尽力清理对象;直入只签 OSS,因此固定回 OSS 后端。 */
+  private async discardPendingUpload(pending: PendingUpload) {
+    await this.prisma.pendingUpload
+      .delete({ where: { id: pending.id } })
+      .catch(() => undefined);
+    const backend = await this.storage.backendFor("oss").catch(() => null);
+    if (backend) {
+      await backend.removeObject(pending.storageKey).catch(() => undefined);
+    }
+  }
+
+  /** 惰性清理:签名新任务时回收该用户已过期的直入预留。 */
+  private async reapExpiredPendingUploads(userId: string) {
+    const expired = await this.prisma.pendingUpload.findMany({
+      where: { uploadedBy: userId, expiresAt: { lte: new Date() } },
+      take: 20,
+    });
+    for (const pending of expired) {
+      await this.discardPendingUpload(pending);
+    }
+  }
+
+  /** 直入签名的 UX 预检:重名与配额(含未确认的直入预留)。 */
+  private async assertDirectUploadQuotaAvailable(
+    userId: string,
+    context: { workspaceId: string; folderId: string | null; fileId: string | null; kind: "embedded" | "standalone" },
+    filename: string,
+    incomingBytes: number,
+  ) {
+    const duplicate =
+      context.kind === "standalone" && context.folderId
+        ? await this.prisma.fileAsset.findFirst({
+            where: {
+              folderId: context.folderId,
+              kind: "standalone",
+              filename,
+            },
+            select: { id: true },
+          })
+        : context.kind === "embedded" && context.fileId
+          ? await this.prisma.fileAsset.findFirst({
+              where: { fileId: context.fileId, kind: "embedded", filename },
+              select: { id: true },
+            })
+          : null;
+    if (duplicate) {
+      throw new ConflictException(
+        context.kind === "standalone"
+          ? "当前文件夹中已存在同名文件"
+          : "当前文档中已存在同名附件",
+      );
+    }
+
+    const [user, workspace] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { storageQuotaBytes: true },
+      }),
+      this.prisma.workspace.findUnique({
+        where: { id: context.workspaceId },
+        select: { memberAttachmentQuotaBytes: true },
+      }),
+    ]);
+    if (!user) throw new UnauthorizedException("Missing session");
+
+    const quotaBytes =
+      user.storageQuotaBytes ??
+      workspace?.memberAttachmentQuotaBytes ??
+      DEFAULT_MEMBER_ATTACHMENT_QUOTA_BYTES;
+    const [assetUsage, pendingUsage] = await Promise.all([
+      this.prisma.fileAsset.aggregate({
+        where: { uploadedBy: userId },
+        _sum: { sizeBytes: true },
+      }),
+      this.prisma.pendingUpload.aggregate({
+        where: {
+          uploadedBy: userId,
+          kind: "asset",
+          expiresAt: { gt: new Date() },
+        },
+        _sum: { sizeBytes: true },
+      }),
+    ]);
+    const total =
+      (assetUsage._sum.sizeBytes ?? 0) +
+      (pendingUsage._sum.sizeBytes ?? 0) +
+      incomingBytes;
+    if (total > quotaBytes) {
+      throw new BadRequestException(
+        `文档附件容量不足,当前上限为 ${formatStorageSize(quotaBytes)}`,
+      );
+    }
   }
 
   async getAssetForDownload(
@@ -872,6 +1121,23 @@ function assertStandaloneTypeAllowed(filename: string, mimeType: string) {
   throw new BadRequestException(
     "该类型不支持直接上传到文件夹，支持 PDF、Office 文档、文本和图片",
   );
+}
+
+/**
+ * 签名直入拿不到文件内容,只能基于文件名与浏览器声明的 MIME 归一化;
+ * 无法做魔数检测,SVG 一律按扩展名/声明拒绝。
+ */
+function normalizeDirectUploadMime(filename: string, declared?: string) {
+  const declaredMime = declared?.trim().toLowerCase() ?? "";
+  if (
+    filename.toLowerCase().endsWith(".svg") ||
+    declaredMime === "image/svg+xml"
+  ) {
+    throw new BadRequestException("不支持上传 SVG 文件");
+  }
+  return /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(declaredMime)
+    ? declaredMime
+    : "application/octet-stream";
 }
 
 export function normalizeAssetMimeType(file: UploadedAssetFile) {

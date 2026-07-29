@@ -85,6 +85,16 @@ enum StorageDownloadMode {
   direct
 }
 
+enum StorageUploadMode {
+  relay
+  direct
+}
+
+enum PendingUploadKind {
+  asset
+  classroom
+}
+
 enum FileAssetKind {
   embedded
   standalone
@@ -187,6 +197,7 @@ model Workspace {
   teachingDecks     TeachingDeck[]
   classrooms        Classroom[]
   storageSettings   StorageSettings?
+  pendingUploads    PendingUpload[]
 }
 
 model ForumCategory {
@@ -649,17 +660,43 @@ model StorageSettings {
   workspaceId        String              @unique
   backend            StorageBackend      @default(minio)
   downloadMode       StorageDownloadMode @default(proxy)
+  uploadMode         StorageUploadMode   @default(relay)
   ossRegion          String?
   ossBucket          String?
   ossEndpoint        String?
   ossAccessKeyId     String?
   ossAccessKeySecret String?
   ossInternal        Boolean             @default(false)
+  ossInternalEndpoint String?
   updatedById        String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+/**
+ * 签名直入(浏览器直传 OSS)的两阶段预留。签名时创建,确认上传后删除;
+ * 超时未确认的行由后续签名请求惰性清理,对象尽力删除。
+ */
+model PendingUpload {
+  id           String            @id @default(cuid())
+  kind         PendingUploadKind
+  workspaceId  String
+  folderId     String?
+  fileId       String?
+  classroomId  String?
+  filename     String
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String            @unique
+  uploadedBy   String
+  createdAt    DateTime          @default(now())
+  expiresAt    DateTime
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([uploadedBy, expiresAt])
 }
 
 model AiSettings {

@@ -37,6 +37,7 @@ import type {
 import {
   API_URL,
   ApiError,
+  putWithProgress,
   redirectToLoginOnUnauthorized,
   request,
   uploadFormData,
@@ -576,12 +577,14 @@ export function setHttpsAutoRenew(enabled: boolean) {
 export interface StorageSettings {
   backend: "minio" | "oss";
   downloadMode: "proxy" | "direct";
+  uploadMode: "relay" | "direct";
   minio: { endpoint: string; bucket: string };
   oss: {
     region: string | null;
     bucket: string | null;
     endpoint: string | null;
     internal: boolean;
+    internalEndpoint: string | null;
     accessKeyId: string | null;
     secretConfigured: boolean;
   };
@@ -598,6 +601,8 @@ export interface OssSettingsInput {
   bucket?: string;
   endpoint?: string;
   internal?: boolean;
+  /** 自定义内网 Endpoint;留空用阿里云默认内网域名 */
+  internalEndpoint?: string;
   accessKeyId?: string;
   accessKeySecret?: string;
 }
@@ -609,6 +614,7 @@ export function getStorageSettings() {
 export function updateStorageSettings(input: {
   backend?: "minio" | "oss";
   downloadMode?: "proxy" | "direct";
+  uploadMode?: "relay" | "direct";
   oss?: OssSettingsInput;
 }) {
   return request<{ storage: StorageSettings }>("/admin/settings/storage", {
@@ -1224,8 +1230,68 @@ export async function uploadAsset(
   );
 }
 
-export function listLibraryAssets() {
-  return request<{ assets: FileAssetSummary[] }>("/assets/library");
+function isAbortError(caught: unknown) {
+  return caught instanceof DOMException && caught.name === "AbortError";
+}
+
+function abortAssetUpload(uploadId: string) {
+  return request<{ ok: boolean }>("/assets/upload-abort", {
+    method: "POST",
+    body: JSON.stringify({ uploadId }),
+  }).catch(() => undefined);
+}
+
+/**
+ * 优先签名直入(浏览器直传 OSS):签名接口 501(存储配置不支持)或
+ * 直传失败(多为 Bucket 未配 CORS)时自动回退服务器中转,调用方
+ * 无需感知存储模式。配额/重名/权限等校验错误直接抛出,不再回退
+ * 重传一遍。
+ */
+export async function uploadAssetDirect(
+  input: {
+    file: File;
+    fileId?: string;
+    folderId?: string;
+  },
+  options?: UploadRequestOptions,
+) {
+  let signed: { uploadId: string; url: string };
+  try {
+    signed = await request<{ uploadId: string; url: string }>(
+      "/assets/upload-url",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          filename: input.file.name,
+          sizeBytes: input.file.size,
+          mimeType: input.file.type || undefined,
+          fileId: input.fileId,
+          folderId: input.folderId,
+        }),
+      },
+    );
+  } catch (caught) {
+    if (caught instanceof ApiError && caught.status === 501) {
+      return uploadAsset(input, options);
+    }
+    throw caught;
+  }
+
+  try {
+    await putWithProgress(signed.url, input.file, options);
+  } catch (caught) {
+    await abortAssetUpload(signed.uploadId);
+    if (isAbortError(caught)) throw caught;
+    return uploadAsset(input, options);
+  }
+
+  return request<{ asset: FileAssetSummary }>("/assets/upload-confirm", {
+    method: "POST",
+    body: JSON.stringify({ uploadId: signed.uploadId }),
+  });
+}
+
+export function listLibraryAssets() {  return request<{ assets: FileAssetSummary[] }>("/assets/library");
 }
 
 export function listAssetReferences(assetId: string) {
@@ -1520,6 +1586,52 @@ export async function uploadClassroomFile(
     "上传课堂文件失败",
     options,
   );
+}
+
+/**
+ * 课堂文件的签名直入版本,回退策略同 uploadAssetDirect。
+ */
+export async function uploadClassroomFileDirect(
+  classroomId: string,
+  file: File,
+  options?: UploadRequestOptions,
+) {
+  const base = `/classrooms/${classroomId}/files`;
+  let signed: { uploadId: string; url: string };
+  try {
+    signed = await request<{ uploadId: string; url: string }>(
+      `${base}/upload-url`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          filename: file.name,
+          sizeBytes: file.size,
+          mimeType: file.type || undefined,
+        }),
+      },
+    );
+  } catch (caught) {
+    if (caught instanceof ApiError && caught.status === 501) {
+      return uploadClassroomFile(classroomId, file, options);
+    }
+    throw caught;
+  }
+
+  try {
+    await putWithProgress(signed.url, file, options);
+  } catch (caught) {
+    await request<{ ok: boolean }>(`${base}/upload-abort`, {
+      method: "POST",
+      body: JSON.stringify({ uploadId: signed.uploadId }),
+    }).catch(() => undefined);
+    if (isAbortError(caught)) throw caught;
+    return uploadClassroomFile(classroomId, file, options);
+  }
+
+  return request<{ file: ClassroomFileSummary }>(`${base}/upload-confirm`, {
+    method: "POST",
+    body: JSON.stringify({ uploadId: signed.uploadId }),
+  });
 }
 
 export function deleteClassroomFile(classroomId: string, fileId: string) {

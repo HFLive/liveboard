@@ -19,11 +19,13 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
   ValidateNested,
 } from "class-validator";
 import type { FileType } from "@liveboard/shared";
@@ -182,6 +184,36 @@ class UploadAssetDto {
   @IsOptional()
   @IsString()
   fileId?: string;
+}
+
+class SignAssetUploadDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  filename!: string;
+
+  @IsInt()
+  @Min(1)
+  sizeBytes!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  mimeType?: string;
+
+  @IsOptional()
+  @IsString()
+  folderId?: string;
+
+  @IsOptional()
+  @IsString()
+  fileId?: string;
+}
+
+class ConfirmAssetUploadDto {
+  @IsString()
+  @IsNotEmpty()
+  uploadId!: string;
 }
 
 class RenameAssetDto {
@@ -419,6 +451,30 @@ export class FilesController {
     }
   }
 
+  @Post("assets/upload-url")
+  async signAssetUpload(
+    @CurrentUserId() userId: string | null,
+    @Body() body: SignAssetUploadDto,
+  ) {
+    return this.assetsService.signAssetUpload(userId, body);
+  }
+
+  @Post("assets/upload-confirm")
+  async confirmAssetUpload(
+    @CurrentUserId() userId: string | null,
+    @Body() body: ConfirmAssetUploadDto,
+  ) {
+    return { asset: await this.assetsService.confirmAssetUpload(userId, body.uploadId) };
+  }
+
+  @Post("assets/upload-abort")
+  async abortAssetUpload(
+    @CurrentUserId() userId: string | null,
+    @Body() body: ConfirmAssetUploadDto,
+  ) {
+    return this.assetsService.abortAssetUpload(userId, body.uploadId);
+  }
+
   @Get("assets/library")
   async listLibraryAssets(@CurrentUserId() userId: string | null) {
     return {
@@ -484,6 +540,11 @@ export class FilesController {
       "Content-Type",
       inline ? asset.mimeType : "application/octet-stream",
     );
+    if (inline) {
+      // 资产内容不可变（id 固定对应一个对象），让浏览器缓存预览图，
+      // 避免每次打开页面都重走一遍带宽受限的中转下载。
+      res.setHeader("Cache-Control", "private, max-age=86400, immutable");
+    }
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader(
       "Cross-Origin-Resource-Policy",
@@ -494,6 +555,7 @@ export class FilesController {
       "Content-Disposition",
       `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(asset.filename)}"`,
     );
+    res.setHeader("Content-Length", String(asset.sizeBytes));
     stream!.pipe(res);
   }
 

@@ -59,7 +59,7 @@ import {
   reorderBlocks,
   updateFile,
   updateBlock,
-  uploadAsset,
+  uploadAssetDirect,
   upsertPermissionGrant,
 } from "@/lib/api";
 import {
@@ -1039,7 +1039,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
 
     try {
       const outcomes = await uploadFiles(jobs, (job, options) =>
-        uploadAsset({ file: job.file, fileId }, options),
+        uploadAssetDirect({ file: job.file, fileId }, options),
       );
       const assets = outcomes.flatMap((outcome) =>
         outcome.result ? [outcome.result.asset] : [],
