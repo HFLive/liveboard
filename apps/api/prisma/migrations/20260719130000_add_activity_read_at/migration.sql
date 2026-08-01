@@ -1,1 +1,0 @@
-ALTER TABLE "User" ADD COLUMN "activityReadAt" TIMESTAMP(3);

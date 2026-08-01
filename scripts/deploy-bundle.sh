@@ -105,6 +105,7 @@ for file in \
   "$SOURCE_BUNDLE_DIR/liveboard-https-agent.service" \
   "$SOURCE_BUNDLE_DIR/liveboard-https-renew.service" \
   "$SOURCE_BUNDLE_DIR/liveboard-https-renew.timer" \
+  "$SOURCE_BUNDLE_DIR/legacy-baseline-transition.sh" \
   "$SOURCE_BUNDLE_DIR/SHA256SUMS" \
   "$SOURCE_BUNDLE_DIR/.env.example"; do
   if [ ! -f "$file" ]; then
@@ -361,6 +362,32 @@ find "$BACKUP_DIR" -type f -name 'postgres-*.dump' -print \
   | while IFS= read -r expired_backup; do
       rm -f "$expired_backup"
     done
+
+# 仓库已收口为单 baseline。既有自托管数据库仍保存旧 migration 历史，直接
+# 运行 migrate deploy 会重复建表，因此备份完成后、正常 migrate deploy 前
+# 先做受控历史过渡（精确校验旧历史 → 桥接 SQL → schema diff → resolve baseline）。
+EXISTING_MIGRATIONS=$(compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT COUNT(*) FROM _prisma_migrations"' 2>/dev/null || echo 0)
+if [ "${EXISTING_MIGRATIONS:-0}" -gt 0 ] 2>/dev/null; then
+  echo "检测到既有数据库 migration 历史（${EXISTING_MIGRATIONS} 条），执行 baseline 历史过渡…"
+  cat > "$RELEASE_DIR/transition-psql.sh" <<'LBWEOF'
+#!/bin/sh
+db=$(printf '%s' "$DATABASE_URL" | sed -E 's|.*/([^/?]+)(\?.*)?$|\1|')
+shift
+exec docker compose exec -T postgres sh -c "exec psql -U \"\$POSTGRES_USER\" -d \"$db\" \"\$@\"" psql-wrapper "$@"
+LBWEOF
+  cat > "$RELEASE_DIR/transition-prisma.sh" <<'LBWEOF'
+#!/bin/sh
+exec docker compose run --rm --no-deps -e DATABASE_URL="$DATABASE_URL" migrate node node_modules/prisma/build/index.js "$@"
+LBWEOF
+  chmod +x "$RELEASE_DIR/transition-psql.sh" "$RELEASE_DIR/transition-prisma.sh"
+  if ! DATABASE_URL="postgresql://${POSTGRES_USER:-liveboard}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-liveboard}?schema=public" \
+    PSQL="$RELEASE_DIR/transition-psql.sh" \
+    PRISMA_CMD="$RELEASE_DIR/transition-prisma.sh" \
+    sh "$RELEASE_DIR/legacy-baseline-transition.sh" --execute; then
+    echo "数据库历史过渡失败，请先检查数据库后重试。" >&2
+    exit 1
+  fi
+fi
 
 echo "执行数据库迁移并更新应用服务..."
 compose up -d --no-build --force-recreate migrate api web

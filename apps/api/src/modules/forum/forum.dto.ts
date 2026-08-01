@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
@@ -122,4 +123,26 @@ export class UpdateForumCategoryDto {
   @IsInt()
   @Min(0)
   sortOrder?: number;
+}
+
+export class SignForumImageUploadDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  filename!: string;
+
+  @IsInt()
+  @Min(1)
+  sizeBytes!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  mimeType?: string;
+}
+
+export class ConfirmForumImageUploadDto {
+  @IsString()
+  @IsNotEmpty()
+  uploadId!: string;
 }

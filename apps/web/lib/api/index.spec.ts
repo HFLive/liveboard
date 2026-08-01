@@ -346,8 +346,13 @@ describe("Direct asset upload API", () => {
       .mockResolvedValueOnce(
         jsonResponse({
           uploadId: "u1",
-          url: "https://oss.example/upload",
-          fields: { key: "workspace/notes.txt", policy: "signed-policy" },
+          instruction: {
+            transport: "form_post",
+            url: "https://oss.example/upload",
+            fields: { key: "workspace/notes.txt", policy: "signed-policy" },
+            expiresAt: "2026-07-29T00:10:00.000Z",
+          },
+          expiresAt: "2026-07-29T00:10:00.000Z",
         }),
       )
       .mockResolvedValueOnce(jsonResponse({ asset: { id: "asset-1" } }));
@@ -423,8 +428,13 @@ describe("Direct asset upload API", () => {
       .mockResolvedValueOnce(
         jsonResponse({
           uploadId: "u1",
-          url: "https://oss.example/upload",
-          fields: { key: "workspace/notes.txt", policy: "signed-policy" },
+          instruction: {
+            transport: "form_post",
+            url: "https://oss.example/upload",
+            fields: { key: "workspace/notes.txt", policy: "signed-policy" },
+            expiresAt: "2026-07-29T00:10:00.000Z",
+          },
+          expiresAt: "2026-07-29T00:10:00.000Z",
         }),
       )
       .mockResolvedValueOnce(jsonResponse({ ok: true }));

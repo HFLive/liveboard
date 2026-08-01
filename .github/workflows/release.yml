@@ -122,11 +122,13 @@ jobs:
           cp scripts/deploy-bundle.sh "${bundle_dir}/deploy.sh"
           cp scripts/liveboard-https-agent.py "${bundle_dir}/https-agent.py"
           cp scripts/liveboard-manager.sh "${bundle_dir}/manager.sh"
+          cp scripts/legacy-baseline-transition.sh "${bundle_dir}/legacy-baseline-transition.sh"
           chmod +x \
             "${bundle_dir}/deploy.sh" \
             "${bundle_dir}/https-agent.py" \
             "${bundle_dir}/lego" \
-            "${bundle_dir}/manager.sh"
+            "${bundle_dir}/manager.sh" \
+            "${bundle_dir}/legacy-baseline-transition.sh"
 
           {
             echo "release=${GITHUB_REF_NAME}"
@@ -159,6 +161,7 @@ jobs:
               liveboard-https-agent.service \
               liveboard-https-renew.service \
               liveboard-https-renew.timer \
+              legacy-baseline-transition.sh \
               .env.example \
               manifest.txt \
               >SHA256SUMS

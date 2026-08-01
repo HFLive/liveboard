@@ -1,0 +1,9 @@
+{
+  "regions": ["sin1"],
+  "crons": [
+    {
+      "path": "/internal/cron/storage-cleanup",
+      "schedule": "3 4 * * *"
+    }
+  ]
+}

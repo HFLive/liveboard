@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -11,15 +12,26 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { isSuperAdmin } from "@liveboard/shared";
-import type { StorageSettings } from "@prisma/client";
+import type { PendingUpload, StorageSettings } from "@prisma/client";
 import { Client } from "minio";
 import { randomUUID } from "node:crypto";
+import {
+  getDeploymentTarget,
+  type DeploymentTarget,
+} from "../../common/deployment-target";
 import { AiSecretService } from "../ai/ai-secret.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { MinioStorageBackend } from "./minio-storage.backend";
 import { OssStorageBackend, type OssClientConfig } from "./oss-storage.backend";
+import {
+  R2_PRESIGN_PUT_TTL_SECONDS,
+  R2StorageBackend,
+  resolveR2ClientConfig,
+  type R2ClientConfig,
+} from "./r2-storage.backend";
 import type {
   ObjectStorageBackend,
+  ObjectUploadInstruction,
   StorageBackendName,
   StorageDownloadMode,
   StorageUploadMode,
@@ -55,20 +67,22 @@ export interface PresignDownloadTarget {
 export interface StorageFileDistribution {
   minio: { count: number; bytes: number };
   oss: { count: number; bytes: number };
+  r2: { count: number; bytes: number };
 }
 
 const SETTINGS_CACHE_TTL_MS = 30_000;
 const PRESIGN_EXPIRY_SECONDS = 600;
 const PENDING_UPLOAD_CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
 const PENDING_UPLOAD_CLEANUP_BATCH_SIZE = 100;
-const BACKENDS: StorageBackendName[] = ["minio", "oss"];
+const BACKENDS: StorageBackendName[] = ["minio", "oss", "r2"];
 const DOWNLOAD_MODES: StorageDownloadMode[] = ["proxy", "direct"];
 const UPLOAD_MODES: StorageUploadMode[] = ["relay", "direct"];
 
 @Injectable()
 export class StorageService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(StorageService.name);
-  private readonly minioClient: Client;
+  private readonly deploymentTarget: DeploymentTarget;
+  private minioClient: Client | null = null;
   private readonly minioBucket: string;
   private readonly minioEndpointDisplay: string;
   private minioBackend: MinioStorageBackend | null = null;
@@ -76,58 +90,45 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     fingerprint: string;
     backend: OssStorageBackend;
   } | null = null;
+  private r2Backend: R2StorageBackend | null = null;
   private settingsCache: { at: number; value: StorageSettings | null } | null =
     null;
   private pendingUploadCleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
-    config: ConfigService,
+    private readonly config: ConfigService,
     private readonly secrets: AiSecretService,
   ) {
+    this.deploymentTarget = getDeploymentTarget(config);
+    this.minioBucket = config.get<string>("MINIO_BUCKET", "liveboard-assets");
     const endpoint = config.get<string>("MINIO_ENDPOINT", "localhost");
     const port = config.get<number>("MINIO_PORT", 9000);
-    this.minioBucket = config.get<string>("MINIO_BUCKET", "liveboard-assets");
     this.minioEndpointDisplay = `${endpoint}:${port}`;
-    const accessKey = config.get<string>("MINIO_ROOT_USER", "liveboard");
-    const secretKey = config.get<string>(
-      "MINIO_ROOT_PASSWORD",
-      "replace-with-a-strong-password",
-    );
-    if (
-      process.env.NODE_ENV === "production" &&
-      (!accessKey ||
-        !secretKey ||
-        secretKey === "replace-with-a-strong-password")
-    ) {
-      throw new Error(
-        "Secure MinIO credentials must be configured in production",
-      );
+    // Vercel 下不读取 MinIO 凭据；R2 配置必须完整，缺失时启动失败并列出变量名。
+    if (this.deploymentTarget === "vercel") {
+      resolveR2ClientConfig(this.env());
     }
-    this.minioClient = new Client({
-      endPoint: endpoint,
-      port,
-      useSSL: config.get<string>("MINIO_USE_SSL", "false") === "true",
-      accessKey,
-      secretKey,
-      partSize: ATOMIC_UPLOAD_PART_SIZE_BYTES,
-    });
   }
 
   onModuleInit() {
-    void this.cleanupExpiredPendingUploads().catch((caught: unknown) => {
-      this.logger.warn(
-        `清理过期 OSS 上传任务失败: ${caught instanceof Error ? caught.message : String(caught)}`,
-      );
-    });
-    this.pendingUploadCleanupTimer = setInterval(() => {
+    // Vercel 是 Serverless，禁止进程内 setInterval；过期上传清理改由每日
+    // Cron、请求时惰性清理和 R2 Lifecycle 共同完成。
+    if (this.deploymentTarget !== "vercel") {
       void this.cleanupExpiredPendingUploads().catch((caught: unknown) => {
         this.logger.warn(
           `清理过期 OSS 上传任务失败: ${caught instanceof Error ? caught.message : String(caught)}`,
         );
       });
-    }, PENDING_UPLOAD_CLEANUP_INTERVAL_MS);
-    this.pendingUploadCleanupTimer.unref();
+      this.pendingUploadCleanupTimer = setInterval(() => {
+        void this.cleanupExpiredPendingUploads().catch((caught: unknown) => {
+          this.logger.warn(
+            `清理过期 OSS 上传任务失败: ${caught instanceof Error ? caught.message : String(caught)}`,
+          );
+        });
+      }, PENDING_UPLOAD_CLEANUP_INTERVAL_MS);
+      this.pendingUploadCleanupTimer.unref();
+    }
   }
 
   onModuleDestroy() {
@@ -137,8 +138,94 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** 当前部署目标，供其他模块分支使用。 */
+  get target(): DeploymentTarget {
+    return this.deploymentTarget;
+  }
+
   /**
-   * 全局回收过期的 OSS 直传任务。先删除对象、再删除任务行；对象删除失败
+   * R2 直传的临时对象统一放在 `pending/` 前缀下，由 R2 Lifecycle 一天后
+   * 兜底删除；确认上传时服务端把对象复制到正式业务 Key 再删除临时对象。
+   * MinIO/OSS 直入没有 Lifecycle，临时对象直接写在正式 Key 上。
+   */
+  objectKeyForPendingUpload(
+    storageBackend: StorageBackendName,
+    storageKey: string,
+  ) {
+    return storageBackend === "r2" ? `pending/${storageKey}` : storageKey;
+  }
+
+  /**
+   * 清理 PendingUpload 时需要删除的全部对象 Key。R2 直传的临时对象在
+   * `pending/` 下，确认后复制出来的正式业务对象在 storageKey 下，两者都要
+   * 尽力删除（S3 对不存在 Key 的删除按成功处理，可安全重复）。
+   */
+  objectKeysToCleanForPendingUpload(
+    storageBackend: StorageBackendName,
+    storageKey: string,
+  ) {
+    return storageBackend === "r2"
+      ? [`pending/${storageKey}`, storageKey]
+      : [storageKey];
+  }
+
+  /**
+   * 按行内 backend 清理对象后再删除 PendingUpload 行（R2 同时清理
+   * `pending/` 临时 Key 与确认后复制的正式 Key）。任一对象删除失败时保留
+   * 任务行供后续重试，避免制造不可追踪的孤立对象。
+   */
+  async discardPendingUpload(pending: PendingUpload) {
+    const backend = await this.backendFor(
+      pending.storageBackend as StorageBackendName,
+    ).catch(() => null);
+    if (!backend) return false;
+    for (const key of this.objectKeysToCleanForPendingUpload(
+      pending.storageBackend as StorageBackendName,
+      pending.storageKey,
+    )) {
+      const removed = await backend
+        .removeObject(key)
+        .then(() => true)
+        .catch(() => false);
+      if (!removed) return false;
+    }
+    const deleted = await this.prisma.pendingUpload.deleteMany({
+      where: { id: pending.id },
+    });
+    return deleted.count > 0;
+  }
+
+  /**
+   * 直传确认：校验 PendingUpload 对应对象存在且大小精确匹配；R2 下把
+   * `pending/` 临时对象复制到正式业务 Key 并删除临时对象。
+   * 任何校验失败都会抛异常，调用方负责清理 PendingUpload。
+   */
+  async verifyAndFinalizePendingObject(pending: {
+    storageBackend: StorageBackendName;
+    storageKey: string;
+    mimeType: string;
+    sizeBytes: number;
+  }) {
+    const backend = await this.backendFor(pending.storageBackend);
+    const objectKey = this.objectKeyForPendingUpload(
+      pending.storageBackend,
+      pending.storageKey,
+    );
+    const stat = await backend.statObject(objectKey).catch(() => null);
+    if (!stat) {
+      throw new BadRequestException("对象存储中未找到已上传的文件,请重新上传");
+    }
+    if (stat.size !== pending.sizeBytes) {
+      throw new BadRequestException("上传内容不完整,请重新上传");
+    }
+    if (pending.storageBackend === "r2") {
+      await backend.copyObject(objectKey, pending.storageKey, pending.mimeType);
+      await backend.removeObject(objectKey).catch(() => undefined);
+    }
+  }
+
+  /**
+   * 全局回收过期的直传任务。先删除对象、再删除任务行；对象删除失败
    * 时保留任务供下轮重试，避免把占用空间的对象变成不可追踪孤儿。
    */
   async cleanupExpiredPendingUploads() {
@@ -149,15 +236,27 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     });
     if (expired.length === 0) return 0;
 
-    const backend = await this.backendFor("oss");
     let cleaned = 0;
     for (const pending of expired) {
-      // S3/OSS DeleteObject 对不存在的 Key 也按成功处理，因此可安全重试。
-      const removed = await backend
-        .removeObject(pending.storageKey)
-        .then(() => true)
-        .catch(() => false);
-      if (!removed) continue;
+      // S3/R2 DeleteObject 对不存在的 Key 也按成功处理，因此可安全重试。
+      const backend = await this.backendFor(
+        pending.storageBackend as StorageBackendName,
+      );
+      let allRemoved = true;
+      for (const key of this.objectKeysToCleanForPendingUpload(
+        pending.storageBackend as StorageBackendName,
+        pending.storageKey,
+      )) {
+        const removed = await backend
+          .removeObject(key)
+          .then(() => true)
+          .catch(() => false);
+        if (!removed) {
+          allRemoved = false;
+          break;
+        }
+      }
+      if (!allRemoved) continue;
       const result = await this.prisma.pendingUpload.deleteMany({
         where: { id: pending.id, expiresAt: { lte: new Date() } },
       });
@@ -166,8 +265,9 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     return cleaned;
   }
 
-  /** 当前激活的上传后端。 */
+  /** 当前激活的上传后端。Vercel 固定为 R2，忽略数据库中的选择。 */
   async activeBackend(): Promise<ObjectStorageBackend> {
+    if (this.deploymentTarget === "vercel") return this.backendFor("r2");
     const settings = await this.getSettings();
     return this.backendFor(settings?.backend ?? "minio");
   }
@@ -175,11 +275,24 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
   /** 按对象自身记录的后端解析，保证切换后历史文件仍可读写。 */
   async backendFor(name: StorageBackendName): Promise<ObjectStorageBackend> {
     if (name === "minio") {
+      if (this.deploymentTarget === "vercel") {
+        throw new ServiceUnavailableException("Vercel 环境不使用 MinIO 存储");
+      }
       this.minioBackend ??= new MinioStorageBackend(
-        this.minioClient,
+        this.getMinioClient(),
         this.minioBucket,
       );
       return this.minioBackend;
+    }
+    if (name === "r2") {
+      if (!this.r2Backend) {
+        // Vercel 已在构造时校验；自托管环境按需从环境变量解析，缺 R2 配置时
+        // 无法读取已经迁移到 R2 的对象。
+        this.r2Backend = new R2StorageBackend(
+          resolveR2ClientConfig(this.env()),
+        );
+      }
+      return this.r2Backend;
     }
     const settings = await this.getSettings();
     const config = this.resolveOssClientConfig(settings);
@@ -198,43 +311,71 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
 
   /** 当前激活后端的下载模式。 */
   async activeDownloadMode(): Promise<StorageDownloadMode> {
+    if (this.deploymentTarget === "vercel") return "direct";
     const settings = await this.getSettings();
     return settings?.downloadMode ?? "proxy";
   }
 
+  /** 当前激活后端的上传模式。 */
+  async activeUploadMode(): Promise<StorageUploadMode> {
+    if (this.deploymentTarget === "vercel") return "direct";
+    const settings = await this.getSettings();
+    return settings?.uploadMode ?? "relay";
+  }
+
   /**
-   * 签名直入模式下生成带服务端约束的 POST Policy;中转模式、非 OSS
-   * 后端或后端不支持时返回 null,调用方回退到服务器中转上传。
+   * 签名直入模式下生成上传指令（form_post | put 判别联合）；中转模式、
+   * 后端不支持或 uploadMode 非 direct 时返回 null，调用方回退到服务器中转上传。
    */
-  async presignUpload(
+  async signUpload(
     storageBackend: StorageBackendName,
     key: string,
     options: { sizeBytes: number; mimeType: string },
-  ) {
-    if (storageBackend !== "oss") return null;
-    const settings = await this.getSettings();
-    if ((settings?.uploadMode ?? "relay") !== "direct") return null;
+  ): Promise<ObjectUploadInstruction | null> {
+    if ((await this.activeUploadMode()) !== "direct") return null;
     const backend = await this.backendFor(storageBackend);
-    return backend.presignUpload(key, {
-      expirySeconds: PRESIGN_EXPIRY_SECONDS,
+    const expirySeconds =
+      storageBackend === "r2"
+        ? R2_PRESIGN_PUT_TTL_SECONDS
+        : PRESIGN_EXPIRY_SECONDS;
+    const expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
+    if (storageBackend === "r2") {
+      const put = await backend.presignPut(key, {
+        expirySeconds,
+        ...options,
+      });
+      if (!put) return null;
+      return {
+        transport: "put",
+        url: put.url,
+        headers: put.headers,
+        expiresAt,
+      };
+    }
+    const form = await backend.presignUpload(key, {
+      expirySeconds,
       ...options,
     });
+    if (!form) return null;
+    return {
+      transport: "form_post",
+      url: form.url,
+      fields: form.fields,
+      expiresAt,
+    };
   }
 
   /**
    * 直出模式下为对象生成预签名地址；中转模式或后端不支持时返回 null，
-   * 调用方回退到服务器流式中转。
+   * 调用方回退到服务器流式中转。inline 资源统一由 API 中转（签名 URL
+   * 无法覆盖 nosniff/CORP/Cache-Control，且 OSS 默认域名会阻止内联预览）。
    */
   async presignDownload(
     storageBackend: StorageBackendName,
     key: string,
     target: PresignDownloadTarget,
   ): Promise<string | null> {
-    const settings = await this.getSettings();
-    if ((settings?.downloadMode ?? "proxy") !== "direct") return null;
-    // 阿里云 OSS 默认域名会阻止浏览器内联预览签名 URL。图片、头像、
-    // Banner 和 favicon 等 inline 资源统一由 API 中转，只有明确下载的
-    // attachment 才签名直出，避免出现文件可下载但 <img> 无法显示。
+    if ((await this.activeDownloadMode()) !== "direct") return null;
     if (target.inline) return null;
     const backend = await this.backendFor(storageBackend);
     return backend.presignGet(key, {
@@ -255,6 +396,19 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
 
   async getSettingsForAdmin(userId: string | null) {
     await this.requireSuperAdmin(userId);
+    if (this.deploymentTarget === "vercel") {
+      this.r2Backend ??= new R2StorageBackend(
+        resolveR2ClientConfig(this.env()),
+      );
+      const [healthy, fileDistribution] = await Promise.all([
+        this.r2Backend
+          .healthCheck()
+          .then(() => true)
+          .catch(() => false),
+        this.fileDistribution(),
+      ]);
+      return this.toPublicSettingsVercel(healthy, fileDistribution);
+    }
     const settings = await this.getSettings();
     const [healthy, fileDistribution] = await Promise.all([
       this.activeBackend()
@@ -270,6 +424,12 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     userId: string | null,
     input: UpdateStorageSettingsInput,
   ) {
+    if (this.deploymentTarget === "vercel") {
+      await this.requireSuperAdmin(userId);
+      throw new ConflictException(
+        "Vercel 环境的存储后端由环境变量固定为 Cloudflare R2，不能在此修改",
+      );
+    }
     const user = await this.requireSuperAdmin(userId);
     const backend = parseEnum(input.backend, BACKENDS, "存储后端");
     const downloadMode = parseEnum(
@@ -333,6 +493,12 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
   }
 
   async testConnection(userId: string | null, input: OssSettingsInput) {
+    if (this.deploymentTarget === "vercel") {
+      await this.requireSuperAdmin(userId);
+      throw new ConflictException(
+        "Vercel 环境使用 R2，不支持测试阿里云 OSS 连接",
+      );
+    }
     await this.requireSuperAdmin(userId);
     const existing = await this.getSettings();
     const merged = this.mergeOssInput(existing, input);
@@ -431,7 +597,7 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** 统计课堂文件与文档附件分别落在服务器存储 / OSS 上的数量与体积。 */
+  /** 统计课堂文件与文档附件分别落在各后端上的数量与体积。 */
   private async fileDistribution(): Promise<StorageFileDistribution> {
     const [classroomFiles, fileAssets] = await Promise.all([
       this.prisma.classroomFile.groupBy({
@@ -448,12 +614,17 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     const distribution: StorageFileDistribution = {
       minio: { count: 0, bytes: 0 },
       oss: { count: 0, bytes: 0 },
+      r2: { count: 0, bytes: 0 },
     };
     for (const row of [...classroomFiles, ...fileAssets]) {
-      const bucket =
-        row.storageBackend === "oss" ? distribution.oss : distribution.minio;
-      bucket.count += row._count._all;
-      bucket.bytes += row._sum.sizeBytes ?? 0;
+      const key =
+        row.storageBackend === "oss"
+          ? "oss"
+          : row.storageBackend === "r2"
+            ? "r2"
+            : "minio";
+      distribution[key].count += row._count._all;
+      distribution[key].bytes += row._sum.sizeBytes ?? 0;
     }
     return distribution;
   }
@@ -494,6 +665,24 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     return user;
   }
 
+  private toPublicSettingsVercel(
+    healthy: boolean,
+    fileDistribution: StorageFileDistribution,
+  ) {
+    const config = resolveR2ClientConfig(this.env());
+    return {
+      backend: "r2",
+      source: "environment",
+      editable: false,
+      bucket: config.bucket,
+      activeBackendHealthy: healthy,
+      uploadMode: "direct",
+      downloadMode: "direct",
+      fileDistribution,
+      updatedAt: null,
+    };
+  }
+
   private toPublicSettings(
     settings: StorageSettings | null,
     activeBackendHealthy: boolean,
@@ -519,6 +708,45 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
       activeBackendHealthy,
       fileDistribution,
       updatedAt: settings?.updatedAt.toISOString() ?? null,
+    };
+  }
+
+  private getMinioClient() {
+    if (this.minioClient) return this.minioClient;
+    const endpoint = this.config.get<string>("MINIO_ENDPOINT", "localhost");
+    const port = this.config.get<number>("MINIO_PORT", 9000);
+    const accessKey = this.config.get<string>("MINIO_ROOT_USER", "liveboard");
+    const secretKey = this.config.get<string>(
+      "MINIO_ROOT_PASSWORD",
+      "replace-with-a-strong-password",
+    );
+    if (
+      process.env.NODE_ENV === "production" &&
+      (!accessKey ||
+        !secretKey ||
+        secretKey === "replace-with-a-strong-password")
+    ) {
+      throw new Error(
+        "Secure MinIO credentials must be configured in production",
+      );
+    }
+    this.minioClient = new Client({
+      endPoint: endpoint,
+      port,
+      useSSL: this.config.get<string>("MINIO_USE_SSL", "false") === "true",
+      accessKey,
+      secretKey,
+      partSize: ATOMIC_UPLOAD_PART_SIZE_BYTES,
+    });
+    return this.minioClient;
+  }
+
+  private env() {
+    return {
+      R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
+      R2_BUCKET: process.env.R2_BUCKET,
+      R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+      R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
     };
   }
 }

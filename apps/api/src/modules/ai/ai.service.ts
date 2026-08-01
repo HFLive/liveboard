@@ -1056,8 +1056,8 @@ export class AiService {
           ...getProviderSpecificBody(settings.baseUrl, settings.model),
         }),
         signal: signal
-          ? AbortSignal.any([signal, AbortSignal.timeout(120_000)])
-          : AbortSignal.timeout(120_000),
+          ? AbortSignal.any([signal, AbortSignal.timeout(110_000)])
+          : AbortSignal.timeout(110_000),
       });
     } catch {
       throw new ServiceUnavailableException("无法连接 AI 服务");

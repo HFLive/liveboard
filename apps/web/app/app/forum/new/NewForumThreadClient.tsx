@@ -8,14 +8,20 @@ import type { ForumCategorySummary } from "@liveboard/shared";
 import {
   createForumThread,
   listForumOverview,
-  uploadForumPostImages,
+  uploadForumPostImageDirect,
 } from "@/lib/api";
 import { APP_ROUTES, forumThread } from "@/lib/routes";
 import { ForumImagePicker } from "../ForumImagePicker";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import {
+  prepareUploadJobs,
+  useUploadTask,
+} from "@/components/upload/useUploadTask";
+import { UploadTaskToast } from "@/components/upload/UploadTaskToast";
 
 export function NewForumThreadClient() {
   const router = useRouter();
+  const { tasks, uploadFiles, cancelUpload, dismissUpload } = useUploadTask();
   const [categories, setCategories] = useState<ForumCategorySummary[]>([]);
   const [categoryId, setCategoryId] = useState("");
   const [title, setTitle] = useState("");
@@ -86,7 +92,18 @@ export function NewForumThreadClient() {
       }
 
       if (images.length > 0) {
-        await uploadForumPostImages(target.postId, images);
+        const jobs = prepareUploadJobs(images, [], "重复图片");
+        const outcomes = await uploadFiles(jobs, (job, uploadOptions) =>
+          uploadForumPostImageDirect(target.postId, job.file, uploadOptions),
+        );
+        const failed = outcomes.filter((outcome) => outcome.error);
+        if (failed.length > 0) {
+          throw new Error(
+            failed[0]?.error instanceof Error
+              ? failed[0].error.message
+              : "图片上传失败",
+          );
+        }
       }
 
       router.push(forumThread(target.threadId));
@@ -210,6 +227,11 @@ export function NewForumThreadClient() {
           </div>
         </form>
       </section>
+      <UploadTaskToast
+        tasks={tasks}
+        onCancel={cancelUpload}
+        onDismiss={dismissUpload}
+      />
     </div>
   );
 }

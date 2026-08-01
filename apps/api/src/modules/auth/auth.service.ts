@@ -3,6 +3,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  NotImplementedException,
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -12,9 +13,11 @@ import type {
   UserSummary,
 } from "@liveboard/shared";
 import argon2 from "argon2";
+import type { PendingUpload } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { PrismaService } from "../prisma/prisma.service";
+import type { StorageBackendName } from "../storage/storage-backend";
 import { StorageService } from "../storage/storage.service";
 import type { ChangePasswordDto, UpdateProfileDto } from "./auth.dto";
 import { LoginRateLimitService } from "./login-rate-limit.service";
@@ -28,6 +31,7 @@ export interface UploadedProfileImageFile {
 
 export const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024;
 export const MAX_BANNER_SIZE_BYTES = 5 * 1024 * 1024;
+const PENDING_UPLOAD_TTL_MS = 60 * 60 * 1000;
 const PROFILE_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 @Injectable()
@@ -281,6 +285,166 @@ export class AuthService {
     return this.toProfile(updated);
   }
 
+  /**
+   * Banner 直传第一步：校验并预留 PendingUpload，返回浏览器直传对象存储的
+   * 上传指令。Banner 上限 5MB，超过 Vercel 普通请求体限制，Vercel 下必须直传。
+   */
+  async signBannerUpload(
+    userId: string | null,
+    input: { filename: string; sizeBytes: number; mimeType?: string },
+  ) {
+    const user = await this.requireActiveUser(userId);
+    if (!Number.isInteger(input.sizeBytes) || input.sizeBytes <= 0) {
+      throw new BadRequestException("无效的文件大小");
+    }
+    if (input.sizeBytes > MAX_BANNER_SIZE_BYTES) {
+      throw new BadRequestException("Banner 图片不能超过 5MB");
+    }
+    const mimeType = normalizeDirectProfileMime(
+      input.filename,
+      input.mimeType,
+      "Banner",
+    );
+    const storageKey = `banners/${user.id}/${randomUUID()}.${profileImageExtension(mimeType)}`;
+    const backend = await this.storage.activeBackend();
+    const instruction = await this.storage.signUpload(
+      backend.name,
+      this.storage.objectKeyForPendingUpload(backend.name, storageKey),
+      { sizeBytes: input.sizeBytes, mimeType },
+    );
+    if (!instruction) {
+      throw new NotImplementedException(
+        "当前存储配置不支持签名直入,请改用服务器中转上传",
+      );
+    }
+    await this.reapExpiredPendingUploads(user.id);
+    const workspace = await this.getDefaultWorkspace();
+    const pending = await this.prisma.pendingUpload.create({
+      data: {
+        kind: "profile_banner",
+        workspaceId: workspace.id,
+        storageBackend: backend.name,
+        filename: "banner",
+        mimeType,
+        sizeBytes: input.sizeBytes,
+        storageKey,
+        uploadedBy: user.id,
+        expiresAt: new Date(Date.now() + PENDING_UPLOAD_TTL_MS),
+      },
+    });
+    return {
+      uploadId: pending.id,
+      instruction,
+      expiresAt: instruction.expiresAt,
+    };
+  }
+
+  /** Banner 直传第三步：校验对象与真实文件头后更新用户 Banner。 */
+  async confirmBannerUpload(userId: string | null, uploadId: string) {
+    const user = await this.requireActiveUser(userId);
+    const pending = await this.requirePendingUpload(user.id, uploadId);
+    try {
+      await this.storage.verifyAndFinalizePendingObject(pending);
+      const backend = await this.storage.backendFor(pending.storageBackend);
+      const buffer = await readStreamBuffer(
+        await backend.getObject(pending.storageKey),
+        MAX_BANNER_SIZE_BYTES,
+      );
+      const detectedMime = detectAvatarMimeType(buffer);
+      if (!detectedMime || !PROFILE_IMAGE_MIMES.has(detectedMime)) {
+        throw new BadRequestException("Banner 仅支持 PNG、JPEG 或 WebP 图片");
+      }
+
+      const updated = await this.prisma.$transaction(async (transaction) => {
+        const result = await transaction.user.update({
+          where: { id: user.id },
+          data: {
+            bannerStorageKey: pending.storageKey,
+            bannerMimeType: detectedMime,
+            bannerUpdatedAt: new Date(),
+            bannerStorageBackend: pending.storageBackend,
+          },
+        });
+        await transaction.pendingUpload.delete({
+          where: { id: pending.id },
+        });
+        return result;
+      });
+
+      // 更新成功后尽力删除旧 Banner；失败不回滚新 Banner。
+      if (
+        user.bannerStorageKey &&
+        user.bannerStorageKey !== pending.storageKey
+      ) {
+        const previous = await this.storage
+          .backendFor(user.bannerStorageBackend as StorageBackendName)
+          .catch(() => null);
+        if (previous) {
+          await previous
+            .removeObject(user.bannerStorageKey)
+            .catch(() => undefined);
+        }
+      }
+      return this.toProfile(updated);
+    } catch (caught) {
+      await this.storage.discardPendingUpload(pending);
+      throw caught;
+    }
+  }
+
+  /** Banner 直传取消或失败时释放预留并清理对象；重复调用安全。 */
+  async abortBannerUpload(userId: string | null, uploadId: string) {
+    const user = await this.requireActiveUser(userId);
+    const pending = await this.prisma.pendingUpload.findUnique({
+      where: { id: uploadId },
+    });
+    if (
+      pending &&
+      pending.kind === "profile_banner" &&
+      pending.uploadedBy === user.id
+    ) {
+      await this.storage.discardPendingUpload(pending);
+    }
+    return { ok: true as const };
+  }
+
+  private async requirePendingUpload(userId: string, uploadId: string) {
+    const pending = await this.prisma.pendingUpload.findUnique({
+      where: { id: uploadId },
+    });
+    if (
+      !pending ||
+      pending.kind !== "profile_banner" ||
+      pending.uploadedBy !== userId
+    ) {
+      throw new NotFoundException("上传任务不存在或已完成");
+    }
+    if (pending.expiresAt.getTime() <= Date.now()) {
+      await this.storage.discardPendingUpload(pending);
+      throw new NotFoundException("上传任务已过期,请重新上传");
+    }
+    return pending;
+  }
+
+  /** 惰性清理：签名新任务时回收该用户已过期的直入预留。 */
+  private async reapExpiredPendingUploads(userId: string) {
+    const expired = await this.prisma.pendingUpload.findMany({
+      where: { uploadedBy: userId, expiresAt: { lte: new Date() } },
+      take: 20,
+    });
+    for (const pending of expired) {
+      await this.storage.discardPendingUpload(pending);
+    }
+  }
+
+  private async getDefaultWorkspace() {
+    const workspace = await this.prisma.workspace.findFirst({
+      orderBy: { createdAt: "asc" },
+    });
+    if (!workspace) throw new NotFoundException("Workspace not found");
+    return workspace;
+  }
+
   async getAvatar(userId: string | null, targetUserId: string) {
     if (!userId) {
       throw new UnauthorizedException("Missing session");
@@ -485,6 +649,44 @@ function profileImageExtension(mimeType: string) {
   if (mimeType === "image/png") return "png";
   if (mimeType === "image/jpeg") return "jpg";
   return "webp";
+}
+
+/**
+ * 签名直入拿不到文件内容，只能基于文件名与浏览器声明的 MIME 归一化；
+ * 拒绝 SVG，只放行头像/Banner 允许的图片类型，真实文件头在 confirm 时校验。
+ */
+function normalizeDirectProfileMime(
+  filename: string,
+  declared?: string,
+  label = "图片",
+) {
+  const lowerName = filename.toLowerCase();
+  const declaredMime = declared?.trim().toLowerCase() ?? "";
+  if (lowerName.endsWith(".svg") || declaredMime === "image/svg+xml") {
+    throw new BadRequestException("不支持上传 SVG 文件");
+  }
+  if (PROFILE_IMAGE_MIMES.has(declaredMime)) return declaredMime;
+  if (lowerName.endsWith(".png")) return "image/png";
+  if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
+    return "image/jpeg";
+  }
+  if (lowerName.endsWith(".webp")) return "image/webp";
+  throw new BadRequestException(`${label}仅支持 PNG、JPEG 或 WebP 图片`);
+}
+
+async function readStreamBuffer(stream: Readable, maxBytes: number) {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of stream) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.length;
+    if (total > maxBytes) {
+      stream.destroy();
+      throw new BadRequestException("图片内容过大，无法处理");
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks, total);
 }
 
 function detectAvatarMimeType(buffer: Buffer) {

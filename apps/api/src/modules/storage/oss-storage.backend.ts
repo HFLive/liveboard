@@ -47,10 +47,14 @@ export class OssStorageBackend implements ObjectStorageBackend {
       : this.client;
   }
 
-  async putObject(key: string, data: Buffer, mimeType: string) {
-    await this.client.putObject(this.bucket, key, data, data.length, {
-      "Content-Type": mimeType,
-    });
+  async putObject(key: string, data: Buffer | Readable, mimeType: string) {
+    await this.client.putObject(
+      this.bucket,
+      key,
+      data,
+      Buffer.isBuffer(data) ? data.length : undefined,
+      { "Content-Type": mimeType },
+    );
   }
 
   async getObject(key: string) {
@@ -59,6 +63,14 @@ export class OssStorageBackend implements ObjectStorageBackend {
 
   async removeObject(key: string) {
     await this.client.removeObject(this.bucket, key);
+  }
+
+  async copyObject(fromKey: string, toKey: string, _mimeType: string) {
+    await this.client.copyObject(
+      this.bucket,
+      toKey,
+      `/${this.bucket}/${fromKey}`,
+    );
   }
 
   presignGet(key: string, options: PresignDownloadOptions) {
@@ -104,6 +116,17 @@ export class OssStorageBackend implements ObjectStorageBackend {
         ]),
       ),
     };
+  }
+
+  presignPut(
+    _key: string,
+    _options: {
+      expirySeconds: number;
+      sizeBytes: number;
+      mimeType: string;
+    },
+  ) {
+    return Promise.resolve(null);
   }
 
   async statObject(key: string) {

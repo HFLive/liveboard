@@ -14,6 +14,7 @@ import { Readable } from "node:stream";
 import { Prisma, type PendingUpload } from "@prisma/client";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
+import type { StorageBackendName } from "../storage/storage-backend";
 import { StorageService } from "../storage/storage.service";
 import { DEFAULT_MEMBER_ATTACHMENT_QUOTA_BYTES } from "../../common/storage-quota";
 import { requireResourceName } from "../../common/resource-name";
@@ -158,9 +159,9 @@ export class AssetsService {
   }
 
   /**
-   * 签名直入第一步:校验并预留 PendingUpload,返回浏览器直传 OSS 的
-   * 带大小约束的 POST Policy。配额与重名的原子保证在 confirm 时由
-   * reserveAssetWithinQuota 完成,这里只做 UX 预检。
+   * 签名直入第一步:校验并预留 PendingUpload,返回浏览器直传对象存储的
+   * 上传指令(form_post | put 判别联合)。配额与重名的原子保证在 confirm
+   * 时由 reserveAssetWithinQuota 完成,这里只做 UX 预检。
    */
   async signAssetUpload(userId: string | null, input: SignAssetUploadInput) {
     if (!userId) {
@@ -186,11 +187,15 @@ export class AssetsService {
     const storageKey = `${context.workspaceId}/${new Date()
       .toISOString()
       .slice(0, 10)}/${randomUUID()}-${storageFilename}`;
-    const upload = await this.storage.presignUpload(backend.name, storageKey, {
-      sizeBytes: input.sizeBytes,
-      mimeType,
-    });
-    if (!upload) {
+    const instruction = await this.storage.signUpload(
+      backend.name,
+      this.storage.objectKeyForPendingUpload(backend.name, storageKey),
+      {
+        sizeBytes: input.sizeBytes,
+        mimeType,
+      },
+    );
+    if (!instruction) {
       throw new NotImplementedException(
         "当前存储配置不支持签名直入,请改用服务器中转上传",
       );
@@ -210,6 +215,7 @@ export class AssetsService {
         workspaceId: context.workspaceId,
         folderId: context.folderId,
         fileId: context.fileId,
+        storageBackend: backend.name,
         filename,
         mimeType,
         sizeBytes: input.sizeBytes,
@@ -219,7 +225,11 @@ export class AssetsService {
       },
     });
 
-    return { uploadId: pending.id, ...upload };
+    return {
+      uploadId: pending.id,
+      instruction,
+      expiresAt: instruction.expiresAt,
+    };
   }
 
   /** 签名直入第三步:对象校验通过后原子创建资产记录并释放预留。 */
@@ -228,19 +238,9 @@ export class AssetsService {
       throw new UnauthorizedException("Missing session");
     }
     const pending = await this.requirePendingUpload(userId, uploadId, "asset");
-    const backend = await this.storage.backendFor("oss");
-
-    const stat = await backend.statObject(pending.storageKey).catch(() => null);
-    if (!stat) {
-      await this.discardPendingUpload(pending);
-      throw new BadRequestException("对象存储中未找到已上传的文件,请重新上传");
-    }
-    if (stat.size !== pending.sizeBytes) {
-      await this.discardPendingUpload(pending);
-      throw new BadRequestException("上传内容不完整,请重新上传");
-    }
 
     try {
+      await this.storage.verifyAndFinalizePendingObject(pending);
       const asset = await this.reserveAssetWithinQuota(
         userId,
         pending.sizeBytes,
@@ -249,15 +249,15 @@ export class AssetsService {
           folderId: pending.folderId,
           fileId: pending.fileId,
           storageKey: pending.storageKey,
-          storageBackend: "oss",
+          storageBackend: pending.storageBackend,
           kind: pending.fileId ? "embedded" : "standalone",
           filename: pending.filename,
           mimeType: pending.mimeType,
           sizeBytes: pending.sizeBytes,
           uploadedBy: userId,
         },
+        { pendingUploadId: pending.id },
       );
-      await this.prisma.pendingUpload.delete({ where: { id: pending.id } });
       return {
         ...asset,
         url: this.getAssetUrl(asset.id),
@@ -285,7 +285,7 @@ export class AssetsService {
   private async requirePendingUpload(
     userId: string,
     uploadId: string,
-    kind: "asset" | "classroom",
+    kind: PendingUpload["kind"],
   ) {
     const pending = await this.prisma.pendingUpload.findUnique({
       where: { id: uploadId },
@@ -300,15 +300,9 @@ export class AssetsService {
     return pending;
   }
 
-  /** 删除预留行并尽力清理对象;直入只签 OSS,因此固定回 OSS 后端。 */
+  /** 删除预留行并按行内 backend 尽力清理对象;R2 同时清理临时与正式 Key。 */
   private async discardPendingUpload(pending: PendingUpload) {
-    await this.prisma.pendingUpload
-      .delete({ where: { id: pending.id } })
-      .catch(() => undefined);
-    const backend = await this.storage.backendFor("oss").catch(() => null);
-    if (backend) {
-      await backend.removeObject(pending.storageKey).catch(() => undefined);
-    }
+    await this.storage.discardPendingUpload(pending);
   }
 
   /** 惰性清理:签名新任务时回收该用户已过期的直入预留。 */
@@ -467,18 +461,21 @@ export class AssetsService {
 
     const backend = await this.storage.backendFor(asset.storageBackend);
     const stream = await backend.getObject(asset.storageKey);
+
+    if (kind === "pdf") {
+      // PDF 上限 25MB，超过 Vercel 普通响应体限制；先读首块校验文件头，
+      // 再流式 pipe，禁止整块读入内存后一次性发送。
+      return {
+        asset,
+        kind,
+        stream: await pdfStreamWithHeaderCheck(stream),
+      };
+    }
+
     const buffer = await readPreviewBuffer(stream, maxBytes);
     if (buffer.length !== asset.sizeBytes) {
       throw new BadRequestException("文件内容不完整，无法预览");
     }
-
-    if (kind === "pdf") {
-      if (!buffer.subarray(0, 1024).includes(Buffer.from("%PDF-"))) {
-        throw new BadRequestException("文件内容不是有效的 PDF");
-      }
-      return { asset, kind, content: buffer };
-    }
-
     try {
       const content = new TextDecoder("utf-8", { fatal: true })
         .decode(buffer)
@@ -616,6 +613,201 @@ export class AssetsService {
       ...asset,
       url: `/assets/${asset.id}`,
     }));
+  }
+
+  /**
+   * 论坛图片直传第一步：校验帖子与权限、重新计算当前图片数与预留数，返回
+   * 浏览器直传对象存储的上传指令。主帖最多 9 张，评论/嵌套回复最多 3 张。
+   */
+  async signForumPostImageUpload(
+    userId: string | null,
+    postId: string,
+    input: { filename: string; sizeBytes: number; mimeType?: string },
+  ) {
+    if (!userId) throw new UnauthorizedException("Missing session");
+
+    const [user, post] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId } }),
+      this.prisma.forumPost.findUnique({
+        where: { id: postId },
+        include: { thread: true },
+      }),
+    ]);
+    if (!user || user.status !== "active") {
+      throw new UnauthorizedException("Missing session");
+    }
+    if (!post) throw new NotFoundException("Forum post not found");
+    if (post.authorId !== user.id && !isSystemAdmin(user.systemRole)) {
+      throw new ForbiddenException("No permission to attach images");
+    }
+
+    const mainPost = await this.prisma.forumPost.findFirst({
+      where: { threadId: post.threadId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+    });
+    const maxImages =
+      mainPost?.id === post.id ? MAX_FORUM_IMAGES : MAX_FORUM_REPLY_IMAGES;
+
+    const [existingCount, pendingCount] = await Promise.all([
+      this.prisma.fileAsset.count({ where: { forumPostId: postId } }),
+      this.prisma.pendingUpload.count({
+        where: {
+          forumPostId: postId,
+          kind: "forum_image",
+          expiresAt: { gt: new Date() },
+        },
+      }),
+    ]);
+    if (existingCount + pendingCount + 1 > maxImages) {
+      throw new BadRequestException(`最多附带 ${maxImages} 张图片`);
+    }
+
+    if (!Number.isInteger(input.sizeBytes) || input.sizeBytes <= 0) {
+      throw new BadRequestException("无效的文件大小");
+    }
+    if (input.sizeBytes > MAX_FORUM_IMAGE_SIZE_BYTES) {
+      throw new BadRequestException("压缩后的单张图片不能超过 10MB");
+    }
+    const mimeType = normalizeDirectUploadMime(input.filename, input.mimeType);
+    if (mimeType !== "image/webp") {
+      throw new BadRequestException("论坛图片必须压缩为 WebP 格式");
+    }
+
+    const backend = await this.storage.activeBackend();
+    const storageKey = `${post.thread.workspaceId}/forum/${post.id}/${randomUUID()}.webp`;
+    const instruction = await this.storage.signUpload(
+      backend.name,
+      this.storage.objectKeyForPendingUpload(backend.name, storageKey),
+      { sizeBytes: input.sizeBytes, mimeType },
+    );
+    if (!instruction) {
+      throw new NotImplementedException(
+        "当前存储配置不支持签名直入,请改用服务器中转上传",
+      );
+    }
+
+    await this.reapExpiredPendingUploads(userId);
+    const sortOrder = existingCount + pendingCount;
+    const pending = await this.prisma.pendingUpload.create({
+      data: {
+        kind: "forum_image",
+        workspaceId: post.thread.workspaceId,
+        forumPostId: post.id,
+        storageBackend: backend.name,
+        filename: `forum-image-${sortOrder + 1}.webp`,
+        mimeType,
+        sizeBytes: input.sizeBytes,
+        storageKey,
+        uploadedBy: userId,
+        expiresAt: new Date(Date.now() + PENDING_UPLOAD_TTL_MS),
+      },
+    });
+
+    return {
+      uploadId: pending.id,
+      instruction,
+      expiresAt: instruction.expiresAt,
+    };
+  }
+
+  /** 论坛图片直传第三步：读取对象并验证真实文件头与尺寸后创建 FileAsset。 */
+  async confirmForumPostImageUpload(
+    userId: string | null,
+    postId: string,
+    uploadId: string,
+  ) {
+    if (!userId) throw new UnauthorizedException("Missing session");
+    const pending = await this.requirePendingUpload(
+      userId,
+      uploadId,
+      "forum_image",
+    );
+    if (pending.forumPostId !== postId) {
+      await this.discardPendingUpload(pending);
+      throw new NotFoundException("上传任务不存在或已完成");
+    }
+
+    try {
+      await this.storage.verifyAndFinalizePendingObject(pending);
+      const backend = await this.storage.backendFor(
+        pending.storageBackend as StorageBackendName,
+      );
+      const buffer = await readPreviewBuffer(
+        await backend.getObject(pending.storageKey),
+        MAX_FORUM_IMAGE_SIZE_BYTES,
+      );
+      const dimensions = readWebpDimensions(buffer);
+      if (!dimensions) {
+        throw new BadRequestException("无法读取图片尺寸");
+      }
+      if (Math.max(dimensions.width, dimensions.height) > 1600) {
+        throw new BadRequestException("图片最长边不能超过 1600px");
+      }
+
+      const post = await this.prisma.forumPost.findUnique({
+        where: { id: postId },
+        select: { threadId: true },
+      });
+      if (!post) throw new NotFoundException("Forum post not found");
+      const mainPost = await this.prisma.forumPost.findFirst({
+        where: { threadId: post.threadId },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true },
+      });
+      const maxImages =
+        mainPost?.id === postId ? MAX_FORUM_IMAGES : MAX_FORUM_REPLY_IMAGES;
+      const asset = await this.reserveAssetWithinQuota(
+        userId,
+        pending.sizeBytes,
+        {
+          workspaceId: pending.workspaceId,
+          folderId: null,
+          fileId: null,
+          forumPostId: postId,
+          storageKey: pending.storageKey,
+          storageBackend: pending.storageBackend,
+          filename: pending.filename,
+          mimeType: pending.mimeType,
+          sizeBytes: pending.sizeBytes,
+          width: dimensions.width,
+          height: dimensions.height,
+          uploadedBy: userId,
+        },
+        { pendingUploadId: pending.id, maxForumImages: maxImages },
+      );
+      return {
+        id: asset.id,
+        url: `/assets/${asset.id}`,
+        width: dimensions.width,
+        height: dimensions.height,
+        sortOrder: asset.sortOrder,
+      };
+    } catch (caught) {
+      await this.discardPendingUpload(pending);
+      throw caught;
+    }
+  }
+
+  /** 论坛图片直传取消或失败时释放预留并清理对象；重复调用安全。 */
+  async abortForumPostImageUpload(
+    userId: string | null,
+    postId: string,
+    uploadId: string,
+  ) {
+    if (!userId) throw new UnauthorizedException("Missing session");
+    const pending = await this.prisma.pendingUpload.findUnique({
+      where: { id: uploadId },
+    });
+    if (
+      pending &&
+      pending.kind === "forum_image" &&
+      pending.forumPostId === postId &&
+      pending.uploadedBy === userId
+    ) {
+      await this.discardPendingUpload(pending);
+    }
+    return { ok: true as const };
   }
 
   async removeForumPostImages(postIds: string[]) {
@@ -1064,6 +1256,10 @@ export class AssetsService {
     userId: string,
     incomingBytes: number,
     data: Prisma.FileAssetUncheckedCreateInput,
+    options: {
+      pendingUploadId?: string;
+      maxForumImages?: number;
+    } = {},
   ) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -1109,6 +1305,18 @@ export class AssetsService {
               );
             }
 
+            let forumImageCount: number | null = null;
+            if (data.forumPostId && options.maxForumImages !== undefined) {
+              forumImageCount = await tx.fileAsset.count({
+                where: { forumPostId: data.forumPostId },
+              });
+              if (forumImageCount >= options.maxForumImages) {
+                throw new BadRequestException(
+                  `最多附带 ${options.maxForumImages} 张图片`,
+                );
+              }
+            }
+
             const quotaBytes =
               user.storageQuotaBytes ??
               workspace?.memberAttachmentQuotaBytes ??
@@ -1122,7 +1330,18 @@ export class AssetsService {
                 `文档附件容量不足，当前上限为 ${formatStorageSize(quotaBytes)}`,
               );
             }
-            return tx.fileAsset.create({ data });
+            const asset = await tx.fileAsset.create({
+              data:
+                forumImageCount === null
+                  ? data
+                  : { ...data, sortOrder: forumImageCount },
+            });
+            if (options.pendingUploadId) {
+              await tx.pendingUpload.delete({
+                where: { id: options.pendingUploadId },
+              });
+            }
+            return asset;
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );
@@ -1267,6 +1486,34 @@ function detectSafeRasterMime(buffer: Buffer) {
     return "image/webp";
   }
   return null;
+}
+
+/**
+ * PDF 预览的流式文件头校验：读取第一个数据块，确认包含 `%PDF-` 后，把该块
+ * 与后续流重新组装成新的 Readable。禁止把整个 PDF 读入内存再发送。
+ */
+export async function pdfStreamWithHeaderCheck(
+  stream: Readable,
+): Promise<Readable> {
+  const iterator = stream[Symbol.asyncIterator]();
+  const first = await iterator.next();
+  if (first.done) {
+    throw new BadRequestException("文件内容不是有效的 PDF");
+  }
+  const firstChunk = Buffer.isBuffer(first.value)
+    ? first.value
+    : Buffer.from(first.value);
+  if (!firstChunk.subarray(0, 1024).includes(Buffer.from("%PDF-"))) {
+    await iterator.return?.().catch(() => undefined);
+    stream.destroy();
+    throw new BadRequestException("文件内容不是有效的 PDF");
+  }
+  return Readable.from(
+    (async function* () {
+      yield firstChunk;
+      for await (const chunk of iterator) yield chunk;
+    })(),
+  );
 }
 
 export async function readPreviewBuffer(stream: Readable, maxBytes: number) {

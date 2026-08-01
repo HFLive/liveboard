@@ -1,5 +1,31 @@
 export type SystemRole = "super_admin" | "admin" | "member";
 
+/**
+ * 对象存储直传指令判别联合：前端必须根据 `transport` 字段决定走 Form POST
+ * 还是原始 PUT，禁止通过是否存在 `fields` 猜测协议。
+ */
+export type ObjectUploadInstruction =
+  | {
+      transport: "form_post";
+      url: string;
+      fields: Record<string, string>;
+      expiresAt: string;
+    }
+  | {
+      transport: "put";
+      url: string;
+      headers: Record<string, string>;
+      expiresAt: string;
+    };
+
+export interface SignedUploadResponse {
+  uploadId: string;
+  instruction: ObjectUploadInstruction;
+  expiresAt: string;
+}
+
+export type DeploymentTargetPublic = "self_hosted" | "vercel";
+
 export type PermissionLevel =
   "owner" | "editor" | "lecturer" | "viewer" | "no_access";
 
@@ -177,7 +203,10 @@ export interface ServerResourceUsage {
   totalBytes: number;
 }
 
-export interface ServerStatusSummary {
+export type ServerDependencyState = "ok" | "unavailable";
+
+export interface HostServerStatus {
+  mode: "host";
   current: {
     sampledAt: string;
     cpuUsagePercent: number;
@@ -188,6 +217,19 @@ export interface ServerStatusSummary {
   sampleIntervalSeconds: number;
   retentionHours: number;
 }
+
+export interface ServerlessServerStatus {
+  mode: "serverless";
+  region: string | null;
+  deploymentId: string | null;
+  dependencies: {
+    postgres: ServerDependencyState;
+    redis: ServerDependencyState;
+    r2: ServerDependencyState;
+  };
+}
+
+export type ServerStatusSummary = HostServerStatus | ServerlessServerStatus;
 
 export interface FolderNode {
   id: string;

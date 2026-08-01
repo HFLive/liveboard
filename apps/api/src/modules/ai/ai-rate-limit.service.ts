@@ -2,11 +2,12 @@ import {
   HttpException,
   Injectable,
   Logger,
-  OnModuleDestroy,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createHash } from "node:crypto";
-import { createClient, type RedisClientType } from "redis";
+import type { RedisClientType } from "redis";
+import { RedisService } from "../redis/redis.service";
 
 interface FallbackState {
   count: number;
@@ -15,16 +16,17 @@ interface FallbackState {
 }
 
 @Injectable()
-export class AiRateLimitService implements OnModuleDestroy {
+export class AiRateLimitService {
   private readonly logger = new Logger(AiRateLimitService.name);
-  private readonly client: RedisClientType;
   private readonly maxRequests: number;
   private readonly windowSeconds: number;
   private readonly maxConcurrent: number;
-  private connectPromise: Promise<unknown> | null = null;
   private readonly fallback = new Map<string, FallbackState>();
 
-  constructor(config: ConfigService) {
+  constructor(
+    config: ConfigService,
+    private readonly redis: RedisService,
+  ) {
     this.maxRequests = positiveInt(
       config.get<string>("AI_RATE_LIMIT_MAX_REQUESTS"),
       30,
@@ -37,13 +39,6 @@ export class AiRateLimitService implements OnModuleDestroy {
       config.get<string>("AI_MAX_CONCURRENT_PER_USER"),
       2,
     );
-    this.client = createClient({
-      url: config.get<string>("REDIS_URL", "redis://localhost:6379"),
-      socket: { connectTimeout: 1_000, reconnectStrategy: false },
-    });
-    this.client.on("error", (error) => {
-      this.logger.warn(`Redis AI limiter unavailable: ${error.message}`);
-    });
   }
 
   async acquire(userId: string | null) {
@@ -51,8 +46,11 @@ export class AiRateLimitService implements OnModuleDestroy {
     const identity = createHash("sha256").update(userId).digest("hex");
     const rateKey = `liveboard:ai-rate:${identity}`;
     const concurrentKey = `liveboard:ai-concurrent:${identity}`;
+    const client = await this.redis.getClient();
+    if (!client) {
+      return this.acquireFallback(identity);
+    }
     try {
-      const client = await this.getClient();
       const result = (await client.eval(
         [
           "local rate = redis.call('INCR', KEYS[1])",
@@ -92,12 +90,11 @@ export class AiRateLimitService implements OnModuleDestroy {
       };
     } catch (caught) {
       if (caught instanceof HttpException) throw caught;
+      if (!this.redis.fallbackAllowed) {
+        throw new ServiceUnavailableException("Redis 服务暂不可用");
+      }
       return this.acquireFallback(identity);
     }
-  }
-
-  async onModuleDestroy() {
-    if (this.client.isOpen) await this.client.quit();
   }
 
   private acquireFallback(identity: string) {
@@ -127,16 +124,6 @@ export class AiRateLimitService implements OnModuleDestroy {
       const current = this.fallback.get(identity);
       if (current) current.concurrent = Math.max(0, current.concurrent - 1);
     };
-  }
-
-  private async getClient() {
-    if (!this.client.isOpen) {
-      this.connectPromise ??= this.client.connect().finally(() => {
-        this.connectPromise = null;
-      });
-      await this.connectPromise;
-    }
-    return this.client;
   }
 }
 

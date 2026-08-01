@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import type { StorageBackendName } from "../storage/storage-backend";
 import { StorageService } from "../storage/storage.service";
 import { requireResourceName } from "../../common/resource-name";
 import { putObjectWithCompensation } from "../storage/upload-compensation";
@@ -623,11 +624,15 @@ export class ClassroomsService {
     const backend = await this.storage.activeBackend();
     const storageFilename = sanitizeStorageFilename(filename);
     const storageKey = `${classroom.workspaceId}/classrooms/${classroomId}/${randomUUID()}-${storageFilename}`;
-    const upload = await this.storage.presignUpload(backend.name, storageKey, {
-      sizeBytes: input.sizeBytes,
-      mimeType,
-    });
-    if (!upload) {
+    const instruction = await this.storage.signUpload(
+      backend.name,
+      this.storage.objectKeyForPendingUpload(backend.name, storageKey),
+      {
+        sizeBytes: input.sizeBytes,
+        mimeType,
+      },
+    );
+    if (!instruction) {
       throw new NotImplementedException(
         "当前存储配置不支持签名直入,请改用服务器中转上传",
       );
@@ -645,6 +650,7 @@ export class ClassroomsService {
         kind: "classroom",
         workspaceId: classroom.workspaceId,
         classroomId,
+        storageBackend: backend.name,
         filename,
         mimeType,
         sizeBytes: input.sizeBytes,
@@ -654,7 +660,11 @@ export class ClassroomsService {
       },
     });
 
-    return { uploadId: pending.id, ...upload };
+    return {
+      uploadId: pending.id,
+      instruction,
+      expiresAt: instruction.expiresAt,
+    };
   }
 
   /** 签名直入第三步:对象校验通过后原子创建文件记录并释放预留。 */
@@ -671,33 +681,23 @@ export class ClassroomsService {
       classroomId,
     );
     const classroom = await this.requireClassroom(classroomId);
-    const backend = await this.storage.backendFor("oss");
-
-    const stat = await backend.statObject(pending.storageKey).catch(() => null);
-    if (!stat) {
-      await this.discardPendingUpload(pending);
-      throw new BadRequestException("对象存储中未找到已上传的文件,请重新上传");
-    }
-    if (stat.size !== pending.sizeBytes) {
-      await this.discardPendingUpload(pending);
-      throw new BadRequestException("上传内容不完整,请重新上传");
-    }
 
     try {
+      await this.storage.verifyAndFinalizePendingObject(pending);
       const record = await this.reserveClassroomFile(
         classroom,
         pending.sizeBytes,
         {
           classroomId,
           storageKey: pending.storageKey,
-          storageBackend: "oss",
+          storageBackend: pending.storageBackend,
           filename: pending.filename,
           mimeType: pending.mimeType,
           sizeBytes: pending.sizeBytes,
           uploadedBy: user.id,
         },
+        pending.id,
       );
-      await this.prisma.pendingUpload.delete({ where: { id: pending.id } });
       return {
         ...record,
         createdAt: record.createdAt.toISOString(),
@@ -753,15 +753,9 @@ export class ClassroomsService {
     return pending;
   }
 
-  /** 删除预留行并尽力清理对象;直入只签 OSS,因此固定回 OSS 后端。 */
+  /** 删除预留行并按行内 backend 尽力清理对象;R2 同时清理临时与正式 Key。 */
   private async discardPendingUpload(pending: PendingUpload) {
-    await this.prisma.pendingUpload
-      .delete({ where: { id: pending.id } })
-      .catch(() => undefined);
-    const backend = await this.storage.backendFor("oss").catch(() => null);
-    if (backend) {
-      await backend.removeObject(pending.storageKey).catch(() => undefined);
-    }
+    await this.storage.discardPendingUpload(pending);
   }
 
   /** 惰性清理:签名新任务时回收该用户已过期的直入预留。 */
@@ -1009,6 +1003,7 @@ export class ClassroomsService {
     },
     incomingBytes: number,
     data: Prisma.ClassroomFileUncheckedCreateInput,
+    pendingUploadId?: string,
   ) {
     return this.prisma.$transaction(
       async (transaction) => {
@@ -1041,7 +1036,13 @@ export class ClassroomsService {
             `课堂文件容量不足，当前上限为 ${formatStorageSize(quotaBytes)}`,
           );
         }
-        return transaction.classroomFile.create({ data });
+        const record = await transaction.classroomFile.create({ data });
+        if (pendingUploadId) {
+          await transaction.pendingUpload.delete({
+            where: { id: pendingUploadId },
+          });
+        }
+        return record;
       },
       { isolationLevel: "Serializable" },
     );

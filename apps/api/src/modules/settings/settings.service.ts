@@ -9,6 +9,7 @@ import { isSuperAdmin } from "@liveboard/shared";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { PrismaService } from "../prisma/prisma.service";
+import type { StorageBackendName } from "../storage/storage-backend";
 import { StorageService } from "../storage/storage.service";
 import { HttpsAgentClient } from "./https-agent.client";
 
@@ -258,13 +259,13 @@ function storedFavicon(
   workspace: {
     faviconStorageKey: string | null;
     faviconMimeType: string | null;
-    faviconStorageBackend: "minio" | "oss";
+    faviconStorageBackend: StorageBackendName;
     faviconLightStorageKey: string | null;
     faviconLightMimeType: string | null;
-    faviconLightStorageBackend: "minio" | "oss";
+    faviconLightStorageBackend: StorageBackendName;
     faviconDarkStorageKey: string | null;
     faviconDarkMimeType: string | null;
-    faviconDarkStorageBackend: "minio" | "oss";
+    faviconDarkStorageBackend: StorageBackendName;
   },
   variant: FaviconVariant,
 ) {
@@ -293,7 +294,7 @@ function faviconUpdateData(
   variant: FaviconVariant,
   storageKey: string,
   mimeType: string,
-  backend: "minio" | "oss",
+  backend: StorageBackendName,
 ) {
   const updatedAt = new Date();
   if (variant === "light") {

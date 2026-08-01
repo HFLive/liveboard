@@ -78,6 +78,7 @@ enum ForumThreadStatus {
 enum StorageBackend {
   minio
   oss
+  r2
 }
 
 enum StorageDownloadMode {
@@ -93,6 +94,8 @@ enum StorageUploadMode {
 enum PendingUploadKind {
   asset
   classroom
+  forum_image
+  profile_banner
 }
 
 enum FileAssetKind {
@@ -298,6 +301,7 @@ model ForumPost {
   author          User            @relation("ForumPostAuthor", fields: [authorId], references: [id])
   images          FileAsset[]     @relation("ForumPostImages")
   votes           ForumPostVote[]
+  pendingUploads  PendingUpload[] @relation("PendingUploadForumPost")
 
   @@index([threadId, createdAt])
   @@index([parentId, createdAt])
@@ -720,23 +724,27 @@ model StorageSettings {
  * 超时未确认的行由后续签名请求惰性清理,对象尽力删除。
  */
 model PendingUpload {
-  id          String            @id @default(cuid())
-  kind        PendingUploadKind
-  workspaceId String
-  folderId    String?
-  fileId      String?
-  classroomId String?
-  filename    String
-  mimeType    String
-  sizeBytes   Int
-  storageKey  String            @unique
-  uploadedBy  String
-  createdAt   DateTime          @default(now())
-  expiresAt   DateTime
+  id             String            @id @default(cuid())
+  kind           PendingUploadKind
+  workspaceId    String
+  folderId       String?
+  fileId         String?
+  classroomId    String?
+  forumPostId    String?
+  storageBackend StorageBackend    @default(minio)
+  filename       String
+  mimeType       String
+  sizeBytes      Int
+  storageKey     String            @unique
+  uploadedBy     String
+  createdAt      DateTime          @default(now())
+  expiresAt      DateTime
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  forumPost  ForumPost? @relation("PendingUploadForumPost", fields: [forumPostId], references: [id], onDelete: Cascade)
 
   @@index([uploadedBy, expiresAt])
+  @@index([forumPostId])
 }
 
 model AiSettings {

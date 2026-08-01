@@ -6,11 +6,11 @@ describe("HealthService", () => {
     const service = Object.create(HealthService.prototype) as unknown as {
       check: HealthService["check"];
       prisma: { $queryRaw: jest.Mock };
-      pingRedis: jest.Mock;
+      redis: { ping: jest.Mock };
       storage: { healthCheckActive: jest.Mock };
     };
     service.prisma = { $queryRaw: jest.fn().mockResolvedValue([{ one: 1 }]) };
-    service.pingRedis = jest.fn().mockResolvedValue("PONG");
+    service.redis = { ping: jest.fn().mockResolvedValue(true) };
     service.storage = {
       healthCheckActive: jest.fn().mockResolvedValue(undefined),
     };
@@ -27,6 +27,15 @@ describe("HealthService", () => {
   it("returns 503 when a required dependency is unavailable", async () => {
     const service = createService();
     service.storage.healthCheckActive.mockRejectedValue(new Error("offline"));
+
+    await expect(service.check()).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it("returns 503 when Redis ping resolves false", async () => {
+    const service = createService();
+    service.redis.ping.mockResolvedValue(false);
 
     await expect(service.check()).rejects.toBeInstanceOf(
       ServiceUnavailableException,

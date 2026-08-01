@@ -30,7 +30,25 @@ MOCK_DOCKER_STATE="$TEST_DIR/docker-state"
 NGINX_SITE="$TEST_DIR/nginx/sites-available/liveboard"
 NGINX_ENABLED="$TEST_DIR/nginx/sites-enabled/liveboard"
 NGINX_DEFAULT="$TEST_DIR/nginx/sites-enabled/default"
+TRANSITION_PRISMA_LOG="$TEST_DIR/transition-prisma.log"
+# 从过渡脚本提取 golden manifest，构造 _prisma_migrations 的 mock 输出
+TRANSITION_MANIFEST_FILE="$TEST_DIR/transition-manifest.txt"
+awk '/^GOLDEN_MANIFEST=.*/{in_manifest=1; next} in_manifest && /^'\''$/{exit} in_manifest && /^[0-9]+_/ {print}' \
+  "$ROOT_DIR/scripts/legacy-baseline-transition.sh" > "$TRANSITION_MANIFEST_FILE"
+MOCK_MIGRATIONS_FILE="$TEST_DIR/mock-migrations.csv"
+: > "$MOCK_MIGRATIONS_FILE"
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  name="${line%%=*}"
+  checksum="${line#*=}"
+  printf '%s|%s|2026-07-29 00:00:00\n' "$name" "$checksum" >> "$MOCK_MIGRATIONS_FILE"
+done < "$TRANSITION_MANIFEST_FILE"
 export MOCK_DOCKER_STATE
+export MOCK_MIGRATION_COUNT=0
+export MOCK_BRIDGE_APPLIED=0
+export MOCK_BASELINE_RESOLVED=0
+export MOCK_MIGRATIONS_FILE="$MOCK_MIGRATIONS_FILE"
+export MOCK_TRANSITION_PRISMA_LOG="$TRANSITION_PRISMA_LOG"
 export LIVEBOARD_NGINX_SITE="$NGINX_SITE"
 export LIVEBOARD_NGINX_ENABLED="$NGINX_ENABLED"
 export LIVEBOARD_NGINX_DEFAULT="$NGINX_DEFAULT"
@@ -44,6 +62,7 @@ cp "$ROOT_DIR/.env.production.example" "$BUNDLE_DIR/.env.example"
 cp "$ROOT_DIR/infra/systemd/liveboard-https-agent.service" "$BUNDLE_DIR/liveboard-https-agent.service"
 cp "$ROOT_DIR/infra/systemd/liveboard-https-renew.service" "$BUNDLE_DIR/liveboard-https-renew.service"
 cp "$ROOT_DIR/infra/systemd/liveboard-https-renew.timer" "$BUNDLE_DIR/liveboard-https-renew.timer"
+cp "$ROOT_DIR/scripts/legacy-baseline-transition.sh" "$BUNDLE_DIR/legacy-baseline-transition.sh"
 grep -q 'TLS_ALPN_CHALLENGE = "tls-alpn-01"' "$BUNDLE_DIR/https-agent.py"
 grep -q 'arguments.append("--tls")' "$BUNDLE_DIR/https-agent.py"
 grep -q 'renew_days = "3" if subject_type == IP_SUBJECT else "30"' "$BUNDLE_DIR/https-agent.py"
@@ -85,6 +104,22 @@ case " $* " in
     printf '%s\n' 'mock-postgres-backup'
     ;;
   *" exec -T postgres "*" pg_isready "*)
+    exit 0
+    ;;
+  *" information_schema.columns "*" storageBackend "*)
+    printf '%s\n' "${MOCK_BRIDGE_APPLIED:-0}"
+    ;;
+  *" WHERE migration_name = '00000000000000_baseline_v1'"*)
+    printf '%s\n' "${MOCK_BASELINE_RESOLVED:-0}"
+    ;;
+  *" exec -T postgres "*"migration_name"*"checksum"*)
+    cat "$MOCK_MIGRATIONS_FILE"
+    ;;
+  *" exec -T postgres "*"SELECT COUNT(*) FROM _prisma_migrations"*)
+    printf '%s\n' "${MOCK_MIGRATION_COUNT:-0}"
+    ;;
+  *" run --rm --no-deps "*" migrate node "*)
+    printf '%s\n' "mock prisma: $*" >>"$MOCK_TRANSITION_PRISMA_LOG"
     exit 0
     ;;
   *" exec -T api node dist/bootstrap-production.js --machine-readable "*)
@@ -256,5 +291,24 @@ PATH="$BIN_DIR:$PATH" \
 test "$(cat "$SECOND_STATE_DIR/releases/current")" = "v1.0.1"
 test -x "$SECOND_MANAGER_PATH"
 test -L "$NGINX_ENABLED"
+
+# 既有数据库历史（41 条）→ 升级必须触发受控 baseline 历史过渡
+MOCK_MIGRATION_COUNT=41
+MOCK_BRIDGE_APPLIED=0
+MOCK_BASELINE_RESOLVED=0
+: >"$TRANSITION_PRISMA_LOG"
+printf '%s\n' 'release=v1.0.2' >"$BUNDLE_DIR/manifest.txt"
+PATH="$BIN_DIR:$PATH" \
+  LIVEBOARD_STATE_DIR="$SECOND_STATE_DIR" \
+  LIVEBOARD_MANAGER_PATH="$SECOND_MANAGER_PATH" \
+  sh "$BUNDLE_DIR/deploy.sh" upgrade >"$TEST_DIR/transition-run.log" 2>&1
+grep -q '检测到既有数据库 migration 历史' "$TEST_DIR/transition-run.log"
+test -s "$TRANSITION_PRISMA_LOG"
+grep -q 'migrate resolve --applied 00000000000000_baseline_v1' "$TRANSITION_PRISMA_LOG"
+if grep -q '数据库历史过渡失败' "$TEST_DIR/transition-run.log"; then
+  echo "升级不应报告数据库历史过渡失败。" >&2
+  exit 1
+fi
+MOCK_MIGRATION_COUNT=0
 
 printf '%s\n' 'deploy bundle and manager checks passed'

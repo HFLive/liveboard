@@ -1,9 +1,17 @@
-import { Injectable, ServiceUnavailableException } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createConnection } from "node:net";
+import { getDeploymentTarget } from "../../common/deployment-target";
 
 export interface HttpsStatus {
   available: boolean;
+  /** Vercel 下为 "vercel"，表示由 Vercel 项目设置托管。 */
+  managedBy?: "vercel";
+  message?: string;
   enabled: boolean;
   domain: string | null;
   subjectType: "domain" | "ip" | null;
@@ -28,15 +36,20 @@ interface AgentResponse {
 @Injectable()
 export class HttpsAgentClient {
   private readonly socketPath: string;
+  private readonly vercel: boolean;
 
   constructor(config: ConfigService) {
     this.socketPath = config.get<string>(
       "LIVEBOARD_HTTPS_SOCKET",
       "/run/liveboard/https-agent.sock",
     );
+    this.vercel = getDeploymentTarget(config) === "vercel";
   }
 
   async status(): Promise<HttpsStatus> {
+    if (this.vercel) {
+      return vercelManagedStatus;
+    }
     try {
       return await this.request({ action: "status" }, 3_000);
     } catch (caught) {
@@ -48,6 +61,7 @@ export class HttpsAgentClient {
   }
 
   async enable(domain: string, email: string): Promise<HttpsStatus> {
+    this.assertNotVercel();
     try {
       return await this.request({ action: "enable", domain, email }, 420_000);
     } catch (caught) {
@@ -61,6 +75,7 @@ export class HttpsAgentClient {
   }
 
   async disable(httpHost?: string): Promise<HttpsStatus> {
+    this.assertNotVercel();
     try {
       return await this.request(
         { action: "disable", httpHost: httpHost ?? "" },
@@ -80,6 +95,7 @@ export class HttpsAgentClient {
     primaryHost: string,
     allowedHosts: string[],
   ): Promise<HttpsStatus> {
+    this.assertNotVercel();
     try {
       return await this.request(
         { action: "configure-http", primaryHost, allowedHosts },
@@ -96,6 +112,7 @@ export class HttpsAgentClient {
   }
 
   async setAutoRenew(enabled: boolean): Promise<HttpsStatus> {
+    this.assertNotVercel();
     try {
       return await this.request({ action: "set-auto-renew", enabled }, 30_000);
     } catch (caught) {
@@ -105,6 +122,14 @@ export class HttpsAgentClient {
         );
       }
       throw caught;
+    }
+  }
+
+  private assertNotVercel() {
+    if (this.vercel) {
+      throw new ConflictException(
+        "域名与 HTTPS 由 Vercel 项目设置管理，无法在此修改",
+      );
     }
   }
 
@@ -180,6 +205,25 @@ export class HttpsAgentClient {
 
 const unavailableStatus: HttpsStatus = {
   available: false,
+  enabled: false,
+  domain: null,
+  subjectType: null,
+  challengeType: null,
+  certificateProfile: null,
+  autoRenewEnabled: false,
+  httpHost: null,
+  httpPrimaryHost: null,
+  httpAllowedHosts: [],
+  expiresAt: null,
+  lastRenewedAt: null,
+  lastRenewalCheckAt: null,
+  lastError: null,
+};
+
+const vercelManagedStatus: HttpsStatus = {
+  available: false,
+  managedBy: "vercel",
+  message: "域名与 HTTPS 由 Vercel 项目设置管理",
   enabled: false,
   domain: null,
   subjectType: null,

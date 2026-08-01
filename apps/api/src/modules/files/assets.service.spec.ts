@@ -289,14 +289,14 @@ describe("AssetsService consistency", () => {
     permissions.getEffectiveLevelForFolder.mockResolvedValue("viewer");
     backend.getObject.mockResolvedValue(Readable.from([pdf]));
 
-    await expect(
-      service.getAssetForPreview("user-1", "asset-1"),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        kind: "pdf",
-        content: pdf,
-      }),
-    );
+    const result = await service.getAssetForPreview("user-1", "asset-1");
+    expect(result.kind).toBe("pdf");
+    if (result.kind !== "pdf") throw new Error("expected pdf stream");
+    const chunks: Buffer[] = [];
+    for await (const chunk of result.stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    expect(Buffer.concat(chunks)).toEqual(pdf);
   });
 
   it("rejects invalid UTF-8 text instead of rendering it", async () => {
@@ -691,7 +691,10 @@ describe("AssetsService direct upload", () => {
   const storage = {
     activeBackend: jest.fn(),
     backendFor: jest.fn(),
-    presignUpload: jest.fn(),
+    signUpload: jest.fn(),
+    objectKeyForPendingUpload: jest.fn((_backend: string, key: string) => key),
+    verifyAndFinalizePendingObject: jest.fn(),
+    discardPendingUpload: jest.fn(),
   };
   let service: AssetsService;
 
@@ -702,6 +705,8 @@ describe("AssetsService direct upload", () => {
     folderId: "folder-1",
     fileId: "file-1",
     classroomId: null,
+    forumPostId: null,
+    storageBackend: "oss" as const,
     filename: "notes.txt",
     mimeType: "text/plain",
     sizeBytes: 5,
@@ -721,10 +726,17 @@ describe("AssetsService direct upload", () => {
     );
     storage.activeBackend.mockResolvedValue(backend);
     storage.backendFor.mockResolvedValue(backend);
-    storage.presignUpload.mockResolvedValue({
+    storage.objectKeyForPendingUpload.mockImplementation(
+      (_backend: string, key: string) => key,
+    );
+    storage.signUpload.mockResolvedValue({
+      transport: "form_post",
       url: "https://oss.example/upload",
       fields: { policy: "signed-policy" },
+      expiresAt: "2026-07-29T00:10:00.000Z",
     });
+    storage.verifyAndFinalizePendingObject.mockResolvedValue(undefined);
+    storage.discardPendingUpload.mockResolvedValue(undefined);
     backend.statObject.mockResolvedValue({ size: 5 });
     backend.removeObject.mockResolvedValue(undefined);
     permissions.getEffectiveLevelForFile.mockResolvedValue("editor");
@@ -758,10 +770,15 @@ describe("AssetsService direct upload", () => {
 
     expect(result).toEqual({
       uploadId: "upload-1",
-      url: "https://oss.example/upload",
-      fields: { policy: "signed-policy" },
+      instruction: {
+        transport: "form_post",
+        url: "https://oss.example/upload",
+        fields: { policy: "signed-policy" },
+        expiresAt: "2026-07-29T00:10:00.000Z",
+      },
+      expiresAt: "2026-07-29T00:10:00.000Z",
     });
-    expect(storage.presignUpload).toHaveBeenCalledWith(
+    expect(storage.signUpload).toHaveBeenCalledWith(
       "oss",
       expect.stringMatching(/^workspace-1\/\d{4}-\d{2}-\d{2}\/.+-notes\.txt$/),
       { sizeBytes: 5, mimeType: "text/plain" },
@@ -795,7 +812,7 @@ describe("AssetsService direct upload", () => {
   });
 
   it("rejects signing when the storage configuration has no direct upload", async () => {
-    storage.presignUpload.mockResolvedValue(null);
+    storage.signUpload.mockResolvedValue(null);
 
     await expect(
       service.signAssetUpload("user-1", {
@@ -841,6 +858,7 @@ describe("AssetsService direct upload", () => {
         aggregate: jest.fn().mockResolvedValue({ _sum: { sizeBytes: 0 } }),
         create: jest.fn().mockResolvedValue(created),
       },
+      pendingUpload: { delete: jest.fn().mockResolvedValue(pendingRow) },
     };
     prisma.$transaction.mockImplementation((callback) => callback(tx));
 
@@ -855,7 +873,7 @@ describe("AssetsService direct upload", () => {
         sizeBytes: 5,
       }),
     });
-    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
+    expect(tx.pendingUpload.delete).toHaveBeenCalledWith({
       where: { id: "upload-1" },
     });
     expect(result.url).toContain("/assets/asset-1");
@@ -863,15 +881,14 @@ describe("AssetsService direct upload", () => {
   });
 
   it("confirm discards the object when the size does not match", async () => {
-    backend.statObject.mockResolvedValue({ size: 10 });
+    storage.verifyAndFinalizePendingObject.mockRejectedValue(
+      new BadRequestException("上传内容不完整"),
+    );
 
     await expect(
       service.confirmAssetUpload("user-1", "upload-1"),
     ).rejects.toThrow("上传内容不完整");
-    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
-      where: { id: "upload-1" },
-    });
-    expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
+    expect(storage.discardPendingUpload).toHaveBeenCalledWith(pendingRow);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
@@ -892,10 +909,7 @@ describe("AssetsService direct upload", () => {
     await expect(
       service.confirmAssetUpload("user-1", "upload-1"),
     ).rejects.toThrow("文档附件容量不足");
-    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
-      where: { id: "upload-1" },
-    });
-    expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
+    expect(storage.discardPendingUpload).toHaveBeenCalledWith(pendingRow);
   });
 
   it("confirm rejects an expired reservation and reaps it", async () => {
@@ -907,9 +921,7 @@ describe("AssetsService direct upload", () => {
     await expect(
       service.confirmAssetUpload("user-1", "upload-1"),
     ).rejects.toThrow("上传任务已过期");
-    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
-      where: { id: "upload-1" },
-    });
+    expect(storage.discardPendingUpload).toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
@@ -924,17 +936,14 @@ describe("AssetsService direct upload", () => {
     await expect(
       service.abortAssetUpload("user-1", "upload-1"),
     ).resolves.toEqual({ ok: true });
-    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
-      where: { id: "upload-1" },
-    });
-    expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
+    expect(storage.discardPendingUpload).toHaveBeenCalledWith(pendingRow);
 
     prisma.pendingUpload.findUnique.mockResolvedValue(null);
-    prisma.pendingUpload.delete.mockClear();
+    storage.discardPendingUpload.mockClear();
     await expect(
       service.abortAssetUpload("user-1", "upload-1"),
     ).resolves.toEqual({ ok: true });
-    expect(prisma.pendingUpload.delete).not.toHaveBeenCalled();
+    expect(storage.discardPendingUpload).not.toHaveBeenCalled();
   });
 });
 

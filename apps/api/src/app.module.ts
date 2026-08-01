@@ -11,6 +11,7 @@ import { ForumModule } from "./modules/forum/forum.module";
 import { HealthModule } from "./modules/health/health.module";
 import { PermissionsModule } from "./modules/permissions/permissions.module";
 import { PrismaModule } from "./modules/prisma/prisma.module";
+import { RedisModule } from "./modules/redis/redis.module";
 import { SettingsModule } from "./modules/settings/settings.module";
 import { ServerStatusModule } from "./modules/server-status/server-status.module";
 import { StorageModule } from "./modules/storage/storage.module";
@@ -23,6 +24,7 @@ import { BadgesModule } from "./modules/badges/badges.module";
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    RedisModule,
     HealthModule,
     AuthModule,
     UsersModule,

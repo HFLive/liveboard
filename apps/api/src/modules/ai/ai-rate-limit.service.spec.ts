@@ -1,5 +1,6 @@
 import { HttpException } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
+import { RedisService } from "../redis/redis.service";
 import { AiRateLimitService } from "./ai-rate-limit.service";
 
 jest.mock("redis", () => ({
@@ -12,9 +13,11 @@ jest.mock("redis", () => ({
 }));
 
 function createService(values: Record<string, string>) {
-  return new AiRateLimitService({
+  const config = {
     get: (key: string, fallback?: string) => values[key] ?? fallback,
-  } as unknown as ConfigService);
+  } as unknown as ConfigService;
+  const redis = new RedisService(config);
+  return new AiRateLimitService(config, redis);
 }
 
 describe("AiRateLimitService fallback", () => {

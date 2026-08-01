@@ -75,7 +75,20 @@ pnpm dev
 
 ## 生产部署
 
-生产环境只保留一种发布方式：GitHub Release 自解压单文件包。服务器不拉取源码、不构建镜像，也不直接访问 Docker Hub 或 npm registry。
+LiveBoard 支持两种受支持的生产部署目标：
+
+- **自托管**（默认）：GitHub Release 自解压单文件包，Docker Compose +
+  MinIO / 阿里云 OSS，详细见下方与 [Ubuntu 24.04 单文件部署教程](./docs/deploy-ubuntu-24.04.md)。
+- **Vercel + Cloudflare R2**：`apps/web` 与 `apps/api` 部署为两个 Vercel
+  Project，PostgreSQL/Redis 使用托管服务，对象存储固定为 R2。业务行为由
+  `DEPLOYMENT_TARGET=vercel` 决定；Vercel 下大文件由浏览器直传 R2，每日
+  Cron 配合 R2 Lifecycle 清理过期上传。详细见
+  [Vercel + R2 部署教程](./docs/deploy-vercel-r2.md) 与
+  [数据迁移手册](./docs/migrate-data-to-vercel-r2.md)。
+
+### 自托管发布
+
+生产环境只保留一种自托管发布方式：GitHub Release 自解压单文件包。服务器不拉取源码、不构建镜像，也不直接访问 Docker Hub 或 npm registry。
 
 推送 `v*` 标签后，Release 工作流会构建 Linux AMD64 的 API/Web 和固定版本基础镜像，并生成唯一资产：
 

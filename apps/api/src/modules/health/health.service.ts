@@ -1,34 +1,20 @@
-import {
-  Injectable,
-  OnModuleDestroy,
-  ServiceUnavailableException,
-} from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { createClient, type RedisClientType } from "redis";
+import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { RedisService } from "../redis/redis.service";
 import { StorageService } from "../storage/storage.service";
 
 @Injectable()
-export class HealthService implements OnModuleDestroy {
-  private readonly redis: RedisClientType;
-  private redisConnectPromise: Promise<unknown> | null = null;
-
+export class HealthService {
   constructor(
-    config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
     private readonly storage: StorageService,
-  ) {
-    this.redis = createClient({
-      url: config.get<string>("REDIS_URL", "redis://localhost:6379"),
-      socket: { connectTimeout: 1_500, reconnectStrategy: false },
-    });
-    this.redis.on("error", () => undefined);
-  }
+  ) {}
 
   async check() {
     const checks = await Promise.allSettled([
       withTimeout(this.prisma.$queryRaw`SELECT 1`, 2_000),
-      withTimeout(this.pingRedis(), 2_000),
+      withTimeout(requireHealthyRedis(this.redis.ping()), 2_000),
       withTimeout(this.storage.healthCheckActive(), 2_000),
     ]);
     const names = ["postgres", "redis", "storage"];
@@ -52,20 +38,10 @@ export class HealthService implements OnModuleDestroy {
       timestamp: new Date().toISOString(),
     };
   }
+}
 
-  async onModuleDestroy() {
-    if (this.redis.isOpen) await this.redis.quit();
-  }
-
-  private async pingRedis() {
-    if (!this.redis.isOpen) {
-      this.redisConnectPromise ??= this.redis.connect().finally(() => {
-        this.redisConnectPromise = null;
-      });
-      await this.redisConnectPromise;
-    }
-    return this.redis.ping();
-  }
+async function requireHealthyRedis(check: Promise<boolean>) {
+  if (!(await check)) throw new Error("Redis health check failed");
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {

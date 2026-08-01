@@ -130,11 +130,15 @@ describe("FilesController Markdown endpoints", () => {
   ])(
     "returns authenticated %s preview content with isolated headers",
     async (kind, contentType, content) => {
-      assetsService.getAssetForPreview.mockResolvedValue({
-        asset: { filename: "preview" },
-        kind,
-        content,
-      });
+      assetsService.getAssetForPreview.mockResolvedValue(
+        kind === "pdf"
+          ? {
+              asset: { filename: "preview", sizeBytes: content.length },
+              kind: "pdf",
+              stream: { pipe: jest.fn() },
+            }
+          : { asset: { filename: "preview" }, kind, content },
+      );
 
       await controller.previewAsset(
         "user-1",
@@ -158,7 +162,11 @@ describe("FilesController Markdown endpoints", () => {
         "Cache-Control",
         PRIVATE_IMMUTABLE_CACHE_CONTROL,
       );
-      expect(response.send).toHaveBeenCalledWith(content);
+      if (kind === "pdf") {
+        expect(response.send).not.toHaveBeenCalled();
+      } else {
+        expect(response.send).toHaveBeenCalledWith(content);
+      }
     },
   );
 
