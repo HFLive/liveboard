@@ -177,8 +177,8 @@ const deployToEdgeOne = (stageDir) => {
   run(
     "pnpm",
     [
-      "exec",
-      "edgeone",
+      "dlx",
+      "edgeone@1.6.19",
       "makers",
       "deploy",
       stageDir,
