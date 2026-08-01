@@ -19,11 +19,30 @@ const createNextConfig = (phase) => {
     );
   }
 
+  const rawAssetPrefix = process.env.NEXT_PUBLIC_ASSET_PREFIX?.trim();
+  let assetPrefix;
+  if (rawAssetPrefix) {
+    const parsedAssetPrefix = new URL(rawAssetPrefix);
+    if (
+      parsedAssetPrefix.protocol !== "https:" ||
+      parsedAssetPrefix.username ||
+      parsedAssetPrefix.password ||
+      parsedAssetPrefix.search ||
+      parsedAssetPrefix.hash
+    ) {
+      throw new Error(
+        "NEXT_PUBLIC_ASSET_PREFIX 必须是没有凭据、查询参数或锚点的 HTTPS 地址。",
+      );
+    }
+    assetPrefix = rawAssetPrefix.replace(/\/+$/, "");
+  }
+
   return {
     distDir:
       process.env.NEXT_DIST_DIR ??
       (phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next"),
     reactStrictMode: true,
+    assetPrefix,
     transpilePackages: ["@liveboard/shared"],
     typedRoutes: true,
     async rewrites() {

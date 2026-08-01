@@ -21,6 +21,7 @@ PostgreSQL、Upstash Redis、Cloudflare R2、Vercel API/Web、首次管理员初
   │
   ▼
 Vercel Web（Next.js，apps/web）
+  ├── /_next/static/*：可选由 static.hsfz.live（Cloudflare Pages）分发
   │  同源 /api/* rewrite
   ▼
 Vercel API（NestJS，apps/api，sin1）
@@ -356,6 +357,54 @@ API_HOST=https://liveboard-api-tlvx.vercel.app
 
 部署后记录 Web 稳定域名，例如
 `https://liveboard-web.vercel.app`。
+
+### 9.1 可选：用 Cloudflare Pages 分发 Next.js 静态资源
+
+如果目标用户访问 Vercel CDN 的 `/_next/static/*` 明显缓慢，可以只把带内容哈希
+的 JS、CSS 和字体发布到 Cloudflare Pages；页面、API 和用户文件的部署位置不变。
+这里使用独立 Pages Direct Upload Project，不公开存放用户文件的 R2 Bucket。
+
+1. 在 Cloudflare Workers & Pages 创建 Direct Upload Project，名称固定为
+   `liveboard-static`，第一次把构建目录按 `_next/static/*` 结构上传。
+2. 在 Pages Project 先添加 `static.hsfz.live`；域名继续由 DNSPod 等外部 DNS
+   托管时，只需添加 `static` 到 `liveboard-static.pages.dev` 的 CNAME，不需要
+   修改域名 Nameserver。
+3. 创建最小权限 API Token：`Account / Cloudflare Pages / Edit`，不授予 DNS、
+   R2 或 Workers 权限。
+4. 只在 Vercel Web Project 的 Production 环境增加：
+
+   ```text
+   NEXT_PUBLIC_ASSET_PREFIX=https://static.hsfz.live
+   CLOUDFLARE_ACCOUNT_ID=<Cloudflare Account ID>
+   CLOUDFLARE_API_TOKEN=<Cloudflare Pages Edit Token>
+   ```
+
+   `NEXT_PUBLIC_ASSET_PREFIX` 不带结尾 `/`。Token 设置为 Sensitive，不能放入
+   Git、文档、聊天或 `NEXT_PUBLIC_*` 变量。
+
+[`apps/web/scripts/deploy-pages-static.mjs`](../apps/web/scripts/deploy-pages-static.mjs)
+由 Web 的 `postbuild` 自动调用。它仅在 `VERCEL=1` 且
+`VERCEL_ENV=production` 时执行，复制**本次相同构建**的 `.next/static`，写入一年
+`immutable` 缓存规则，再通过 Wrangler 发布到 `liveboard-static` 的 `main`
+Production branch。上传或凭据校验失败会让 Vercel 构建失败，防止新 HTML 已上线
+而对应静态文件缺失。本地、Preview 和自托管构建会明确跳过上传。
+
+首次接入后检查任一构建文件：
+
+```bash
+curl -I https://static.hsfz.live/_next/static/chunks/<实际文件名>.js
+```
+
+预期至少包含 `200`、正确的 JavaScript Content-Type，以及：
+
+```text
+Cache-Control: public, max-age=31536000, immutable
+```
+
+Pages 的平台域名和这些浏览器构建文件本身都是公开资源；课程文件、附件、头像等
+业务对象继续使用私有 R2 和签名/API 权限链路。没有备案时不要把该方案描述为
+中国大陆 CDN，它仍是境外 Cloudflare 网络，必须从真实用户网络测速后决定是否
+启用。
 
 ## 10. 补齐 Web、API 和 R2 的正式 Origin
 
