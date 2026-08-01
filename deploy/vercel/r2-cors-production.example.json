@@ -1,11 +1,12 @@
-{
-  "rules": [
-    {
-      "AllowedOrigins": ["https://liveboard.example.com"],
-      "AllowedMethods": ["PUT"],
-      "AllowedHeaders": ["Content-Type"],
-      "ExposeHeaders": ["ETag"],
-      "MaxAgeSeconds": 3600
-    }
-  ]
-}
+[
+  {
+    "AllowedOrigins": [
+      "https://liveboard-web.vercel.app",
+      "https://liveboard.example.com"
+    ],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]

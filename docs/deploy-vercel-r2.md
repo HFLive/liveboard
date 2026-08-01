@@ -1,163 +1,791 @@
-# LiveBoard 部署到 Vercel Hobby + Cloudflare R2
+# LiveBoard 从零部署到 Vercel Hobby、Neon、Upstash 与 Cloudflare R2
 
-本文面向把 LiveBoard 部署到 Vercel Hobby 的工程师。前提是先完成
-[数据迁移](./migrate-data-to-vercel-r2.md)，把现有 PostgreSQL 业务数据与
-MinIO/OSS 对象迁移到 Vercel 环境。
+本文用于把 LiveBoard 的一个**全新实例**部署到云端，覆盖 GitHub、Neon
+PostgreSQL、Upstash Redis、Cloudflare R2、Vercel API/Web、首次管理员初始化、
+域名、发布同步、验收和排错。
 
-> 重要：Vercel Hobby 只允许个人、非商业用途。如果 LiveBoard 用于学校、
-> 公司、收费教学，或开发过程涉及受薪员工/顾问，请改用 Vercel Pro 或继续
-> 采用自托管部署。
+部署全新实例**不要求先迁移旧数据**。如果要保留旧 LiveBoard 的业务数据，先按
+本文部署并验收空环境，再执行
+[旧数据迁移指南](./migrate-data-to-vercel-r2.md)，最后切换正式流量。
 
-## 1. 前置条件
+> Vercel Hobby 适合个人、非商业项目。学校、公司、收费教学、受薪开发等用途应
+> 根据 Vercel 当前条款改用 Pro 或自托管。Hobby 还只有一个并发构建槽，API 与
+> Web 同时部署时排队是正常现象。
 
-- Vercel Hobby 账号。
-- 个人 GitHub 账号名下的私有镜像仓库。Vercel Hobby 不支持连接
-  GitHub Organization 拥有的仓库，因此 `HFLive/liveboard` 需要通过人工或
-  GitHub Actions 同步到个人镜像。
-- 托管 PostgreSQL（推荐 Neon Singapore）。
-- 托管 Redis（推荐 Upstash Singapore）。
-- Cloudflare R2 Bucket（Production 与 Preview 各一个）。
+## 1. 最终架构和数据流
 
-## 2. 创建 Vercel Project
-
-创建两个 Project，都连接个人镜像仓库，Root Directory 分别指向
-`apps/api` 和 `apps/web`，Node.js 22，两个 Project 都开启
-“Include source files outside of the Root Directory”。
-
-1. `liveboard-api`
-   - Root Directory：`apps/api`
-   - Framework：NestJS
-   - Function Region：`sin1`
-2. `liveboard-web`
-   - Root Directory：`apps/web`
-   - Framework：Next.js
-
-创建 API Project 后，在 Vercel 控制台取得真实 `prj_*` ID，写入
-`apps/web/vercel.json` 的 `relatedProjects`（提交代码前必须用真实 ID 替换，
-不允许提交 `prj_REPLACE_ME` 占位符）。
-
-## 3. Vercel 环境变量
-
-API Project（Preview 与 Production 使用各自独立的值）：
+需要创建两个 Vercel Project，但它们连接同一个 GitHub 仓库：
 
 ```text
-DEPLOYMENT_TARGET=vercel
-DATABASE_URL=<pooled postgres url>
-DIRECT_DATABASE_URL=<direct postgres url>
-REDIS_URL=<rediss url>
-R2_ACCOUNT_ID=<cloudflare account id>
-R2_BUCKET=<environment-specific private bucket>
-R2_ACCESS_KEY_ID=<bucket-scoped token id>
-R2_SECRET_ACCESS_KEY=<bucket-scoped token secret>
-SESSION_SECRET=<random secret>
-AI_ENCRYPTION_KEY=<稳定随机密钥>
-SESSION_COOKIE_SECURE=true
-TRUST_PROXY_HOPS=1
-WEB_ORIGIN=https://<production web domain>
-CRON_SECRET=<至少 32 字节的随机密钥>
-NODE_ENV=production
+浏览器
+  │
+  ▼
+Vercel Web（Next.js，apps/web）
+  │  同源 /api/* rewrite
+  ▼
+Vercel API（NestJS，apps/api，sin1）
+  ├── Neon PostgreSQL：持久业务数据
+  ├── Upstash Redis：登录限流、AI 限流等临时状态
+  └── Cloudflare R2：上传文件和图片
+
+大文件上传：浏览器 ──预签名 PUT──▶ 私有 R2
+受保护预览：浏览器 ──▶ API 权限校验 ──▶ R2
 ```
 
-Web Project：
+浏览器始终访问 Web 域名下的 `/api`，不直接使用 API 域名。这样 Session Cookie
+留在 Web 域名下，也避免跨域登录问题。大文件通过短期预签名 URL 直接上传 R2，
+避开 Vercel Function 的请求体限制；R2 Bucket 本身保持私有。
+
+## 2. 先明确两种部署路线
+
+### 2.1 全新空实例
+
+本文默认走这条路线：
+
+1. 创建一个空 Neon 数据库。
+2. API 构建时执行 `prisma migrate deploy`，在空库中应用当前唯一的
+   `00000000000000_baseline_v1` 基线，直接得到完整最新表结构。
+3. 单独执行一次生产初始化，创建最高管理员、默认 Workspace 和论坛分类。
+4. 验证登录、上传、预览、下载和删除。
+
+这里仍然会使用 Prisma migration 命令创建数据库结构，但不会逐轮重放项目过去
+的历史 migration，也不需要运行 `db push`。这是“干净基线”，不是“不建表”。
+
+### 2.2 保留旧实例数据
+
+先完成本文的云端资源和空实例部署，只放测试数据。基础设施全部正常后，再按
+[旧数据迁移指南](./migrate-data-to-vercel-r2.md)迁移 PostgreSQL 和对象文件。
+正式迁移前应停止旧站写入，并避免在新库中产生需要保留的业务数据。
+
+## 3. 部署前准备
+
+需要以下账号：
+
+- 一个个人 GitHub 账号。
+- 一个 Vercel 账号。
+- 一个 Neon 账号。
+- 一个 Upstash 账号。
+- 一个 Cloudflare 账号。
+- 可选：一个已接入 DNS 的正式域名。
+
+准备一个密码管理器。部署过程中会生成或取得以下敏感值：
+
+- Neon 数据库连接地址。
+- Upstash Redis 密码。
+- R2 Access Key ID 与 Secret Access Key。
+- `SESSION_SECRET`、`AI_ENCRYPTION_KEY`、`CRON_SECRET`。
+- 首次初始化生成的管理员密码。
+
+不要把这些值发到聊天、Issue、PR、截图或日志中。R2 Secret Access Key 通常只
+显示一次；一旦泄露，立即轮换对应凭据，并更新 Vercel 环境变量后重新部署。
+
+## 4. 准备 GitHub 部署仓库
+
+团队源仓库是 `HFLive/liveboard`。Vercel Hobby 不能直接连接 GitHub
+Organization 拥有的私有仓库时，使用个人账号下的 fork/镜像仓库作为部署源。
+
+推荐先使用最简单的手动流程：
+
+1. 把 `HFLive/liveboard` fork 到个人账号，例如 `cyx2007/liveboard`。
+2. Vercel 的两个 Project 都连接这个个人仓库的 `main`。
+3. 团队仓库合并新版本后，在个人 fork 页面点击 **Sync fork**。
+4. 个人 fork 的 `main` 更新后，Vercel 会自动部署，不需要再写一个“部署
+   Vercel”的 GitHub Action。
+
+如果以后希望自动同步，可以增加一个只负责把 `HFLive/liveboard:main` 同步到
+个人 fork `main` 的 Action。它只负责同步代码；Vercel 仍通过 Git 集成自动部署。
+刚上线时建议先保留手动同步，减少自动覆盖和凭据配置。
+
+## 5. 创建 Neon PostgreSQL
+
+### 5.1 创建项目
+
+建议配置：
+
+- Project name：`liveboard-production`。
+- Postgres version：`16`，与本项目本地 `postgres:16-alpine` 保持一致。
+- Region：AWS Asia Pacific 1（Singapore），尽量和 API、Redis 放在同一区域。
+- Neon Auth：关闭。LiveBoard 使用自己的用户、密码和 Session 系统。
+
+### 5.2 保存两条连接地址
+
+在 Neon 的 Connect 页面分别取得：
+
+- 池化连接地址，主机名通常含 `-pooler`，填入 `DATABASE_URL`。
+- 直连地址，主机名不含 `-pooler`，填入 `DIRECT_DATABASE_URL`。
+
+保留 Neon 给出的完整查询参数和 SSL 设置，不要手工删改。运行中的 API 使用池化
+地址；构建阶段执行 Prisma migration 时优先使用直连地址。
+
+不要在此时手工建表、执行 `db push` 或导入旧数据。首次 API 构建会对空库应用
+基线。
+
+## 6. 创建 Upstash Redis
+
+建议配置：
+
+- Region：Singapore / `ap-southeast-1`。
+- TLS/SSL：开启。
+- Eviction：关闭。Redis 中的限流状态应在自身 TTL 到期，不应因内存策略被提前
+  淘汰。
+
+LiveBoard 使用 Redis 协议连接，不使用 Upstash REST URL/Token。Upstash 控制台
+可能显示：
 
 ```text
-NEXT_PUBLIC_API_URL=/api
-NEXT_PUBLIC_DEPLOYMENT_TARGET=vercel
-# 只为 Production 设置；Preview 必须依赖 Related Projects，禁止回退正式 API
-API_HOST=https://<stable production api host>
-NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=false
+redis-cli --tls -u redis://default:<password>@<endpoint>:6379
 ```
 
-要点：
+`redis-cli` 通过额外的 `--tls` 参数启用 TLS；LiveBoard 只读取 URL，所以填入
+Vercel 的 `REDIS_URL` 必须改为：
 
-- Production 必须沿用旧环境的 `AI_ENCRYPTION_KEY`，否则迁移过来的 AI
-  Provider API Key 无法解密。
-- `SESSION_SECRET` 可以更换；更换会使旧 Session 失效，用户重新登录即可。
-- Preview 与 Production 的数据库、Redis、R2 Bucket、`SESSION_SECRET`、
-  `AI_ENCRYPTION_KEY`、`CRON_SECRET` 必须完全隔离。
-- `API_HOST` 只配置在 Production。Preview 若没有正确的 Related Projects 配对，
-  Web 构建会直接失败，避免误连 Production API。
-- 所有密钥只通过 Vercel Secret Environment Variables 提供，禁止
-  `NEXT_PUBLIC_*`，禁止写入代码、日志或文档真实值。
+```text
+rediss://default:<password>@<endpoint>:6379
+```
 
-## 4. 构建配置
+重点是 `rediss://` 的双 `s`。写成 `redis://` 时 API 可以部署成功，但健康检查会
+显示 `redis: unavailable`。
 
-两个 Project 的安装命令均从 workspace 根目录执行：
+如果 Redis URL 曾完整出现在聊天或截图中，应在 Upstash 控制台轮换数据库凭据，
+不要继续使用已暴露的密码。
+
+## 7. 创建私有 Cloudflare R2
+
+### 7.1 Bucket
+
+创建 Bucket，例如 `liveboard-production`：
+
+- Public Development URL（`r2.dev`）：关闭。
+- Public Access / 自定义公开域名：不配置。
+- Location hint：如控制台可选，优先亚太地区。
+
+“设置 CORS”不会使 Bucket 公开。没有有效签名或服务端密钥时，对象仍不能访问。
+
+### 7.2 Bucket 级访问令牌
+
+创建只绑定该 Bucket 的 **Object Read & Write** R2 API Token，保存：
+
+- Cloudflare Account ID → `R2_ACCOUNT_ID`。
+- Bucket 名称 → `R2_BUCKET`。
+- Access Key ID → `R2_ACCESS_KEY_ID`。
+- Secret Access Key → `R2_SECRET_ACCESS_KEY`。
+
+不要创建全账号管理权限 Token，也不要把 Cloudflare 全局 API Key 填到应用中。
+
+### 7.3 CORS
+
+可以等 Web 的 Vercel 域名和正式域名确定后再设置。Cloudflare Dashboard 的 CORS
+JSON 编辑器使用**数组**，不是 `{ "rules": [...] }` 包装对象：
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "https://liveboard-web.vercel.app",
+      "https://liveboard.example.com"
+    ],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+规则要求：
+
+- Origin 只有协议和主机名，不带路径，不带结尾 `/`。
+- 上线过渡期可同时保留 Vercel Web 域名和正式域名。
+- 不需要允许 `GET`。受保护预览和下载由 API 校验或签名处理。
+- Production 不要使用 `AllowedOrigins: ["*"]`。
+
+可复制的模板见
+[`deploy/vercel/r2-cors-production.example.json`](../deploy/vercel/r2-cors-production.example.json)。
+
+### 7.4 Lifecycle
+
+增加一条生命周期规则：
+
+- Prefix：`pending/`。
+- Expiration：对象创建 1 天后删除。
+
+它只兜底清理中断上传留下的临时对象。不要给整个 Bucket 设置 1 天过期。
+
+## 8. 创建 Vercel API Project
+
+### 8.1 导入项目
+
+在 Vercel 导入个人 GitHub 仓库，创建 API Project：
+
+- Project Name：优先 `liveboard-api`。
+- Framework Preset：NestJS；若未自动识别可手动选择 Other/NestJS，以最终构建
+  命令为准。
+- Root Directory：`apps/api`。
+- Include source files outside of the Root Directory：**开启**。
+- Node.js Version：`22.x`。
+
+Root Directory 选择器中应点选 `apps/api` 这一层，不要选择仓库根目录、`src`、
+`prisma` 或 `scripts`。
+
+Vercel 新建 Monorepo Project 时这个 Root 外文件选项通常默认开启，但不要假设当前
+项目一定如此；进入 Root Directory 设置实际确认一次。
+
+Vercel 项目名需要全局/账号内唯一时，可能自动变成 `liveboard-api-tlvx` 一类名称。
+这不会影响 Production，后面始终使用控制台显示的真实稳定域名。
+
+### 8.2 Build & Development Settings
+
+Install Command：
 
 ```bash
 cd ../.. && pnpm install --frozen-lockfile
 ```
 
-API 构建顺序：
+Build Command：
 
 ```bash
-pnpm --filter @liveboard/shared build
-pnpm --filter @liveboard/api db:generate
-pnpm --filter @liveboard/api db:deploy
-pnpm --filter @liveboard/api build
+cd ../.. && pnpm --filter @liveboard/shared build && pnpm --filter @liveboard/api db:generate && pnpm --filter @liveboard/api db:deploy && pnpm --filter @liveboard/api build
 ```
 
-`db:deploy` 会优先把 `DIRECT_DATABASE_URL` 临时作为 Prisma migration 连接，
-应用运行时仍使用池化的 `DATABASE_URL`；未提供直连地址时会明确警告并回退。
+不要把安装命令填到 Build Command。`cd ../..` 是因为 Vercel Root Directory 已经
+位于 `apps/api`，构建需要回到 pnpm workspace 根目录。
 
-Web 构建顺序：
+API 的 [`vercel.json`](../apps/api/vercel.json) 已固定 Function Region 为
+`sin1`，并声明每日存储清理 Cron。
+
+### 8.3 API 环境变量
+
+第一次创建时只勾选 Production。填入：
+
+```text
+DEPLOYMENT_TARGET=vercel
+DATABASE_URL=<Neon pooled URL>
+DIRECT_DATABASE_URL=<Neon direct URL>
+REDIS_URL=<Upstash rediss:// URL>
+R2_ACCOUNT_ID=<Cloudflare Account ID>
+R2_BUCKET=liveboard-production
+R2_ACCESS_KEY_ID=<R2 Access Key ID>
+R2_SECRET_ACCESS_KEY=<R2 Secret Access Key>
+SESSION_SECRET=<独立随机值>
+AI_ENCRYPTION_KEY=<独立且长期保存的随机值>
+SESSION_COOKIE_SECURE=true
+TRUST_PROXY_HOPS=1
+WEB_ORIGIN=https://placeholder.invalid
+CRON_SECRET=<独立随机值，至少 32 字节>
+NODE_ENV=production
+```
+
+因为 Web 域名尚未产生，首次可暂时使用
+`WEB_ORIGIN=https://placeholder.invalid`。API 部署后不要用这个占位值正式登录；
+创建 Web Project 后立即替换。
+
+在本机分别生成三个不同的随机值：
 
 ```bash
-pnpm --filter @liveboard/shared build
-pnpm --filter @liveboard/web build
+openssl rand -base64 48
+openssl rand -base64 48
+openssl rand -base64 48
 ```
 
-注意：Preview 必须使用独立数据库，否则 Preview 构建会对生产库执行 migration。
+分别用于 `SESSION_SECRET`、`AI_ENCRYPTION_KEY`、`CRON_SECRET`，并保存在密码
+管理器。以后迁移旧数据或恢复备份时，必须保留原 `AI_ENCRYPTION_KEY`，否则已
+保存的 AI Provider API Key 无法解密。
 
-## 5. Cloudflare R2 配置
+Vercel 环境不设置任何 `MINIO_*` 变量。
 
-创建 `liveboard-production` 与 `liveboard-preview` 两个私有 Bucket，都
-禁用公共 `r2.dev`。每个 Bucket 使用独立的 Bucket-scoped Object Read/Write
-Token。
+### 8.4 第一次部署
 
-CORS（参考 `deploy/vercel/r2-cors-production.example.json`）：
+部署完成后记录 API 的稳定域名，例如：
 
-- Production 只允许正式 Web Origin 的 `PUT`，暴露 `ETag`。
-- Preview 可以允许全部 Origin 的 `PUT`，暴露 `ETag`；安全边界由私有
-  Bucket、60 秒有效预签名 URL、随机 Key 与 Confirm 校验共同提供。
+```text
+https://liveboard-api-tlvx.vercel.app
+```
 
-Lifecycle：临时上传对象统一以 `pending/` 开头，配置删除一天以上
-`pending/` 前缀对象的规则。正式业务对象不能位于 `pending/` 前缀。
+使用 Project 的稳定域名，不要复制某次 Deployment 的随机预览 URL。
 
-## 6. 同源 /api 路由
+如果日志出现：
 
-`apps/web/next.config.mjs` 通过 `@vercel/related-projects` 在构建时解析
-`liveboard-api` 的对应环境 Host，把 `/api/:path*` rewrite 到 API；缺失时
-回退 `API_HOST`。浏览器只访问 Web 域名下的同源 `/api`，Session Cookie
-保持在 Web 域名下。
+```text
+Unsupported engine: wanted: {"node":">=22 <23"} (current: {"node":"v24..."})
+```
 
-本地开发继续使用 `NEXT_PUBLIC_API_URL=http://localhost:4000`，不走 Vercel
-rewrite。
+说明 Project 仍在使用 Node 24。到 Settings → Build and Deployment → Node.js
+Version 选择 22.x，然后 Redeploy。不要改项目的 engine 去迎合 Node 24。
 
-## 7. 上传与下载
+如果只出现 Prisma 的 `package.json#prisma is deprecated` 警告，这是 Prisma 6
+提示未来 Prisma 7 要迁移配置文件，不会导致本次构建失败。
 
-- 大文件（独立文件、课堂文件、论坛图片、Banner）由浏览器直接上传 R2，
-  不经过 Vercel Function Body（普通请求/响应体上限 4.5MB）。
-- 头像、favicon、Markdown 导入仍可经过 API，对象最终写入 R2。
-- 附件下载优先 302 到 R2 预签名 GET；PDF、图片等 inline 资源继续由 API
-  流式中转并重新校验权限。
-- 每日一次 Cron `GET /internal/cron/storage-cleanup` 配合惰性清理与 R2
-  Lifecycle 清理过期上传。
+## 9. 创建 Vercel Web Project
 
-## 8. 定时任务
+再次导入同一个个人 GitHub 仓库，创建 Web Project：
 
-`apps/api/vercel.json` 配置每天一次的 UTC Cron。Vercel Cron 会携带
-`Authorization: Bearer ${CRON_SECRET}`，API 使用恒定时间比较校验。
+- Project Name：`liveboard-web`。
+- Framework Preset：Next.js。
+- Root Directory：`apps/web`。
+- Include source files outside of the Root Directory：**开启**。
+- Node.js Version：`22.x`。
+- Function Region：在 Project Settings 中选择 Singapore；静态资源仍由全球 CDN
+  分发。
 
-## 9. 上线检查清单
+Install Command：
 
-1. 两个 Project 部署同一 Git 提交，Web `/api/health` 命中同一提交的 API。
-2. API Region 为 `sin1`。
-3. Session Cookie 为 Secure、HttpOnly、SameSite=Lax。
-4. R2 Bucket 保持私有，无签名 URL 无法上传/下载。
-5. 上传 50MB 独立文件、100MB 课堂文件、10MB 论坛图片、5MB Banner 均成功。
-6. 浏览器断开后 AI 上游请求被取消；110 秒超时返回明确错误。
-7. `_prisma_migrations` 只有唯一 baseline，`prisma migrate status` 无 pending。
-8. 至少一名迁移过来的正常最高管理员可以登录，AI 配置可用原
-   `AI_ENCRYPTION_KEY` 解密。
-9. 数据迁移验证工具 `verify-vercel-data-migration` 全部 PASS，R2 缺失对象数为 0。
+```bash
+cd ../.. && pnpm install --frozen-lockfile
+```
+
+Build Command：
+
+```bash
+cd ../.. && pnpm --filter @liveboard/shared build && pnpm --filter @liveboard/web build
+```
+
+Web Production 环境变量：
+
+```text
+NEXT_PUBLIC_API_URL=/api
+NEXT_PUBLIC_DEPLOYMENT_TARGET=vercel
+NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=false
+API_HOST=https://<API Project 的真实稳定域名>
+```
+
+`API_HOST` 不带结尾 `/`，也不附加 `/api`。例如：
+
+```text
+API_HOST=https://liveboard-api-tlvx.vercel.app
+```
+
+部署后记录 Web 稳定域名，例如
+`https://liveboard-web.vercel.app`。
+
+## 10. 补齐 Web、API 和 R2 的正式 Origin
+
+Web 部署成功后完成闭环：
+
+1. API Project 的 `WEB_ORIGIN` 改为 Web 稳定域名：
+
+   ```text
+   WEB_ORIGIN=https://liveboard-web.vercel.app
+   ```
+
+2. 如果正式域名已确定，可用英文逗号同时保留两个 Origin：
+
+   ```text
+   WEB_ORIGIN=https://liveboard-web.vercel.app,https://liveboard.example.com
+   ```
+
+3. 保存后重新部署 API。只改环境变量不会改变已经运行的旧 Deployment。
+4. 按第 7.3 节把相同 Web Origin 加入 R2 CORS。
+5. 如果 Web 的 `API_HOST` 有修改，也重新部署 Web。
+
+`WEB_ORIGIN` 中每项都不带路径和结尾 `/`。
+
+先访问：
+
+```text
+https://<Web 域名>/api/health
+```
+
+预期：
+
+```json
+{
+  "ok": true,
+  "service": "liveboard-api",
+  "dependencies": {
+    "postgres": "ok",
+    "redis": "ok",
+    "storage": "ok"
+  }
+}
+```
+
+只有三项都为 `ok` 才继续初始化管理员。
+
+## 11. 安全执行一次生产管理员初始化
+
+Vercel 部署不会自动执行 `seed.cjs`，也不会自动创建生产管理员。健康检查全部正常
+后，在可信本机仓库中执行一次
+[`bootstrap-production.ts`](../apps/api/src/bootstrap-production.ts)。使用 Neon
+**直连**地址，输入内容不会回显：
+
+```bash
+cd /Users/xiang/Desktop/liveboard
+read -s "LIVEBOARD_BOOTSTRAP_DATABASE_URL?粘贴 Neon 直连地址（输入不会显示）: "
+echo
+DATABASE_URL="$LIVEBOARD_BOOTSTRAP_DATABASE_URL" pnpm --filter @liveboard/api exec tsx src/bootstrap-production.ts --machine-readable
+unset LIVEBOARD_BOOTSTRAP_DATABASE_URL
+```
+
+输出会包含 `CREATED=1`、管理员用户名和随机密码。立即把密码保存到密码管理器，再
+执行：
+
+```bash
+clear
+```
+
+初始化脚本只在没有用户的空库中创建：
+
+- 一个 `super_admin` 管理员。
+- 默认 Workspace。
+- 默认论坛分类。
+
+再次运行时应得到 `CREATED=0`，不会覆盖已有管理员。生产环境不要运行本地演示
+seed。
+
+第一次打开登录页时，左上角默认 `LB` 标志可能暂时不显示。这是因为初始化前
+数据库还没有 Workspace，`/settings/public` 无法返回站点配置；初始化创建
+Workspace 后默认标志才出现，与“修改管理员密码”本身无关。
+
+首次登录后立即：
+
+1. 修改管理员密码。
+2. 确认退出再登录成功。
+3. 开启 GitHub、Vercel、Neon、Upstash 和 Cloudflare 的 MFA。
+
+### 忘记保存初始化密码
+
+终端 `clear` 只清屏，不会撤销已创建的管理员，也无法从数据库恢复明文密码。可以
+在可信本机为 `admin` 重置一个至少 16 位的新密码：
+
+```bash
+cd /Users/xiang/Desktop/liveboard
+read -s "LIVEBOARD_NEW_ADMIN_PASSWORD?输入已保存的新密码（不会显示）: "
+echo
+read -s "LIVEBOARD_ADMIN_RESET_DATABASE_URL?粘贴 Neon 直连地址（不会显示）: "
+echo
+DATABASE_URL="$LIVEBOARD_ADMIN_RESET_DATABASE_URL" \
+LIVEBOARD_NEW_ADMIN_PASSWORD="$LIVEBOARD_NEW_ADMIN_PASSWORD" \
+pnpm --filter @liveboard/api exec node - <<'NODE'
+const { PrismaClient } = require("@prisma/client");
+const argon2 = require("argon2");
+
+const prisma = new PrismaClient();
+
+async function main() {
+  const password = process.env.LIVEBOARD_NEW_ADMIN_PASSWORD;
+  if (!password || password.length < 16) {
+    throw new Error("新密码必须至少 16 位");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { username: "admin" },
+    select: { id: true, systemRole: true },
+  });
+  if (!user) throw new Error("没有找到 admin 用户");
+  if (user.systemRole !== "super_admin") {
+    throw new Error("admin 不是最高管理员，已停止操作");
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash: await argon2.hash(password),
+      sessionVersion: { increment: 1 },
+      status: "active",
+    },
+  });
+  console.log("管理员密码已成功重置，旧会话已失效。");
+}
+
+main()
+  .catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  })
+  .finally(async () => prisma.$disconnect());
+NODE
+unset LIVEBOARD_NEW_ADMIN_PASSWORD
+unset LIVEBOARD_ADMIN_RESET_DATABASE_URL
+clear
+```
+
+## 12. 绑定正式域名
+
+只把用户访问的正式域名绑定到 **Web Project**。API 不需要公开绑定同一个域名，
+因为 Web 已把 `/api/*` 同源转发到 API Project。
+
+1. Vercel Web Project → Settings → Domains，添加正式域名。
+2. 在 DNS 服务商按 Vercel 页面显示的记录配置，不要凭旧教程猜 A/CNAME 值。
+3. 如果 DNS 托管在 Cloudflare，初次验证和签发证书时建议使用 DNS only（灰云）。
+4. 等待 Vercel 显示域名和证书有效。
+5. API `WEB_ORIGIN` 加入正式域名并 Redeploy API。
+6. R2 CORS 加入正式域名。
+
+Web 的 `API_HOST` 仍然指向 API Project 的稳定 `.vercel.app` 域名，不改成正式 Web
+域名，否则会形成 rewrite 自循环。
+
+从 `.vercel.app` 切到正式域名后需要重新登录是正常的：Cookie 属于不同主机，旧
+域名的登录态不会自动复制到新域名。
+
+## 13. Cron、区域和访问速度
+
+[`apps/api/vercel.json`](../apps/api/vercel.json) 已配置：
+
+```text
+GET /internal/cron/storage-cleanup
+3 4 * * *
+```
+
+Vercel 会携带 `Authorization: Bearer <CRON_SECRET>`。部署后在 Vercel Cron Jobs
+中确认任务已识别；不要从浏览器公开调用内部清理接口。
+
+API 固定在 `sin1`，Neon 与 Upstash 也应选择 Singapore，以减少每次 API 请求的
+数据库/Redis 往返。Web Function 同样选 Singapore；静态 JS/CSS/图片仍由 Vercel
+全球 CDN 分发。
+
+Vercel Hobby 通常只能选择单个 Function Region。中国大陆访问仍可能受跨境网络、
+冷启动和第三方服务影响。排查“慢”时先看浏览器 Network：
+
+- Document/静态资源慢：更可能是 CDN、DNS 或跨境网络。
+- `/api/*` 慢：检查 Vercel Function 日志、冷启动和 Neon/Upstash 区域。
+- 文件上传慢：检查客户端到 R2 的网络，而不是 Vercel API Region。
+
+不要只为靠近浏览器把 API 改到香港，而数据库和 Redis 仍在新加坡；这会让每次
+数据库访问增加跨区往返，整体可能更慢。
+
+免费托管还可能引入额外冷启动：Neon Compute 闲置后可能自动休眠，第一条数据库
+连接会比后续请求慢；Upstash 免费数据库长期无活动时可能被归档，并会事先发送
+提醒邮件。不要把偶发第一次慢误判成 Region 配错，也不要忽略平台的额度和归档
+通知。
+
+## 14. 完整生产验收
+
+### 14.1 基础设施
+
+- Web 首页可打开。
+- `https://<Web 域名>/api/health` 的 PostgreSQL、Redis、Storage 全部为 `ok`。
+- API 和 Web Deployment 使用同一个 Git commit。
+- API Function Region 是 `sin1`，Node 是 22.x。
+- R2 `r2.dev` 和公开自定义域名保持关闭。
+- Vercel 的 Production 环境没有任何 `MINIO_*` 变量。
+
+### 14.2 数据库基线
+
+在 Neon SQL Editor 执行：
+
+```sql
+SELECT migration_name, finished_at
+FROM "_prisma_migrations"
+ORDER BY finished_at;
+```
+
+全新部署应只有：
+
+```text
+00000000000000_baseline_v1
+```
+
+再检查管理员：
+
+```sql
+SELECT username, "systemRole", status
+FROM "User";
+```
+
+应至少有一个状态正常的 `super_admin`。
+
+### 14.3 登录与 Cookie
+
+- 正式域名登录成功，刷新页面后会话仍在。
+- 修改密码后旧会话失效，新密码可重新登录。
+- Cookie 应为 Secure、HttpOnly、SameSite=Lax。
+- Production 登录页不显示演示账号。
+
+### 14.4 R2 文件链路
+
+先上传一个小测试文件，再上传一个 10–50 MB 文件，逐项验证：
+
+- 上传进度正常，浏览器请求直接发往 R2。
+- 支持的 PDF/Markdown/TXT 可以预览。
+- 下载成功。
+- 删除后页面记录和 R2 对象按业务规则清理。
+- 浏览器控制台没有 R2 CORS 错误。
+
+生产切流前还应检查头像、站点图标、论坛图片和课堂文件等实际使用入口。
+
+### 14.5 安全与恢复
+
+- 所有平台启用 MFA。
+- 凭据进入密码管理器，没有写入 Git。
+- Neon 已配置与业务重要性匹配的备份/PITR 策略。
+- R2 重要对象有独立备份或复制方案；R2 不是备份本身。
+- `AI_ENCRYPTION_KEY` 有独立安全备份。
+
+## 15. 日常发布：手动还是自动
+
+当前推荐流程是“手动同步代码，Vercel 自动部署”：
+
+1. 在 `HFLive/liveboard` 提交并合并 PR。
+2. 确认团队仓库 `main` 的 CI 通过。
+3. 到个人 fork 点击 **Sync fork**。
+4. Vercel 看到个人 fork `main` 更新后，自动构建 API 和 Web。
+5. 检查两个 Production Deployment 和 `/api/health`。
+
+这里没有第二次手动上传，也不需要一个 Vercel Deployment Action。以后若增加
+GitHub Action，它只替代第 3 步的“Sync fork”，第 4 步仍由 Vercel Git 集成完成。
+
+同一次提交可能在 Vercel 列表中出现旧 Production 和一次手动 Redeploy 两条
+`Ready` 记录。不要删除：带当前 Production 标记的最新 Deployment 正在服务，
+旧记录用于回滚。
+
+## 16. Preview 环境是可选项
+
+先把 Production 上线，不要为了 Preview 阻塞首次部署。真正安全的 Preview 需要
+完全独立的：
+
+- Neon 数据库。
+- Upstash Redis。
+- R2 Bucket 和 Token。
+- `SESSION_SECRET`、`AI_ENCRYPTION_KEY`、`CRON_SECRET`。
+
+每次 API Preview 构建也会执行 migration，因此绝不能把 Preview 的
+`DIRECT_DATABASE_URL` 指向生产库。
+
+Web 的 [`vercel.json`](../apps/web/vercel.json) 当前没有绑定账户专属的 Related
+Project ID。Production 可通过 `API_HOST` 正常工作；Preview 故意禁止回退到
+Production API，避免预览代码读写正式数据。
+
+以后启用 Preview 时：
+
+1. 为 API Preview 配置独立基础设施和环境变量。
+2. 在 Web Project 配置对应的 Vercel Related Project。
+3. 把真实 API Project ID 写入个人部署 fork 的 `relatedProjects`。
+4. 确保 API Project 名与
+   [`next.config.mjs`](../apps/web/next.config.mjs) 中的 `liveboard-api` 一致。
+
+如果 Vercel 把项目命名成 `liveboard-api-tlvx`，Production 的 `API_HOST` 只需使用
+真实域名；启用 Preview 前则应把项目重命名为 `liveboard-api`，或同步修改代码中
+的 Related Project 名称。
+
+## 17. 旧数据迁移不是首次部署前提
+
+只有需要保留旧站内容时才执行
+[旧数据迁移指南](./migrate-data-to-vercel-r2.md)。推荐顺序：
+
+1. 按本文创建并验收全新的云端空环境。
+2. 清除仅用于验收的测试业务数据，或重新创建干净目标资源。
+3. 备份旧 PostgreSQL 和 MinIO/OSS。
+4. 停止旧站写入。
+5. 迁移 PostgreSQL 数据和对象文件。
+6. 运行迁移校验，确认对象缺失数为 0、管理员和 AI 配置可用。
+7. 重新部署并做最终业务验收。
+8. 切换正式域名；旧环境保留一段只读回滚窗口。
+
+如果旧数据库中保存过 AI Provider 配置，新环境必须沿用旧
+`AI_ENCRYPTION_KEY`。`SESSION_SECRET` 可以更换，但会要求所有用户重新登录。
+
+## 18. 本次部署中遇到的坑与解决方案
+
+### 健康检查显示 `redis: unavailable`
+
+最常见原因是把 Upstash 示例中的 `redis://` 原样填入。改为 `rediss://`，确认变量
+作用域包含 Production，保存后 Redeploy API。仍失败时查看 API Runtime Logs，
+检查端点、密码、6379 端口和 TLS，而不是改用 REST Token。
+
+### Vercel 使用 Node 24 并警告 engine 不支持
+
+Node 版本不是从 Root Directory 选择器设置。进入每个 Project 的 Settings →
+Build and Deployment，把 Node.js Version 明确设为 22.x，再 Redeploy。API 和 Web
+都要设置。
+
+### 不知道 Root Directory 选哪一层
+
+API 选择 `apps/api`，Web 选择 `apps/web`。两者都开启 Include source files
+outside of the Root Directory，因为构建还需要仓库根目录的 workspace 和
+`packages/shared`。
+
+### 安装命令填到了 Build Command
+
+Install Command 只放 `pnpm install`；Build Command 放 shared build、Prisma 和
+应用 build。两者都从 `apps/*` 用 `cd ../..` 回到仓库根目录。
+
+### Prisma `package.json#prisma` deprecation 警告
+
+这是 Prisma 6 的未来兼容提示，不是部署失败原因。只有出现实际 error 或构建退出
+码非 0 才需要阻塞上线。
+
+### Project Name 自动多了随机后缀
+
+说明期望名称不可用。Production 直接使用实际稳定 API 域名作为 `API_HOST` 即可。
+只有 Related Projects/Preview 依赖代码中的项目名，需要按第 16 节对齐。
+
+### R2 控制台拒绝 CORS JSON
+
+Cloudflare Dashboard 要求顶层是数组 `[...]`。不要粘贴旧格式
+`{ "rules": [...] }`。同时检查 Origin 无结尾 `/`，方法为 `PUT`，Header 包含
+`Content-Type`。
+
+### R2 已设 CORS，仍担心是否公开
+
+CORS 只限制浏览器从哪些网页 Origin 发起请求，不授予对象读取权限。只要
+`r2.dev`、公开 Bucket 和公共自定义域名关闭，对象仍是私有的。
+
+### 修改环境变量后健康检查仍是旧结果
+
+Vercel 环境变量只影响新 Deployment。确认变量勾选了 Production，然后 Redeploy
+对应 Project。仅保存变量不会热更新正在运行的 Function。
+
+### Vercel 出现两条相同提交的 Production Deployment
+
+通常是一条 Git 自动部署和一条手动 Redeploy。保留即可；最新且带当前 Production
+标记的一条负责流量，旧条目可以用于回滚。
+
+### 初始化前左上角 `LB` 不显示
+
+空库没有 Workspace，公开站点设置接口暂时没有配置可返回。运行生产初始化后会
+创建默认 Workspace，刷新页面后默认 `LB` 出现。这不是 Logo 文件加载失败。
+
+### `API_HOST` 是否加结尾 `/`
+
+不加，也不要加 `/api`。正确示例是
+`https://liveboard-api-tlvx.vercel.app`。
+
+### 绑定正式域名后需要重新登录
+
+正常。`.vercel.app` 与正式域名拥有不同 Cookie 空间。在正式域名重新登录一次。
+
+### Vercel 部署 Ready，但 `/api/health` 返回 503
+
+Ready 只代表构建和 Function 发布成功，不代表外部依赖全部可用。根据 health 中
+失败项分别检查 Neon、Upstash 或 R2，并查看 API Runtime Logs。不要在依赖未全绿
+时运行管理员初始化。
+
+### 管理员密码在 `clear` 后找不到
+
+密码无法从 hash 还原。使用第 11 节的受限脚本重置 `admin` 密码；脚本还会增加
+`sessionVersion`，使旧会话失效。不要重新运行 seed，也不要删除数据库重来。
+
+## 19. 最终上线清单
+
+- [ ] 个人 GitHub fork 已连接 Vercel，团队仓库仍是代码源。
+- [ ] Neon 使用 PostgreSQL 16、Singapore，已保存 pooled/direct 两条 URL。
+- [ ] Upstash 在 Singapore，Eviction 关闭，`REDIS_URL` 使用 `rediss://`。
+- [ ] R2 Bucket 私有，Token 只限目标 Bucket，CORS 是正式 Origin 数组格式。
+- [ ] API Root 是 `apps/api`，Web Root 是 `apps/web`，均允许读取 Root 外文件。
+- [ ] 两个 Project 均使用 Node 22.x。
+- [ ] API/Web Install 与 Build Command 填在正确栏位。
+- [ ] API 三个随机密钥彼此不同且已安全备份。
+- [ ] Web `API_HOST` 使用真实 API 稳定域名且没有结尾 `/api` 或 `/`。
+- [ ] API `WEB_ORIGIN` 包含当前 Web 域名，修改后已 Redeploy。
+- [ ] `/api/health` 的 PostgreSQL、Redis、Storage 全部为 `ok`。
+- [ ] 生产初始化只执行一次，管理员密码已保存并修改。
+- [ ] Neon 中只有 baseline migration，并存在正常最高管理员。
+- [ ] 小文件和 10–50 MB 文件的上传、预览、下载、删除全部通过。
+- [ ] 正式域名只绑定 Web，API Origin 与 R2 CORS 已同步更新。
+- [ ] 已决定暂时手动 Sync fork；未把“代码同步”和“Vercel 部署”混为一件事。
+- [ ] 如需旧数据，等空环境验收后再按独立迁移指南执行。
+
+## 20. 官方参考
+
+- [Vercel Plans 与 Hobby 用途](https://vercel.com/docs/plans)
+- [Vercel Git 部署与 Hobby 私有组织仓库限制](https://vercel.com/docs/git)
+- [Vercel Monorepos](https://vercel.com/docs/monorepos)
+- [Vercel Monorepos FAQ](https://vercel.com/docs/monorepos/monorepo-faq)
+- [Vercel Functions Regions](https://vercel.com/docs/functions/configuring-functions/region)
+- [Vercel Environment Variables](https://vercel.com/docs/environment-variables)
+- [Vercel Custom Domains](https://vercel.com/docs/domains/working-with-domains/add-a-domain)
+- [Neon connection pooling](https://neon.com/docs/connect/connection-pooling)
+- [Upstash Redis TLS connections](https://upstash.com/docs/redis/howto/connectwithrediscli)
+- [Cloudflare R2 CORS](https://developers.cloudflare.com/r2/buckets/cors/)
+- [Cloudflare R2 API tokens](https://developers.cloudflare.com/r2/api/tokens/)
+- [Cloudflare R2 lifecycle rules](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)
