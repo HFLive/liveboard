@@ -105,6 +105,11 @@ LiveBoard 支持双目标部署，自托管能力保持不变：
   `docs/deploy-vercel-r2.md`。
 - 所有 R2 Secret、数据库/Redis 地址、`SESSION_SECRET`、`AI_ENCRYPTION_KEY`
   只能通过环境变量提供，禁止写入代码、日志、文档真实值或 `NEXT_PUBLIC_*`。
+- Vercel Web 可通过 `NEXT_PUBLIC_ASSET_PREFIX=https://static.hsfz.live` 把
+  `/_next/static/*` 发布到独立 Cloudflare Pages Direct Upload Project
+  `liveboard-static`。Pages Token 只能授予 Account / Cloudflare Pages / Edit，
+  只配置在 Web Production；`postbuild` 必须上传本次相同构建并在失败时阻止
+  Vercel 上线，本地和 Preview 不得上传。业务 R2 Bucket 继续保持私有。
 
 ## UI 设计原则
 
