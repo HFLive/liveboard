@@ -105,11 +105,14 @@ LiveBoard 支持双目标部署，自托管能力保持不变：
   `docs/deploy-vercel-r2.md`。
 - 所有 R2 Secret、数据库/Redis 地址、`SESSION_SECRET`、`AI_ENCRYPTION_KEY`
   只能通过环境变量提供，禁止写入代码、日志、文档真实值或 `NEXT_PUBLIC_*`。
-- Vercel Web 可通过 `NEXT_PUBLIC_ASSET_PREFIX=https://static.hsfz.live` 把
-  `/_next/static/*` 发布到独立 Cloudflare Pages Direct Upload Project
-  `liveboard-static`。Pages Token 只能授予 Account / Cloudflare Pages / Edit，
-  只配置在 Web Production；`postbuild` 必须上传本次相同构建并在失败时阻止
-  Vercel 上线，本地和 Preview 不得上传。业务 R2 Bucket 继续保持私有。
+- Vercel Web 的 `STATIC_ASSET_PROVIDER=vercel|cloudflare|edgeone` 选择
+  `/_next/static/*` 使用 Vercel 原生分发、Cloudflare Pages 或 Tencent EdgeOne
+  Makers；默认 `vercel`。Cloudflare 与 EdgeOne 的域名、项目名和 Secret 可以同时
+  保留，切换 provider 时 `postbuild` 只向选中的 Direct Upload Project 上传本次
+  相同构建，并通过正式静态域名逐字节校验一个构建文件；上传或校验失败必须阻止
+  Vercel 上线；本地、Preview 和自托管不得上传。
+  Cloudflare Token 只能授予 Account / Cloudflare Pages / Edit；EdgeOne 使用独立
+  Makers API Token；二者都只能配置在 Web Production。业务 R2 Bucket 继续私有。
 
 ## UI 设计原则
 

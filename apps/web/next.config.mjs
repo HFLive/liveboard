@@ -1,5 +1,6 @@
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 import { withRelatedProject } from "@vercel/related-projects";
+import { resolveStaticAssetConfig } from "./scripts/static-assets-config.mjs";
 
 /** @type {import('next').NextConfig} */
 const createNextConfig = (phase) => {
@@ -19,23 +20,7 @@ const createNextConfig = (phase) => {
     );
   }
 
-  const rawAssetPrefix = process.env.NEXT_PUBLIC_ASSET_PREFIX?.trim();
-  let assetPrefix;
-  if (rawAssetPrefix) {
-    const parsedAssetPrefix = new URL(rawAssetPrefix);
-    if (
-      parsedAssetPrefix.protocol !== "https:" ||
-      parsedAssetPrefix.username ||
-      parsedAssetPrefix.password ||
-      parsedAssetPrefix.search ||
-      parsedAssetPrefix.hash
-    ) {
-      throw new Error(
-        "NEXT_PUBLIC_ASSET_PREFIX 必须是没有凭据、查询参数或锚点的 HTTPS 地址。",
-      );
-    }
-    assetPrefix = rawAssetPrefix.replace(/\/+$/, "");
-  }
+  const { assetPrefix } = resolveStaticAssetConfig();
 
   return {
     distDir:
