@@ -17,7 +17,7 @@ import {
   setEquippedBadges,
   updateProfile,
   uploadAvatar,
-  uploadProfileBanner,
+  uploadProfileBannerDirect,
 } from "@/lib/api";
 import { roleLabel, userStatusLabel } from "@/lib/labels";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
@@ -215,7 +215,7 @@ export function ProfileClient() {
       const result =
         cropTarget === "avatar"
           ? await uploadAvatar(file)
-          : await uploadProfileBanner(file);
+          : await uploadProfileBannerDirect(file);
       setUser(result.user);
       if (cropTarget === "avatar") {
         window.dispatchEvent(new Event("liveboard:profile-updated"));

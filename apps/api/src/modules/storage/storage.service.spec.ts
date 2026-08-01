@@ -58,6 +58,7 @@ describe("StorageService", () => {
   };
 
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.resetAllMocks();
     MockedMinioClient.mockImplementation(() => mockMinioClient);
     secrets.encrypt.mockImplementation((value: string) => `enc:${value}`);
@@ -121,7 +122,9 @@ describe("StorageService", () => {
     );
   });
 
-  it("keeps supported uploads below the storage SDK multipart threshold", () => {
+  it("keeps supported uploads below the storage SDK multipart threshold", async () => {
+    // MinIO 客户端现在惰性初始化，先触发一次后端解析。
+    await service.activeBackend();
     expect(MockedMinioClient).toHaveBeenCalledWith(
       expect.objectContaining({
         partSize: ATOMIC_UPLOAD_PART_SIZE_BYTES,
@@ -145,6 +148,7 @@ describe("StorageService", () => {
     prisma.pendingUpload.findMany.mockResolvedValue([
       {
         id: "upload-1",
+        storageBackend: "oss",
         storageKey: "workspace/pending/file.bin",
         expiresAt: new Date("2026-07-29T00:00:00Z"),
       },
@@ -180,6 +184,7 @@ describe("StorageService", () => {
     prisma.pendingUpload.findMany.mockResolvedValue([
       {
         id: "upload-1",
+        storageBackend: "oss",
         storageKey: "workspace/pending/file.bin",
         expiresAt: new Date("2026-07-29T00:00:00Z"),
       },
@@ -189,6 +194,75 @@ describe("StorageService", () => {
     );
 
     await expect(service.cleanupExpiredPendingUploads()).resolves.toBe(0);
+
+    expect(prisma.pendingUpload.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("removes both R2 pending and final keys before deleting an expired row", async () => {
+    const removeObject = jest.fn().mockResolvedValue(undefined);
+    jest
+      .spyOn(service, "backendFor")
+      .mockResolvedValue({ removeObject } as never);
+    prisma.pendingUpload.findMany.mockResolvedValue([
+      {
+        id: "upload-r2",
+        storageBackend: "r2",
+        storageKey: "workspace/file.bin",
+        expiresAt: new Date("2026-07-29T00:00:00Z"),
+      },
+    ]);
+
+    await expect(service.cleanupExpiredPendingUploads()).resolves.toBe(1);
+
+    expect(removeObject).toHaveBeenNthCalledWith(
+      1,
+      "pending/workspace/file.bin",
+    );
+    expect(removeObject).toHaveBeenNthCalledWith(2, "workspace/file.bin");
+    expect(prisma.pendingUpload.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: "upload-r2",
+        expiresAt: { lte: expect.any(Date) },
+      },
+    });
+  });
+
+  it("retains the pending row when any R2 object cleanup fails", async () => {
+    const removeObject = jest
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("R2 unavailable"));
+    jest
+      .spyOn(service, "backendFor")
+      .mockResolvedValue({ removeObject } as never);
+    prisma.pendingUpload.findMany.mockResolvedValue([
+      {
+        id: "upload-r2",
+        storageBackend: "r2",
+        storageKey: "workspace/file.bin",
+        expiresAt: new Date("2026-07-29T00:00:00Z"),
+      },
+    ]);
+
+    await expect(service.cleanupExpiredPendingUploads()).resolves.toBe(0);
+
+    expect(prisma.pendingUpload.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("does not discard the tracking row before object cleanup succeeds", async () => {
+    const removeObject = jest
+      .fn()
+      .mockRejectedValue(new Error("R2 unavailable"));
+    jest
+      .spyOn(service, "backendFor")
+      .mockResolvedValue({ removeObject } as never);
+    const pending = {
+      id: "upload-r2",
+      storageBackend: "r2",
+      storageKey: "workspace/file.bin",
+    } as never;
+
+    await expect(service.discardPendingUpload(pending)).resolves.toBe(false);
 
     expect(prisma.pendingUpload.deleteMany).not.toHaveBeenCalled();
   });
@@ -219,6 +293,7 @@ describe("StorageService", () => {
     expect(result.fileDistribution).toEqual({
       minio: { count: 5, bytes: 160 },
       oss: { count: 4, bytes: 0 },
+      r2: { count: 0, bytes: 0 },
     });
   });
 
@@ -515,7 +590,7 @@ describe("StorageService", () => {
     });
 
     await expect(
-      service.presignUpload("oss", "some/key", {
+      service.signUpload("oss", "some/key", {
         sizeBytes: 5,
         mimeType: "text/plain",
       }),
@@ -525,7 +600,7 @@ describe("StorageService", () => {
 
   it("returns null for presigned uploads on the MinIO backend", async () => {
     await expect(
-      service.presignUpload("minio", "some/key", {
+      service.signUpload("minio", "some/key", {
         sizeBytes: 5,
         mimeType: "text/plain",
       }),
@@ -548,18 +623,21 @@ describe("StorageService", () => {
     });
 
     await expect(
-      service.presignUpload("oss", "ws/2026-07-29/a.pdf", {
+      service.signUpload("oss", "ws/2026-07-29/a.pdf", {
         sizeBytes: 1024,
         mimeType: "application/pdf",
       }),
-    ).resolves.toEqual({
-      url: "https://oss.example/upload",
-      fields: {
-        key: "ws/2026-07-29/a.pdf",
-        policy: "signed-policy",
-        "x-amz-signature": "signature",
-      },
-    });
+    ).resolves.toEqual(
+      expect.objectContaining({
+        transport: "form_post",
+        url: "https://oss.example/upload",
+        fields: {
+          key: "ws/2026-07-29/a.pdf",
+          policy: "signed-policy",
+          "x-amz-signature": "signature",
+        },
+      }),
+    );
     const policy = mockMinioClient.newPostPolicy.mock.results[0]?.value;
     expect(policy.setBucket).toHaveBeenCalledWith("liveboard");
     expect(policy.setKey).toHaveBeenCalledWith("ws/2026-07-29/a.pdf");

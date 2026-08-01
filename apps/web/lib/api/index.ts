@@ -21,10 +21,12 @@ import type {
   ForumThreadStatus,
   NotificationCategory,
   NotificationListResult,
+  ObjectUploadInstruction,
   PermissionLevel,
   PermissionTargetType,
   QuestionType,
   ServerStatusSummary,
+  SignedUploadResponse,
   SystemRole,
   TeachingDeckSummary,
   TeachingDeckItemType,
@@ -36,12 +38,13 @@ import type {
   UserSummary,
 } from "@liveboard/shared";
 import {
+  ALLOW_RELAY_FALLBACK,
   API_URL,
   ApiError,
-  postToObjectStorageWithProgress,
   redirectToLoginOnUnauthorized,
   request,
   uploadFormData,
+  uploadToObjectStorage,
   type UploadRequestOptions,
 } from "./client";
 
@@ -244,6 +247,58 @@ export async function uploadProfileBanner(file: File) {
   }
 
   return (await response.json()) as { user: UserProfile };
+}
+
+function abortBannerUpload(uploadId: string) {
+  return request<{ ok: boolean }>("/auth/me/banner/upload-abort", {
+    method: "POST",
+    body: JSON.stringify({ uploadId }),
+  }).catch(() => undefined);
+}
+
+/**
+ * Banner 直传（Vercel 下 5MB 超过普通请求体上限必须直传）。自托管下
+ * 签名 501 或直传失败时回退服务器中转；Vercel 下直传失败直接抛出。
+ */
+export async function uploadProfileBannerDirect(
+  file: File,
+  options?: UploadRequestOptions,
+) {
+  let signed: SignedUploadResponse;
+  try {
+    signed = await request<SignedUploadResponse>("/auth/me/banner/upload-url", {
+      method: "POST",
+      body: JSON.stringify({
+        filename: file.name,
+        sizeBytes: file.size,
+        mimeType: file.type || undefined,
+      }),
+    });
+  } catch (caught) {
+    if (
+      ALLOW_RELAY_FALLBACK &&
+      caught instanceof ApiError &&
+      caught.status === 501
+    ) {
+      return uploadProfileBanner(file);
+    }
+    throw caught;
+  }
+
+  try {
+    await uploadToObjectStorage(signed.instruction, file, options);
+  } catch (caught) {
+    await abortBannerUpload(signed.uploadId);
+    if (isAbortError(caught)) throw caught;
+    if (ALLOW_RELAY_FALLBACK) return uploadProfileBanner(file);
+    throw caught;
+  }
+
+  clearCurrentUserCache();
+  return request<{ user: UserProfile }>("/auth/me/banner/upload-confirm", {
+    method: "POST",
+    body: JSON.stringify({ uploadId: signed.uploadId }),
+  });
 }
 
 export function changePassword(input: {
@@ -579,6 +634,9 @@ export function resetSystemFavicon(variant: FaviconVariant = "default") {
 
 export interface HttpsStatus {
   available: boolean;
+  /** Vercel 下为 "vercel"，表示由 Vercel 项目设置托管。 */
+  managedBy?: "vercel";
+  message?: string;
   enabled: boolean;
   domain: string | null;
   subjectType: "domain" | "ip" | null;
@@ -630,9 +688,14 @@ export function setHttpsAutoRenew(enabled: boolean) {
 }
 
 export interface StorageSettings {
-  backend: "minio" | "oss";
+  backend: "minio" | "oss" | "r2";
   downloadMode: "proxy" | "direct";
   uploadMode: "relay" | "direct";
+  /** Vercel 下为 "environment"，表示由环境变量管理，不可编辑。 */
+  source?: "environment";
+  editable?: boolean;
+  /** Vercel R2 的只读 Bucket 名称。 */
+  bucket?: string;
   minio: { endpoint: string; bucket: string };
   oss: {
     region: string | null;
@@ -647,6 +710,7 @@ export interface StorageSettings {
   fileDistribution: {
     minio: { count: number; bytes: number };
     oss: { count: number; bytes: number };
+    r2: { count: number; bytes: number };
   };
   updatedAt: string | null;
 }
@@ -964,6 +1028,71 @@ export async function uploadForumPostImages(postId: string, images: File[]) {
   }
 
   return (await response.json()) as { images: ForumImageSummary[] };
+}
+
+function abortForumPostImageUpload(postId: string, uploadId: string) {
+  return request<{ ok: boolean }>(
+    `/forum/posts/${postId}/images/upload-abort`,
+    {
+      method: "POST",
+      body: JSON.stringify({ uploadId }),
+    },
+  ).catch(() => undefined);
+}
+
+/**
+ * 单张论坛图片直传：签名 → 直传对象存储（OSS/R2）→ 确认。
+ * Vercel 下图片直传失败直接抛出，不允许回退 multipart。
+ */
+export async function uploadForumPostImageDirect(
+  postId: string,
+  file: File,
+  options?: UploadRequestOptions,
+) {
+  let signed: SignedUploadResponse;
+  try {
+    signed = await request<SignedUploadResponse>(
+      `/forum/posts/${postId}/images/upload-url`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          filename: file.name,
+          sizeBytes: file.size,
+          mimeType: file.type || undefined,
+        }),
+      },
+    );
+  } catch (caught) {
+    if (
+      ALLOW_RELAY_FALLBACK &&
+      caught instanceof ApiError &&
+      caught.status === 501
+    ) {
+      const { images } = await uploadForumPostImages(postId, [file]);
+      return { image: images[0]! };
+    }
+    throw caught;
+  }
+
+  try {
+    await uploadToObjectStorage(signed.instruction, file, options);
+  } catch (caught) {
+    await abortForumPostImageUpload(postId, signed.uploadId);
+    if (isAbortError(caught)) throw caught;
+    if (ALLOW_RELAY_FALLBACK) {
+      const { images } = await uploadForumPostImages(postId, [file]);
+      return { image: images[0]! };
+    }
+    throw caught;
+  }
+
+  return request<{ image: ForumImageSummary }>(
+    `/forum/posts/${postId}/images/upload-confirm`,
+    {
+      method: "POST",
+      body: JSON.stringify({ uploadId: signed.uploadId }),
+    },
+  );
 }
 
 export function voteForumPost(postId: string, vote: "up" | "down") {
@@ -1290,10 +1419,9 @@ function abortAssetUpload(uploadId: string) {
 }
 
 /**
- * 优先签名直入(浏览器直传 OSS):签名接口 501(存储配置不支持)或
- * 直传失败(多为 Bucket 未配 CORS)时自动回退服务器中转,调用方
- * 无需感知存储模式。配额/重名/权限等校验错误直接抛出,不再回退
- * 重传一遍。
+ * 签名直入(浏览器直传 OSS/R2):按服务端返回的上传指令直传对象存储。
+ * 自托管下签名 501 或直传失败(多为 Bucket 未配 CORS)时回退服务器中转；
+ * Vercel 下禁止回退，直传失败直接抛出。配额/重名/权限等校验错误直接抛出。
  */
 export async function uploadAssetDirect(
   input: {
@@ -1303,17 +1431,9 @@ export async function uploadAssetDirect(
   },
   options?: UploadRequestOptions,
 ) {
-  let signed: {
-    uploadId: string;
-    url: string;
-    fields: Record<string, string>;
-  };
+  let signed: SignedUploadResponse;
   try {
-    signed = await request<{
-      uploadId: string;
-      url: string;
-      fields: Record<string, string>;
-    }>("/assets/upload-url", {
+    signed = await request<SignedUploadResponse>("/assets/upload-url", {
       method: "POST",
       body: JSON.stringify({
         filename: input.file.name,
@@ -1324,23 +1444,23 @@ export async function uploadAssetDirect(
       }),
     });
   } catch (caught) {
-    if (caught instanceof ApiError && caught.status === 501) {
+    if (
+      ALLOW_RELAY_FALLBACK &&
+      caught instanceof ApiError &&
+      caught.status === 501
+    ) {
       return uploadAsset(input, options);
     }
     throw caught;
   }
 
   try {
-    await postToObjectStorageWithProgress(
-      signed.url,
-      signed.fields,
-      input.file,
-      options,
-    );
+    await uploadToObjectStorage(signed.instruction, input.file, options);
   } catch (caught) {
     await abortAssetUpload(signed.uploadId);
     if (isAbortError(caught)) throw caught;
-    return uploadAsset(input, options);
+    if (ALLOW_RELAY_FALLBACK) return uploadAsset(input, options);
+    throw caught;
   }
 
   return request<{ asset: FileAssetSummary }>("/assets/upload-confirm", {
@@ -1648,7 +1768,7 @@ export async function uploadClassroomFile(
 }
 
 /**
- * 课堂文件的签名直入版本,回退策略同 uploadAssetDirect。
+ * 课堂文件的签名直入版本，回退策略同 uploadAssetDirect。
  */
 export async function uploadClassroomFileDirect(
   classroomId: string,
@@ -1656,17 +1776,9 @@ export async function uploadClassroomFileDirect(
   options?: UploadRequestOptions,
 ) {
   const base = `/classrooms/${classroomId}/files`;
-  let signed: {
-    uploadId: string;
-    url: string;
-    fields: Record<string, string>;
-  };
+  let signed: SignedUploadResponse;
   try {
-    signed = await request<{
-      uploadId: string;
-      url: string;
-      fields: Record<string, string>;
-    }>(`${base}/upload-url`, {
+    signed = await request<SignedUploadResponse>(`${base}/upload-url`, {
       method: "POST",
       body: JSON.stringify({
         filename: file.name,
@@ -1675,26 +1787,27 @@ export async function uploadClassroomFileDirect(
       }),
     });
   } catch (caught) {
-    if (caught instanceof ApiError && caught.status === 501) {
+    if (
+      ALLOW_RELAY_FALLBACK &&
+      caught instanceof ApiError &&
+      caught.status === 501
+    ) {
       return uploadClassroomFile(classroomId, file, options);
     }
     throw caught;
   }
 
   try {
-    await postToObjectStorageWithProgress(
-      signed.url,
-      signed.fields,
-      file,
-      options,
-    );
+    await uploadToObjectStorage(signed.instruction, file, options);
   } catch (caught) {
     await request<{ ok: boolean }>(`${base}/upload-abort`, {
       method: "POST",
       body: JSON.stringify({ uploadId: signed.uploadId }),
     }).catch(() => undefined);
     if (isAbortError(caught)) throw caught;
-    return uploadClassroomFile(classroomId, file, options);
+    if (ALLOW_RELAY_FALLBACK)
+      return uploadClassroomFile(classroomId, file, options);
+    throw caught;
   }
 
   return request<{ file: ClassroomFileSummary }>(`${base}/upload-confirm`, {

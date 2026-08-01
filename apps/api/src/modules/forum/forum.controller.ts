@@ -19,9 +19,11 @@ import {
   type UploadedAssetFile,
 } from "../files/assets.service";
 import {
+  ConfirmForumImageUploadDto,
   CreateForumCategoryDto,
   CreateForumPostDto,
   CreateForumThreadDto,
+  SignForumImageUploadDto,
   UpdateForumCategoryDto,
   UpdateForumPostDto,
   UpdateForumPostVoteDto,
@@ -164,6 +166,47 @@ export class ForumController {
     return {
       images: await this.assetsService.uploadForumPostImages(userId, id, files),
     };
+  }
+
+  @Post("posts/:id/images/upload-url")
+  async signPostImageUpload(
+    @CurrentUserId() userId: string | null,
+    @Param("id") id: string,
+    @Body() body: SignForumImageUploadDto,
+  ) {
+    return this.assetsService.signForumPostImageUpload(userId, id, {
+      filename: body.filename,
+      sizeBytes: body.sizeBytes,
+      mimeType: body.mimeType,
+    });
+  }
+
+  @Post("posts/:id/images/upload-confirm")
+  async confirmPostImageUpload(
+    @CurrentUserId() userId: string | null,
+    @Param("id") id: string,
+    @Body() body: ConfirmForumImageUploadDto,
+  ) {
+    return {
+      image: await this.assetsService.confirmForumPostImageUpload(
+        userId,
+        id,
+        body.uploadId,
+      ),
+    };
+  }
+
+  @Post("posts/:id/images/upload-abort")
+  async abortPostImageUpload(
+    @CurrentUserId() userId: string | null,
+    @Param("id") id: string,
+    @Body() body: ConfirmForumImageUploadDto,
+  ) {
+    return this.assetsService.abortForumPostImageUpload(
+      userId,
+      id,
+      body.uploadId,
+    );
   }
 
   @Delete("posts/:id")

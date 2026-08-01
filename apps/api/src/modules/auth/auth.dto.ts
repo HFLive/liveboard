@@ -1,4 +1,12 @@
-import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  MinLength,
+} from "class-validator";
 
 export class LoginDto {
   @IsString()
@@ -35,4 +43,26 @@ export class ChangePasswordDto {
   @MinLength(8)
   @MaxLength(256)
   newPassword!: string;
+}
+
+export class SignProfileImageUploadDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  filename!: string;
+
+  @IsInt()
+  @Min(1)
+  sizeBytes!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  mimeType?: string;
+}
+
+export class ConfirmProfileImageUploadDto {
+  @IsString()
+  @IsNotEmpty()
+  uploadId!: string;
 }

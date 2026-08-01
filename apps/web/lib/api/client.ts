@@ -1,6 +1,18 @@
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
+/**
+ * 前端部署目标。Vercel 构建时设置为 `vercel`；缺失时保持 `self_hosted`。
+ * 只用于决定直传失败时是否允许回退到服务器中转，不携带任何凭据。
+ */
+export const DEPLOYMENT_TARGET: "self_hosted" | "vercel" =
+  process.env.NEXT_PUBLIC_DEPLOYMENT_TARGET === "vercel"
+    ? "vercel"
+    : "self_hosted";
+
+/** Vercel 下禁止直传失败后回退到 API multipart 中转。 */
+export const ALLOW_RELAY_FALLBACK = DEPLOYMENT_TARGET !== "vercel";
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -95,6 +107,69 @@ export function uploadFormData<T>(
 }
 
 /**
+ * R2 直传：浏览器按服务端签发的预签名 PUT URL 上传原始文件。只设置服务端
+ * 返回的允许 Header（签入了 Content-Type）。请求不带站点 cookie，进度是
+ * 真实的网络发送进度。
+ */
+export function putToObjectStorageWithProgress(
+  url: string,
+  headers: Record<string, string>,
+  file: File,
+  options: UploadRequestOptions = {},
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    let settled = false;
+
+    const cleanup = () => {
+      options.signal?.removeEventListener("abort", onAbort);
+    };
+    const finish = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      action();
+    };
+    const onAbort = () => {
+      xhr.abort();
+      finish(() => reject(new DOMException("上传已取消", "AbortError")));
+    };
+
+    if (options.signal?.aborted) {
+      onAbort();
+      return;
+    }
+
+    xhr.open("PUT", url);
+    for (const [name, value] of Object.entries(headers)) {
+      xhr.setRequestHeader(name, value);
+    }
+    xhr.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) return;
+      options.onProgress?.(
+        Math.min(100, Math.round((event.loaded / event.total) * 100)),
+      );
+    });
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        options.onProgress?.(100);
+        finish(() => resolve());
+        return;
+      }
+      finish(() => reject(new Error(`直传对象存储失败(${xhr.status})`)));
+    });
+    xhr.addEventListener("error", () => {
+      finish(() => reject(new Error("网络连接中断,直传对象存储失败")));
+    });
+    xhr.addEventListener("abort", () => {
+      finish(() => reject(new DOMException("上传已取消", "AbortError")));
+    });
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+    xhr.send(file);
+  });
+}
+
+/**
  * 签名直入:浏览器按服务端签发的 POST Policy 上传到对象存储。
  * Policy 在 OSS 侧强制校验对象 Key、精确大小与 MIME；file 必须最后
  * 加入表单。请求不带站点 cookie，进度是真实的网络发送进度。
@@ -157,6 +232,37 @@ export function postToObjectStorageWithProgress(
     formData.append("file", file);
     xhr.send(formData);
   });
+}
+
+/**
+ * 按上传指令判别联合把文件直传到对象存储：
+ * - `form_post`：OSS 的 HTML Form POST Policy。
+ * - `put`：R2 的预签名 PUT。
+ */
+export async function uploadToObjectStorage(
+  instruction: {
+    transport: "form_post" | "put";
+    url: string;
+    fields?: Record<string, string>;
+    headers?: Record<string, string>;
+  },
+  file: File,
+  options: UploadRequestOptions = {},
+): Promise<void> {
+  if (instruction.transport === "put") {
+    return putToObjectStorageWithProgress(
+      instruction.url,
+      instruction.headers ?? {},
+      file,
+      options,
+    );
+  }
+  return postToObjectStorageWithProgress(
+    instruction.url,
+    instruction.fields ?? {},
+    file,
+    options,
+  );
 }
 
 function parseJsonResponse(value: string): unknown {

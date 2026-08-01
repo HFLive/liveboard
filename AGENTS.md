@@ -59,6 +59,53 @@ Nginx 站点配置是跨版本持久状态。安装器只在首次缺失时安�
 
 在 Codex 沙箱中，本机端口或数据库连接可能返回 `EPERM`/`P1001`。确认基础设施正常后，应在获准的非沙箱环境启动开发进程，不要误判为项目故障。
 
+## Vercel + Cloudflare R2 部署
+
+LiveBoard 支持双目标部署，自托管能力保持不变：
+
+- 自托管：Docker Compose、MinIO、阿里云 OSS、`.run` Release、Nginx 和 HTTPS 助手继续可用。
+- Vercel：`apps/web` 与 `apps/api` 分别部署为两个 Vercel Project；PostgreSQL/Redis 使用托管服务；对象存储固定为 Cloudflare R2。
+
+规则：
+
+- 业务行为统一以 `DEPLOYMENT_TARGET=self_hosted|vercel` 为准，缺失默认
+  `self_hosted`；业务模块不得直接读 `VERCEL` 决定行为。
+- Vercel 下 StorageService 固定使用 R2：active backend 为 `r2`，
+  upload/downloadMode 为 `direct`（inline 资源仍由 API 中转），缺失任一
+  R2 环境变量时启动失败并列出变量名。存储管理页只读显示 R2，PUT/test
+  返回 409。
+- 大文件（独立文件、课堂文件、论坛图片、Banner）由浏览器直传 R2（预签名
+  PUT，60 秒有效，签入 Content-Type），不经过 Vercel Function Body（普通
+  请求/响应体上限 4.5MB）。前端上传指令是 `form_post | put` 判别联合，
+  禁止用 `fields` 是否存在猜测协议。Vercel 下直传失败禁止回退 multipart
+  中转。
+- 临时上传对象统一放 `pending/` 前缀，配合 R2 Lifecycle 一天后兜底删除；
+  confirm 时服务端把对象复制到正式业务 Key。`verifyAndFinalizePendingObject`
+  是直传确认的统一入口。清理必须先删除临时/正式对象，成功后才能删除
+  `PendingUpload`；创建业务记录与释放 PendingUpload 必须在同一数据库事务。
+- Vercel 是 Serverless：禁用进程内 `setInterval` 关键清理（过期上传清理改由
+  每日 Cron + 惰性清理 + R2 Lifecycle），Server Status 不采样不写表，
+  HTTPS 由 Vercel 项目设置托管（写接口 409）。
+- Redis 使用全局共享的 `RedisService`，惰性连接；本地开发/测试允许内存
+  fallback，Vercel/生产禁止 fallback（Redis 不可用时登录和 AI 返回 503）。
+- AI 上游超时固定 110 秒（Web→API rewrite 上限 120 秒）；PDF 预览流式
+  pipe，禁止整块读入内存后发送。
+- `apps/api/prisma/migrations` 只保留 `00000000000000_baseline_v1` 与
+  `migration_lock.toml`。新环境通过 `prisma migrate deploy` 从零建库；既有
+  自托管数据库升级必须先运行 `scripts/legacy-baseline-transition.sh`
+  （默认只检查，`--execute` 才写入，bridge 后必须通过真实 schema diff，
+  未知历史或 drift 一律 fail closed）。Vercel 构建使用 `db:deploy`，优先用
+  `DIRECT_DATABASE_URL` 直连迁移，Runtime 仍使用池化 `DATABASE_URL`。旧 41
+  条 migration 可由 Git tag `pre-vercel-baseline` 恢复，不得重写 Git 历史。
+- 数据迁移工具：`pnpm --filter @liveboard/api migrate-storage-to-r2`
+  （默认 dry-run 只能读取源/R2 元数据，严禁写对象或数据库；execute 逐对象
+  复制校验后改 `storageBackend=r2`）和
+  `verify-vercel-data-migration`（校验行数、外键、最高管理员、AI 解密、
+  R2 对象与唯一 baseline）。详见 `docs/migrate-data-to-vercel-r2.md` 与
+  `docs/deploy-vercel-r2.md`。
+- 所有 R2 Secret、数据库/Redis 地址、`SESSION_SECRET`、`AI_ENCRYPTION_KEY`
+  只能通过环境变量提供，禁止写入代码、日志、文档真实值或 `NEXT_PUBLIC_*`。
+
 ## UI 设计原则
 
 - 参考 Notion、Claude、Reddit 等产品的信息密度与交互克制，但不复制品牌外观。

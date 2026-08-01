@@ -1,3 +1,4 @@
+import { BadRequestException } from "@nestjs/common";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { StorageService } from "../storage/storage.service";
 import { Readable } from "node:stream";
@@ -417,7 +418,10 @@ describe("ClassroomsService direct upload", () => {
   const storage = {
     activeBackend: jest.fn(),
     backendFor: jest.fn(),
-    presignUpload: jest.fn(),
+    signUpload: jest.fn(),
+    objectKeyForPendingUpload: jest.fn((_backend: string, key: string) => key),
+    verifyAndFinalizePendingObject: jest.fn(),
+    discardPendingUpload: jest.fn(),
   };
   let service: ClassroomsService;
 
@@ -436,6 +440,8 @@ describe("ClassroomsService direct upload", () => {
     folderId: null,
     fileId: null,
     classroomId: "classroom-1",
+    forumPostId: null,
+    storageBackend: "oss" as const,
     filename: "slides.pdf",
     mimeType: "application/pdf",
     sizeBytes: 5,
@@ -477,10 +483,17 @@ describe("ClassroomsService direct upload", () => {
     prisma.pendingUpload.delete.mockResolvedValue(pendingRow);
     storage.activeBackend.mockResolvedValue(backend);
     storage.backendFor.mockResolvedValue(backend);
-    storage.presignUpload.mockResolvedValue({
+    storage.objectKeyForPendingUpload.mockImplementation(
+      (_backend: string, key: string) => key,
+    );
+    storage.signUpload.mockResolvedValue({
+      transport: "form_post",
       url: "https://oss.example/upload",
       fields: { policy: "signed-policy" },
+      expiresAt: "2026-07-29T00:10:00.000Z",
     });
+    storage.verifyAndFinalizePendingObject.mockResolvedValue(undefined);
+    storage.discardPendingUpload.mockResolvedValue(undefined);
     backend.statObject.mockResolvedValue({ size: 5 });
     backend.removeObject.mockResolvedValue(undefined);
   });
@@ -494,10 +507,15 @@ describe("ClassroomsService direct upload", () => {
 
     expect(result).toEqual({
       uploadId: "upload-1",
-      url: "https://oss.example/upload",
-      fields: { policy: "signed-policy" },
+      instruction: {
+        transport: "form_post",
+        url: "https://oss.example/upload",
+        fields: { policy: "signed-policy" },
+        expiresAt: "2026-07-29T00:10:00.000Z",
+      },
+      expiresAt: "2026-07-29T00:10:00.000Z",
     });
-    expect(storage.presignUpload).toHaveBeenCalledWith(
+    expect(storage.signUpload).toHaveBeenCalledWith(
       "oss",
       expect.stringMatching(
         /^workspace-1\/classrooms\/classroom-1\/.+-slides\.pdf$/,
@@ -546,7 +564,7 @@ describe("ClassroomsService direct upload", () => {
   });
 
   it("rejects signing when the storage configuration has no direct upload", async () => {
-    storage.presignUpload.mockResolvedValue(null);
+    storage.signUpload.mockResolvedValue(null);
 
     await expect(
       service.signFileUpload("teacher-1", "classroom-1", {
@@ -588,6 +606,7 @@ describe("ClassroomsService direct upload", () => {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue(created),
       },
+      pendingUpload: { delete: jest.fn().mockResolvedValue(pendingRow) },
     };
     prisma.$transaction.mockImplementation((callback) => callback(tx));
 
@@ -606,7 +625,7 @@ describe("ClassroomsService direct upload", () => {
         sizeBytes: 5,
       }),
     });
-    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
+    expect(tx.pendingUpload.delete).toHaveBeenCalledWith({
       where: { id: "upload-1" },
     });
     expect(result.url).toBe("/classrooms/classroom-1/files/file-1");
@@ -614,15 +633,14 @@ describe("ClassroomsService direct upload", () => {
   });
 
   it("confirm discards the object when the size does not match", async () => {
-    backend.statObject.mockResolvedValue({ size: 10 });
+    storage.verifyAndFinalizePendingObject.mockRejectedValue(
+      new BadRequestException("上传内容不完整"),
+    );
 
     await expect(
       service.confirmFileUpload("teacher-1", "classroom-1", "upload-1"),
     ).rejects.toThrow("上传内容不完整");
-    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
-      where: { id: "upload-1" },
-    });
-    expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
+    expect(storage.discardPendingUpload).toHaveBeenCalledWith(pendingRow);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
@@ -641,26 +659,20 @@ describe("ClassroomsService direct upload", () => {
       service.confirmFileUpload("teacher-1", "classroom-1", "upload-1"),
     ).rejects.toThrow("当前课堂中已存在同名文件");
     expect(tx.classroomFile.create).not.toHaveBeenCalled();
-    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
-      where: { id: "upload-1" },
-    });
-    expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
+    expect(storage.discardPendingUpload).toHaveBeenCalledWith(pendingRow);
   });
 
   it("abort is idempotent and cleans up the object", async () => {
     await expect(
       service.abortFileUpload("teacher-1", "classroom-1", "upload-1"),
     ).resolves.toEqual({ ok: true });
-    expect(prisma.pendingUpload.delete).toHaveBeenCalledWith({
-      where: { id: "upload-1" },
-    });
-    expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
+    expect(storage.discardPendingUpload).toHaveBeenCalledWith(pendingRow);
 
     prisma.pendingUpload.findUnique.mockResolvedValue(null);
-    prisma.pendingUpload.delete.mockClear();
+    storage.discardPendingUpload.mockClear();
     await expect(
       service.abortFileUpload("teacher-1", "classroom-1", "upload-1"),
     ).resolves.toEqual({ ok: true });
-    expect(prisma.pendingUpload.delete).not.toHaveBeenCalled();
+    expect(storage.discardPendingUpload).not.toHaveBeenCalled();
   });
 });

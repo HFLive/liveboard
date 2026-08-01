@@ -544,6 +544,12 @@ export class FilesController {
     response.setHeader("Cross-Origin-Resource-Policy", "same-site");
     response.setHeader("Content-Security-Policy", "sandbox");
     response.setHeader("Cache-Control", PRIVATE_IMMUTABLE_CACHE_CONTROL);
+    if (preview.kind === "pdf") {
+      // PDF 可能接近 25MB，超过 Vercel 普通响应体上限，必须流式 pipe。
+      response.setHeader("Content-Length", String(preview.asset.sizeBytes));
+      preview.stream.pipe(response);
+      return;
+    }
     response.send(preview.content);
   }
 

@@ -17,11 +17,15 @@ export class MinioStorageBackend implements ObjectStorageBackend {
     private readonly bucket: string,
   ) {}
 
-  async putObject(key: string, data: Buffer, mimeType: string) {
+  async putObject(key: string, data: Buffer | Readable, mimeType: string) {
     await this.ensureBucket();
-    await this.client.putObject(this.bucket, key, data, data.length, {
-      "Content-Type": mimeType,
-    });
+    await this.client.putObject(
+      this.bucket,
+      key,
+      data,
+      Buffer.isBuffer(data) ? data.length : undefined,
+      { "Content-Type": mimeType },
+    );
   }
 
   async getObject(key: string) {
@@ -32,11 +36,30 @@ export class MinioStorageBackend implements ObjectStorageBackend {
     await this.client.removeObject(this.bucket, key);
   }
 
+  async copyObject(fromKey: string, toKey: string, _mimeType: string) {
+    await this.client.copyObject(
+      this.bucket,
+      toKey,
+      `/${this.bucket}/${fromKey}`,
+    );
+  }
+
   presignGet(_key: string, _options: PresignDownloadOptions) {
     return Promise.resolve(null);
   }
 
   presignUpload(
+    _key: string,
+    _options: {
+      expirySeconds: number;
+      sizeBytes: number;
+      mimeType: string;
+    },
+  ) {
+    return Promise.resolve(null);
+  }
+
+  presignPut(
     _key: string,
     _options: {
       expirySeconds: number;

@@ -34,7 +34,13 @@ import {
   MAX_BANNER_SIZE_BYTES,
   type UploadedProfileImageFile,
 } from "./auth.service";
-import { ChangePasswordDto, LoginDto, UpdateProfileDto } from "./auth.dto";
+import {
+  ChangePasswordDto,
+  ConfirmProfileImageUploadDto,
+  LoginDto,
+  SignProfileImageUploadDto,
+  UpdateProfileDto,
+} from "./auth.dto";
 
 @Controller("auth")
 export class AuthController {
@@ -125,6 +131,36 @@ export class AuthController {
     @UploadedFile() file?: UploadedProfileImageFile,
   ) {
     return { user: await this.authService.updateBanner(userId, file) };
+  }
+
+  @Post("me/banner/upload-url")
+  async signBannerUpload(
+    @CurrentUserId() userId: string | null,
+    @Body() body: SignProfileImageUploadDto,
+  ) {
+    return this.authService.signBannerUpload(userId, {
+      filename: body.filename,
+      sizeBytes: body.sizeBytes,
+      mimeType: body.mimeType,
+    });
+  }
+
+  @Post("me/banner/upload-confirm")
+  async confirmBannerUpload(
+    @CurrentUserId() userId: string | null,
+    @Body() body: ConfirmProfileImageUploadDto,
+  ) {
+    return {
+      user: await this.authService.confirmBannerUpload(userId, body.uploadId),
+    };
+  }
+
+  @Post("me/banner/upload-abort")
+  async abortBannerUpload(
+    @CurrentUserId() userId: string | null,
+    @Body() body: ConfirmProfileImageUploadDto,
+  ) {
+    return this.authService.abortBannerUpload(userId, body.uploadId);
   }
 
   @Get("profile/:id")

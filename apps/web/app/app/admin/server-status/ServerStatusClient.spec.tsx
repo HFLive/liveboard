@@ -16,6 +16,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 const status = {
+  mode: "host" as const,
   current: {
     sampledAt: "2026-07-23T14:00:00.000Z",
     cpuUsagePercent: 25.4,

@@ -581,6 +581,14 @@ export function SystemSettingsClient() {
 
                 {loadingHttps ? (
                   <SkeletonRows count={3} />
+                ) : httpsStatus?.managedBy === "vercel" ? (
+                  <div className="https-unavailable-panel">
+                    <strong>HTTPS 由 Vercel 项目设置管理</strong>
+                    <p className="muted">
+                      域名、证书与自动续期请在 Vercel
+                      项目设置中配置，无需在此操作。
+                    </p>
+                  </div>
                 ) : httpsStatus?.enabled ? (
                   <div className="https-enabled-panel">
                     <ShieldCheck aria-hidden="true" />

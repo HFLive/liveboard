@@ -38,6 +38,7 @@ const storageSettings = {
   fileDistribution: {
     minio: { count: 0, bytes: 0 },
     oss: { count: 1, bytes: 1024 },
+    r2: { count: 0, bytes: 0 },
   },
   updatedAt: "2026-07-28T00:00:00.000Z",
 };

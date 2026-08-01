@@ -50,19 +50,22 @@ export function ServerStatusClient() {
     return () => window.clearInterval(timer);
   }, [loadStatus]);
 
+  const serverlessStatus = status?.mode === "serverless" ? status : null;
+  const hostStatus = status?.mode === "host" ? status : null;
+
   const chartPoints = useMemo(() => {
-    if (!status) return [];
+    if (!hostStatus) return [];
     const currentPoint: ServerMetricPoint = {
-      sampledAt: status.current.sampledAt,
-      cpuUsagePercent: status.current.cpuUsagePercent,
-      memoryUsagePercent: status.current.memory.usagePercent,
-      diskUsagePercent: status.current.disk.usagePercent,
+      sampledAt: hostStatus.current.sampledAt,
+      cpuUsagePercent: hostStatus.current.cpuUsagePercent,
+      memoryUsagePercent: hostStatus.current.memory.usagePercent,
+      diskUsagePercent: hostStatus.current.disk.usagePercent,
     };
-    const points = status.history.filter(
+    const points = hostStatus.history.filter(
       (point) => point.sampledAt !== currentPoint.sampledAt,
     );
     return [...points, currentPoint];
-  }, [status]);
+  }, [hostStatus]);
 
   return (
     <div className="workspace admin-workspace admin-page admin-page--standard server-status-page">
@@ -74,99 +77,124 @@ export function ServerStatusClient() {
 
       {error ? <p className="error-text">{error}</p> : null}
 
-      <section aria-label="当前资源占用" className="server-metric-grid">
-        <MetricCard
-          detail="实时采样"
-          icon={Cpu}
-          label="CPU"
-          loading={loading}
-          percent={status?.current.cpuUsagePercent}
-        />
-        <MetricCard
-          detail={
-            status
-              ? `${formatBytes(status.current.memory.usedBytes)} / ${formatBytes(
-                  status.current.memory.totalBytes,
-                )}`
-              : undefined
-          }
-          icon={MemoryStick}
-          label="内存"
-          loading={loading}
-          percent={status?.current.memory.usagePercent}
-        />
-        <MetricCard
-          detail={
-            status
-              ? `${formatBytes(status.current.disk.usedBytes)} / ${formatBytes(
-                  status.current.disk.totalBytes,
-                )}`
-              : undefined
-          }
-          icon={Database}
-          label="磁盘"
-          loading={loading}
-          percent={status?.current.disk.usagePercent}
-        />
-      </section>
-
-      <section className="server-trend-section">
-        <div className="server-trend-head">
-          <div>
-            <h2>占用率趋势</h2>
-            <p className="muted">
-              每 {status?.sampleIntervalSeconds ?? 60} 秒采样，保留{" "}
-              {Math.round((status?.retentionHours ?? 168) / 24)} 天。
-            </p>
+      {serverlessStatus ? (
+        <section aria-label="托管依赖状态" className="server-metric-grid">
+          <ServerlessDependencyCard
+            label="PostgreSQL"
+            state={serverlessStatus.dependencies.postgres}
+          />
+          <ServerlessDependencyCard
+            label="Redis"
+            state={serverlessStatus.dependencies.redis}
+          />
+          <ServerlessDependencyCard
+            label="R2"
+            state={serverlessStatus.dependencies.r2}
+          />
+          <div className="serverless-note">
+            当前环境由 Vercel Serverless 托管，不展示临时实例的 CPU、内存或
+            磁盘容量。
+            {serverlessStatus.region ? (
+              <span>
+                Region：{serverlessStatus.region}
+                {serverlessStatus.deploymentId
+                  ? ` · ${serverlessStatus.deploymentId}`
+                  : ""}
+              </span>
+            ) : null}
           </div>
-          <div className="server-trend-actions">
-            <div aria-label="趋势时间范围" className="segmented">
-              {ranges.map((range) => (
+        </section>
+      ) : null}
+
+      {hostStatus ? (
+        <>
+          <section aria-label="当前资源占用" className="server-metric-grid">
+            <MetricCard
+              detail="实时采样"
+              icon={Cpu}
+              label="CPU"
+              loading={loading}
+              percent={hostStatus.current.cpuUsagePercent}
+            />
+            <MetricCard
+              detail={`${formatBytes(hostStatus.current.memory.usedBytes)} / ${formatBytes(
+                hostStatus.current.memory.totalBytes,
+              )}`}
+              icon={MemoryStick}
+              label="内存"
+              loading={loading}
+              percent={hostStatus.current.memory.usagePercent}
+            />
+            <MetricCard
+              detail={`${formatBytes(hostStatus.current.disk.usedBytes)} / ${formatBytes(
+                hostStatus.current.disk.totalBytes,
+              )}`}
+              icon={Database}
+              label="磁盘"
+              loading={loading}
+              percent={hostStatus.current.disk.usagePercent}
+            />
+          </section>
+
+          <section className="server-trend-section">
+            <div className="server-trend-head">
+              <div>
+                <h2>占用率趋势</h2>
+                <p className="muted">
+                  每 {hostStatus.sampleIntervalSeconds} 秒采样，保留{" "}
+                  {Math.round(hostStatus.retentionHours / 24)} 天。
+                </p>
+              </div>
+              <div className="server-trend-actions">
+                <div aria-label="趋势时间范围" className="segmented">
+                  {ranges.map((range) => (
+                    <button
+                      aria-pressed={rangeHours === range.hours}
+                      className={
+                        rangeHours === range.hours ? "active" : undefined
+                      }
+                      key={range.hours}
+                      onClick={() => setRangeHours(range.hours)}
+                      type="button"
+                    >
+                      {range.label}
+                    </button>
+                  ))}
+                </div>
                 <button
-                  aria-pressed={rangeHours === range.hours}
-                  className={rangeHours === range.hours ? "active" : undefined}
-                  key={range.hours}
-                  onClick={() => setRangeHours(range.hours)}
+                  aria-label="刷新服务器状态"
+                  className="icon-button subtle"
+                  disabled={refreshing}
+                  onClick={() => void loadStatus(true)}
+                  title="刷新"
                   type="button"
                 >
-                  {range.label}
+                  <RefreshCw
+                    aria-hidden="true"
+                    className={refreshing ? "spinning" : undefined}
+                  />
                 </button>
-              ))}
+              </div>
             </div>
-            <button
-              aria-label="刷新服务器状态"
-              className="icon-button subtle"
-              disabled={refreshing}
-              onClick={() => void loadStatus(true)}
-              title="刷新"
-              type="button"
-            >
-              <RefreshCw
-                aria-hidden="true"
-                className={refreshing ? "spinning" : undefined}
-              />
-            </button>
-          </div>
-        </div>
 
-        <div className="server-chart-legend" aria-label="图例">
-          <span className="cpu">CPU</span>
-          <span className="memory">内存</span>
-          <span className="disk">磁盘</span>
-        </div>
+            <div className="server-chart-legend" aria-label="图例">
+              <span className="cpu">CPU</span>
+              <span className="memory">内存</span>
+              <span className="disk">磁盘</span>
+            </div>
 
-        {loading && !status ? (
-          <div className="skeleton server-chart-skeleton" />
-        ) : (
-          <UsageChart hours={rangeHours} points={chartPoints} />
-        )}
+            {loading && !hostStatus ? (
+              <div className="skeleton server-chart-skeleton" />
+            ) : (
+              <UsageChart hours={rangeHours} points={chartPoints} />
+            )}
 
-        <p className="server-sampled-at">
-          {status
-            ? `当前值采样于 ${formatSampleTime(status.current.sampledAt)}`
-            : "等待采样"}
-        </p>
-      </section>
+            <p className="server-sampled-at">
+              {`当前值采样于 ${formatSampleTime(hostStatus.current.sampledAt)}`}
+            </p>
+          </section>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -336,4 +364,30 @@ function formatChartTime(value: number, hours: number) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function ServerlessDependencyCard({
+  label,
+  state,
+}: {
+  label: string;
+  state: "ok" | "unavailable";
+}) {
+  return (
+    <article className="server-metric">
+      <div className="server-metric-label">
+        <Database aria-hidden="true" />
+        <span>{label}</span>
+      </div>
+      <strong
+        className={
+          state === "ok"
+            ? "serverless-dependency-ok"
+            : "serverless-dependency-down"
+        }
+      >
+        {state === "ok" ? "正常" : "不可用"}
+      </strong>
+    </article>
+  );
 }

@@ -1,10 +1,14 @@
+import type { ConfigService } from "@nestjs/config";
 import type { PrismaService } from "../prisma/prisma.service";
+import type { RedisService } from "../redis/redis.service";
+import type { StorageService } from "../storage/storage.service";
 import type { ServerMetricsCollector } from "./server-metrics.collector";
 import { ServerStatusService } from "./server-status.service";
 
 describe("ServerStatusService", () => {
   const sampledAt = new Date("2026-07-23T14:00:00.000Z");
   const prisma = {
+    $queryRaw: jest.fn(),
     user: { findUnique: jest.fn() },
     serverMetricSample: {
       findMany: jest.fn(),
@@ -16,13 +20,22 @@ describe("ServerStatusService", () => {
   const collector = {
     sample: jest.fn(),
   };
+  const redis = { ping: jest.fn().mockResolvedValue(true) };
+  const storage = { healthCheckActive: jest.fn().mockResolvedValue(undefined) };
+  const config = { get: jest.fn() } as unknown as ConfigService;
   let service: ServerStatusService;
 
   beforeEach(() => {
     jest.resetAllMocks();
+    redis.ping.mockResolvedValue(true);
+    prisma.$queryRaw.mockResolvedValue([{ one: 1 }]);
+    storage.healthCheckActive.mockResolvedValue(undefined);
     service = new ServerStatusService(
       prisma as unknown as PrismaService,
       collector as unknown as ServerMetricsCollector,
+      redis as unknown as RedisService,
+      storage as unknown as StorageService,
+      config,
     );
     prisma.user.findUnique.mockResolvedValue({
       systemRole: "super_admin",
@@ -92,5 +105,22 @@ describe("ServerStatusService", () => {
       "Only super administrators",
     );
     expect(collector.sample).not.toHaveBeenCalled();
+  });
+
+  it("reports Redis unavailable when serverless ping resolves false", async () => {
+    (config.get as jest.Mock).mockReturnValue("vercel");
+    redis.ping.mockResolvedValue(false);
+    service = new ServerStatusService(
+      prisma as unknown as PrismaService,
+      collector as unknown as ServerMetricsCollector,
+      redis as unknown as RedisService,
+      storage as unknown as StorageService,
+      config,
+    );
+
+    await expect(service.getStatus("admin-1")).resolves.toMatchObject({
+      mode: "serverless",
+      dependencies: { redis: "unavailable" },
+    });
   });
 });

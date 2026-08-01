@@ -40,7 +40,9 @@ export function StorageBackendClient() {
     getStorageSettings()
       .then((result) => {
         setSettings(result.storage);
-        setBackend(result.storage.backend);
+        // Vercel 环境固定 R2，由环境变量管理，不初始化可编辑表单字段。
+        if (result.storage.source === "environment") return;
+        setBackend(result.storage.backend as BackendChoice);
         setDownloadMode(result.storage.downloadMode);
         setUploadMode(result.storage.uploadMode);
         setRegion(result.storage.oss.region ?? "");
@@ -132,6 +134,93 @@ export function StorageBackendClient() {
 
       {loading || !settings ? (
         <SkeletonRows count={4} />
+      ) : settings.source === "environment" ? (
+        <div className="storage-backend-sections">
+          <section className="storage-backend-section" aria-label="当前状态">
+            <div className="panel-head">
+              <div>
+                <h2>当前状态</h2>
+                <p>Vercel 环境固定使用 Cloudflare R2，凭据由环境变量管理。</p>
+              </div>
+            </div>
+            <dl className="storage-backend-status">
+              <div>
+                <dt>当前后端</dt>
+                <dd>Cloudflare R2</dd>
+              </div>
+              <div>
+                <dt>配置来源</dt>
+                <dd>Vercel 环境变量</dd>
+              </div>
+              <div>
+                <dt>Bucket</dt>
+                <dd>{settings.bucket ?? "-"}</dd>
+              </div>
+              <div>
+                <dt>健康状态</dt>
+                <dd
+                  className={
+                    settings.activeBackendHealthy
+                      ? "storage-backend-ok"
+                      : "storage-backend-down"
+                  }
+                >
+                  {settings.activeBackendHealthy ? "正常" : "不可用"}
+                </dd>
+              </div>
+              <div>
+                <dt>下载方式</dt>
+                <dd>签名直出（inline 资源仍由 API 中转）</dd>
+              </div>
+              <div>
+                <dt>上传方式</dt>
+                <dd>浏览器直传（预签名 PUT）</dd>
+              </div>
+              <div className="storage-backend-distribution">
+                <dt>文件分布</dt>
+                <dd>
+                  <span className="storage-backend-dist-item">
+                    <Cloud aria-hidden="true" />
+                    R2 <strong>{settings.fileDistribution.r2.count} 个</strong>
+                    <small>
+                      {formatFileSize(settings.fileDistribution.r2.bytes)}
+                    </small>
+                  </span>
+                </dd>
+              </div>
+            </dl>
+          </section>
+          <section className="storage-backend-section" aria-label="配置说明">
+            <div className="panel-head">
+              <div>
+                <h2>配置说明</h2>
+                <p>
+                  R2 Bucket 的 CORS 与生命周期规则由 Cloudflare 控制台管理。
+                </p>
+              </div>
+            </div>
+            <ul className="storage-backend-guidance-list">
+              <li>
+                为 Production 和 Preview 分别创建私有 Bucket 与独立的
+                Bucket-scoped 读写 Token。
+              </li>
+              <li>
+                Bucket CORS 必须允许 <code>PUT</code> 并暴露 <code>ETag</code>
+                ；Production 只允许正式 Web Origin，Preview 可允许全部 Origin。
+              </li>
+              <li>
+                配置 <code>pending/</code> 前缀的 Lifecycle 规则，删除一天前
+                未确认的临时上传对象。
+              </li>
+              <li>
+                相关环境变量：<code>R2_ACCOUNT_ID</code>、<code>R2_BUCKET</code>
+                、<code>R2_ACCESS_KEY_ID</code>、
+                <code>R2_SECRET_ACCESS_KEY</code>。密钥只允许通过 Vercel
+                环境变量提供，不能在此查看或修改。
+              </li>
+            </ul>
+          </section>
+        </div>
       ) : (
         <div className="storage-backend-sections">
           <section className="storage-backend-section" aria-label="当前状态">

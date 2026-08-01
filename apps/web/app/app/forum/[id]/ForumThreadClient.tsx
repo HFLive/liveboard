@@ -22,10 +22,15 @@ import {
   deleteForumPost,
   deleteForumThread,
   getForumThread,
-  uploadForumPostImages,
+  uploadForumPostImageDirect,
   updateForumThread,
   voteForumPost,
 } from "@/lib/api";
+import {
+  prepareUploadJobs,
+  useUploadTask,
+} from "@/components/upload/useUploadTask";
+import { UploadTaskToast } from "@/components/upload/UploadTaskToast";
 import { formatRelativeTime } from "@/lib/labels";
 import {
   APP_ROUTES,
@@ -46,6 +51,7 @@ interface ForumThreadClientProps {
 
 export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
   const router = useRouter();
+  const { tasks, uploadFiles, cancelUpload, dismissUpload } = useUploadTask();
   const [thread, setThread] = useState<ForumThreadDetail | null>(null);
   useDocumentTitle(thread?.title ?? null);
   const [reply, setReply] = useState("");
@@ -152,8 +158,25 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
 
       const images = replyImages[anonymousKey] ?? [];
       if (images.length > 0 && post.images.length === 0) {
-        const uploaded = await uploadForumPostImages(post.id, images);
-        post = { ...post, images: uploaded.images };
+        const targetPostId = post.id;
+        const jobs = prepareUploadJobs(images, [], "重复图片");
+        const outcomes = await uploadFiles(jobs, (job, uploadOptions) =>
+          uploadForumPostImageDirect(targetPostId, job.file, uploadOptions),
+        );
+        const failed = outcomes.filter((outcome) => outcome.error);
+        if (failed.length > 0) {
+          throw new Error(
+            failed[0]?.error instanceof Error
+              ? failed[0].error.message
+              : "图片上传失败",
+          );
+        }
+        const uploadedImages = outcomes
+          .map((outcome) => outcome.result?.image)
+          .filter((image): image is NonNullable<typeof image> =>
+            Boolean(image),
+          );
+        post = { ...post, images: uploadedImages };
       }
 
       if (parentId) {
@@ -940,6 +963,11 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
           </Link>
         </section>
       ) : null}
+      <UploadTaskToast
+        tasks={tasks}
+        onCancel={cancelUpload}
+        onDismiss={dismissUpload}
+      />
     </div>
   );
 }
