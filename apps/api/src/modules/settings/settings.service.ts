@@ -12,7 +12,6 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { StorageBackendName } from "../storage/storage-backend";
 import { StorageService } from "../storage/storage.service";
 import { HttpsAgentClient } from "./https-agent.client";
-import { PRIVATE_SHORT_CACHE_CONTROL } from "../../common/cache-control";
 
 export interface UpdateSystemSettingsInput {
   timeZone?: string;
@@ -184,24 +183,9 @@ export class SettingsService {
     }
 
     const mimeType = icon.mimeType ?? "image/png";
-    const redirectUrl = await this.storage.presignDownload(
-      icon.backend,
-      icon.storageKey,
-      {
-        filename: "favicon",
-        mimeType,
-        inline: true,
-        cacheControl: PRIVATE_SHORT_CACHE_CONTROL,
-      },
-    );
-    if (redirectUrl) {
-      return { mimeType, redirectUrl, stream: null };
-    }
-
     const backend = await this.storage.backendFor(icon.backend);
     return {
       mimeType,
-      redirectUrl: null,
       stream: (await backend.getObject(icon.storageKey)) as Readable,
     };
   }

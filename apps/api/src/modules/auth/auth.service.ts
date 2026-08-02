@@ -465,21 +465,11 @@ export class AuthService {
     }
 
     const mimeType = user.avatarMimeType ?? "image/webp";
-    const redirectUrl = await this.storage.presignDownload(
-      user.avatarStorageBackend,
-      user.avatarStorageKey,
-      { filename: "avatar", mimeType, inline: true },
-    );
-    if (redirectUrl) {
-      return { mimeType, redirectUrl, stream: null };
-    }
-
     const backend = await this.storage.backendFor(user.avatarStorageBackend);
     const stream = await backend.getObject(user.avatarStorageKey);
 
     return {
       mimeType,
-      redirectUrl: null,
       stream: stream as Readable,
     };
   }

@@ -108,17 +108,18 @@ describe("AuthController session cookies", () => {
         "Cache-Control",
         PRIVATE_REVALIDATED_CACHE_CONTROL,
       );
+      expect(stream.pipe).toHaveBeenCalledWith(response);
     },
   );
 
-  it("does not cache a short-lived signed image redirect", async () => {
-    authService.getAvatar.mockResolvedValue({
+  it("does not cache a short-lived signed banner redirect", async () => {
+    authService.getBanner.mockResolvedValue({
       mimeType: "image/png",
-      redirectUrl: "https://r2.example/signed-avatar",
+      redirectUrl: "https://r2.example/signed-banner",
       stream: null,
     });
 
-    await controller.getAvatar("user-1", "user-1", response, "7");
+    await controller.getBanner("user-1", "user-1", response, "7");
 
     expect(response.setHeader).toHaveBeenCalledWith(
       "Cache-Control",
@@ -126,7 +127,7 @@ describe("AuthController session cookies", () => {
     );
     expect(response.redirect).toHaveBeenCalledWith(
       302,
-      "https://r2.example/signed-avatar",
+      "https://r2.example/signed-banner",
     );
     expect(response.setHeader).not.toHaveBeenCalledWith(
       "Cache-Control",

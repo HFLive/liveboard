@@ -14,7 +14,6 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import {
   ArrowDown,
-  ArrowLeft,
   ArrowUp,
   Bot,
   ChevronDown,
@@ -24,6 +23,7 @@ import {
   File as FileIcon,
   FileText,
   Folder,
+  LayoutGrid,
   MoreHorizontal,
   MoveRight,
   Paperclip,
@@ -32,6 +32,8 @@ import {
   PinOff,
   Plus,
   RotateCcw,
+  Rows3,
+  Search,
   Trash2,
   Upload,
   Users,
@@ -106,7 +108,7 @@ type FloatingMenuState = {
 };
 type ContentRowMenuState = FloatingMenuState & {
   targetType: "folder" | "file" | "asset";
-  surface: "tree" | "table";
+  surface: "tree" | "list" | "grid";
 };
 type TreeDepthStyle = CSSProperties & {
   "--tree-depth": number;
@@ -124,7 +126,7 @@ type DeleteFolderTarget = {
   fileCount: number;
 };
 type ContentSortMode = "name" | "updated";
-type MobileContentPane = "tree" | "contents";
+type ContentView = "list" | "grid";
 
 const SORT_OPTIONS = [
   { value: "updated", label: "最近更新" },
@@ -285,7 +287,10 @@ export function ContentClient() {
   const [isDeletingFolder, setIsDeletingFolder] = useState(false);
   const [contentSortMode, setContentSortMode] =
     useState<ContentSortMode>("updated");
-  const [mobilePane, setMobilePane] = useState<MobileContentPane>("contents");
+  const [contentSearchQuery, setContentSearchQuery] = useState("");
+  const [contentView, setContentView] = useState<ContentView>("list");
+  const [isBreadcrumbOverflowOpen, setIsBreadcrumbOverflowOpen] =
+    useState(false);
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -397,6 +402,64 @@ export function ContentClient() {
       sortedFiles.filter((file) => !pinnedTargetKeys.has(`file:${file.id}`)),
     [pinnedTargetKeys, sortedFiles],
   );
+  const normalizedContentSearchQuery = contentSearchQuery
+    .trim()
+    .toLocaleLowerCase();
+  const visiblePinnedItems = useMemo(
+    () =>
+      pinnedItems.filter((item) => {
+        const label =
+          item.kind === "folder" ? item.folder.name : item.file.title;
+        return (
+          !normalizedContentSearchQuery ||
+          label.toLocaleLowerCase().includes(normalizedContentSearchQuery)
+        );
+      }),
+    [normalizedContentSearchQuery, pinnedItems],
+  );
+  const visibleChildFolders = useMemo(
+    () =>
+      unpinnedChildFolders.filter(
+        (folder) =>
+          !normalizedContentSearchQuery ||
+          folder.name
+            .toLocaleLowerCase()
+            .includes(normalizedContentSearchQuery),
+      ),
+    [normalizedContentSearchQuery, unpinnedChildFolders],
+  );
+  const visibleFiles = useMemo(
+    () =>
+      unpinnedFiles.filter(
+        (file) =>
+          !normalizedContentSearchQuery ||
+          file.title.toLocaleLowerCase().includes(normalizedContentSearchQuery),
+      ),
+    [normalizedContentSearchQuery, unpinnedFiles],
+  );
+  const visibleAssets = useMemo(
+    () =>
+      sortedAssets.filter(
+        (asset) =>
+          !normalizedContentSearchQuery ||
+          asset.filename
+            .toLocaleLowerCase()
+            .includes(normalizedContentSearchQuery),
+      ),
+    [normalizedContentSearchQuery, sortedAssets],
+  );
+  const hasContentItems =
+    pinnedItems.length +
+      unpinnedChildFolders.length +
+      unpinnedFiles.length +
+      sortedAssets.length >
+    0;
+  const hasVisibleContentItems =
+    visiblePinnedItems.length +
+      visibleChildFolders.length +
+      visibleFiles.length +
+      visibleAssets.length >
+    0;
   const activeFolderPath = useMemo(() => {
     if (!activeFolderId) {
       return [];
@@ -413,6 +476,12 @@ export function ContentClient() {
 
     return path;
   }, [activeFolderId, flatFolders]);
+  const collapsedBreadcrumbFolders =
+    activeFolderPath.length > 2 ? activeFolderPath.slice(0, -1) : [];
+  const visibleBreadcrumbFolders =
+    collapsedBreadcrumbFolders.length > 0
+      ? activeFolderPath.slice(-1)
+      : activeFolderPath;
   useDocumentTitle(activeFolderPath.at(-1)?.name ?? "文档");
   const directGrantUserIds = useMemo(
     () => new Set(grants.map((grant) => grant.userId)),
@@ -521,6 +590,7 @@ export function ContentClient() {
     function closeFloatingMenus() {
       setOpenContentRowMenu(null);
       setShowCreateMenu(false);
+      setIsBreadcrumbOverflowOpen(false);
     }
 
     function closeMenus(event: MouseEvent) {
@@ -627,15 +697,18 @@ export function ContentClient() {
   async function selectFolder(folderId: string) {
     setActiveFolderId(folderId);
     persistActiveFolder(folderId);
+    setContentSearchQuery("");
+    setIsBreadcrumbOverflowOpen(false);
     setShowCreateMenu(false);
     setError(null);
     await refreshFolderContents(folderId);
-    setMobilePane("contents");
   }
 
   function selectRoot() {
     setActiveFolderId(null);
     persistActiveFolder(null);
+    setContentSearchQuery("");
+    setIsBreadcrumbOverflowOpen(false);
     setFiles([]);
     setStandaloneAssets([]);
     setGrants([]);
@@ -646,15 +719,6 @@ export function ContentClient() {
     setShowCreateMenu(false);
     setOpenContentRowMenu(null);
     setError(null);
-    setMobilePane("contents");
-  }
-
-  function goToParentFolder() {
-    if (activeFolder?.parentId) {
-      void selectFolder(activeFolder.parentId);
-    } else {
-      selectRoot();
-    }
   }
 
   async function onCreateFolder(event: FormEvent<HTMLFormElement>) {
@@ -1133,7 +1197,7 @@ export function ContentClient() {
   }
 
   function onContentRowClick(
-    event: ReactMouseEvent<HTMLTableRowElement>,
+    event: ReactMouseEvent<HTMLElement>,
     item: ContentRowItem,
   ) {
     const target = event.target;
@@ -1153,7 +1217,7 @@ export function ContentClient() {
   }
 
   function onAssetRowClick(
-    event: ReactMouseEvent<HTMLTableRowElement>,
+    event: ReactMouseEvent<HTMLElement>,
     asset: FolderAssetSummary,
   ) {
     const target = event.target;
@@ -1362,7 +1426,7 @@ export function ContentClient() {
     return (
       <Fragment key={`${item.kind}:${id}`}>
         <tr
-          className="content-pinned-row"
+          className="content-drive-row content-pinned-row"
           onClick={(event) => onContentRowClick(event, item)}
         >
           <td data-label="文件名">
@@ -1433,7 +1497,7 @@ export function ContentClient() {
                     isFolder ? "folder" : "file",
                     id,
                     event.currentTarget,
-                    "table",
+                    "list",
                     getContentRowMenuItemCount(),
                   );
                 }}
@@ -1442,7 +1506,7 @@ export function ContentClient() {
               >
                 <MoreHorizontal aria-hidden="true" />
               </button>
-              {renderContentRowContextMenu(item, "table")}
+              {renderContentRowContextMenu(item, "list")}
             </div>
           </td>
         </tr>
@@ -1487,11 +1551,6 @@ export function ContentClient() {
               <span title={folder.name}>{folder.name}</span>
             </span>
           </button>
-          {folder.fileCount > 0 ? (
-            <em aria-hidden="true" className="tree-count">
-              {folder.fileCount}
-            </em>
-          ) : null}
           <button
             aria-label={`“${folder.name}”文件夹操作`}
             className="tree-row-menu-button"
@@ -1512,6 +1571,222 @@ export function ContentClient() {
           </button>
           {renderContentRowContextMenu({ kind: "folder", folder }, "tree")}
         </div>
+      </div>
+    );
+  }
+
+  function renderContentGridCard(
+    item: ContentRowItem | PinnedContentItem,
+    pinnedIndex?: number,
+  ) {
+    const isFolder = item.kind === "folder";
+    const id = isFolder ? item.folder.id : item.file.id;
+    const label = isFolder ? item.folder.name : item.file.title;
+    const updatedAt = isFolder ? item.folder.updatedAt : item.file.updatedAt;
+    const isPinned = pinnedTargetKeys.has(
+      `${isFolder ? "folder" : "file"}:${id}`,
+    );
+
+    return (
+      <article
+        className={`content-drive-card content-drive-card--${isFolder ? "folder" : "document"}${isPinned ? " content-drive-card--pinned" : ""}`}
+        key={`${item.kind}:${id}`}
+      >
+        {isFolder ? (
+          <button
+            className="content-drive-card-main"
+            onClick={() => void selectFolder(item.folder.id)}
+            type="button"
+          >
+            <span aria-hidden="true" className="content-drive-card-icon">
+              <Folder />
+            </span>
+            <strong title={label}>{label}</strong>
+          </button>
+        ) : (
+          <Link
+            aria-label={label}
+            className="content-drive-card-main"
+            href={contentDetail(item.file.id)}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <span aria-hidden="true" className="content-drive-card-icon">
+              <FileText />
+            </span>
+            <strong title={label}>{label}</strong>
+            {item.file.status === "draft" ? (
+              <span aria-hidden="true" className="content-draft-tag">
+                草稿
+              </span>
+            ) : null}
+          </Link>
+        )}
+        <div className="content-drive-card-footer">
+          <span className="content-drive-card-meta">
+            {isPinned ? <Pin aria-hidden="true" /> : null}
+            {formatRelativeTime(updatedAt)}
+          </span>
+          <div className="content-drive-card-actions" data-menu-root="true">
+            {pinnedIndex !== undefined && canManagePins ? (
+              <>
+                <button
+                  aria-label={`上移“${label}”`}
+                  disabled={isUpdatingPins || pinnedIndex === 0}
+                  onClick={() => void movePinnedItem(pinnedIndex, -1)}
+                  title="上移"
+                  type="button"
+                >
+                  <ArrowUp aria-hidden="true" />
+                </button>
+                <button
+                  aria-label={`下移“${label}”`}
+                  disabled={
+                    isUpdatingPins || pinnedIndex === pinnedItems.length - 1
+                  }
+                  onClick={() => void movePinnedItem(pinnedIndex, 1)}
+                  title="下移"
+                  type="button"
+                >
+                  <ArrowDown aria-hidden="true" />
+                </button>
+              </>
+            ) : null}
+            <button
+              aria-label={`“${label}”${isFolder ? "文件夹" : "文档"}操作`}
+              className="icon-button subtle content-row-menu-button"
+              onClick={(event) => {
+                toggleContentRowMenu(
+                  isFolder ? "folder" : "file",
+                  id,
+                  event.currentTarget,
+                  "grid",
+                  getContentRowMenuItemCount(),
+                );
+              }}
+              title={isFolder ? "文件夹操作" : "文档操作"}
+              type="button"
+            >
+              <MoreHorizontal aria-hidden="true" />
+            </button>
+            {renderContentRowContextMenu(item, "grid")}
+          </div>
+        </div>
+      </article>
+    );
+  }
+
+  function renderAssetGridCard(asset: FolderAssetSummary) {
+    return (
+      <article
+        className="content-drive-card content-drive-card--asset"
+        key={asset.id}
+      >
+        <a
+          className="content-drive-card-main"
+          href={apiResourceUrl(`/assets/${asset.id}`)}
+          onClick={(event) => {
+            event.preventDefault();
+            setPreviewAsset(asset);
+          }}
+        >
+          <span aria-hidden="true" className="content-drive-card-icon">
+            <FileIcon />
+          </span>
+          <strong title={asset.filename}>{asset.filename}</strong>
+          <small>{formatFileSize(asset.sizeBytes)}</small>
+        </a>
+        <div className="content-drive-card-footer">
+          <span className="content-drive-card-meta">
+            {formatRelativeTime(asset.updatedAt)}
+          </span>
+          <div className="content-drive-card-actions" data-menu-root="true">
+            {asset.canManage ? (
+              <>
+                <button
+                  aria-label={`“${asset.filename}”文件操作`}
+                  className="icon-button subtle content-row-menu-button"
+                  onClick={(event) => {
+                    toggleContentRowMenu(
+                      "asset",
+                      asset.id,
+                      event.currentTarget,
+                      "grid",
+                      3,
+                    );
+                  }}
+                  title="文件操作"
+                  type="button"
+                >
+                  <MoreHorizontal aria-hidden="true" />
+                </button>
+                {renderAssetContextMenu(asset)}
+              </>
+            ) : (
+              <a
+                aria-label={`下载“${asset.filename}”`}
+                className="icon-button subtle"
+                href={assetDownloadUrl(asset.id)}
+                title="下载"
+              >
+                <Download aria-hidden="true" />
+              </a>
+            )}
+          </div>
+        </div>
+      </article>
+    );
+  }
+
+  function renderContentEmptyState() {
+    if (hasVisibleContentItems || loadingItems) return null;
+
+    if (hasContentItems) {
+      return (
+        <div className="content-drive-empty">
+          <Search aria-hidden="true" />
+          <strong>没有匹配的项目</strong>
+          <span>换个关键词，或清除搜索查看当前目录。</span>
+          <button
+            className="button secondary"
+            onClick={() => setContentSearchQuery("")}
+            type="button"
+          >
+            清除搜索
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="content-drive-empty">
+        <Folder aria-hidden="true" />
+        <strong>{isRootView ? "还没有文件夹" : "当前文件夹还是空的"}</strong>
+        <span>
+          {isRootView
+            ? "创建文件夹后，就可以开始整理课程文档。"
+            : "在这里创建文档或上传文件。"}
+        </span>
+        {isRootView && canCreateFolderHere ? (
+          <button
+            className="button secondary"
+            onClick={() => beginCreateFolder(null)}
+            type="button"
+          >
+            <Plus aria-hidden="true" className="button-icon" />
+            新建文件夹
+          </button>
+        ) : null}
+        {!isRootView && canCreateFileHere ? (
+          <button
+            className="button secondary"
+            onClick={() => setShowCreateFile(true)}
+            type="button"
+          >
+            <Plus aria-hidden="true" className="button-icon" />
+            创建文档
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -1602,436 +1877,494 @@ export function ContentClient() {
 
   return (
     <div className="workspace content-workspace">
-      <header className="page-head">
-        <div>
-          <p className="page-eyebrow">文档工作区</p>
-          <h1>文档</h1>
-          <p className="muted">
-            管理员编写与整理文档，普通成员可阅读已发布内容。
-          </p>
-        </div>
-      </header>
-
       <FeedbackNotice notice={errorNotice} tone="error" />
       <FeedbackNotice notice={messageNotice} tone="success" />
 
-      <div className="panel-head content-path-head">
-        <button
-          aria-label="返回上一级"
-          className={
-            isRootView ? "breadcrumb-back is-hidden" : "breadcrumb-back"
-          }
-          disabled={isRootView}
-          onClick={goToParentFolder}
-          tabIndex={isRootView ? -1 : undefined}
-          title="返回上一级"
-          type="button"
-        >
-          <ArrowLeft aria-hidden="true" />
-        </button>
-        <div className="breadcrumb" aria-label="当前位置">
-          {isRootView ? (
-            <span>顶层</span>
-          ) : (
-            activeFolderPath.map((folder, index) => (
-              <span key={folder.id}>
-                {index > 0 ? <ChevronRight aria-hidden="true" /> : null}
-                <button
-                  onClick={() => void selectFolder(folder.id)}
-                  title={folder.name}
-                  type="button"
-                >
-                  {folder.name}
-                </button>
-              </span>
-            ))
-          )}
-        </div>
-        <div className="toolbar-row content-action-bar">
-          <Link
-            aria-label="打开 AI"
-            className="button secondary mobile-icon-action"
-            href={APP_ROUTES.ai}
-            title="AI"
-          >
-            <Bot aria-hidden="true" className="button-icon" />
-            AI
-          </Link>
-          <Link
-            aria-label="打开文件"
-            className="button secondary mobile-icon-action"
-            href={APP_ROUTES.library}
-            title="文件"
-          >
-            <Paperclip aria-hidden="true" className="button-icon" />
-            文件
-          </Link>
-          <SortIconSelect
-            onChange={setContentSortMode}
-            options={SORT_OPTIONS}
-            value={contentSortMode}
-          />
-          {activeFolderId && canCreateFileHere ? (
-            <>
-              <button
-                aria-label={uploadingAsset ? "正在上传文件" : "上传文件"}
-                className="button secondary mobile-icon-action"
-                disabled={uploadingAsset}
-                onClick={() => assetInputRef.current?.click()}
-                title={uploadingAsset ? "上传中" : "上传文件"}
-                type="button"
-              >
-                <Upload aria-hidden="true" className="button-icon" />
-                {uploadingAsset ? "上传中" : "上传文件"}
-              </button>
-              <input
-                aria-label="上传文件到当前文件夹"
-                hidden
-                multiple
-                onChange={(event) => void onUploadAsset(event)}
-                ref={assetInputRef}
-                type="file"
-              />
-            </>
-          ) : null}
-          {canCreateFolderHere || canCreateFileHere ? (
-            <div className="new-content-menu" data-menu-root="true">
-              <button
-                aria-label="新建"
-                aria-expanded={showCreateMenu}
-                aria-haspopup="menu"
-                className="button secondary mobile-icon-action"
-                onClick={() => {
-                  setOpenContentRowMenu(null);
-                  setShowCreateMenu((current) => !current);
-                }}
-                title="新建"
-                type="button"
-              >
-                <Plus aria-hidden="true" className="button-icon" />
-                新建
-                <ChevronDown aria-hidden="true" className="button-icon" />
-              </button>
-              {showCreateMenu ? (
-                <div
-                  className="context-menu right new-content-options"
-                  role="menu"
-                >
-                  {canCreateFolderHere ? (
-                    <button
-                      onClick={() => beginCreateFolder(activeFolderId)}
-                      role="menuitem"
-                      type="button"
-                    >
-                      <Folder aria-hidden="true" />
-                      新建文件夹
-                    </button>
-                  ) : null}
-                  {canCreateFileHere ? (
-                    <button
-                      onClick={() => {
-                        setShowCreateMenu(false);
-                        setShowCreateFile(true);
-                      }}
-                      role="menuitem"
-                      type="button"
-                    >
-                      <FileText aria-hidden="true" />
-                      创建文档
-                    </button>
-                  ) : null}
-                  {canCreateFileHere ? (
-                    <MarkdownImportButton
-                      menuItem
-                      onImport={onImportMarkdown}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      <div
-        aria-label="文档移动视图"
-        className="segmented-control content-mobile-tabs"
-        role="group"
-      >
-        <button
-          aria-pressed={mobilePane === "tree"}
-          className={mobilePane === "tree" ? "active" : ""}
-          onClick={() => setMobilePane("tree")}
-          type="button"
-        >
-          位置
-        </button>
-        <button
-          aria-pressed={mobilePane === "contents"}
-          className={mobilePane === "contents" ? "active" : ""}
-          onClick={() => setMobilePane("contents")}
-          type="button"
-        >
-          当前目录
-        </button>
-      </div>
-
-      <section className={`workbench files-layout mobile-pane-${mobilePane}`}>
-        <aside className="folder-panel">
-          <div className="file-tree">
+      <section className="content-drive-layout">
+        <aside className="content-drive-sidebar" aria-label="文档位置">
+          <nav className="content-drive-nav" aria-label="文档快捷入口">
+            <button
+              className={isRootView ? "active" : ""}
+              onClick={() => void selectRoot()}
+              type="button"
+            >
+              <Folder aria-hidden="true" />
+              文档
+            </button>
+            <Link href={APP_ROUTES.ai}>
+              <Bot aria-hidden="true" />
+              AI
+            </Link>
+            <Link href={APP_ROUTES.library}>
+              <Paperclip aria-hidden="true" />
+              文件
+            </Link>
+          </nav>
+          <div className="content-drive-sidebar-title">
+            <span>文件夹</span>
+          </div>
+          <div className="file-tree content-drive-tree">
             {loadingTree ? <SkeletonRows compact count={6} /> : null}
             {visibleTreeFolders.map(renderContentTreeRow)}
             {!loadingTree && flatFolders.length === 0 && !showCreateFolder ? (
-              <div className="empty-panel">
+              <div className="content-drive-sidebar-empty">
                 <strong>还没有文件夹</strong>
-                <span>先创建一个位置来存放文件。</span>
-                {canCreateFolderHere ? (
-                  <button
-                    className="button secondary"
-                    onClick={() => beginCreateFolder(null)}
-                    type="button"
-                  >
-                    <Plus aria-hidden="true" className="button-icon" />
-                    新建文件夹
-                  </button>
-                ) : null}
+                <span>从右上角新建开始整理。</span>
               </div>
             ) : null}
           </div>
         </aside>
 
-        <div className="workbench-main">
-          <div className="table-wrap">
-            <table className="table responsive-table content-items-table">
-              <tbody>
-                {loadingItems ? (
-                  <TableSkeletonRows colSpan={3} count={6} />
+        <div className="content-drive-main">
+          <div className="content-drive-toolbar">
+            <div className="content-drive-location">
+              <div aria-label="当前位置" className="breadcrumb">
+                {isRootView ? (
+                  <span className="content-breadcrumb-root">文档</span>
                 ) : null}
-                {pinnedItems.map(renderPinnedTableRow)}
-                {unpinnedChildFolders.map((folder) => (
-                  <tr
-                    className="content-folder-row"
-                    key={folder.id}
-                    onClick={(event) =>
-                      onContentRowClick(event, { kind: "folder", folder })
-                    }
+                {!isRootView ? (
+                  <span className="content-breadcrumb-root">
+                    <button onClick={() => void selectRoot()} type="button">
+                      文档
+                    </button>
+                  </span>
+                ) : null}
+                {collapsedBreadcrumbFolders.length > 0 ? (
+                  <div
+                    className="content-breadcrumb-overflow"
+                    data-menu-root="true"
                   >
-                    <td data-label="文件名">
-                      <button
-                        className="content-folder-link"
-                        onClick={() => void selectFolder(folder.id)}
-                        type="button"
-                      >
-                        <Folder aria-hidden="true" />
-                        {folder.name}
-                      </button>
-                    </td>
-                    <td data-label="最近更新">
-                      {formatRelativeTime(folder.updatedAt)}
-                    </td>
-                    <td data-label="操作">
-                      <div className="row-menu-wrap" data-menu-root="true">
-                        <button
-                          aria-label={`“${folder.name}”文件夹操作`}
-                          className="icon-button subtle content-row-menu-button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            toggleContentRowMenu(
-                              "folder",
-                              folder.id,
-                              event.currentTarget,
-                              "table",
-                              getContentRowMenuItemCount(),
-                            );
-                          }}
-                          title="文件夹操作"
-                          type="button"
-                        >
-                          <MoreHorizontal aria-hidden="true" />
-                        </button>
-                        {renderContentRowContextMenu(
-                          {
-                            kind: "folder",
-                            folder,
-                          },
-                          "table",
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {unpinnedFiles.map((file) => (
-                  <Fragment key={file.id}>
-                    <tr
-                      className="content-file-row"
-                      onClick={(event) =>
-                        onContentRowClick(event, { kind: "file", file })
+                    <ChevronRight aria-hidden="true" />
+                    <button
+                      aria-expanded={isBreadcrumbOverflowOpen}
+                      aria-haspopup="menu"
+                      aria-label="展开上级路径"
+                      onClick={() =>
+                        setIsBreadcrumbOverflowOpen((isOpen) => !isOpen)
                       }
+                      title="展开上级路径"
+                      type="button"
                     >
-                      <td data-label="文件名">
-                        <Link
-                          aria-label={file.title}
-                          className="content-file-link"
-                          href={contentDetail(file.id)}
-                          rel="noopener noreferrer"
-                          target="_blank"
-                        >
-                          <FileText aria-hidden="true" />
-                          {file.status === "draft" ? (
-                            <span
-                              aria-hidden="true"
-                              className="content-draft-tag"
-                            >
-                              草稿
-                            </span>
-                          ) : null}
-                          {file.title}
-                        </Link>
-                      </td>
-                      <td data-label="最近更新">
-                        {formatRelativeTime(file.updatedAt)}
-                      </td>
-                      <td data-label="操作">
-                        <div className="row-menu-wrap" data-menu-root="true">
+                      <MoreHorizontal aria-hidden="true" />
+                    </button>
+                    {isBreadcrumbOverflowOpen ? (
+                      <div
+                        className="content-breadcrumb-overflow-menu"
+                        role="menu"
+                      >
+                        {collapsedBreadcrumbFolders.map((folder) => (
                           <button
-                            aria-label={`“${file.title}”文档操作`}
-                            className="icon-button subtle content-row-menu-button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              toggleContentRowMenu(
-                                "file",
-                                file.id,
-                                event.currentTarget,
-                                "table",
-                                getContentRowMenuItemCount(),
-                              );
-                            }}
-                            title="文档操作"
+                            key={folder.id}
+                            onClick={() => void selectFolder(folder.id)}
+                            role="menuitem"
+                            title={folder.name}
                             type="button"
                           >
-                            <MoreHorizontal aria-hidden="true" />
+                            <Folder aria-hidden="true" />
+                            <span>{folder.name}</span>
                           </button>
-                          {renderContentRowContextMenu(
-                            { kind: "file", file },
-                            "table",
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  </Fragment>
-                ))}
-                {sortedAssets.map((asset) => (
-                  <tr
-                    className="content-asset-row"
-                    key={asset.id}
-                    onClick={(event) => onAssetRowClick(event, asset)}
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {visibleBreadcrumbFolders.map((folder) => (
+                  <span
+                    className={`content-breadcrumb-item${folder.id === activeFolderId ? " is-current" : ""}`}
+                    key={folder.id}
                   >
-                    <td data-label="文件名">
-                      <a
-                        className="content-file-link"
-                        href={apiResourceUrl(`/assets/${asset.id}`)}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          setPreviewAsset(asset);
-                        }}
+                    <ChevronRight aria-hidden="true" />
+                    <button
+                      onClick={() => void selectFolder(folder.id)}
+                      title={folder.name}
+                      type="button"
+                    >
+                      <span className="content-breadcrumb-label">
+                        {folder.name}
+                      </span>
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <label className="content-drive-search">
+              <Search aria-hidden="true" />
+              <input
+                aria-label="搜索当前目录"
+                onChange={(event) => setContentSearchQuery(event.target.value)}
+                placeholder="搜索当前目录"
+                value={contentSearchQuery}
+              />
+              {contentSearchQuery ? (
+                <button
+                  aria-label="清除目录搜索"
+                  onClick={() => setContentSearchQuery("")}
+                  type="button"
+                >
+                  <X aria-hidden="true" />
+                </button>
+              ) : null}
+            </label>
+
+            <div className="content-drive-actions">
+              <Link
+                aria-label="打开 AI"
+                className="content-drive-mobile-shortcut"
+                href={APP_ROUTES.ai}
+                title="AI"
+              >
+                <Bot aria-hidden="true" />
+              </Link>
+              <Link
+                aria-label="打开文件"
+                className="content-drive-mobile-shortcut"
+                href={APP_ROUTES.library}
+                title="文件"
+              >
+                <Paperclip aria-hidden="true" />
+              </Link>
+              <div
+                aria-label="文档展示方式"
+                className="segmented-control content-drive-view-toggle"
+              >
+                <button
+                  aria-label="列表视图"
+                  aria-pressed={contentView === "list"}
+                  className={contentView === "list" ? "active" : ""}
+                  onClick={() => setContentView("list")}
+                  title="列表视图"
+                  type="button"
+                >
+                  <Rows3 aria-hidden="true" strokeWidth={1.8} />
+                </button>
+                <button
+                  aria-label="网格视图"
+                  aria-pressed={contentView === "grid"}
+                  className={contentView === "grid" ? "active" : ""}
+                  onClick={() => setContentView("grid")}
+                  title="网格视图"
+                  type="button"
+                >
+                  <LayoutGrid aria-hidden="true" strokeWidth={1.8} />
+                </button>
+              </div>
+              <SortIconSelect
+                onChange={setContentSortMode}
+                options={SORT_OPTIONS}
+                value={contentSortMode}
+              />
+              {activeFolderId && canCreateFileHere ? (
+                <>
+                  <button
+                    aria-label={uploadingAsset ? "正在上传文件" : "上传文件"}
+                    className="button secondary content-drive-upload"
+                    disabled={uploadingAsset}
+                    onClick={() => assetInputRef.current?.click()}
+                    title={uploadingAsset ? "上传中" : "上传文件"}
+                    type="button"
+                  >
+                    <Upload aria-hidden="true" className="button-icon" />
+                    <span>{uploadingAsset ? "上传中" : "上传"}</span>
+                  </button>
+                  <input
+                    aria-label="上传文件到当前文件夹"
+                    hidden
+                    multiple
+                    onChange={(event) => void onUploadAsset(event)}
+                    ref={assetInputRef}
+                    type="file"
+                  />
+                </>
+              ) : null}
+              {canCreateFolderHere || canCreateFileHere ? (
+                <div className="new-content-menu" data-menu-root="true">
+                  <button
+                    aria-label="新建"
+                    aria-expanded={showCreateMenu}
+                    aria-haspopup="menu"
+                    className="button content-create-button"
+                    onClick={() => {
+                      setOpenContentRowMenu(null);
+                      setShowCreateMenu((current) => !current);
+                    }}
+                    title="新建"
+                    type="button"
+                  >
+                    <Plus aria-hidden="true" className="button-icon" />
+                    <span>新建</span>
+                    <ChevronDown aria-hidden="true" className="button-icon" />
+                  </button>
+                  {showCreateMenu ? (
+                    <div
+                      className="context-menu right new-content-options"
+                      role="menu"
+                    >
+                      {canCreateFolderHere ? (
+                        <button
+                          onClick={() => beginCreateFolder(activeFolderId)}
+                          role="menuitem"
+                          type="button"
+                        >
+                          <Folder aria-hidden="true" />
+                          新建文件夹
+                        </button>
+                      ) : null}
+                      {canCreateFileHere ? (
+                        <button
+                          onClick={() => {
+                            setShowCreateMenu(false);
+                            setShowCreateFile(true);
+                          }}
+                          role="menuitem"
+                          type="button"
+                        >
+                          <FileText aria-hidden="true" />
+                          创建文档
+                        </button>
+                      ) : null}
+                      {canCreateFileHere ? (
+                        <MarkdownImportButton
+                          menuItem
+                          onImport={onImportMarkdown}
+                        />
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="content-drive-content">
+            {contentView === "list" ? (
+              <div className="content-drive-list table-wrap">
+                <table className="table responsive-table content-items-table content-drive-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">文件名</th>
+                      <th scope="col">最近更新</th>
+                      <th scope="col">
+                        <span className="sr-only">操作</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loadingItems ? (
+                      <TableSkeletonRows colSpan={3} count={6} />
+                    ) : null}
+                    {visiblePinnedItems.map((item) =>
+                      renderPinnedTableRow(item, pinnedItems.indexOf(item)),
+                    )}
+                    {visibleChildFolders.map((folder) => (
+                      <tr
+                        className="content-drive-row content-folder-row"
+                        key={folder.id}
+                        onClick={(event) =>
+                          onContentRowClick(event, { kind: "folder", folder })
+                        }
                       >
-                        <FileIcon aria-hidden="true" />
-                        {asset.filename}
-                        <small className="muted">
-                          {formatFileSize(asset.sizeBytes)}
-                        </small>
-                      </a>
-                    </td>
-                    <td data-label="最近更新">
-                      {formatRelativeTime(asset.updatedAt)}
-                    </td>
-                    <td data-label="操作">
-                      <div className="content-asset-actions">
-                        {asset.canManage ? (
+                        <td data-label="文件名">
+                          <button
+                            className="content-folder-link"
+                            onClick={() => void selectFolder(folder.id)}
+                            type="button"
+                          >
+                            <Folder aria-hidden="true" />
+                            {folder.name}
+                          </button>
+                        </td>
+                        <td data-label="最近更新">
+                          {formatRelativeTime(folder.updatedAt)}
+                        </td>
+                        <td data-label="操作">
                           <div className="row-menu-wrap" data-menu-root="true">
                             <button
-                              aria-label={`“${asset.filename}”文件操作`}
+                              aria-label={`“${folder.name}”文件夹操作`}
                               className="icon-button subtle content-row-menu-button"
                               onClick={(event) => {
                                 event.stopPropagation();
                                 toggleContentRowMenu(
-                                  "asset",
-                                  asset.id,
+                                  "folder",
+                                  folder.id,
                                   event.currentTarget,
-                                  "table",
-                                  3,
+                                  "list",
+                                  getContentRowMenuItemCount(),
                                 );
                               }}
-                              title="文件操作"
+                              title="文件夹操作"
                               type="button"
                             >
                               <MoreHorizontal aria-hidden="true" />
                             </button>
-                            {renderAssetContextMenu(asset)}
+                            {renderContentRowContextMenu(
+                              {
+                                kind: "folder",
+                                folder,
+                              },
+                              "list",
+                            )}
                           </div>
-                        ) : (
+                        </td>
+                      </tr>
+                    ))}
+                    {visibleFiles.map((file) => (
+                      <Fragment key={file.id}>
+                        <tr
+                          className="content-drive-row content-file-row"
+                          onClick={(event) =>
+                            onContentRowClick(event, { kind: "file", file })
+                          }
+                        >
+                          <td data-label="文件名">
+                            <Link
+                              aria-label={file.title}
+                              className="content-file-link"
+                              href={contentDetail(file.id)}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                            >
+                              <FileText aria-hidden="true" />
+                              {file.status === "draft" ? (
+                                <span
+                                  aria-hidden="true"
+                                  className="content-draft-tag"
+                                >
+                                  草稿
+                                </span>
+                              ) : null}
+                              {file.title}
+                            </Link>
+                          </td>
+                          <td data-label="最近更新">
+                            {formatRelativeTime(file.updatedAt)}
+                          </td>
+                          <td data-label="操作">
+                            <div
+                              className="row-menu-wrap"
+                              data-menu-root="true"
+                            >
+                              <button
+                                aria-label={`“${file.title}”文档操作`}
+                                className="icon-button subtle content-row-menu-button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  toggleContentRowMenu(
+                                    "file",
+                                    file.id,
+                                    event.currentTarget,
+                                    "list",
+                                    getContentRowMenuItemCount(),
+                                  );
+                                }}
+                                title="文档操作"
+                                type="button"
+                              >
+                                <MoreHorizontal aria-hidden="true" />
+                              </button>
+                              {renderContentRowContextMenu(
+                                { kind: "file", file },
+                                "list",
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      </Fragment>
+                    ))}
+                    {visibleAssets.map((asset) => (
+                      <tr
+                        className="content-drive-row content-asset-row"
+                        key={asset.id}
+                        onClick={(event) => onAssetRowClick(event, asset)}
+                      >
+                        <td data-label="文件名">
                           <a
-                            aria-label={`下载“${asset.filename}”`}
-                            className="icon-button subtle"
-                            href={assetDownloadUrl(asset.id)}
-                            title="下载"
+                            className="content-file-link"
+                            href={apiResourceUrl(`/assets/${asset.id}`)}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              setPreviewAsset(asset);
+                            }}
                           >
-                            <Download aria-hidden="true" />
+                            <FileIcon aria-hidden="true" />
+                            {asset.filename}
+                            <small className="muted">
+                              {formatFileSize(asset.sizeBytes)}
+                            </small>
                           </a>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {!loadingItems &&
-                pinnedItems.length === 0 &&
-                unpinnedChildFolders.length === 0 &&
-                unpinnedFiles.length === 0 &&
-                sortedAssets.length === 0 ? (
-                  <tr className="content-empty-row">
-                    <td className="empty-cell" colSpan={3}>
-                      {isRootView ? (
-                        <div className="empty-panel">
-                          <strong>还没有文件夹</strong>
-                          <span>先创建一个位置来存放文件。</span>
-                          {canCreateFolderHere ? (
-                            <button
-                              className="button secondary"
-                              onClick={() => beginCreateFolder(null)}
-                              type="button"
-                            >
-                              <Plus
-                                aria-hidden="true"
-                                className="button-icon"
-                              />
-                              新建文件夹
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <div className="empty-panel">
-                          <strong>当前文件夹还是空的</strong>
-                          <span>可以新建文档、教案、课程或练习集。</span>
-                          {canCreateFileHere ? (
-                            <button
-                              className="button secondary"
-                              onClick={() => setShowCreateFile(true)}
-                              type="button"
-                            >
-                              <Plus
-                                aria-hidden="true"
-                                className="button-icon"
-                              />
-                              创建文档
-                            </button>
-                          ) : null}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+                        </td>
+                        <td data-label="最近更新">
+                          {formatRelativeTime(asset.updatedAt)}
+                        </td>
+                        <td data-label="操作">
+                          <div className="content-asset-actions">
+                            {asset.canManage ? (
+                              <div
+                                className="row-menu-wrap"
+                                data-menu-root="true"
+                              >
+                                <button
+                                  aria-label={`“${asset.filename}”文件操作`}
+                                  className="icon-button subtle content-row-menu-button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    toggleContentRowMenu(
+                                      "asset",
+                                      asset.id,
+                                      event.currentTarget,
+                                      "list",
+                                      3,
+                                    );
+                                  }}
+                                  title="文件操作"
+                                  type="button"
+                                >
+                                  <MoreHorizontal aria-hidden="true" />
+                                </button>
+                                {renderAssetContextMenu(asset)}
+                              </div>
+                            ) : (
+                              <a
+                                aria-label={`下载“${asset.filename}”`}
+                                className="icon-button subtle"
+                                href={assetDownloadUrl(asset.id)}
+                                title="下载"
+                              >
+                                <Download aria-hidden="true" />
+                              </a>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {!loadingItems && !hasVisibleContentItems ? (
+                      <tr className="content-empty-row">
+                        <td className="empty-cell" colSpan={3}>
+                          {renderContentEmptyState()}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="content-drive-grid">
+                {loadingItems ? <SkeletonRows count={6} /> : null}
+                {visiblePinnedItems.map((item) =>
+                  renderContentGridCard(item, pinnedItems.indexOf(item)),
+                )}
+                {visibleChildFolders.map((folder) =>
+                  renderContentGridCard({ kind: "folder", folder }),
+                )}
+                {visibleFiles.map((file) =>
+                  renderContentGridCard({ kind: "file", file }),
+                )}
+                {visibleAssets.map(renderAssetGridCard)}
+                {!loadingItems && !hasVisibleContentItems
+                  ? renderContentEmptyState()
+                  : null}
+              </div>
+            )}
           </div>
         </div>
       </section>

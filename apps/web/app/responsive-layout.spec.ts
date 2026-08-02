@@ -52,8 +52,8 @@ describe("responsive workspace contracts", () => {
     expect(redesignCss).toMatch(
       /\.rail-avatar\s*{[\s\S]*?border-color: var\(--line-strong\)/,
     );
-    expect(mobileCss).toMatch(
-      /@media \(max-width: 760px\)[\s\S]*?\.content-workspace \.content-items-table tbody tr\s*{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) 44px/,
+    expect(contentCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.content-drive-table > tbody > \.content-drive-row\s*{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) 44px/,
     );
     expect(mobileCss).toMatch(
       /@media \(max-width: 760px\)[\s\S]*?\.content-row-menu-button,[\s\S]*?\.history-more-button[\s\S]*?width: 44px;[\s\S]*?height: 44px/,
@@ -104,12 +104,46 @@ describe("responsive workspace contracts", () => {
     );
   });
 
-  it("keeps the content browser to one visible pane on narrow screens", () => {
+  it("uses a single directory flow for the content browser on narrow screens", () => {
     expect(contentCss).toMatch(
-      /@media \(max-width: 760px\)[\s\S]*?\.content-mobile-tabs/,
+      /@media \(max-width: 820px\)[\s\S]*?\.content-drive-sidebar\s*{\s*display: none/,
+    );
+    expect(contentCss).not.toContain("content-mobile-tabs");
+    expect(contentCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.content-drive-location \.breadcrumb\s*{[\s\S]*?overflow: visible/,
     );
     expect(contentCss).toMatch(
-      /\.files-layout\.mobile-pane-tree > \.workbench-main,[\s\S]*?\.files-layout\.mobile-pane-contents > \.folder-panel\s*{[\s\S]*?display: none/,
+      /\.content-drive-location \.breadcrumb\s*{[\s\S]*?flex-wrap: nowrap;[\s\S]*?overflow: visible/,
+    );
+    expect(contentCss).toMatch(
+      /\.content-drive-tree \.tree-label > span:last-child\s*{[\s\S]*?text-overflow: ellipsis;[\s\S]*?white-space: nowrap/,
+    );
+    expect(contentCss).toMatch(
+      /\.content-breadcrumb-overflow-menu\s*{[\s\S]*?padding: 10px/,
+    );
+    expect(contentCss).toMatch(
+      /\.workspace\.content-workspace \.content-breadcrumb-overflow-menu button\s*{[\s\S]*?min-height: 38px;[\s\S]*?padding: 0 12px/,
+    );
+    expect(contentCss).toMatch(
+      /\.content-breadcrumb-label\s*{[\s\S]*?line-height: 1\.45;[\s\S]*?padding-block: 1px/,
+    );
+    expect(contentCss).toMatch(
+      /\.content-drive-toolbar\s*{[\s\S]*?border-bottom: 0/,
+    );
+    expect(contentCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.content-drive-table > tbody > \.content-drive-row\s*{[\s\S]*?background: var\(--bg\);[\s\S]*?border-bottom: 1px solid var\(--line\)/,
+    );
+  });
+
+  it("keeps the desktop document list readable on wide displays", () => {
+    expect(contentCss).toMatch(
+      /\.content-drive-layout\s*{[\s\S]*?grid-template-columns: 232px minmax\(0, 1fr\)/,
+    );
+    expect(contentCss).toMatch(
+      /\.content-drive-main\s*{[\s\S]*?max-width: 1180px/,
+    );
+    expect(contentCss).toMatch(
+      /\.content-drive-sidebar\s*{[\s\S]*?height: calc\(100dvh - \(var\(--page-gutter\) \* 2\)\)/,
     );
   });
 
@@ -123,17 +157,17 @@ describe("responsive workspace contracts", () => {
     expect(mobileCss).toMatch(
       /\.workspace \.button\.mobile-icon-action,[\s\S]*?background: transparent;[\s\S]*?color: var\(--text-soft\);[\s\S]*?box-shadow: none/,
     );
-    expect(mobileCss).toMatch(
-      /\.content-workspace \.content-path-head > \.content-action-bar\s*{[\s\S]*?grid-row: 1;[\s\S]*?display: flex;[\s\S]*?width: 100%;[\s\S]*?overflow: visible;[\s\S]*?background: transparent/,
+    expect(contentCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.content-drive-actions\s*{[\s\S]*?width: 100%;[\s\S]*?margin-left: 0/,
     );
-    expect(mobileCss).toMatch(
-      /\.content-workspace \.breadcrumb\s*{[\s\S]*?grid-row: 2/,
+    expect(contentCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.content-drive-upload,[\s\S]*?\.content-create-button\s*{[\s\S]*?flex: 0 0 40px;[\s\S]*?width: 40px/,
     );
-    expect(mobileCss).toMatch(
-      /\.content-workspace \.content-action-bar > \.new-content-menu\s*{[\s\S]*?margin-left: auto/,
+    expect(contentCss).toMatch(
+      /\.content-drive-actions \.new-content-menu\s*{\s*margin-left: auto/,
     );
-    expect(mobileCss).not.toMatch(
-      /\.content-workspace[\s\S]*?\.new-content-menu[\s\S]*?background: var\(--text\)/,
+    expect(contentCss).toMatch(
+      /\.content-create-button\s*{[\s\S]*?background: var\(--text\)/,
     );
   });
 

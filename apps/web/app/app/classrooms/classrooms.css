@@ -67,6 +67,47 @@
   background: var(--fill-hover);
 }
 
+.classroom-row-skeleton {
+  min-height: 126px;
+  pointer-events: none;
+}
+
+.classroom-skeleton-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.classroom-skeleton-title {
+  width: 44%;
+  height: 16px;
+}
+
+.classroom-skeleton-role {
+  width: 46px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+}
+
+.classroom-skeleton-description {
+  width: 68%;
+  height: 12px;
+}
+
+.classroom-skeleton-stats {
+  display: block;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.classroom-skeleton-stat {
+  display: block;
+  width: 34%;
+  height: 12px;
+}
+
 .classroom-row-head {
   display: flex;
   align-items: baseline;
