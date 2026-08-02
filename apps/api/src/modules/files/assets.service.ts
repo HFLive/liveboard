@@ -14,7 +14,10 @@ import { Readable } from "node:stream";
 import { Prisma, type PendingUpload } from "@prisma/client";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
-import type { StorageBackendName } from "../storage/storage-backend";
+import {
+  isSafeInlineImageMime,
+  type StorageBackendName,
+} from "../storage/storage-backend";
 import { StorageService } from "../storage/storage.service";
 import { DEFAULT_MEMBER_ATTACHMENT_QUOTA_BYTES } from "../../common/storage-quota";
 import { requireResourceName } from "../../common/resource-name";
@@ -46,17 +49,6 @@ const PENDING_UPLOAD_TTL_MS = 60 * 60 * 1000;
 export const MAX_FORUM_IMAGES = 9;
 export const MAX_FORUM_REPLY_IMAGES = 3;
 export const MAX_FORUM_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
-const SAFE_INLINE_IMAGE_MIMES = new Set([
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-]);
-
-export function isSafeInlineAssetMime(mimeType: string) {
-  return SAFE_INLINE_IMAGE_MIMES.has(mimeType);
-}
-
 export type AssetPreviewKind = "pdf" | "markdown" | "text";
 
 export function getAssetPreviewKind(
@@ -412,7 +404,7 @@ export class AssetsService {
 
     await this.assertCanViewAsset(userId, asset);
 
-    const inline = !forceDownload && isSafeInlineAssetMime(asset.mimeType);
+    const inline = !forceDownload && isSafeInlineImageMime(asset.mimeType);
     const redirectUrl = await this.storage.presignDownload(
       asset.storageBackend,
       asset.storageKey,

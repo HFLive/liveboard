@@ -37,10 +37,10 @@ import {
 } from "../../common/cache-control";
 import {
   AssetsService,
-  isSafeInlineAssetMime,
   MAX_ASSET_SIZE_BYTES,
   type UploadedAssetFile,
 } from "./assets.service";
+import { isSafeInlineImageMime } from "../storage/storage-backend";
 import { FilesService } from "./files.service";
 import { MAX_MARKDOWN_SIZE_BYTES } from "./markdown";
 import { createRequestAbortSignal } from "../../common/request-abort";
@@ -574,7 +574,7 @@ export class FilesController {
       return;
     }
 
-    const inline = !forceDownload && isSafeInlineAssetMime(asset.mimeType);
+    const inline = !forceDownload && isSafeInlineImageMime(asset.mimeType);
     res.setHeader(
       "Content-Type",
       inline ? asset.mimeType : "application/octet-stream",

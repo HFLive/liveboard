@@ -11,6 +11,7 @@ import {
   fetchAssetPreview,
   getHttpsStatus,
   getMe,
+  getPublicSettings,
   importMarkdown,
   setHttpsAutoRenew,
 } from "./index";
@@ -83,6 +84,40 @@ describe("Current user API", () => {
 
     expect(first).toEqual(second);
     expect(second).toEqual(third);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Public settings API", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("deduplicates concurrent public-settings requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          settings: {
+            workspaceName: "LiveBoard",
+            workspaceSlug: "liveboard",
+            timeZone: "Asia/Shanghai",
+            faviconUrl: null,
+            faviconLightUrl: null,
+            faviconDarkUrl: null,
+            updatedAt: "2026-08-02T00:00:00.000Z",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const [first, second] = await Promise.all([
+      getPublicSettings(),
+      getPublicSettings(),
+    ]);
+
+    expect(first).toEqual(second);
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 });

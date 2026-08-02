@@ -17,6 +17,7 @@ import { CurrentUserId } from "../../common/current-user-id.decorator";
 import {
   isVersionedResourceRequest,
   PRIVATE_IMMUTABLE_CACHE_CONTROL,
+  PRIVATE_NO_STORE_CACHE_CONTROL,
   PRIVATE_REVALIDATED_CACHE_CONTROL,
 } from "../../common/cache-control";
 import { Public } from "../../common/public.decorator";
@@ -193,16 +194,19 @@ export class AuthController {
       targetUserId,
     );
 
+    if (redirectUrl) {
+      // 短期 R2 签名不能被版本化资源的一年缓存固化，否则签名过期后
+      // 浏览器会持续复用失效的 Location。
+      res.setHeader("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL);
+      res.redirect(302, redirectUrl);
+      return;
+    }
     res.setHeader(
       "Cache-Control",
       isVersionedResourceRequest(version)
         ? PRIVATE_IMMUTABLE_CACHE_CONTROL
         : PRIVATE_REVALIDATED_CACHE_CONTROL,
     );
-    if (redirectUrl) {
-      res.redirect(302, redirectUrl);
-      return;
-    }
     res.setHeader("Content-Type", mimeType);
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cross-Origin-Resource-Policy", "same-site");
@@ -221,16 +225,17 @@ export class AuthController {
       targetUserId,
     );
 
+    if (redirectUrl) {
+      res.setHeader("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL);
+      res.redirect(302, redirectUrl);
+      return;
+    }
     res.setHeader(
       "Cache-Control",
       isVersionedResourceRequest(version)
         ? PRIVATE_IMMUTABLE_CACHE_CONTROL
         : PRIVATE_REVALIDATED_CACHE_CONTROL,
     );
-    if (redirectUrl) {
-      res.redirect(302, redirectUrl);
-      return;
-    }
     res.setHeader("Content-Type", mimeType);
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cross-Origin-Resource-Policy", "same-site");

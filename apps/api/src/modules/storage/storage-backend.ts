@@ -4,6 +4,18 @@ export type StorageBackendName = "minio" | "oss" | "r2";
 export type StorageDownloadMode = "proxy" | "direct";
 export type StorageUploadMode = "relay" | "direct";
 
+const SAFE_INLINE_IMAGE_MIME_TYPES = new Set([
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+/** 只有经过文件头校验的这些位图格式允许浏览器内联渲染。 */
+export function isSafeInlineImageMime(mimeType: string) {
+  return SAFE_INLINE_IMAGE_MIME_TYPES.has(mimeType);
+}
+
 /**
  * LiveBoard 当前最大上传为 100MB。把 SDK 分片阈值设得更高，
  * 让所有受支持上传使用原子单次 PUT，避免进程中断留下未完成分片。

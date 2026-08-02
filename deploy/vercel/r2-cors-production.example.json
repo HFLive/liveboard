@@ -4,7 +4,7 @@
       "https://liveboard-web.vercel.app",
       "https://liveboard.example.com"
     ],
-    "AllowedMethods": ["PUT"],
+    "AllowedMethods": ["GET", "PUT"],
     "AllowedHeaders": ["Content-Type"],
     "ExposeHeaders": ["ETag"],
     "MaxAgeSeconds": 3600

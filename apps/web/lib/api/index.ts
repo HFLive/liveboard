@@ -579,8 +579,18 @@ export interface SystemSettings {
 
 export type FaviconVariant = "default" | "light" | "dark";
 
+let publicSettingsRequest: Promise<{ settings: SystemSettings }> | null = null;
+
 export function getPublicSettings() {
-  return request<{ settings: SystemSettings }>("/settings/public");
+  if (!publicSettingsRequest) {
+    publicSettingsRequest = request<{ settings: SystemSettings }>(
+      "/settings/public",
+    ).finally(() => {
+      publicSettingsRequest = null;
+    });
+  }
+
+  return publicSettingsRequest;
 }
 
 export function getSystemSettings() {

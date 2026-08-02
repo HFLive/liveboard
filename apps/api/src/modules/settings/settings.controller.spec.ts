@@ -1,5 +1,6 @@
 import type { Response } from "express";
 import {
+  PRIVATE_SHORT_CACHE_CONTROL,
   PUBLIC_IMMUTABLE_CACHE_CONTROL,
   PUBLIC_REVALIDATED_CACHE_CONTROL,
 } from "../../common/cache-control";
@@ -12,6 +13,7 @@ describe("SettingsController cache policy", () => {
     getFavicon: jest.fn(),
   };
   const response = {
+    redirect: jest.fn(),
     setHeader: jest.fn(),
   };
   let controller: SettingsController;
@@ -63,6 +65,29 @@ describe("SettingsController cache policy", () => {
     expect(response.setHeader).toHaveBeenCalledWith(
       "Cache-Control",
       PUBLIC_REVALIDATED_CACHE_CONTROL,
+    );
+  });
+
+  it("briefly caches a signed favicon redirect within its lifetime", async () => {
+    settingsService.getFavicon.mockResolvedValue({
+      mimeType: "image/png",
+      redirectUrl: "https://r2.example/signed-favicon",
+      stream: null,
+    });
+
+    await controller.favicon(response as unknown as Response, "7");
+
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Cache-Control",
+      PRIVATE_SHORT_CACHE_CONTROL,
+    );
+    expect(response.redirect).toHaveBeenCalledWith(
+      302,
+      "https://r2.example/signed-favicon",
+    );
+    expect(response.setHeader).not.toHaveBeenCalledWith(
+      "Cache-Control",
+      PUBLIC_IMMUTABLE_CACHE_CONTROL,
     );
   });
 });

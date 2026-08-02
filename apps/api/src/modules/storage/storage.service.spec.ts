@@ -2,7 +2,10 @@ import type { ConfigService } from "@nestjs/config";
 import type { AiSecretService } from "../ai/ai-secret.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import { ATOMIC_UPLOAD_PART_SIZE_BYTES } from "./storage-backend";
-import { StorageService } from "./storage.service";
+import {
+  R2_INLINE_IMAGE_PRESIGN_EXPIRY_SECONDS,
+  StorageService,
+} from "./storage.service";
 
 const mockMinioClient = {
   listBuckets: jest.fn(),
@@ -541,6 +544,45 @@ describe("StorageService", () => {
       }),
     ).resolves.toBeNull();
     expect(mockMinioClient.presignedGetObject).not.toHaveBeenCalled();
+  });
+
+  it("presigns safe inline R2 images for Vercel without proxying their bytes", async () => {
+    Object.defineProperty(service, "deploymentTarget", { value: "vercel" });
+    const presignGet = jest
+      .fn()
+      .mockResolvedValue("https://r2.example/signed-image");
+    jest
+      .spyOn(service, "backendFor")
+      .mockResolvedValue({ presignGet } as never);
+
+    await expect(
+      service.presignDownload("r2", "ws/assets/image.png", {
+        filename: "课堂截图.png",
+        mimeType: "image/png",
+        inline: true,
+      }),
+    ).resolves.toBe("https://r2.example/signed-image");
+    expect(presignGet).toHaveBeenCalledWith(
+      "ws/assets/image.png",
+      expect.objectContaining({
+        expirySeconds: R2_INLINE_IMAGE_PRESIGN_EXPIRY_SECONDS,
+        responseContentDisposition: expect.stringContaining("inline"),
+      }),
+    );
+  });
+
+  it("does not presign non-image inline R2 content on Vercel", async () => {
+    Object.defineProperty(service, "deploymentTarget", { value: "vercel" });
+    const backendFor = jest.spyOn(service, "backendFor");
+
+    await expect(
+      service.presignDownload("r2", "ws/assets/lesson.pdf", {
+        filename: "讲义.pdf",
+        mimeType: "application/pdf",
+        inline: true,
+      }),
+    ).resolves.toBeNull();
+    expect(backendFor).not.toHaveBeenCalled();
   });
 
   it("presigns downloads from OSS in direct mode", async () => {

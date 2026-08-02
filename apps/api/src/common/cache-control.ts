@@ -18,6 +18,9 @@ export const PUBLIC_REVALIDATED_CACHE_CONTROL = "public, no-cache";
 /** 私有资源允许浏览器保存，但固定 URL 每次使用前必须重新校验。 */
 export const PRIVATE_REVALIDATED_CACHE_CONTROL = "private, no-cache";
 
+/** 120 秒签名资源的浏览器短缓存，保留充足的过期安全余量。 */
+export const PRIVATE_SHORT_CACHE_CONTROL = "private, max-age=60";
+
 /** 带权限且不应由浏览器复用的导出、附件和签名跳转响应。 */
 export const PRIVATE_NO_STORE_CACHE_CONTROL = "private, no-store";
 

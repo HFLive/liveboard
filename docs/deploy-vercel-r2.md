@@ -30,12 +30,18 @@ Vercel API（NestJS，apps/api，sin1）
   └── Cloudflare R2：上传文件和图片
 
 大文件上传：浏览器 ──预签名 PUT──▶ 私有 R2
-受保护预览：浏览器 ──▶ API 权限校验 ──▶ R2
+受保护图片：浏览器 ──▶ API 权限校验 ──302 短期签名──▶ 私有 R2
+文档预览：浏览器 ──▶ API 权限校验与流式中转 ──▶ 私有 R2
 ```
 
 浏览器始终访问 Web 域名下的 `/api`，不直接使用 API 域名。这样 Session Cookie
 留在 Web 域名下，也避免跨域登录问题。大文件通过短期预签名 URL 直接上传 R2，
-避开 Vercel Function 的请求体限制；R2 Bucket 本身保持私有。
+避开 Vercel Function 的请求体限制；安全位图由 API 鉴权后跳转到 120 秒签名
+GET，避免下载字节经过 Vercel。PDF、Markdown 与文本预览仍由 API 流式中转，
+R2 Bucket 本身保持私有。
+
+favicon 的 API 重定向和 R2 图片响应会在浏览器私有缓存 60 秒，
+短于 120 秒签名有效期；这让标签页图标与页面品牌图复用同一签名资源。
 
 ## 2. 先明确两种部署路线
 
@@ -185,7 +191,7 @@ JSON 编辑器使用**数组**，不是 `{ "rules": [...] }` 包装对象：
       "https://liveboard-web.vercel.app",
       "https://liveboard.example.com"
     ],
-    "AllowedMethods": ["PUT"],
+    "AllowedMethods": ["GET", "PUT"],
     "AllowedHeaders": ["Content-Type"],
     "ExposeHeaders": ["ETag"],
     "MaxAgeSeconds": 3600
@@ -197,7 +203,8 @@ JSON 编辑器使用**数组**，不是 `{ "rules": [...] }` 包装对象：
 
 - Origin 只有协议和主机名，不带路径，不带结尾 `/`。
 - 上线过渡期可同时保留 Vercel Web 域名和正式域名。
-- 不需要允许 `GET`。受保护预览和下载由 API 校验或签名处理。
+- `GET` 用于 API 鉴权后跳转的短期图片签名地址，`PUT` 用于浏览器直传。
+- 允许 `GET` 不会公开 Bucket；请求仍必须携带有效的 R2 签名。
 - Production 不要使用 `AllowedOrigins: ["*"]`。
 
 可复制的模板见
