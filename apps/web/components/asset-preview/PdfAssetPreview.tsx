@@ -13,10 +13,12 @@ let pdfModulePromise: Promise<typeof import("pdfjs-dist")> | null = null;
 
 async function loadPdfModule() {
   pdfModulePromise ??= import("pdfjs-dist").then((pdfjs) => {
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-      "pdfjs-dist/build/pdf.worker.min.mjs",
-      import.meta.url,
-    ).toString();
+    // PDF.js worker 由站点自身提供（public/ 下，Vercel 原生 application/javascript），
+    // 不放进 EdgeOne 的 /_next/static：EdgeOne 上传对 .mjs 存成 octet-stream，而
+    // 用 new URL() 输出 .js 又会被 webpack 编译出无法解析的 @swc/helpers 裸导入。
+    // 文件名带 pdfjs 版本号，升级 pdfjs-dist 时换新 URL 并同步更新这里与
+    // public/pdf.worker.<版本>.js。
+    pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.v6.1.200.js";
     return pdfjs;
   });
   return pdfModulePromise;
