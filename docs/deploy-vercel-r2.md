@@ -40,8 +40,9 @@ Vercel API（NestJS，apps/api，sin1）
 GET，避免下载字节经过 Vercel。PDF、Markdown 与文本预览仍由 API 流式中转，
 R2 Bucket 本身保持私有。
 
-favicon 的 API 重定向和 R2 图片响应会在浏览器私有缓存 60 秒，
-短于 120 秒签名有效期；这让标签页图标与页面品牌图复用同一签名资源。
+favicon 与用户头像始终由 API 从私有 R2 流式中转，不使用签名重定向。带内容版本号的
+favicon 可在浏览器与 CDN 缓存一年 `immutable`，头像可在登录用户的浏览器私有缓存一年
+`immutable`；更新资源会生成新版本 URL，未带版本号的请求仍会重新校验。
 
 ## 2. 先明确两种部署路线
 
@@ -429,17 +430,21 @@ Cloudflare 配置；新部署不要设置它。
 由 Web 的 `postbuild` 自动调用。它仅在 `VERCEL=1` 且
 `VERCEL_ENV=production` 时执行，复制**本次相同构建**的 `.next/static`，写入一年
 `immutable` 缓存与跨域响应头，再上传到当前 provider。上传、凭据或配置校验失败
-会让 Vercel 构建失败。上传后脚本还会通过当前正式静态域名读取一个本次构建文件并
-逐字节比对，防止项目名错误、域名未关联到新部署或证书异常时继续上线。本地、
-Preview、自托管构建和 `STATIC_ASSET_PROVIDER=vercel` 都会明确跳过外部上传。
+会让 Vercel 构建失败。上传后脚本还会通过当前正式静态域名读取一个本次构建文件与
+一个 `.mjs`，逐字节比对并校验 JavaScript Content-Type，防止项目名错误、域名未
+关联到新部署、证书异常或模块 MIME 错误时继续上线。本地、Preview、自托管构建和
+`STATIC_ASSET_PROVIDER=vercel` 都会明确跳过外部上传。
 
-切换后，从新部署 HTML 中复制任一实际构建文件名并检查：
+切换后，从新部署 HTML 中复制任一实际构建文件名并检查；如果启用 PDF 预览，也要
+检查实际的 `pdf.worker.min.<hash>.mjs`：
 
 ```bash
 curl -I https://<当前静态域名>/_next/static/chunks/<实际文件名>.js
+curl -I https://<当前静态域名>/_next/static/media/pdf.worker.min.<hash>.mjs
 ```
 
-预期至少包含 `200`、正确的 JavaScript Content-Type，以及：
+两者都预期至少包含 `200`、正确的 JavaScript Content-Type（`.mjs` 不能是
+`application/octet-stream`），以及：
 
 ```text
 Cache-Control: public, max-age=31536000, immutable

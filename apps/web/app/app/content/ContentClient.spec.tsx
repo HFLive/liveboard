@@ -89,9 +89,7 @@ function getTree() {
 async function enterFolderFromTree(name: string) {
   fireEvent.click(await within(getTree()).findByRole("button", { name }));
   await waitFor(() =>
-    expect(
-      screen.getByRole("button", { name: "返回上一级" }),
-    ).toBeInTheDocument(),
+    expect(screen.getByLabelText("当前位置")).toHaveTextContent(name),
   );
 }
 
@@ -118,6 +116,7 @@ describe("ContentClient folder deletion", () => {
     expect(
       within(tree as HTMLElement).getByRole("button", { name: "第一章" }),
     ).toBeInTheDocument();
+    expect((tree as HTMLElement).querySelector(".tree-count")).toBeNull();
 
     fireEvent.click(
       within(tree as HTMLElement).getByRole("button", {
@@ -348,11 +347,13 @@ describe("ContentClient folder deletion", () => {
     expect(leftTree?.querySelector(".content-pinned-panel")).toBeNull();
     expect(document.querySelector(".content-pinned-panel")).toBeNull();
     const table = screen.getByRole("table");
-    const tableRows = within(table).getAllByRole("row");
-    expect(tableRows[0]).toHaveClass("content-pinned-row");
-    expect(tableRows[0]).toHaveTextContent("第一章");
-    expect(tableRows[1]).toHaveClass("content-pinned-row");
-    expect(tableRows[1]).toHaveTextContent("课程导读");
+    const contentRows = within(table)
+      .getAllByRole("row")
+      .filter((row) => !row.querySelector("th"));
+    expect(contentRows[0]).toHaveClass("content-pinned-row");
+    expect(contentRows[0]).toHaveTextContent("第一章");
+    expect(contentRows[1]).toHaveClass("content-pinned-row");
+    expect(contentRows[1]).toHaveTextContent("课程导读");
     expect(
       within(table).getAllByRole("link", { name: "课程导读" }),
     ).toHaveLength(1);
@@ -493,9 +494,11 @@ describe("ContentClient folder deletion", () => {
     expect(treeNames).toEqual(["课程资料", "第二章", "第一章"]);
 
     await enterFolderFromTree("课程资料");
-    const tableRows = within(screen.getByRole("table")).getAllByRole("row");
-    expect(tableRows[0]).toHaveTextContent("第二章");
-    expect(tableRows[1]).toHaveTextContent("第一章");
+    const contentRows = within(screen.getByRole("table"))
+      .getAllByRole("row")
+      .filter((row) => !row.querySelector("th"));
+    expect(contentRows[0]).toHaveTextContent("第二章");
+    expect(contentRows[1]).toHaveTextContent("第一章");
   });
 
   it("shows an icon before document names in the document table", async () => {
@@ -530,6 +533,34 @@ describe("ContentClient folder deletion", () => {
     expect(
       within(table).getByRole("button", { name: "“课程导读”文档操作" }),
     ).toHaveClass("content-row-menu-button");
+  });
+
+  it("switches the current directory between list and grid views and filters it locally", async () => {
+    render(<ContentClient />);
+
+    await enterFolderFromTree("课程资料");
+    expect(screen.getByRole("table")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "网格视图" }));
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    const grid = document.querySelector(".content-drive-grid");
+    expect(grid).not.toBeNull();
+    expect(
+      within(grid as HTMLElement).getByRole("button", { name: "第一章" }),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索当前目录" }), {
+      target: { value: "不存在" },
+    });
+    expect(screen.getByText("没有匹配的项目")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "清除搜索" }));
+    expect(
+      within(grid as HTMLElement).getByRole("button", { name: "第一章" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "列表视图" }));
+    expect(screen.getByRole("table")).toBeInTheDocument();
   });
 
   it("opens a row menu from its SVG icon without opening the document", async () => {
@@ -639,17 +670,17 @@ describe("ContentClient folder deletion", () => {
     ).toBeInTheDocument();
   });
 
-  it("goes up one level from the back button", async () => {
+  it("uses the path itself to move up through folders", async () => {
     render(<ContentClient />);
 
     const table = screen.getByRole("table");
     expect(
       await within(table).findByRole("button", { name: "课程资料" }),
     ).toBeInTheDocument();
-    // 顶层时返回按钮隐藏占位且不可点击，保持路径文字位置一致
-    const backAtRoot = screen.getByRole("button", { name: "返回上一级" });
-    expect(backAtRoot).toBeDisabled();
-    expect(backAtRoot).toHaveClass("is-hidden");
+    // 顶层没有无效的“返回”占位，目录导航只在可执行时出现。
+    expect(
+      screen.queryByRole("button", { name: "返回上一级" }),
+    ).not.toBeInTheDocument();
 
     await enterFolderFromTree("课程资料");
     fireEvent.click(
@@ -663,8 +694,11 @@ describe("ContentClient folder deletion", () => {
       ).not.toBeInTheDocument(),
     );
 
-    // 返回上一级回到“课程资料”，而不是直接回到顶层
-    fireEvent.click(screen.getByRole("button", { name: "返回上一级" }));
+    // 通过地址栏中的父级回到“课程资料”，而不是直接回到顶层。
+    const breadcrumb = screen.getByLabelText("当前位置");
+    fireEvent.click(
+      within(breadcrumb).getByRole("button", { name: "课程资料" }),
+    );
     await waitFor(() =>
       expect(
         within(screen.getByRole("table")).getByRole("button", {
@@ -673,18 +707,78 @@ describe("ContentClient folder deletion", () => {
       ).toBeInTheDocument(),
     );
 
-    // 顶层文件夹的上一级是顶层“/”
-    fireEvent.click(screen.getByRole("button", { name: "返回上一级" }));
+    // 通过根目录地址回到文档根目录，根目录不显示无效返回动作。
+    fireEvent.click(within(breadcrumb).getByRole("button", { name: "文档" }));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "返回上一级" })).toHaveClass(
-        "is-hidden",
-      ),
+      expect(
+        screen.queryByRole("button", { name: "返回上一级" }),
+      ).not.toBeInTheDocument(),
     );
     expect(
       within(screen.getByRole("table")).getByRole("button", {
         name: "课程资料",
       }),
     ).toBeInTheDocument();
+  });
+
+  it("collapses deep parent paths into an expandable breadcrumb menu", async () => {
+    const rootFolder = folderTree[0]!;
+    const firstChapter = rootFolder.children[0]!;
+    const deepFolder: FolderNode = {
+      id: "folder-3",
+      name: "日程常规与线路基础",
+      parentId: firstChapter.id,
+      permission: "editor",
+      fileCount: 0,
+      pinnedOrder: null,
+      updatedAt: "2026-07-15T06:00:00.000Z",
+      files: [],
+      children: [],
+    };
+    const deepTree: FolderNode[] = [
+      {
+        ...rootFolder,
+        children: [{ ...firstChapter, children: [deepFolder] }],
+      },
+    ];
+    vi.mocked(getFolderTree).mockReset().mockResolvedValue({
+      folders: deepTree,
+      canManagePins: false,
+    });
+
+    render(<ContentClient />);
+
+    await enterFolderFromTree("课程资料");
+    await enterFolderFromTree("第一章");
+    await enterFolderFromTree("日程常规与线路基础");
+
+    const breadcrumb = screen.getByLabelText("当前位置");
+    expect(
+      within(breadcrumb).queryByRole("button", { name: "课程资料" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(breadcrumb).queryByRole("button", { name: "第一章" }),
+    ).not.toBeInTheDocument();
+
+    const expandPathButton = within(breadcrumb).getByRole("button", {
+      name: "展开上级路径",
+    });
+    expect(expandPathButton).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(expandPathButton);
+
+    const pathMenu = screen.getByRole("menu");
+    expect(
+      within(pathMenu).getByRole("menuitem", { name: "课程资料" }),
+    ).toBeInTheDocument();
+    expect(
+      within(pathMenu).getByRole("menuitem", { name: "第一章" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(within(pathMenu).getByRole("menuitem", { name: "第一章" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("当前位置")).toHaveTextContent("第一章"),
+    );
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
   it("clears standalone files when returning to the top level", async () => {
@@ -709,12 +803,16 @@ describe("ContentClient folder deletion", () => {
       await screen.findByRole("link", { name: /测试文件\.pdf/ }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "返回上一级" }));
+    fireEvent.click(
+      within(screen.getByLabelText("当前位置")).getByRole("button", {
+        name: "文档",
+      }),
+    );
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "返回上一级" })).toHaveClass(
-        "is-hidden",
-      ),
+      expect(
+        screen.queryByRole("button", { name: "返回上一级" }),
+      ).not.toBeInTheDocument(),
     );
     expect(
       screen.queryByRole("link", { name: /测试文件\.pdf/ }),
@@ -732,8 +830,10 @@ describe("ContentClient folder deletion", () => {
 
     render(<ContentClient />);
 
-    // “返回文档”回到列表页时直接落在最近打开的目录，而不是顶层
-    await screen.findByRole("button", { name: "返回上一级" });
+    // “返回文档”回到列表页时直接落在最近打开的目录，而不是顶层。
+    await waitFor(() =>
+      expect(screen.getByLabelText("当前位置")).toHaveTextContent("课程资料"),
+    );
     expect(
       within(screen.getByRole("table")).getByRole("button", { name: "第一章" }),
     ).toBeInTheDocument();
@@ -751,8 +851,10 @@ describe("ContentClient folder deletion", () => {
       </StrictMode>,
     );
 
-    // 开发模式 StrictMode 会重复执行挂载 effect，恢复逻辑必须保持幂等
-    await screen.findByRole("button", { name: "返回上一级" });
+    // 开发模式 StrictMode 会重复执行挂载 effect，恢复逻辑必须保持幂等。
+    await waitFor(() =>
+      expect(screen.getByLabelText("当前位置")).toHaveTextContent("第一章"),
+    );
     const breadcrumb = screen.getByLabelText("当前位置");
     expect(
       within(breadcrumb).getByRole("button", { name: "课程资料" }),

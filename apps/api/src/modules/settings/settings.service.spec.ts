@@ -2,7 +2,6 @@ import type { PrismaService } from "../prisma/prisma.service";
 import type { StorageService } from "../storage/storage.service";
 import type { HttpsAgentClient } from "./https-agent.client";
 import { SettingsService } from "./settings.service";
-import { PRIVATE_SHORT_CACHE_CONTROL } from "../../common/cache-control";
 
 describe("SettingsService", () => {
   const workspace = {
@@ -199,7 +198,8 @@ describe("SettingsService", () => {
     );
   });
 
-  it("gives a signed favicon response the same short browser cache", async () => {
+  it("streams an R2 favicon through the server instead of issuing a signed redirect", async () => {
+    const stream = { pipe: jest.fn() };
     prisma.workspace.findFirst.mockResolvedValue({
       ...workspace,
       faviconStorageKey: "site/favicon/current.png",
@@ -207,24 +207,15 @@ describe("SettingsService", () => {
       faviconUpdatedAt: new Date("2026-08-02T00:00:00Z"),
       faviconStorageBackend: "r2",
     });
-    storage.presignDownload.mockResolvedValue(
-      "https://r2.example/signed-favicon",
-    );
+    backend.getObject.mockResolvedValue(stream);
 
     await expect(service.getFavicon()).resolves.toMatchObject({
-      redirectUrl: "https://r2.example/signed-favicon",
-      stream: null,
+      mimeType: "image/png",
+      stream,
     });
-    expect(storage.presignDownload).toHaveBeenCalledWith(
-      "r2",
-      "site/favicon/current.png",
-      {
-        filename: "favicon",
-        mimeType: "image/png",
-        inline: true,
-        cacheControl: PRIVATE_SHORT_CACHE_CONTROL,
-      },
-    );
+    expect(storage.backendFor).toHaveBeenCalledWith("r2");
+    expect(backend.getObject).toHaveBeenCalledWith("site/favicon/current.png");
+    expect(storage.presignDownload).not.toHaveBeenCalled();
   });
 
   it("stores an optional dark icon without replacing the default icon", async () => {

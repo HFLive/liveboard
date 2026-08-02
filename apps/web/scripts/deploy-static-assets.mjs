@@ -52,15 +52,15 @@ const run = (command, args, failureLabel) => {
   }
 };
 
-const findFirstFile = (directory) => {
+const findFirstFile = (directory, matches = () => true) => {
   for (const entry of readdirSync(directory, { withFileTypes: true }).sort(
     (left, right) => left.name.localeCompare(right.name),
   )) {
     const entryPath = join(directory, entry.name);
     if (entry.isDirectory()) {
-      const nestedFile = findFirstFile(entryPath);
+      const nestedFile = findFirstFile(entryPath, matches);
       if (nestedFile) return nestedFile;
-    } else if (entry.isFile()) {
+    } else if (entry.isFile() && matches(entryPath)) {
       return entryPath;
     }
   }
@@ -69,6 +69,11 @@ const findFirstFile = (directory) => {
 
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const isJavaScriptContentType = (value) =>
+  /^(?:application|text)\/(?:javascript|ecmascript)(?:\s*;|$)/i.test(
+    value || "",
+  );
 
 const verifyPublishedAsset = async (sourceStaticDir, distDir) => {
   const buildIdPath = join(process.cwd(), distDir, "BUILD_ID");
@@ -86,48 +91,73 @@ const verifyPublishedAsset = async (sourceStaticDir, distDir) => {
     throw new Error("[static-assets] Next.js 静态目录中没有可验证的文件。");
   }
 
-  const relativePath = relative(sourceStaticDir, localFile)
-    .split(sep)
-    .join("/");
-  const expectedContent = readFileSync(localFile);
-  const verificationUrl = new URL(
-    `/_next/static/${relativePath}`,
-    config.assetPrefix,
+  const moduleFile = findFirstFile(sourceStaticDir, (entryPath) =>
+    entryPath.endsWith(".mjs"),
   );
-  verificationUrl.searchParams.set(
-    "liveboard-deployment",
-    process.env.VERCEL_GIT_COMMIT_SHA?.trim() || Date.now().toString(),
-  );
-
-  let lastFailure = "unknown";
-  for (let attempt = 1; attempt <= 6; attempt += 1) {
-    try {
-      const response = await fetch(verificationUrl, {
-        headers: { "Cache-Control": "no-cache" },
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (response.ok) {
-        const actualContent = Buffer.from(await response.arrayBuffer());
-        if (actualContent.equals(expectedContent)) {
-          console.log(
-            `[static-assets] 已通过正式域名校验：/_next/static/${relativePath}`,
-          );
-          return;
-        }
-        lastFailure = "文件内容与本次构建不一致";
-      } else {
-        lastFailure = `HTTP ${response.status}`;
-      }
-    } catch (error) {
-      lastFailure = error instanceof Error ? error.message : String(error);
-    }
-
-    if (attempt < 6) await wait(3_000);
+  if (!moduleFile) {
+    throw new Error(
+      "[static-assets] Next.js 静态目录中没有可验证 MIME 的 .mjs 文件。",
+    );
+  }
+  const verificationFiles = [localFile];
+  if (moduleFile !== localFile) {
+    verificationFiles.push(moduleFile);
   }
 
-  throw new Error(
-    `[static-assets] ${config.assetPrefix} 未能提供本次构建文件：${lastFailure}`,
-  );
+  for (const verificationFile of verificationFiles) {
+    const relativePath = relative(sourceStaticDir, verificationFile)
+      .split(sep)
+      .join("/");
+    const expectedContent = readFileSync(verificationFile);
+    const verificationUrl = new URL(
+      `/_next/static/${relativePath}`,
+      config.assetPrefix,
+    );
+    verificationUrl.searchParams.set(
+      "liveboard-deployment",
+      process.env.VERCEL_GIT_COMMIT_SHA?.trim() || Date.now().toString(),
+    );
+    const requiresJavaScriptContentType = /\.m?js$/i.test(verificationFile);
+
+    let lastFailure = "unknown";
+    for (let attempt = 1; attempt <= 6; attempt += 1) {
+      try {
+        const response = await fetch(verificationUrl, {
+          headers: { "Cache-Control": "no-cache" },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (response.ok) {
+          const contentType = response.headers.get("content-type");
+          if (
+            requiresJavaScriptContentType &&
+            !isJavaScriptContentType(contentType)
+          ) {
+            lastFailure = `Content-Type 不是 JavaScript MIME（${contentType || "缺失"}）`;
+          } else {
+            const actualContent = Buffer.from(await response.arrayBuffer());
+            if (actualContent.equals(expectedContent)) {
+              console.log(
+                `[static-assets] 已通过正式域名校验：/_next/static/${relativePath}`,
+              );
+              break;
+            }
+            lastFailure = "文件内容与本次构建不一致";
+          }
+        } else {
+          lastFailure = `HTTP ${response.status}`;
+        }
+      } catch (error) {
+        lastFailure = error instanceof Error ? error.message : String(error);
+      }
+
+      if (attempt === 6) {
+        throw new Error(
+          `[static-assets] ${config.assetPrefix} 未能正确提供本次构建文件 /_next/static/${relativePath}：${lastFailure}`,
+        );
+      }
+      await wait(3_000);
+    }
+  }
 };
 
 if (config.provider === "cloudflare") {
@@ -216,6 +246,18 @@ try {
       "utf8",
     );
   } else {
+    const staticAssetHeaders = [
+      {
+        key: "Cache-Control",
+        value: "public, max-age=31536000, immutable",
+      },
+      { key: "Access-Control-Allow-Origin", value: "*" },
+      {
+        key: "Cross-Origin-Resource-Policy",
+        value: "cross-origin",
+      },
+    ];
+
     writeFileSync(
       join(stageDir, "index.html"),
       '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>LiveBoard Static Assets</title></head><body>LiveBoard static asset host.</body></html>\n',
@@ -227,18 +269,18 @@ try {
         {
           headers: [
             {
-              source: "/_next/static/*",
+              source: "/_next/static/*.mjs",
               headers: [
+                ...staticAssetHeaders,
                 {
-                  key: "Cache-Control",
-                  value: "public, max-age=31536000, immutable",
-                },
-                { key: "Access-Control-Allow-Origin", value: "*" },
-                {
-                  key: "Cross-Origin-Resource-Policy",
-                  value: "cross-origin",
+                  key: "Content-Type",
+                  value: "application/javascript; charset=utf-8",
                 },
               ],
+            },
+            {
+              source: "/_next/static/*",
+              headers: staticAssetHeaders,
             },
             {
               source: "/",

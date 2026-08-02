@@ -189,18 +189,10 @@ export class AuthController {
     @Res() res: Response,
     @Query("v") version?: string,
   ) {
-    const { mimeType, stream, redirectUrl } = await this.authService.getAvatar(
+    const { mimeType, stream } = await this.authService.getAvatar(
       userId,
       targetUserId,
     );
-
-    if (redirectUrl) {
-      // 短期 R2 签名不能被版本化资源的一年缓存固化，否则签名过期后
-      // 浏览器会持续复用失效的 Location。
-      res.setHeader("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL);
-      res.redirect(302, redirectUrl);
-      return;
-    }
     res.setHeader(
       "Cache-Control",
       isVersionedResourceRequest(version)

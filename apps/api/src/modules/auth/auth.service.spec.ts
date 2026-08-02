@@ -21,6 +21,9 @@ describe("AuthService", () => {
     presignDownload: jest.fn(),
     healthCheckActive: jest.fn(),
   };
+  const backend = {
+    getObject: jest.fn(),
+  };
   let service: AuthService;
 
   beforeEach(() => {
@@ -31,6 +34,7 @@ describe("AuthService", () => {
       storage as unknown as StorageService,
     );
     limiter.isBlocked.mockResolvedValue(false);
+    storage.backendFor.mockResolvedValue(backend);
   });
 
   it("returns the session version and clears failures after a valid login", async () => {
@@ -67,6 +71,25 @@ describe("AuthService", () => {
       service.validateLogin("teacher", "password", "127.0.0.1"),
     ).rejects.toBeInstanceOf(HttpException);
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("streams an R2 avatar through the server instead of issuing a signed redirect", async () => {
+    const stream = { pipe: jest.fn() };
+    prisma.user.findUnique.mockResolvedValue({
+      avatarStorageKey: "users/user-1/avatar.webp",
+      avatarMimeType: "image/webp",
+      avatarStorageBackend: "r2",
+      status: "active",
+    });
+    backend.getObject.mockResolvedValue(stream);
+
+    await expect(service.getAvatar("viewer-1", "user-1")).resolves.toEqual({
+      mimeType: "image/webp",
+      stream,
+    });
+    expect(storage.backendFor).toHaveBeenCalledWith("r2");
+    expect(backend.getObject).toHaveBeenCalledWith("users/user-1/avatar.webp");
+    expect(storage.presignDownload).not.toHaveBeenCalled();
   });
 
   it("increments the session version when changing a password", async () => {

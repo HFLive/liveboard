@@ -16,9 +16,31 @@ import {
   listVisibilityUsers,
 } from "@/lib/api";
 import { classroomDetail } from "@/lib/routes";
-import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
 type DraftRole = ClassroomMemberRole | "none";
+
+function ClassroomCardSkeletons() {
+  return (
+    <>
+      {Array.from({ length: 4 }, (_, index) => (
+        <div
+          aria-hidden="true"
+          className="classroom-row classroom-row-skeleton"
+          key={index}
+        >
+          <span className="classroom-skeleton-head">
+            <span className="skeleton-block classroom-skeleton-title" />
+            <span className="skeleton-block classroom-skeleton-role" />
+          </span>
+          <span className="skeleton-block classroom-skeleton-description" />
+          <span className="classroom-skeleton-stats">
+            <span className="skeleton-block classroom-skeleton-stat" />
+          </span>
+        </div>
+      ))}
+    </>
+  );
+}
 
 export function ClassroomsClient() {
   const [classrooms, setClassrooms] = useState<ClassroomSummary[]>([]);
@@ -80,6 +102,9 @@ export function ClassroomsClient() {
           meResult.user.systemRole,
         );
         setCanCreate(isAdmin);
+        // 课堂列表已可用时就结束主区域的加载状态。成员目录只供新建弹窗使用，
+        // 不应让列表骨架与真实课堂卡片同时存在。
+        setLoading(false);
         if (isAdmin) {
           const userResult = await listVisibilityUsers();
           setUsers(userResult.users);
@@ -162,7 +187,14 @@ export function ClassroomsClient() {
       </div>
 
       <section className="classroom-list" aria-label="课堂列表">
-        {loading ? <SkeletonRows count={5} /> : null}
+        {loading ? (
+          <>
+            <span className="sr-only" role="status">
+              正在加载课堂
+            </span>
+            <ClassroomCardSkeletons />
+          </>
+        ) : null}
         {filtered.map((classroom) => (
           <Link
             className="classroom-row"

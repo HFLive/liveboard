@@ -532,11 +532,18 @@
 
   .content-editor-workspace .editor-more-menu .context-menu {
     position: absolute;
+    z-index: 80;
     top: calc(100% + 6px);
     right: 0;
     bottom: auto;
     left: auto;
     width: max-content;
+  }
+
+  .content-editor-workspace .editor-more-menu[open] > summary {
+    border-color: var(--line-strong);
+    background: var(--fill-active);
+    color: var(--text);
   }
 
   .content-editor-workspace .editor-tool-modal,
