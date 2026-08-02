@@ -1,0 +1,2 @@
+# PDF.js worker 是第三方压缩产物，交给 Prettier 会整文件重排，必须跳过
+apps/web/public/pdf.worker.*.js
