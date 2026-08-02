@@ -36,7 +36,10 @@ import type {
   StorageDownloadMode,
   StorageUploadMode,
 } from "./storage-backend";
-import { ATOMIC_UPLOAD_PART_SIZE_BYTES } from "./storage-backend";
+import {
+  ATOMIC_UPLOAD_PART_SIZE_BYTES,
+  isSafeInlineImageMime,
+} from "./storage-backend";
 
 export interface OssSettingsInput {
   region?: string;
@@ -72,6 +75,8 @@ export interface StorageFileDistribution {
 
 const SETTINGS_CACHE_TTL_MS = 30_000;
 const PRESIGN_EXPIRY_SECONDS = 600;
+/** R2 内联图片签名是短期 bearer token，缩短权限撤销后的残余可访问窗口。 */
+export const R2_INLINE_IMAGE_PRESIGN_EXPIRY_SECONDS = 120;
 const PENDING_UPLOAD_CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
 const PENDING_UPLOAD_CLEANUP_BATCH_SIZE = 100;
 const BACKENDS: StorageBackendName[] = ["minio", "oss", "r2"];
@@ -367,8 +372,9 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 直出模式下为对象生成预签名地址；中转模式或后端不支持时返回 null，
-   * 调用方回退到服务器流式中转。inline 资源统一由 API 中转（签名 URL
-   * 无法覆盖 nosniff/CORP/Cache-Control，且 OSS 默认域名会阻止内联预览）。
+   * 调用方回退到服务器流式中转。Vercel 下经过文件头校验的 R2 位图可以在
+   * API 权限校验后短期签名直出，避免图片字节经过 Vercel；其他 inline 资源
+   * 继续中转，尤其不能改变阿里云 OSS 默认域名的预览兼容策略。
    */
   async presignDownload(
     storageBackend: StorageBackendName,
@@ -376,10 +382,17 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     target: PresignDownloadTarget,
   ): Promise<string | null> {
     if ((await this.activeDownloadMode()) !== "direct") return null;
-    if (target.inline) return null;
+    const directInlineR2Image =
+      target.inline &&
+      this.deploymentTarget === "vercel" &&
+      storageBackend === "r2" &&
+      isSafeInlineImageMime(target.mimeType);
+    if (target.inline && !directInlineR2Image) return null;
     const backend = await this.backendFor(storageBackend);
     return backend.presignGet(key, {
-      expirySeconds: PRESIGN_EXPIRY_SECONDS,
+      expirySeconds: directInlineR2Image
+        ? R2_INLINE_IMAGE_PRESIGN_EXPIRY_SECONDS
+        : PRESIGN_EXPIRY_SECONDS,
       responseContentDisposition: `${
         target.inline ? "inline" : "attachment"
       }; filename*=UTF-8''${encodeURIComponent(target.filename)}`,

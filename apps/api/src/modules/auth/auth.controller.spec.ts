@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import {
   PRIVATE_IMMUTABLE_CACHE_CONTROL,
+  PRIVATE_NO_STORE_CACHE_CONTROL,
   PRIVATE_REVALIDATED_CACHE_CONTROL,
 } from "../../common/cache-control";
 import type { AuthService } from "./auth.service";
@@ -109,6 +110,29 @@ describe("AuthController session cookies", () => {
       );
     },
   );
+
+  it("does not cache a short-lived signed image redirect", async () => {
+    authService.getAvatar.mockResolvedValue({
+      mimeType: "image/png",
+      redirectUrl: "https://r2.example/signed-avatar",
+      stream: null,
+    });
+
+    await controller.getAvatar("user-1", "user-1", response, "7");
+
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "Cache-Control",
+      PRIVATE_NO_STORE_CACHE_CONTROL,
+    );
+    expect(response.redirect).toHaveBeenCalledWith(
+      302,
+      "https://r2.example/signed-avatar",
+    );
+    expect(response.setHeader).not.toHaveBeenCalledWith(
+      "Cache-Control",
+      PRIVATE_IMMUTABLE_CACHE_CONTROL,
+    );
+  });
 });
 
 function restoreEnvironmentVariable(key: string, value: string | undefined) {

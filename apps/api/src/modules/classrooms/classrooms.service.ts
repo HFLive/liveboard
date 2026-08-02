@@ -13,14 +13,16 @@ import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import type { StorageBackendName } from "../storage/storage-backend";
+import {
+  isSafeInlineImageMime,
+  type StorageBackendName,
+} from "../storage/storage-backend";
 import { StorageService } from "../storage/storage.service";
 import { requireResourceName } from "../../common/resource-name";
 import { putObjectWithCompensation } from "../storage/upload-compensation";
 import { DEFAULT_CLASSROOM_STORAGE_QUOTA_BYTES } from "../../common/storage-quota";
 import {
   getAssetPreviewKind,
-  isSafeInlineAssetMime,
   MAX_PDF_PREVIEW_SIZE_BYTES,
   MAX_TEXT_PREVIEW_SIZE_BYTES,
   readPreviewBuffer,
@@ -827,16 +829,18 @@ export class ClassroomsService {
       where: { id: fileId, classroomId },
     });
     if (!file) throw new NotFoundException("课堂文件不存在");
-    if (forceInline && !isSafeInlineAssetMime(file.mimeType)) {
+    if (forceInline && !isSafeInlineImageMime(file.mimeType)) {
       throw new BadRequestException("该文件类型不支持图片预览");
     }
-    const redirectUrl = forceInline
-      ? null
-      : await this.storage.presignDownload(
-          file.storageBackend,
-          file.storageKey,
-          { filename: file.filename, mimeType: file.mimeType, inline: false },
-        );
+    const redirectUrl = await this.storage.presignDownload(
+      file.storageBackend,
+      file.storageKey,
+      {
+        filename: file.filename,
+        mimeType: file.mimeType,
+        inline: forceInline,
+      },
+    );
     if (redirectUrl) {
       return { file, redirectUrl, stream: null };
     }

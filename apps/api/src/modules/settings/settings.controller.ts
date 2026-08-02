@@ -26,6 +26,7 @@ import type { Response } from "express";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import {
   isVersionedResourceRequest,
+  PRIVATE_SHORT_CACHE_CONTROL,
   PUBLIC_IMMUTABLE_CACHE_CONTROL,
   PUBLIC_REVALIDATED_CACHE_CONTROL,
 } from "../../common/cache-control";
@@ -115,16 +116,17 @@ export class SettingsController {
     favicon: Awaited<ReturnType<SettingsService["getFavicon"]>>,
     version?: string,
   ) {
+    if (favicon.redirectUrl) {
+      response.setHeader("Cache-Control", PRIVATE_SHORT_CACHE_CONTROL);
+      response.redirect(302, favicon.redirectUrl);
+      return;
+    }
     response.setHeader(
       "Cache-Control",
       isVersionedResourceRequest(version)
         ? PUBLIC_IMMUTABLE_CACHE_CONTROL
         : PUBLIC_REVALIDATED_CACHE_CONTROL,
     );
-    if (favicon.redirectUrl) {
-      response.redirect(302, favicon.redirectUrl);
-      return;
-    }
     response.setHeader("Content-Type", favicon.mimeType);
     response.setHeader("Cross-Origin-Resource-Policy", "same-site");
     response.setHeader("X-Content-Type-Options", "nosniff");

@@ -15,6 +15,7 @@ let currentIconSettings: AppIconSettings = {
   faviconDarkUrl: null,
 };
 let iconSettingsResolved = false;
+let defaultFaviconResetRequired = false;
 const DEFAULT_FAVICON_PATH = "/favicon.ico?v=liveboard-default-1";
 const ICON_SETTINGS_CACHE_KEY = "liveboard:site-icon-settings:v1";
 
@@ -57,7 +58,8 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Next.js 会在路由切换时同步页面 head。每次切换后重新应用工作区图标，
     // 避免运行时插入的 favicon 被路由元数据清理，导致各页面图标不一致。
-    applyAppIconSettings();
+    // 首次公开配置还未返回时不额外请求空的默认 favicon。
+    if (iconSettingsResolved) applyAppIconSettings();
   }, [pathname]);
 
   return <>{children}</>;
@@ -76,6 +78,13 @@ export function setAppIconSettings(settings: AppIconSettings) {
 
 function applyResolvedAppIconSettings(settings: AppIconSettings) {
   iconSettingsResolved = true;
+  if (settings.faviconUrl) {
+    defaultFaviconResetRequired = false;
+  } else if (currentIconSettings.faviconUrl) {
+    // 仅在当前页曾显示过自定义图标时请求 204 默认路由，
+    // 用来立即清除标签页上的旧图标。首次加载无自定义图标时不重复请求。
+    defaultFaviconResetRequired = true;
+  }
   currentIconSettings = {
     faviconUrl: settings.faviconUrl,
     faviconLightUrl: settings.faviconLightUrl,
@@ -88,7 +97,9 @@ function applyResolvedAppIconSettings(settings: AppIconSettings) {
 function applyAppIconSettings() {
   const defaultUrl = currentIconSettings.faviconUrl
     ? apiResourceUrl(currentIconSettings.faviconUrl)
-    : DEFAULT_FAVICON_PATH;
+    : defaultFaviconResetRequired
+      ? DEFAULT_FAVICON_PATH
+      : null;
   const lightUrl = currentIconSettings.faviconLightUrl
     ? apiResourceUrl(currentIconSettings.faviconLightUrl)
     : null;
@@ -96,17 +107,27 @@ function applyAppIconSettings() {
     ? apiResourceUrl(currentIconSettings.faviconDarkUrl)
     : null;
 
-  document.head
-    .querySelectorAll<HTMLLinkElement>("link[rel~='icon']")
-    .forEach((candidate) => candidate.remove());
-
-  appendFaviconLink("default", defaultUrl);
-  if (lightUrl) {
-    appendFaviconLink("light", lightUrl, "(prefers-color-scheme: light)");
-  }
-  if (darkUrl) {
-    appendFaviconLink("dark", darkUrl, "(prefers-color-scheme: dark)");
-  }
+  reconcileFaviconLinks([
+    ...(defaultUrl ? [{ variant: "default", href: defaultUrl } as const] : []),
+    ...(lightUrl
+      ? ([
+          {
+            variant: "light",
+            href: lightUrl,
+            media: "(prefers-color-scheme: light)",
+          },
+        ] as const)
+      : []),
+    ...(darkUrl
+      ? ([
+          {
+            variant: "dark",
+            href: darkUrl,
+            media: "(prefers-color-scheme: dark)",
+          },
+        ] as const)
+      : []),
+  ]);
 
   setBrandIconVariable(
     "light",
@@ -122,6 +143,58 @@ function applyAppIconSettings() {
   );
 }
 
+type DesiredFaviconLink = {
+  variant: "default" | "light" | "dark";
+  href: string;
+  media?: string;
+};
+
+/**
+ * Next.js 路由元数据可能会改写 head，所以不能只在首次挂载时设置。
+ * 同时，直接删除再插入相同 link 会让浏览器重新请求图标。
+ * 这里保留已符合期望的 DOM 节点，只更新真正变化的变体。
+ */
+function reconcileFaviconLinks(desiredLinks: DesiredFaviconLink[]) {
+  const candidates = Array.from(
+    document.head.querySelectorAll<HTMLLinkElement>("link[rel~='icon']"),
+  );
+  const retained = new Set<HTMLLinkElement>();
+
+  for (const desired of desiredLinks) {
+    const desiredHref = new URL(desired.href, document.baseURI).href;
+    const desiredMedia = desired.media ?? "";
+    const candidate =
+      candidates.find(
+        (link) =>
+          !retained.has(link) &&
+          link.dataset.liveboardFaviconVariant === desired.variant,
+      ) ??
+      candidates.find(
+        (link) =>
+          !retained.has(link) &&
+          link.href === desiredHref &&
+          link.media === desiredMedia,
+      );
+
+    if (!candidate) {
+      retained.add(
+        appendFaviconLink(desired.variant, desired.href, desired.media),
+      );
+      continue;
+    }
+
+    retained.add(candidate);
+    candidate.dataset.liveboardFavicon = "true";
+    candidate.dataset.liveboardFaviconVariant = desired.variant;
+    if (candidate.href !== desiredHref) candidate.href = desired.href;
+    if (candidate.media !== desiredMedia) candidate.media = desiredMedia;
+  }
+
+  for (const candidate of candidates) {
+    if (!retained.has(candidate)) candidate.remove();
+  }
+}
+
 function appendFaviconLink(
   variant: "default" | "light" | "dark",
   href: string,
@@ -134,6 +207,7 @@ function appendFaviconLink(
   link.href = href;
   if (media) link.media = media;
   document.head.appendChild(link);
+  return link;
 }
 
 function setBrandIconVariable(tone: "light" | "dark", url: string | null) {
@@ -141,8 +215,11 @@ function setBrandIconVariable(tone: "light" | "dark", url: string | null) {
   const attribute = `data-site-brand-icon-${tone}`;
   const property = `--site-brand-icon-${tone}`;
   if (url) {
-    root.setAttribute(attribute, "true");
-    root.style.setProperty(property, `url(${JSON.stringify(url)})`);
+    if (!root.hasAttribute(attribute)) root.setAttribute(attribute, "true");
+    const value = `url(${JSON.stringify(url)})`;
+    if (root.style.getPropertyValue(property) !== value) {
+      root.style.setProperty(property, value);
+    }
     return;
   }
 
@@ -208,6 +285,7 @@ function validateCachedIconPath(
 
 export function resetAppIconSettingsForTest() {
   iconSettingsResolved = false;
+  defaultFaviconResetRequired = false;
   currentIconSettings = {
     faviconUrl: null,
     faviconLightUrl: null,

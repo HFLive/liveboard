@@ -343,7 +343,7 @@ describe("ClassroomsService", () => {
     });
   });
 
-  it("proxies safe classroom images inline instead of issuing a signed URL", async () => {
+  it("lets the storage policy choose direct or proxied delivery for inline images", async () => {
     const content = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
     prisma.user.findUnique.mockResolvedValue({
       id: "student-1",
@@ -372,7 +372,15 @@ describe("ClassroomsService", () => {
       inline: true,
       redirectUrl: null,
     });
-    expect(storage.presignDownload).not.toHaveBeenCalled();
+    expect(storage.presignDownload).toHaveBeenCalledWith(
+      "oss",
+      "classrooms/file-1",
+      {
+        filename: "课堂截图.png",
+        mimeType: "image/png",
+        inline: true,
+      },
+    );
     expect(backend.getObject).toHaveBeenCalledWith("classrooms/file-1");
   });
 
