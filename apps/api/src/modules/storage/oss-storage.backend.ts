@@ -3,8 +3,50 @@ import type { Readable } from "node:stream";
 import type {
   ObjectStorageBackend,
   PresignDownloadOptions,
+  PresignedPutUpload,
 } from "./storage-backend";
 import { ATOMIC_UPLOAD_PART_SIZE_BYTES } from "./storage-backend";
+
+type OssMultipartClient = Client & {
+  initiateNewMultipartUpload(
+    bucketName: string,
+    objectName: string,
+    headers: Record<string, string>,
+  ): Promise<string>;
+  uploadPart(
+    config: {
+      bucketName: string;
+      objectName: string;
+      uploadID: string;
+      partNumber: number;
+      headers: Record<string, string | number>;
+    },
+    payload: Buffer,
+  ): Promise<{ etag: string }>;
+  listParts(
+    bucketName: string,
+    objectName: string,
+    uploadId: string,
+  ): Promise<Array<{ part: number; etag: string; size: number }>>;
+  completeMultipartUpload(
+    bucketName: string,
+    objectName: string,
+    uploadId: string,
+    etags: Array<{ part: number; etag: string }>,
+  ): Promise<unknown>;
+  abortMultipartUpload(
+    bucketName: string,
+    objectName: string,
+    uploadId: string,
+  ): Promise<void>;
+  presignedUrl(
+    method: string,
+    bucketName: string,
+    objectName: string,
+    expires: number,
+    reqParams: Record<string, string>,
+  ): Promise<string>;
+};
 
 export interface OssClientConfig {
   region: string;
@@ -127,6 +169,83 @@ export class OssStorageBackend implements ObjectStorageBackend {
     },
   ) {
     return Promise.resolve(null);
+  }
+
+  async initiateMultipartUpload(key: string, mimeType: string) {
+    return (this.client as OssMultipartClient).initiateNewMultipartUpload(
+      this.bucket,
+      key,
+      { "Content-Type": mimeType },
+    );
+  }
+
+  async uploadMultipartPart(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+    data: Buffer,
+  ) {
+    const result = await (this.client as OssMultipartClient).uploadPart(
+      {
+        bucketName: this.bucket,
+        objectName: key,
+        uploadID: uploadId,
+        partNumber,
+        headers: { "Content-Length": data.length },
+      },
+      data,
+    );
+    return { etag: result.etag };
+  }
+
+  async listMultipartParts(key: string, uploadId: string) {
+    const parts = await (this.client as OssMultipartClient).listParts(
+      this.bucket,
+      key,
+      uploadId,
+    );
+    return parts.map((part) => ({
+      partNumber: part.part,
+      etag: part.etag,
+      size: part.size,
+    }));
+  }
+
+  async completeMultipartUpload(
+    key: string,
+    uploadId: string,
+    parts: Array<{ partNumber: number; etag: string }>,
+  ) {
+    await (this.client as OssMultipartClient).completeMultipartUpload(
+      this.bucket,
+      key,
+      uploadId,
+      parts.map((part) => ({ part: part.partNumber, etag: part.etag })),
+    );
+  }
+
+  async abortMultipartUpload(key: string, uploadId: string) {
+    await (this.client as OssMultipartClient).abortMultipartUpload(
+      this.bucket,
+      key,
+      uploadId,
+    );
+  }
+
+  async presignMultipartPart(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+    expirySeconds: number,
+  ): Promise<PresignedPutUpload> {
+    const url = await (this.presignClient as OssMultipartClient).presignedUrl(
+      "PUT",
+      this.bucket,
+      key,
+      expirySeconds,
+      { uploadId, partNumber: String(partNumber) },
+    );
+    return { url, headers: {} };
   }
 
   async statObject(key: string) {

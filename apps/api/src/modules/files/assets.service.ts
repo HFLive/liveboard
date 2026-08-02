@@ -179,49 +179,56 @@ export class AssetsService {
     const storageKey = `${context.workspaceId}/${new Date()
       .toISOString()
       .slice(0, 10)}/${randomUUID()}-${storageFilename}`;
-    const instruction = await this.storage.signUpload(
+    const objectKey = this.storage.objectKeyForPendingUpload(
       backend.name,
-      this.storage.objectKeyForPendingUpload(backend.name, storageKey),
-      {
-        sizeBytes: input.sizeBytes,
-        mimeType,
-      },
+      storageKey,
     );
+    const instruction = await this.storage.signUpload(backend.name, objectKey, {
+      sizeBytes: input.sizeBytes,
+      mimeType,
+    });
     if (!instruction) {
       throw new NotImplementedException(
         "当前存储配置不支持签名直入,请改用服务器中转上传",
       );
     }
 
-    await this.reapExpiredPendingUploads(userId);
-    await this.assertDirectUploadQuotaAvailable(
-      userId,
-      context,
-      filename,
-      input.sizeBytes,
-    );
-
-    const pending = await this.prisma.pendingUpload.create({
-      data: {
-        kind: "asset",
-        workspaceId: context.workspaceId,
-        folderId: context.folderId,
-        fileId: context.fileId,
-        storageBackend: backend.name,
+    try {
+      await this.reapExpiredPendingUploads(userId);
+      await this.assertDirectUploadQuotaAvailable(
+        userId,
+        context,
         filename,
-        mimeType,
-        sizeBytes: input.sizeBytes,
-        storageKey,
-        uploadedBy: userId,
-        expiresAt: new Date(Date.now() + PENDING_UPLOAD_TTL_MS),
-      },
-    });
+        input.sizeBytes,
+      );
 
-    return {
-      uploadId: pending.id,
-      instruction,
-      expiresAt: instruction.expiresAt,
-    };
+      const pending = await this.prisma.pendingUpload.create({
+        data: {
+          kind: "asset",
+          workspaceId: context.workspaceId,
+          folderId: context.folderId,
+          fileId: context.fileId,
+          storageBackend: backend.name,
+          filename,
+          mimeType,
+          sizeBytes: input.sizeBytes,
+          storageKey,
+          uploadedBy: userId,
+          expiresAt: new Date(Date.now() + PENDING_UPLOAD_TTL_MS),
+        },
+      });
+
+      return {
+        uploadId: pending.id,
+        instruction,
+        expiresAt: instruction.expiresAt,
+      };
+    } catch (caught) {
+      await Promise.resolve(
+        this.storage.discardMultipartUpload(backend.name, objectKey),
+      ).catch(() => undefined);
+      throw caught;
+    }
   }
 
   /** 签名直入第三步:对象校验通过后原子创建资产记录并释放预留。 */
@@ -668,39 +675,49 @@ export class AssetsService {
 
     const backend = await this.storage.activeBackend();
     const storageKey = `${post.thread.workspaceId}/forum/${post.id}/${randomUUID()}.webp`;
-    const instruction = await this.storage.signUpload(
+    const objectKey = this.storage.objectKeyForPendingUpload(
       backend.name,
-      this.storage.objectKeyForPendingUpload(backend.name, storageKey),
-      { sizeBytes: input.sizeBytes, mimeType },
+      storageKey,
     );
+    const instruction = await this.storage.signUpload(backend.name, objectKey, {
+      sizeBytes: input.sizeBytes,
+      mimeType,
+    });
     if (!instruction) {
       throw new NotImplementedException(
         "当前存储配置不支持签名直入,请改用服务器中转上传",
       );
     }
 
-    await this.reapExpiredPendingUploads(userId);
-    const sortOrder = existingCount + pendingCount;
-    const pending = await this.prisma.pendingUpload.create({
-      data: {
-        kind: "forum_image",
-        workspaceId: post.thread.workspaceId,
-        forumPostId: post.id,
-        storageBackend: backend.name,
-        filename: `forum-image-${sortOrder + 1}.webp`,
-        mimeType,
-        sizeBytes: input.sizeBytes,
-        storageKey,
-        uploadedBy: userId,
-        expiresAt: new Date(Date.now() + PENDING_UPLOAD_TTL_MS),
-      },
-    });
+    try {
+      await this.reapExpiredPendingUploads(userId);
+      const sortOrder = existingCount + pendingCount;
+      const pending = await this.prisma.pendingUpload.create({
+        data: {
+          kind: "forum_image",
+          workspaceId: post.thread.workspaceId,
+          forumPostId: post.id,
+          storageBackend: backend.name,
+          filename: `forum-image-${sortOrder + 1}.webp`,
+          mimeType,
+          sizeBytes: input.sizeBytes,
+          storageKey,
+          uploadedBy: userId,
+          expiresAt: new Date(Date.now() + PENDING_UPLOAD_TTL_MS),
+        },
+      });
 
-    return {
-      uploadId: pending.id,
-      instruction,
-      expiresAt: instruction.expiresAt,
-    };
+      return {
+        uploadId: pending.id,
+        instruction,
+        expiresAt: instruction.expiresAt,
+      };
+    } catch (caught) {
+      await Promise.resolve(
+        this.storage.discardMultipartUpload(backend.name, objectKey),
+      ).catch(() => undefined);
+      throw caught;
+    }
   }
 
   /** 论坛图片直传第三步：读取对象并验证真实文件头与尺寸后创建 FileAsset。 */

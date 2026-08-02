@@ -1,8 +1,8 @@
 export type SystemRole = "super_admin" | "admin" | "member";
 
 /**
- * 对象存储直传指令判别联合：前端必须根据 `transport` 字段决定走 Form POST
- * 还是原始 PUT，禁止通过是否存在 `fields` 猜测协议。
+ * 对象存储上传指令判别联合：前端必须根据 `transport` 字段决定走 Form POST、
+ * 原始 PUT 还是 multipart，禁止通过是否存在 `fields` 猜测协议。
  */
 export type ObjectUploadInstruction =
   | {
@@ -15,6 +15,14 @@ export type ObjectUploadInstruction =
       transport: "put";
       url: string;
       headers: Record<string, string>;
+      expiresAt: string;
+    }
+  | {
+      /** 大文件使用服务端 multipart 会话，浏览器逐片上传并在确认时完成对象。 */
+      transport: "multipart";
+      mode: "relay" | "direct";
+      partSizeBytes: number;
+      partCount: number;
       expiresAt: string;
     };
 

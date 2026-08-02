@@ -16,11 +16,23 @@ export function isSafeInlineImageMime(mimeType: string) {
   return SAFE_INLINE_IMAGE_MIME_TYPES.has(mimeType);
 }
 
-/**
- * LiveBoard 当前最大上传为 100MB。把 SDK 分片阈值设得更高，
- * 让所有受支持上传使用原子单次 PUT，避免进程中断留下未完成分片。
- */
+/** SDK 单次 putObject 的历史阈值，迁移脚本仍使用它控制内存/分片行为。 */
 export const ATOMIC_UPLOAD_PART_SIZE_BYTES = 128 * 1024 * 1024;
+
+/** 浏览器与对象存储 multipart 会话共用的分片大小。S3 要求非末片至少 5MiB。 */
+export const MULTIPART_UPLOAD_PART_SIZE_BYTES = 8 * 1024 * 1024;
+
+/** 小文件继续使用单请求，避免为几 KB 的上传创建 multipart 会话。 */
+export const MULTIPART_UPLOAD_THRESHOLD_BYTES =
+  MULTIPART_UPLOAD_PART_SIZE_BYTES;
+
+export function shouldUseMultipartUpload(sizeBytes: number) {
+  return sizeBytes > MULTIPART_UPLOAD_THRESHOLD_BYTES;
+}
+
+export function multipartPartCount(sizeBytes: number) {
+  return Math.ceil(sizeBytes / MULTIPART_UPLOAD_PART_SIZE_BYTES);
+}
 
 export interface PresignDownloadOptions {
   expirySeconds: number;
@@ -41,8 +53,8 @@ export interface PresignedPutUpload {
 }
 
 /**
- * 上传指令判别联合：前端根据 `transport` 字段决定走 Form POST 还是
- * 原始 PUT，禁止通过是否存在 `fields` 猜测协议。
+ * 上传指令判别联合：前端根据 `transport` 字段决定走 Form POST、原始 PUT
+ * 还是 multipart，禁止通过是否存在 `fields` 猜测协议。
  */
 export type ObjectUploadInstruction =
   | {
@@ -55,6 +67,13 @@ export type ObjectUploadInstruction =
       transport: "put";
       url: string;
       headers: Record<string, string>;
+      expiresAt: string;
+    }
+  | {
+      transport: "multipart";
+      mode: StorageUploadMode;
+      partSizeBytes: number;
+      partCount: number;
       expiresAt: string;
     };
 
@@ -105,6 +124,35 @@ export interface ObjectStorageBackend {
       sizeBytes: number;
       mimeType: string;
     },
+  ): Promise<PresignedPutUpload | null>;
+  /** 创建一个由浏览器分片、服务端确认完成的对象存储 multipart 会话。 */
+  initiateMultipartUpload(key: string, mimeType: string): Promise<string>;
+  /** 上传一个已校验大小的 multipart 分片。 */
+  uploadMultipartPart(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+    data: Buffer,
+  ): Promise<{ etag: string }>;
+  /** 列出已写入的分片，确认时由服务端校验完整性。 */
+  listMultipartParts(
+    key: string,
+    uploadId: string,
+  ): Promise<Array<{ partNumber: number; etag: string; size: number }>>;
+  /** 完成 multipart 对象。 */
+  completeMultipartUpload(
+    key: string,
+    uploadId: string,
+    parts: Array<{ partNumber: number; etag: string }>,
+  ): Promise<void>;
+  /** 取消 multipart 会话并释放未完成分片。 */
+  abortMultipartUpload(key: string, uploadId: string): Promise<void>;
+  /** 为浏览器直传的单个分片生成预签名 PUT。 */
+  presignMultipartPart(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+    expirySeconds: number,
   ): Promise<PresignedPutUpload | null>;
   /** 读取对象元信息，用于直入上传后的存在性与大小校验。 */
   statObject(key: string): Promise<{ size: number }>;

@@ -9,7 +9,6 @@ import {
   X,
 } from "lucide-react";
 import type { UploadTask } from "./useUploadTask";
-import { UPLOAD_PROGRESS_CAP } from "./useUploadTask";
 import styles from "./UploadTaskToast.module.css";
 
 export function UploadTaskToast({
@@ -81,11 +80,7 @@ export function UploadTaskToast({
                 <div className={styles.fileRow}>
                   <span title={task.filename}>{task.filename}</span>
                   {task.status === "uploading" ? (
-                    <em>
-                      {task.progress >= UPLOAD_PROGRESS_CAP
-                        ? "服务器处理中…"
-                        : `${task.progress}%`}
-                    </em>
+                    <em>{task.progress}%</em>
                   ) : task.status === "queued" ? (
                     <em>等待中</em>
                   ) : null}
@@ -131,5 +126,5 @@ function taskStatusLabel(task: UploadTask) {
   if (task.status === "error") return "上传失败";
   if (task.status === "cancelled") return "上传已取消";
   if (task.status === "queued") return "等待上传";
-  return task.progress >= UPLOAD_PROGRESS_CAP ? "正在保存" : "正在上传";
+  return "正在上传";
 }
