@@ -1,7 +1,10 @@
 import type { ConfigService } from "@nestjs/config";
 import type { AiSecretService } from "../ai/ai-secret.service";
 import type { PrismaService } from "../prisma/prisma.service";
-import { ATOMIC_UPLOAD_PART_SIZE_BYTES } from "./storage-backend";
+import {
+  ATOMIC_UPLOAD_PART_SIZE_BYTES,
+  MULTIPART_UPLOAD_PART_SIZE_BYTES,
+} from "./storage-backend";
 import {
   R2_INLINE_IMAGE_PRESIGN_EXPIRY_SECONDS,
   StorageService,
@@ -18,6 +21,12 @@ const mockMinioClient = {
   presignedGetObject: jest.fn(),
   newPostPolicy: jest.fn(),
   presignedPostPolicy: jest.fn(),
+  initiateNewMultipartUpload: jest.fn(),
+  uploadPart: jest.fn(),
+  listParts: jest.fn(),
+  completeMultipartUpload: jest.fn(),
+  abortMultipartUpload: jest.fn(),
+  presignedUrl: jest.fn(),
   statObject: jest.fn(),
 };
 
@@ -99,6 +108,14 @@ describe("StorageService", () => {
         "x-amz-signature": "signature",
       },
     });
+    mockMinioClient.initiateNewMultipartUpload.mockResolvedValue("multipart-1");
+    mockMinioClient.uploadPart.mockResolvedValue({ etag: "etag-1" });
+    mockMinioClient.listParts.mockResolvedValue([]);
+    mockMinioClient.completeMultipartUpload.mockResolvedValue(undefined);
+    mockMinioClient.abortMultipartUpload.mockResolvedValue(undefined);
+    mockMinioClient.presignedUrl.mockResolvedValue(
+      "https://oss.example/multipart-part",
+    );
     mockMinioClient.statObject.mockResolvedValue({ size: 1 });
     service = new StorageService(
       prisma as unknown as PrismaService,
@@ -638,6 +655,89 @@ describe("StorageService", () => {
       }),
     ).resolves.toBeNull();
     expect(mockMinioClient.presignedPostPolicy).not.toHaveBeenCalled();
+  });
+
+  it("creates a multipart instruction for large relay uploads", async () => {
+    await expect(
+      service.signUpload("minio", "workspace/large.bin", {
+        sizeBytes: ATOMIC_UPLOAD_PART_SIZE_BYTES + 1,
+        mimeType: "application/octet-stream",
+      }),
+    ).resolves.toMatchObject({
+      transport: "multipart",
+      mode: "relay",
+      partCount: expect.any(Number),
+    });
+    expect(mockMinioClient.initiateNewMultipartUpload).toHaveBeenCalledWith(
+      "liveboard-assets",
+      "workspace/large.bin",
+      { "Content-Type": "application/octet-stream" },
+    );
+  });
+
+  it("forces legacy MinIO direct settings through relay multipart", async () => {
+    prisma.storageSettings.findUnique.mockResolvedValue({
+      backend: "minio",
+      downloadMode: "proxy",
+      uploadMode: "direct",
+    });
+
+    await expect(
+      service.signUpload("minio", "workspace/large.bin", {
+        sizeBytes: MULTIPART_UPLOAD_PART_SIZE_BYTES + 1,
+        mimeType: "application/octet-stream",
+      }),
+    ).resolves.toMatchObject({ transport: "multipart", mode: "relay" });
+  });
+
+  it("validates and completes every multipart part before finalizing", async () => {
+    const sizeBytes = MULTIPART_UPLOAD_PART_SIZE_BYTES + 3;
+    await service.signUpload("minio", "workspace/large.bin", {
+      sizeBytes,
+      mimeType: "application/octet-stream",
+    });
+    mockMinioClient.listParts.mockResolvedValue([
+      {
+        part: 1,
+        etag: "etag-1",
+        size: MULTIPART_UPLOAD_PART_SIZE_BYTES,
+      },
+      { part: 2, etag: "etag-2", size: 3 },
+    ]);
+    mockMinioClient.statObject.mockResolvedValue({ size: sizeBytes });
+
+    await expect(
+      service.verifyAndFinalizePendingObject({
+        storageBackend: "minio",
+        storageKey: "workspace/large.bin",
+        mimeType: "application/octet-stream",
+        sizeBytes,
+      }),
+    ).resolves.toBeUndefined();
+    expect(mockMinioClient.completeMultipartUpload).toHaveBeenCalledWith(
+      "liveboard-assets",
+      "workspace/large.bin",
+      "multipart-1",
+      [
+        { part: 1, etag: "etag-1" },
+        { part: 2, etag: "etag-2" },
+      ],
+    );
+  });
+
+  it("fails closed when a large upload has lost its multipart session", async () => {
+    const sizeBytes = MULTIPART_UPLOAD_PART_SIZE_BYTES + 3;
+    mockMinioClient.statObject.mockResolvedValue({ size: sizeBytes });
+
+    await expect(
+      service.verifyAndFinalizePendingObject({
+        storageBackend: "minio",
+        storageKey: "workspace/large.bin",
+        mimeType: "application/octet-stream",
+        sizeBytes,
+      }),
+    ).rejects.toThrow("分片上传会话不存在,请重新上传");
+    expect(mockMinioClient.statObject).not.toHaveBeenCalled();
   });
 
   it("returns null for presigned uploads on the MinIO backend", async () => {

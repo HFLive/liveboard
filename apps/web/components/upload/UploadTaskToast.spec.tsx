@@ -86,7 +86,7 @@ describe("UploadTaskToast", () => {
     expect(screen.getAllByRole("progressbar")).toHaveLength(2);
   });
 
-  it("shows server-processing state instead of a fake 100% while awaiting response", () => {
+  it("keeps the actual network percentage visible near completion", () => {
     render(
       <UploadTaskToast
         onCancel={vi.fn()}
@@ -102,9 +102,8 @@ describe("UploadTaskToast", () => {
       />,
     );
 
-    expect(screen.getByText("正在保存")).toBeInTheDocument();
-    expect(screen.getByText("服务器处理中…")).toBeInTheDocument();
-    expect(screen.queryByText("90%")).not.toBeInTheDocument();
+    expect(screen.getByText("正在上传")).toBeInTheDocument();
+    expect(screen.getByText("90%")).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute(
       "aria-valuenow",
       "90",

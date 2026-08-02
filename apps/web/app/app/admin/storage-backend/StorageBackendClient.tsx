@@ -450,8 +450,9 @@ export function StorageBackendClient() {
                         <li>
                           「来源」填本站完整地址（例如
                           https://liveboard.example.com，不带结尾斜杠）；「允许
-                          Methods」勾选 POST；「允许 Headers」填 *；「暴露
-                          Headers」填 ETag；其余默认，保存规则。
+                          Methods」勾选 POST、PUT；「允许 Headers」填 *；「暴露
+                          Headers」填 ETag；其余默认，保存规则。大文件会使用 PUT
+                          分片上传。
                         </li>
                         <li>
                           不配置跨域也不影响使用：签名直入上传失败时会自动回退服务器中转，只是仍然占用服务器带宽。
@@ -573,7 +574,8 @@ export function StorageBackendClient() {
                   <h2>上传设置</h2>
                   <p>
                     中转上传兼容性更好；签名直入不占服务器带宽，但需要配置
-                    CORS。直传失败时会自动改用中转。
+                    CORS。大于 8MiB 的文件会自动分片，上传浮窗显示实际字节进度。
+                    直传失败时会自动改用中转。
                   </p>
                 </div>
               </div>
@@ -597,8 +599,8 @@ export function StorageBackendClient() {
                   </div>
                   {uploadMode === "direct" ? (
                     <small className="field-hint storage-backend-inline-hint">
-                      需配置 Bucket CORS：来源为本站地址，允许 POST，允许
-                      Headers 填 *。详见上方指南。
+                      需配置 Bucket CORS：来源为本站地址，允许 POST、PUT，允许
+                      Headers 填 *，暴露 ETag。详见上方指南。
                     </small>
                   ) : null}
                 </div>

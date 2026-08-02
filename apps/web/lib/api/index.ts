@@ -286,7 +286,12 @@ export async function uploadProfileBannerDirect(
   }
 
   try {
-    await uploadToObjectStorage(signed.instruction, file, options);
+    await uploadToObjectStorage(
+      signed.instruction,
+      signed.uploadId,
+      file,
+      options,
+    );
   } catch (caught) {
     await abortBannerUpload(signed.uploadId);
     if (isAbortError(caught)) throw caught;
@@ -1085,7 +1090,12 @@ export async function uploadForumPostImageDirect(
   }
 
   try {
-    await uploadToObjectStorage(signed.instruction, file, options);
+    await uploadToObjectStorage(
+      signed.instruction,
+      signed.uploadId,
+      file,
+      options,
+    );
   } catch (caught) {
     await abortForumPostImageUpload(postId, signed.uploadId);
     if (isAbortError(caught)) throw caught;
@@ -1465,7 +1475,12 @@ export async function uploadAssetDirect(
   }
 
   try {
-    await uploadToObjectStorage(signed.instruction, input.file, options);
+    await uploadToObjectStorage(
+      signed.instruction,
+      signed.uploadId,
+      input.file,
+      options,
+    );
   } catch (caught) {
     await abortAssetUpload(signed.uploadId);
     if (isAbortError(caught)) throw caught;
@@ -1808,7 +1823,12 @@ export async function uploadClassroomFileDirect(
   }
 
   try {
-    await uploadToObjectStorage(signed.instruction, file, options);
+    await uploadToObjectStorage(
+      signed.instruction,
+      signed.uploadId,
+      file,
+      options,
+    );
   } catch (caught) {
     await request<{ ok: boolean }>(`${base}/upload-abort`, {
       method: "POST",

@@ -307,36 +307,46 @@ export class AuthService {
     );
     const storageKey = `banners/${user.id}/${randomUUID()}.${profileImageExtension(mimeType)}`;
     const backend = await this.storage.activeBackend();
-    const instruction = await this.storage.signUpload(
+    const objectKey = this.storage.objectKeyForPendingUpload(
       backend.name,
-      this.storage.objectKeyForPendingUpload(backend.name, storageKey),
-      { sizeBytes: input.sizeBytes, mimeType },
+      storageKey,
     );
+    const instruction = await this.storage.signUpload(backend.name, objectKey, {
+      sizeBytes: input.sizeBytes,
+      mimeType,
+    });
     if (!instruction) {
       throw new NotImplementedException(
         "当前存储配置不支持签名直入,请改用服务器中转上传",
       );
     }
-    await this.reapExpiredPendingUploads(user.id);
-    const workspace = await this.getDefaultWorkspace();
-    const pending = await this.prisma.pendingUpload.create({
-      data: {
-        kind: "profile_banner",
-        workspaceId: workspace.id,
-        storageBackend: backend.name,
-        filename: "banner",
-        mimeType,
-        sizeBytes: input.sizeBytes,
-        storageKey,
-        uploadedBy: user.id,
-        expiresAt: new Date(Date.now() + PENDING_UPLOAD_TTL_MS),
-      },
-    });
-    return {
-      uploadId: pending.id,
-      instruction,
-      expiresAt: instruction.expiresAt,
-    };
+    try {
+      await this.reapExpiredPendingUploads(user.id);
+      const workspace = await this.getDefaultWorkspace();
+      const pending = await this.prisma.pendingUpload.create({
+        data: {
+          kind: "profile_banner",
+          workspaceId: workspace.id,
+          storageBackend: backend.name,
+          filename: "banner",
+          mimeType,
+          sizeBytes: input.sizeBytes,
+          storageKey,
+          uploadedBy: user.id,
+          expiresAt: new Date(Date.now() + PENDING_UPLOAD_TTL_MS),
+        },
+      });
+      return {
+        uploadId: pending.id,
+        instruction,
+        expiresAt: instruction.expiresAt,
+      };
+    } catch (caught) {
+      await Promise.resolve(
+        this.storage.discardMultipartUpload(backend.name, objectKey),
+      ).catch(() => undefined);
+      throw caught;
+    }
   }
 
   /** Banner 直传第三步：校验对象与真实文件头后更新用户 Banner。 */

@@ -626,47 +626,54 @@ export class ClassroomsService {
     const backend = await this.storage.activeBackend();
     const storageFilename = sanitizeStorageFilename(filename);
     const storageKey = `${classroom.workspaceId}/classrooms/${classroomId}/${randomUUID()}-${storageFilename}`;
-    const instruction = await this.storage.signUpload(
+    const objectKey = this.storage.objectKeyForPendingUpload(
       backend.name,
-      this.storage.objectKeyForPendingUpload(backend.name, storageKey),
-      {
-        sizeBytes: input.sizeBytes,
-        mimeType,
-      },
+      storageKey,
     );
+    const instruction = await this.storage.signUpload(backend.name, objectKey, {
+      sizeBytes: input.sizeBytes,
+      mimeType,
+    });
     if (!instruction) {
       throw new NotImplementedException(
         "当前存储配置不支持签名直入,请改用服务器中转上传",
       );
     }
 
-    await this.reapExpiredPendingUploads(user.id);
-    await this.assertDirectUploadQuotaAvailable(
-      classroom,
-      filename,
-      input.sizeBytes,
-    );
-
-    const pending = await this.prisma.pendingUpload.create({
-      data: {
-        kind: "classroom",
-        workspaceId: classroom.workspaceId,
-        classroomId,
-        storageBackend: backend.name,
+    try {
+      await this.reapExpiredPendingUploads(user.id);
+      await this.assertDirectUploadQuotaAvailable(
+        classroom,
         filename,
-        mimeType,
-        sizeBytes: input.sizeBytes,
-        storageKey,
-        uploadedBy: user.id,
-        expiresAt: new Date(Date.now() + PENDING_UPLOAD_TTL_MS),
-      },
-    });
+        input.sizeBytes,
+      );
 
-    return {
-      uploadId: pending.id,
-      instruction,
-      expiresAt: instruction.expiresAt,
-    };
+      const pending = await this.prisma.pendingUpload.create({
+        data: {
+          kind: "classroom",
+          workspaceId: classroom.workspaceId,
+          classroomId,
+          storageBackend: backend.name,
+          filename,
+          mimeType,
+          sizeBytes: input.sizeBytes,
+          storageKey,
+          uploadedBy: user.id,
+          expiresAt: new Date(Date.now() + PENDING_UPLOAD_TTL_MS),
+        },
+      });
+
+      return {
+        uploadId: pending.id,
+        instruction,
+        expiresAt: instruction.expiresAt,
+      };
+    } catch (caught) {
+      await Promise.resolve(
+        this.storage.discardMultipartUpload(backend.name, objectKey),
+      ).catch(() => undefined);
+      throw caught;
+    }
   }
 
   /** 签名直入第三步:对象校验通过后原子创建文件记录并释放预留。 */
