@@ -637,6 +637,7 @@ export function ContentClient() {
     setActiveFolderId(null);
     persistActiveFolder(null);
     setFiles([]);
+    setStandaloneAssets([]);
     setGrants([]);
     setInheritedGrants([]);
     setPermissionUsers([]);
