@@ -687,6 +687,40 @@ describe("ContentClient folder deletion", () => {
     ).toBeInTheDocument();
   });
 
+  it("clears standalone files when returning to the top level", async () => {
+    vi.mocked(listFiles).mockResolvedValue({
+      files: [],
+      standaloneAssets: [
+        {
+          id: "asset-1",
+          folderId: "folder-1",
+          filename: "测试文件.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 2048,
+          canManage: true,
+          updatedAt: "2026-07-20T08:00:00.000Z",
+        },
+      ],
+    });
+
+    render(<ContentClient />);
+    await enterFolderFromTree("课程资料");
+    expect(
+      await screen.findByRole("link", { name: /测试文件\.pdf/ }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "返回上一级" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "返回上一级" })).toHaveClass(
+        "is-hidden",
+      ),
+    );
+    expect(
+      screen.queryByRole("link", { name: /测试文件\.pdf/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("restores the last opened folder when the page loads again", async () => {
     vi.mocked(getFolderTree)
       .mockReset()
