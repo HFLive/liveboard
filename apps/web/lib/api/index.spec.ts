@@ -429,6 +429,79 @@ describe("Direct asset upload API", () => {
     );
   });
 
+  it("uploads large files in concurrent storage-backed parts with continuous progress", async () => {
+    const partSizeBytes = 8 * 1024 * 1024;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          uploadId: "u-large",
+          instruction: {
+            transport: "multipart",
+            mode: "direct",
+            partSizeBytes,
+            partCount: 2,
+            expiresAt: "2026-07-29T00:10:00.000Z",
+          },
+          expiresAt: "2026-07-29T00:10:00.000Z",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          url: "https://oss.example/part-1",
+          headers: {},
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          url: "https://oss.example/part-2",
+          headers: {},
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ asset: { id: "asset-large" } }));
+    const onProgress = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("XMLHttpRequest", FakeXMLHttpRequest);
+
+    const file = new File([new Uint8Array(partSizeBytes + 1)], "large.bin", {
+      type: "application/octet-stream",
+    });
+    const promise = uploadAssetDirect(
+      { file, folderId: "folder-1" },
+      { onProgress },
+    );
+
+    await vi.waitFor(() => {
+      expect(FakeXMLHttpRequest.instances.length).toBe(2);
+    });
+    const firstPart = FakeXMLHttpRequest.instances[0]!;
+    const secondPart = FakeXMLHttpRequest.instances[1]!;
+    firstPart.upload.dispatchEvent(
+      Object.assign(new Event("progress"), {
+        lengthComputable: true,
+        loaded: partSizeBytes / 2,
+        total: partSizeBytes,
+      }),
+    );
+    firstPart.status = 200;
+    firstPart.dispatchEvent(new Event("load"));
+    secondPart.status = 200;
+    secondPart.dispatchEvent(new Event("load"));
+
+    await expect(promise).resolves.toEqual({
+      asset: { id: "asset-large" },
+    });
+    expect(firstPart.url).toBe("https://oss.example/part-1");
+    expect(secondPart.url).toBe("https://oss.example/part-2");
+    expect(onProgress).toHaveBeenLastCalledWith(100);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `${API_URL}/assets/upload-confirm`,
+      expect.objectContaining({
+        body: JSON.stringify({ uploadId: "u-large" }),
+      }),
+    );
+  });
+
   it("falls back to the relay upload when direct upload is unsupported", async () => {
     const fetchMock = vi
       .fn()

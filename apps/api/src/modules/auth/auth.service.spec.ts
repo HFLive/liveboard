@@ -17,6 +17,7 @@ describe("AuthService", () => {
   const storage = {
     activeBackend: jest.fn(),
     backendFor: jest.fn(),
+    discardMultipartUpload: jest.fn(),
     presignDownload: jest.fn(),
     healthCheckActive: jest.fn(),
   };

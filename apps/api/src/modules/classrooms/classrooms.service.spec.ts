@@ -428,6 +428,7 @@ describe("ClassroomsService direct upload", () => {
     backendFor: jest.fn(),
     signUpload: jest.fn(),
     objectKeyForPendingUpload: jest.fn((_backend: string, key: string) => key),
+    discardMultipartUpload: jest.fn(),
     verifyAndFinalizePendingObject: jest.fn(),
     discardPendingUpload: jest.fn(),
   };

@@ -5,8 +5,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  NotImplementedException,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -21,6 +23,7 @@ import {
 } from "../../common/deployment-target";
 import { AiSecretService } from "../ai/ai-secret.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { RedisService } from "../redis/redis.service";
 import { MinioStorageBackend } from "./minio-storage.backend";
 import { OssStorageBackend, type OssClientConfig } from "./oss-storage.backend";
 import {
@@ -39,6 +42,9 @@ import type {
 import {
   ATOMIC_UPLOAD_PART_SIZE_BYTES,
   isSafeInlineImageMime,
+  multipartPartCount,
+  MULTIPART_UPLOAD_PART_SIZE_BYTES,
+  shouldUseMultipartUpload,
 } from "./storage-backend";
 
 export interface OssSettingsInput {
@@ -82,6 +88,14 @@ const PENDING_UPLOAD_CLEANUP_BATCH_SIZE = 100;
 const BACKENDS: StorageBackendName[] = ["minio", "oss", "r2"];
 const DOWNLOAD_MODES: StorageDownloadMode[] = ["proxy", "direct"];
 const UPLOAD_MODES: StorageUploadMode[] = ["relay", "direct"];
+// 比 PendingUpload 的 1 小时寿命更长，给定时清理留出取消 multipart 的窗口。
+const MULTIPART_STATE_TTL_MS = 2 * 60 * 60 * 1000;
+
+interface MultipartUploadState {
+  uploadId: string;
+  mode: StorageUploadMode;
+  expiresAt: string;
+}
 
 @Injectable()
 export class StorageService implements OnModuleInit, OnModuleDestroy {
@@ -99,11 +113,16 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
   private settingsCache: { at: number; value: StorageSettings | null } | null =
     null;
   private pendingUploadCleanupTimer: NodeJS.Timeout | null = null;
+  private readonly localMultipartStates = new Map<
+    string,
+    MultipartUploadState
+  >();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly secrets: AiSecretService,
+    @Optional() private readonly redis?: RedisService,
   ) {
     this.deploymentTarget = getDeploymentTarget(config);
     this.minioBucket = config.get<string>("MINIO_BUCKET", "liveboard-assets");
@@ -174,18 +193,198 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
       : [storageKey];
   }
 
+  private multipartStateKey(
+    storageBackend: StorageBackendName,
+    objectKey: string,
+  ) {
+    return `liveboard:storage-multipart:${storageBackend}:${Buffer.from(
+      objectKey,
+    ).toString("base64url")}`;
+  }
+
+  private async rememberMultipartUpload(
+    storageBackend: StorageBackendName,
+    objectKey: string,
+    state: MultipartUploadState,
+  ) {
+    const key = this.multipartStateKey(storageBackend, objectKey);
+    this.localMultipartStates.set(key, state);
+    const client = await this.redis?.getClient();
+    if (client) {
+      await client.set(key, JSON.stringify(state), {
+        PX: MULTIPART_STATE_TTL_MS,
+      });
+    }
+  }
+
+  private async multipartState(
+    storageBackend: StorageBackendName,
+    objectKey: string,
+  ): Promise<MultipartUploadState | null> {
+    const key = this.multipartStateKey(storageBackend, objectKey);
+    const local = this.localMultipartStates.get(key);
+    if (local) {
+      if (Date.parse(local.expiresAt) > Date.now()) return local;
+      this.localMultipartStates.delete(key);
+    }
+
+    const client = await this.redis?.getClient();
+    if (!client) return null;
+    const raw = await client.get(key);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as Partial<MultipartUploadState>;
+      if (
+        typeof parsed.uploadId !== "string" ||
+        (parsed.mode !== "relay" && parsed.mode !== "direct") ||
+        typeof parsed.expiresAt !== "string" ||
+        Date.parse(parsed.expiresAt) <= Date.now()
+      ) {
+        return null;
+      }
+      return parsed as MultipartUploadState;
+    } catch {
+      return null;
+    }
+  }
+
+  private async forgetMultipartUpload(
+    storageBackend: StorageBackendName,
+    objectKey: string,
+  ) {
+    const key = this.multipartStateKey(storageBackend, objectKey);
+    this.localMultipartStates.delete(key);
+    await this.redis
+      ?.getClient()
+      .then((client) => client?.del(key))
+      .catch(() => undefined);
+  }
+
+  private expectedMultipartPartSize(sizeBytes: number, partNumber: number) {
+    const count = multipartPartCount(sizeBytes);
+    if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > count) {
+      throw new BadRequestException("无效的上传分片编号");
+    }
+    return partNumber === count
+      ? sizeBytes - MULTIPART_UPLOAD_PART_SIZE_BYTES * (count - 1)
+      : MULTIPART_UPLOAD_PART_SIZE_BYTES;
+  }
+
+  private async multipartContext(
+    pending: Pick<PendingUpload, "storageBackend" | "storageKey" | "sizeBytes">,
+    partNumber: number,
+    sizeBytes: number,
+    expectedMode: StorageUploadMode,
+  ) {
+    if (!shouldUseMultipartUpload(pending.sizeBytes)) {
+      throw new BadRequestException("该文件不需要分片上传");
+    }
+    const expectedSize = this.expectedMultipartPartSize(
+      pending.sizeBytes,
+      partNumber,
+    );
+    if (sizeBytes !== expectedSize) {
+      throw new BadRequestException("上传分片大小不正确");
+    }
+    const storageBackend = pending.storageBackend as StorageBackendName;
+    const objectKey = this.objectKeyForPendingUpload(
+      storageBackend,
+      pending.storageKey,
+    );
+    const state = await this.multipartState(storageBackend, objectKey);
+    if (!state || state.mode !== expectedMode) {
+      throw new NotFoundException("上传任务不存在或已过期");
+    }
+    return { storageBackend, objectKey, state, expectedSize };
+  }
+
+  /** 为浏览器直传 multipart 的单个分片生成短期 PUT 地址。 */
+  async presignMultipartPartForPending(
+    pending: Pick<PendingUpload, "storageBackend" | "storageKey" | "sizeBytes">,
+    partNumber: number,
+    sizeBytes: number,
+  ) {
+    const context = await this.multipartContext(
+      pending,
+      partNumber,
+      sizeBytes,
+      "direct",
+    );
+    const backend = await this.backendFor(context.storageBackend);
+    const signed = await backend.presignMultipartPart(
+      context.objectKey,
+      context.state.uploadId,
+      partNumber,
+      PRESIGN_EXPIRY_SECONDS,
+    );
+    if (!signed) {
+      throw new NotImplementedException("当前存储配置不支持浏览器分片直传");
+    }
+    return signed;
+  }
+
+  /** 接收服务器中转 multipart 的单个分片，返回即表示对象存储已写入。 */
+  async uploadMultipartPartForPending(
+    pending: Pick<PendingUpload, "storageBackend" | "storageKey" | "sizeBytes">,
+    partNumber: number,
+    data: Buffer,
+  ) {
+    const context = await this.multipartContext(
+      pending,
+      partNumber,
+      data.length,
+      "relay",
+    );
+    const backend = await this.backendFor(context.storageBackend);
+    return backend.uploadMultipartPart(
+      context.objectKey,
+      context.state.uploadId,
+      partNumber,
+      data,
+    );
+  }
+
+  /** PendingUpload 行尚未创建时的补偿，例如配额预检或建行失败。 */
+  async discardMultipartUpload(
+    storageBackend: StorageBackendName,
+    objectKey: string,
+  ) {
+    const state = await this.multipartState(storageBackend, objectKey);
+    if (!state) return true;
+    const backend = await this.backendFor(storageBackend);
+    await backend.abortMultipartUpload(objectKey, state.uploadId);
+    await this.forgetMultipartUpload(storageBackend, objectKey);
+    return true;
+  }
+
   /**
    * 按行内 backend 清理对象后再删除 PendingUpload 行（R2 同时清理
    * `pending/` 临时 Key 与确认后复制的正式 Key）。任一对象删除失败时保留
    * 任务行供后续重试，避免制造不可追踪的孤立对象。
    */
-  async discardPendingUpload(pending: PendingUpload) {
-    const backend = await this.backendFor(
-      pending.storageBackend as StorageBackendName,
-    ).catch(() => null);
+  async discardPendingUpload(
+    pending: PendingUpload,
+    options: { onlyIfExpired?: boolean } = {},
+  ) {
+    const storageBackend = pending.storageBackend as StorageBackendName;
+    const objectKey = this.objectKeyForPendingUpload(
+      storageBackend,
+      pending.storageKey,
+    );
+    const backend = await this.backendFor(storageBackend).catch(() => null);
     if (!backend) return false;
+    const state = await this.multipartState(storageBackend, objectKey);
+    if (state) {
+      try {
+        await backend.abortMultipartUpload(objectKey, state.uploadId);
+        await this.forgetMultipartUpload(storageBackend, objectKey);
+      } catch {
+        // 不能确认 multipart 已取消时保留 PendingUpload，等待下一轮清理重试。
+        return false;
+      }
+    }
     for (const key of this.objectKeysToCleanForPendingUpload(
-      pending.storageBackend as StorageBackendName,
+      storageBackend,
       pending.storageKey,
     )) {
       const removed = await backend
@@ -195,7 +394,9 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
       if (!removed) return false;
     }
     const deleted = await this.prisma.pendingUpload.deleteMany({
-      where: { id: pending.id },
+      where: options.onlyIfExpired
+        ? { id: pending.id, expiresAt: { lte: new Date() } }
+        : { id: pending.id },
     });
     return deleted.count > 0;
   }
@@ -216,6 +417,40 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
       pending.storageBackend,
       pending.storageKey,
     );
+    const state = await this.multipartState(pending.storageBackend, objectKey);
+    if (shouldUseMultipartUpload(pending.sizeBytes) && !state) {
+      throw new BadRequestException("分片上传会话不存在,请重新上传");
+    }
+    if (state) {
+      const parts = await backend.listMultipartParts(objectKey, state.uploadId);
+      const expectedCount = multipartPartCount(pending.sizeBytes);
+      const sortedParts = [...parts].sort(
+        (left, right) => left.partNumber - right.partNumber,
+      );
+      const complete =
+        sortedParts.length === expectedCount &&
+        sortedParts.every((part, index) => {
+          const partNumber = index + 1;
+          return (
+            part.partNumber === partNumber &&
+            part.size ===
+              this.expectedMultipartPartSize(pending.sizeBytes, partNumber) &&
+            Boolean(part.etag)
+          );
+        });
+      if (!complete) {
+        throw new BadRequestException("分片上传不完整,请重新上传");
+      }
+      await backend.completeMultipartUpload(
+        objectKey,
+        state.uploadId,
+        sortedParts.map((part) => ({
+          partNumber: part.partNumber,
+          etag: part.etag,
+        })),
+      );
+      await this.forgetMultipartUpload(pending.storageBackend, objectKey);
+    }
     const stat = await backend.statObject(objectKey).catch(() => null);
     if (!stat) {
       throw new BadRequestException("对象存储中未找到已上传的文件,请重新上传");
@@ -243,29 +478,10 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
 
     let cleaned = 0;
     for (const pending of expired) {
-      // S3/R2 DeleteObject 对不存在的 Key 也按成功处理，因此可安全重试。
-      const backend = await this.backendFor(
-        pending.storageBackend as StorageBackendName,
-      );
-      let allRemoved = true;
-      for (const key of this.objectKeysToCleanForPendingUpload(
-        pending.storageBackend as StorageBackendName,
-        pending.storageKey,
-      )) {
-        const removed = await backend
-          .removeObject(key)
-          .then(() => true)
-          .catch(() => false);
-        if (!removed) {
-          allRemoved = false;
-          break;
-        }
+      // 先取消 multipart、再删除对象和任务行；任一步失败都保留任务供重试。
+      if (await this.discardPendingUpload(pending, { onlyIfExpired: true })) {
+        cleaned += 1;
       }
-      if (!allRemoved) continue;
-      const result = await this.prisma.pendingUpload.deleteMany({
-        where: { id: pending.id, expiresAt: { lte: new Date() } },
-      });
-      cleaned += result.count;
     }
     return cleaned;
   }
@@ -329,16 +545,53 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 签名直入模式下生成上传指令（form_post | put 判别联合）；中转模式、
-   * 后端不支持或 uploadMode 非 direct 时返回 null，调用方回退到服务器中转上传。
+   * 生成上传指令：小文件继续使用单请求，大文件统一创建 multipart 会话。
+   * relay 模式的 multipart 分片由 API 接收，direct 模式返回每片预签名 PUT
+   * 的会话描述；会话 ID 保存在 Redis（本地开发无 Redis 时使用进程内降级）。
    */
   async signUpload(
     storageBackend: StorageBackendName,
     key: string,
     options: { sizeBytes: number; mimeType: string },
   ): Promise<ObjectUploadInstruction | null> {
-    if ((await this.activeUploadMode()) !== "direct") return null;
+    const configuredUploadMode = await this.activeUploadMode();
     const backend = await this.backendFor(storageBackend);
+    // MinIO 只监听服务器内网，不能为浏览器签发可达的分片地址；兼容旧的
+    // 错误配置时也要在签名阶段直接改走 API 中转，而不是上传第一片才失败。
+    const uploadMode: StorageUploadMode =
+      storageBackend === "minio" ? "relay" : configuredUploadMode;
+    const multipart = shouldUseMultipartUpload(options.sizeBytes);
+    if (multipart) {
+      const objectUploadId = await backend.initiateMultipartUpload(
+        key,
+        options.mimeType,
+      );
+      const expiresAt = new Date(
+        Date.now() + MULTIPART_STATE_TTL_MS,
+      ).toISOString();
+      try {
+        await this.rememberMultipartUpload(storageBackend, key, {
+          uploadId: objectUploadId,
+          mode: uploadMode,
+          expiresAt,
+        });
+      } catch (caught) {
+        await backend
+          .abortMultipartUpload(key, objectUploadId)
+          .catch(() => undefined);
+        await this.forgetMultipartUpload(storageBackend, key);
+        throw caught;
+      }
+      return {
+        transport: "multipart",
+        mode: uploadMode,
+        partSizeBytes: MULTIPART_UPLOAD_PART_SIZE_BYTES,
+        partCount: multipartPartCount(options.sizeBytes),
+        expiresAt,
+      };
+    }
+
+    if (uploadMode !== "direct") return null;
     const expirySeconds =
       storageBackend === "r2"
         ? R2_PRESIGN_PUT_TTL_SECONDS

@@ -15,6 +15,12 @@ describe("putObjectWithCompensation", () => {
     presignGet: jest.fn(),
     presignUpload: jest.fn(),
     presignPut: jest.fn(),
+    initiateMultipartUpload: jest.fn(),
+    uploadMultipartPart: jest.fn(),
+    listMultipartParts: jest.fn(),
+    completeMultipartUpload: jest.fn(),
+    abortMultipartUpload: jest.fn(),
+    presignMultipartPart: jest.fn(),
     statObject: jest.fn(),
     healthCheck: jest.fn(),
   } satisfies ObjectStorageBackend;
