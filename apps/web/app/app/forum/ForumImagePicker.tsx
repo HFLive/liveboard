@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import { ImagePlus, X } from "lucide-react";
+import { compressImageFile } from "@/components/image-compress";
 
 export const MAX_FORUM_IMAGES = 9;
 const MAX_FORUM_IMAGE_EDGE = 1600;
@@ -105,39 +106,10 @@ export function ForumImagePicker({
   );
 }
 
-export async function compressForumImage(file: File, index: number) {
-  if (!file.type.startsWith("image/")) {
-    throw new Error("只能选择图片文件");
-  }
-
-  const bitmap = await createImageBitmap(file, {
-    imageOrientation: "from-image",
+export function compressForumImage(file: File, index: number) {
+  return compressImageFile(file, {
+    maxEdge: MAX_FORUM_IMAGE_EDGE,
+    quality: 0.82,
+    outputFileName: `forum-image-${Date.now()}-${index + 1}.webp`,
   });
-  try {
-    const scale = Math.min(
-      1,
-      MAX_FORUM_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height),
-    );
-    const width = Math.max(1, Math.round(bitmap.width * scale));
-    const height = Math.max(1, Math.round(bitmap.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("浏览器无法处理图片");
-    context.drawImage(bitmap, 0, 0, width, height);
-    const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(
-        (result) =>
-          result ? resolve(result) : reject(new Error("图片压缩失败")),
-        "image/webp",
-        0.82,
-      );
-    });
-    return new File([blob], `forum-image-${Date.now()}-${index + 1}.webp`, {
-      type: "image/webp",
-    });
-  } finally {
-    bitmap.close();
-  }
 }

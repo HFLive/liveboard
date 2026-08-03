@@ -29,6 +29,7 @@ import {
 import { formatDateTime, setAppTimeZone } from "@/lib/labels";
 import { waitForWebReady } from "@/lib/waitForWebReady";
 import { setAppIconSettings } from "@/components/app-shell/AppSettingsProvider";
+import { compressImageFile } from "@/components/image-compress";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 
@@ -146,6 +147,24 @@ function faviconUrlForVariant(
   return settings.faviconUrl;
 }
 
+/** 网站图标统一压缩为小尺寸 WebP；ICO 无法浏览器解码，原样保留。 */
+function compressFavicon(file: File) {
+  // .ico 的 File.type 依操作系统可能是空字符串或 vnd.microsoft.icon，
+  // 因此同时按扩展名判断。
+  if (
+    file.type === "image/x-icon" ||
+    file.type === "image/vnd.microsoft.icon" ||
+    /\.ico$/i.test(file.name)
+  ) {
+    return Promise.resolve(file);
+  }
+  return compressImageFile(file, {
+    maxEdge: 256,
+    quality: 0.82,
+    outputFileName: "favicon.webp",
+  });
+}
+
 export function SystemSettingsClient() {
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [timeZone, setTimeZone] = useState("Asia/Shanghai");
@@ -258,7 +277,8 @@ export function SystemSettingsClient() {
     setError(null);
     setMessage(null);
     try {
-      const result = await uploadSystemFavicon(file, variant);
+      const prepared = await compressFavicon(file);
+      const result = await uploadSystemFavicon(prepared, variant);
       setSettings(result.settings);
       setAppIconSettings(result.settings);
       setMessage(
