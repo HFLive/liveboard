@@ -67,7 +67,10 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
         maxImageSize: 24_000_000,
         // 只按需拉取当前页数据，配合 Range 请求实现「首帧即渲染、翻页再取」。
         disableAutoFetch: true,
-        rangeChunkSize: 256 * 1024,
+        // rangeChunkSize 决定 Range 的最小启用阈值（2 × rangeChunkSize）：文件
+        // 更小则 pdf.js 直接整份顺序下载、进度条跑完才渲染首帧。用 pdf.js
+        // 默认 64KB（阈值 128KB），让常见的小型说明书也能按需拉页、首帧即出。
+        rangeChunkSize: 64 * 1024,
       });
       loadingTask.onProgress = (p: { loaded: number; total?: number }) => {
         if (disposed) return;
