@@ -33,6 +33,18 @@ export function DocumentImageViewer({
     document.body.style.overflow = "hidden";
 
     function onKeyDown(event: KeyboardEvent) {
+      // 避免在输入框/可编辑区域里输入 +、-、r 时误触发缩放/旋转。
+      const target = event.target;
+
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
       if (event.key === "Escape") {
         setOpen(false);
       } else if (event.key === "+" || event.key === "=") {
