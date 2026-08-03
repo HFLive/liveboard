@@ -83,6 +83,15 @@ export function fetchAssetPreview(assetId: string, signal?: AbortSignal) {
   return fetchFilePreview(`/assets/${assetId}/preview`, signal);
 }
 
+// PDF 预览直传：向 /assets/:id/preview-url（或 classroom 对应端点）取短期
+// 预签名 URL，浏览器直接拉对象存储做流式加载。url 为 null 时回退到 /preview 中转。
+export function fetchPreviewUrl(
+  path: string,
+  signal?: AbortSignal,
+): Promise<{ url: string | null }> {
+  return request<{ url: string | null }>(path, { signal });
+}
+
 // 内容块里的附件链接指向 /assets/:id，点击图片类附件会打开裸图页；
 // 统一补 download=1 强制下载，外部链接原样返回。
 export function attachmentDownloadUrl(url: string) {

@@ -6,6 +6,8 @@ import {
   MULTIPART_UPLOAD_PART_SIZE_BYTES,
 } from "./storage-backend";
 import {
+  PDF_PREVIEW_PRESIGN_EXPIRY_SECONDS,
+  PRESIGN_EXPIRY_SECONDS,
   R2_INLINE_IMAGE_PRESIGN_EXPIRY_SECONDS,
   StorageService,
 } from "./storage.service";
@@ -588,14 +590,84 @@ describe("StorageService", () => {
     );
   });
 
-  it("does not presign non-image inline R2 content on Vercel", async () => {
-    Object.defineProperty(service, "deploymentTarget", { value: "vercel" });
-    const backendFor = jest.spyOn(service, "backendFor");
+  it("presigns inline PDFs in direct mode for streaming preview", async () => {
+    prisma.storageSettings.findUnique.mockResolvedValue({
+      downloadMode: "direct",
+    } as never);
+    const presignGet = jest
+      .fn()
+      .mockResolvedValue("https://r2.example/signed-pdf");
+    jest.spyOn(service, "backendFor").mockResolvedValue({
+      presignGet,
+    } as never);
 
     await expect(
       service.presignDownload("r2", "ws/assets/lesson.pdf", {
         filename: "讲义.pdf",
         mimeType: "application/pdf",
+        inline: true,
+      }),
+    ).resolves.toBe("https://r2.example/signed-pdf");
+    expect(presignGet).toHaveBeenCalledWith(
+      "ws/assets/lesson.pdf",
+      expect.objectContaining({
+        expirySeconds: PRESIGN_EXPIRY_SECONDS,
+        responseContentDisposition: expect.stringContaining("inline"),
+      }),
+    );
+  });
+
+  it("presigns inline octet-stream PDFs like application/pdf", async () => {
+    prisma.storageSettings.findUnique.mockResolvedValue({
+      downloadMode: "direct",
+    } as never);
+    const presignGet = jest
+      .fn()
+      .mockResolvedValue("https://r2.example/signed-octet-pdf");
+    jest.spyOn(service, "backendFor").mockResolvedValue({
+      presignGet,
+    } as never);
+
+    await expect(
+      service.presignDownload("r2", "ws/assets/lesson.pdf", {
+        filename: "讲义.pdf",
+        mimeType: "application/octet-stream",
+        inline: true,
+      }),
+    ).resolves.toBe("https://r2.example/signed-octet-pdf");
+  });
+
+  it("honors caller-provided expiry for long reading sessions", async () => {
+    prisma.storageSettings.findUnique.mockResolvedValue({
+      downloadMode: "direct",
+    } as never);
+    const presignGet = jest.fn().mockResolvedValue("https://r2.example/signed");
+    jest.spyOn(service, "backendFor").mockResolvedValue({
+      presignGet,
+    } as never);
+
+    await service.presignDownload("r2", "ws/assets/lesson.pdf", {
+      filename: "讲义.pdf",
+      mimeType: "application/pdf",
+      inline: true,
+      expirySeconds: PDF_PREVIEW_PRESIGN_EXPIRY_SECONDS,
+    });
+    expect(presignGet).toHaveBeenCalledWith(
+      "ws/assets/lesson.pdf",
+      expect.objectContaining({
+        expirySeconds: PDF_PREVIEW_PRESIGN_EXPIRY_SECONDS,
+      }),
+    );
+  });
+
+  it("does not presign non-image, non-PDF inline R2 content on Vercel", async () => {
+    Object.defineProperty(service, "deploymentTarget", { value: "vercel" });
+    const backendFor = jest.spyOn(service, "backendFor");
+
+    await expect(
+      service.presignDownload("r2", "ws/assets/notes.txt", {
+        filename: "notes.txt",
+        mimeType: "text/plain",
         inline: true,
       }),
     ).resolves.toBeNull();

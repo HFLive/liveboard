@@ -625,6 +625,7 @@
   min-width: 0;
   overflow: hidden;
   border: 0;
+  border-radius: 0;
   background: transparent;
   color: inherit;
   font: inherit;

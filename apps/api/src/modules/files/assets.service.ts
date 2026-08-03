@@ -18,7 +18,10 @@ import {
   isSafeInlineImageMime,
   type StorageBackendName,
 } from "../storage/storage-backend";
-import { StorageService } from "../storage/storage.service";
+import {
+  PDF_PREVIEW_PRESIGN_EXPIRY_SECONDS,
+  StorageService,
+} from "../storage/storage.service";
 import { DEFAULT_MEMBER_ATTACHMENT_QUOTA_BYTES } from "../../common/storage-quota";
 import { requireResourceName } from "../../common/resource-name";
 import { putObjectWithCompensation } from "../storage/upload-compensation";
@@ -429,6 +432,46 @@ export class AssetsService {
       redirectUrl: null,
       stream: stream as Readable,
     };
+  }
+
+  /**
+   * PDF 预览的直传签名：鉴权与大小校验通过后，在 direct 下载模式下返回
+   * 短期预签名 URL，让浏览器直接拉对象存储做流式加载（首帧即渲染、按需翻页）。
+   * 非 PDF、非 direct 模式或后端不支持时返回 null，调用方回退到 /preview 中转。
+   */
+  async getAssetPreviewUrl(
+    userId: string | null,
+    assetId: string,
+  ): Promise<string | null> {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+
+    const asset = await this.prisma.fileAsset.findUnique({
+      where: { id: assetId },
+    });
+    if (!asset) {
+      throw new NotFoundException("Asset not found");
+    }
+    await this.assertCanViewAsset(userId, asset);
+
+    const kind = getAssetPreviewKind(asset.filename, asset.mimeType);
+    if (kind !== "pdf") return null;
+    if (asset.sizeBytes > MAX_PDF_PREVIEW_SIZE_BYTES) {
+      throw new BadRequestException("PDF 超过 25MB，请下载后查看");
+    }
+
+    return this.storage.presignDownload(
+      asset.storageBackend,
+      asset.storageKey,
+      {
+        filename: asset.filename,
+        mimeType: asset.mimeType,
+        inline: true,
+        // 阅读会话内逐页按需拉取，签名必须比附件/图片短签更长。
+        expirySeconds: PDF_PREVIEW_PRESIGN_EXPIRY_SECONDS,
+      },
+    );
   }
 
   async getAssetForPreview(userId: string | null, assetId: string) {

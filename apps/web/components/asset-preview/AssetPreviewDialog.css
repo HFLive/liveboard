@@ -161,6 +161,82 @@
   flex: 1 1 auto;
 }
 
+.asset-preview-pdf-page {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.asset-preview-pdf-page input {
+  width: 44px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.asset-preview-pdf-page input::-webkit-outer-spin-button,
+.asset-preview-pdf-page input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.asset-preview-pdf-page input:disabled {
+  opacity: 0.5;
+}
+
+.asset-preview-pdf-page input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.asset-preview-pdf-page span {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.asset-preview-pdf-progress {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  background: var(--fill-subtle);
+}
+
+.asset-preview-pdf-progress i {
+  display: block;
+  height: 100%;
+  background: var(--accent-dark);
+  transition: width 0.15s ease;
+}
+
+.asset-preview-pdf-progress i.indeterminate {
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-dark),
+    transparent
+  );
+  animation: asset-preview-pdf-progress-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes asset-preview-pdf-progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(350%);
+  }
+}
+
 .asset-preview-pdf-viewport {
   min-width: 0;
   min-height: 0;

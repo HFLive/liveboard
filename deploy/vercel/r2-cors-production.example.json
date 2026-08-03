@@ -5,8 +5,13 @@
       "https://liveboard.example.com"
     ],
     "AllowedMethods": ["GET", "PUT"],
-    "AllowedHeaders": ["Content-Type"],
-    "ExposeHeaders": ["ETag"],
+    "AllowedHeaders": ["Content-Type", "Range"],
+    "ExposeHeaders": [
+      "ETag",
+      "Content-Length",
+      "Accept-Ranges",
+      "Content-Range"
+    ],
     "MaxAgeSeconds": 3600
   }
 ]
