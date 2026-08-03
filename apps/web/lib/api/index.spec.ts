@@ -607,12 +607,12 @@ describe("Block asset URL resolution", () => {
   });
 
   it("rewrites legacy absolute asset URLs to the current API base", () => {
-    expect(
-      resolveBlockAssetUrl("http://localhost:4000/assets/asset-1"),
-    ).toBe(`${API_URL}/assets/asset-1`);
-    expect(
-      resolveBlockAssetUrl("https://old.example.com/assets/asset-2"),
-    ).toBe(`${API_URL}/assets/asset-2`);
+    expect(resolveBlockAssetUrl("http://localhost:4000/assets/asset-1")).toBe(
+      `${API_URL}/assets/asset-1`,
+    );
+    expect(resolveBlockAssetUrl("https://old.example.com/assets/asset-2")).toBe(
+      `${API_URL}/assets/asset-2`,
+    );
   });
 
   it("leaves external and non-asset URLs untouched", () => {
@@ -626,9 +626,9 @@ describe("Block asset URL resolution", () => {
     expect(attachmentDownloadUrl("/assets/asset-1")).toBe(
       `${API_URL}/assets/asset-1?download=1`,
     );
-    expect(
-      attachmentDownloadUrl("http://localhost:4000/assets/asset-1"),
-    ).toBe(`${API_URL}/assets/asset-1?download=1`);
+    expect(attachmentDownloadUrl("http://localhost:4000/assets/asset-1")).toBe(
+      `${API_URL}/assets/asset-1?download=1`,
+    );
   });
 
   it("returns non-asset attachment URLs unchanged", () => {
