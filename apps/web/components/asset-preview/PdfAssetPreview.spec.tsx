@@ -75,6 +75,7 @@ describe("PdfAssetPreview", () => {
       expect.objectContaining({
         url: "https://r2.example/signed.pdf",
         withCredentials: false,
+        disableStream: true,
         disableAutoFetch: true,
       }),
     );

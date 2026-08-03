@@ -31,6 +31,7 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const loadingTaskRef = useRef<PDFDocumentLoadingTask | null>(null);
   const renderTaskRef = useRef<RenderTask | null>(null);
+  const readyRef = useRef(false);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageDraft, setPageDraft] = useState("1");
@@ -47,6 +48,7 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
     setZoom(1);
     setError("");
     setProgress(null);
+    readyRef.current = false;
 
     // 直传端点是与 /preview 平级的 /preview-url，对文档附件与课堂文件路径都成立。
     const previewUrlPath = previewPath.replace(/\/preview$/, "/preview-url");
@@ -65,7 +67,10 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
         ...source,
         enableXfa: false,
         maxImageSize: 24_000_000,
-        // 只按需拉取当前页数据，配合 Range 请求实现「首帧即渲染、翻页再取」。
+        // 纯按需 Range 加载：首个请求读到响应头即取消整份流式下载，只拉取
+        // 当前页需要的字节（含尾部 xref），真正「首帧即渲染、不下载全部页面」。
+        // Range 不支持时 pdf.js 自动回退整份流式下载，功能不挂。
+        disableStream: true,
         disableAutoFetch: true,
         // rangeChunkSize 决定 Range 的最小启用阈值（2 × rangeChunkSize）：文件
         // 更小则 pdf.js 直接整份顺序下载、进度条跑完才渲染首帧。用 pdf.js
@@ -73,13 +78,16 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
         rangeChunkSize: 64 * 1024,
       });
       loadingTask.onProgress = (p: { loaded: number; total?: number }) => {
-        if (disposed) return;
+        // 文档就绪后忽略迟到的进度事件：整份流式下载已被取消，但最后一次
+        // onProgress 仍可能触发，避免进度条在首帧已可渲染时重新冒出来。
+        if (disposed || readyRef.current) return;
         setProgress({ loaded: p.loaded, total: p.total });
       };
       loadingTaskRef.current = loadingTask;
       try {
         const nextDocument = await loadingTask.promise;
         if (!nextDocument || disposed) return;
+        readyRef.current = true;
         setDocument(nextDocument);
         setProgress(null);
       } catch (caught) {
