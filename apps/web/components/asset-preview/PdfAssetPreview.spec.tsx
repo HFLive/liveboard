@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchPreviewUrl } from "@/lib/api";
 import { PdfAssetPreview } from "./PdfAssetPreview";
@@ -32,15 +32,31 @@ vi.mock("pdfjs-dist", () => ({
 }));
 
 type LoadingTask = {
-  promise: Promise<null>;
+  promise: Promise<unknown>;
   onProgress?: (progress: { loaded: number; total?: number }) => void;
   destroy: ReturnType<typeof vi.fn>;
 };
 
-function makeTask(promise: Promise<null> = Promise.resolve(null)): LoadingTask {
+function makeTask(
+  promise: Promise<unknown> = Promise.resolve(null),
+): LoadingTask {
   return {
     promise,
     destroy: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+// 带 numPages 的文档代理，用于交互测试（页码输入框、回车提交）。
+function makeDocumentProxy(numPages = 10) {
+  return {
+    numPages,
+    getPage: vi.fn().mockResolvedValue({
+      getViewport: vi.fn().mockReturnValue({ width: 800, height: 1000 }),
+      render: vi.fn().mockReturnValue({
+        promise: Promise.resolve(),
+        cancel: vi.fn(),
+      }),
+    }),
   };
 }
 
@@ -143,5 +159,27 @@ describe("PdfAssetPreview", () => {
 
     expect(await screen.findByText("无法在线预览")).toBeInTheDocument();
     expect(getDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it("commits a page on Enter and keeps it across blur, discarding uncommitted input", async () => {
+    fetchPreviewUrlMock.mockResolvedValue({ url: null });
+    getDocumentMock.mockReturnValue(
+      makeTask(Promise.resolve(makeDocumentProxy())),
+    );
+
+    render(<PdfAssetPreview previewPath="/assets/asset-1/preview" />);
+
+    const input = await screen.findByLabelText("跳转到页码");
+    await waitFor(() => expect(input).not.toBeDisabled());
+
+    // 输入 9 后回车：提交并跳转到第 9 页，输入框保持 9（不被 blur 闪回旧页）。
+    fireEvent.change(input, { target: { value: "9" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(input).toHaveValue(9);
+
+    // 未提交的输入（改 5 后直接 blur）应被丢弃，回到当前页 9。
+    fireEvent.change(input, { target: { value: "5" } });
+    fireEvent.blur(input);
+    expect(input).toHaveValue(9);
   });
 });

@@ -4,6 +4,8 @@ export type CropFrame = {
   width: number;
 };
 
+import { canvasToWebPFile } from "./image-compress";
+
 export type CropCorner = "nw" | "ne" | "sw" | "se";
 
 export const MIN_CROP_WIDTH = 40;
@@ -138,13 +140,5 @@ export async function renderCroppedImageFile(
     outputHeight,
   );
 
-  const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, "image/webp", 0.9);
-  });
-
-  if (!blob) {
-    throw new Error("图片处理失败");
-  }
-
-  return new File([blob], fileName, { type: "image/webp" });
+  return await canvasToWebPFile(canvas, 0.9, fileName);
 }

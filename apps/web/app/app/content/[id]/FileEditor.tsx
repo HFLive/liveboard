@@ -46,6 +46,7 @@ import {
   deletePermissionGrant,
   deleteBlock,
   deleteFile,
+  deleteLibraryAsset,
   downloadMarkdown,
   FileDetail,
   getFile,
@@ -79,6 +80,7 @@ import { assetTypeLabel, permissionLabel } from "@/lib/labels";
 import { APP_ROUTES, contentDetail } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { compressImageFile } from "@/components/image-compress";
 import { PermissionUserPicker } from "@/components/PermissionUserPicker";
 import { UploadTaskToast } from "@/components/upload/UploadTaskToast";
 import {
@@ -1030,24 +1032,83 @@ export function FileEditor({ fileId }: { fileId: string }) {
     });
   }
 
+  /** 文档内插入的图片统一压缩为 WebP；附件等非图片原样保留。
+      限制并发压缩以控制内存峰值，并按原始文件名去重，避免 a.png 与 a.jpg
+      压缩后同名被 prepareUploadJobs 判为重复。 */
+  async function compressDocumentImages(files: File[]) {
+    const results = new Array<File>(files.length);
+    const usedNames = new Set<string>();
+    const CONCURRENCY = 2;
+    let cursor = 0;
+
+    async function worker() {
+      while (cursor < files.length) {
+        const index = cursor;
+        cursor += 1;
+        const file = files[index];
+
+        if (!file) continue;
+
+        if (!file.type.startsWith("image/")) {
+          results[index] = file;
+          continue;
+        }
+
+        const base = file.name.replace(/\.[^.]+$/, "") || "image";
+        let name = `${base}.webp`;
+        let counter = 1;
+        while (usedNames.has(name)) {
+          name = `${base}-${counter}.webp`;
+          counter += 1;
+        }
+        usedNames.add(name);
+
+        try {
+          results[index] = await compressImageFile(file, {
+            maxEdge: 1600,
+            quality: 0.82,
+            outputFileName: name,
+          });
+        } catch {
+          // 无法解码的图片（如 SVG、损坏文件）原样上传，交给后端校验，
+          // 避免单张解码失败中止整批上传。
+          results[index] = file;
+        }
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, files.length) }, () =>
+        worker(),
+      ),
+    );
+    return results;
+  }
+
   async function onUploadAssets(files: File[]) {
     if (files.length === 0 || !assetTargetBlockId) {
       return;
     }
     const targetBlockId = assetTargetBlockId;
-    const jobs = prepareUploadJobs(files, [], "本次选择中包含同名文件");
 
     setUploadingAsset(true);
     setError(null);
     setMessage(null);
 
+    // 记录已上传成功的资产，供失败时清理，避免残留孤儿。
+    const uploadedAssets: FileAssetSummary[] = [];
+    const referencedIds = new Set<string>();
+
     try {
+      const prepared = await compressDocumentImages(files);
+      const jobs = prepareUploadJobs(prepared, [], "本次选择中包含同名文件");
       const outcomes = await uploadFiles(jobs, (job, options) =>
         uploadAssetDirect({ file: job.file, fileId }, options),
       );
       const assets = outcomes.flatMap((outcome) =>
         outcome.result ? [outcome.result.asset] : [],
       );
+      uploadedAssets.push(...assets);
       if (assets.length === 0) return;
 
       const [firstAsset, ...remainingAssets] = assets;
@@ -1062,6 +1123,8 @@ export function FileEditor({ fileId }: { fileId: string }) {
         type: firstType,
         dataJson: buildAssetBlockData(firstAsset),
       });
+      // 已被块引用的资产不再清理；只清理插入失败时尚未被引用的资产。
+      referencedIds.add(firstAsset.id);
       let afterBlockId = targetBlockId;
       for (const asset of remainingAssets) {
         const type: ContentBlockType = asset.mimeType.startsWith("image/")
@@ -1073,6 +1136,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
           dataJson: buildAssetBlockData(asset),
           afterBlockId,
         });
+        referencedIds.add(asset.id);
         afterBlockId = result.block.id;
       }
       setMessage(
@@ -1085,6 +1149,15 @@ export function FileEditor({ fileId }: { fileId: string }) {
       closeAssetPicker();
       await load();
     } catch (caught) {
+      // 块写入失败时只清理已上传但尚未被任何块引用的资产，避免部分成功后
+      // 把已插入的资产误删；已被引用的资产后端也会拒绝删除。
+      await Promise.allSettled(
+        uploadedAssets
+          .filter((asset) => !referencedIds.has(asset.id))
+          .map((asset) => deleteLibraryAsset(asset.id)),
+      );
+      // 部分块可能已插入成功，刷新列表让已插入的内容可见。
+      if (referencedIds.size > 0) await load();
       setError(caught instanceof Error ? caught.message : "插入文件失败");
     } finally {
       setUploadingAsset(false);
@@ -1251,10 +1324,10 @@ export function FileEditor({ fileId }: { fileId: string }) {
         type: block.type,
         dataJson: block.dataJson,
       });
-      setMessage("内容块已保存");
+      // 本地 state 已是最新（patchBlockData 已更新），无需全量 load——
+      // 否则保存期间编辑的其他块会被服务器旧数据覆盖。
       setSaveState("saved");
       setLastSavedAt(new Date());
-      await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存内容块失败");
       setSaveState("error");
