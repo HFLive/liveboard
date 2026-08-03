@@ -658,6 +658,54 @@ describe("AssetsService consistency", () => {
       where: { id: { in: ["asset-1"] }, forumPostId: null, kind: "embedded" },
     });
   });
+
+  it("cleans unreferenced standalone assets when includeStandalone is set", async () => {
+    prisma.fileAsset.findMany.mockResolvedValue([
+      {
+        id: "asset-standalone-1",
+        storageKey: "workspace/讲义.pdf",
+        storageBackend: "r2",
+      },
+    ]);
+    prisma.contentBlock.findMany.mockResolvedValue([]);
+
+    await service.cleanupUnreferencedAssets(["asset-standalone-1"], {
+      includeStandalone: true,
+    });
+
+    expect(prisma.fileAsset.findMany).toHaveBeenCalledWith({
+      where: { id: { in: ["asset-standalone-1"] }, forumPostId: null },
+    });
+    expect(backend.removeObject).toHaveBeenCalledWith("workspace/讲义.pdf");
+    expect(prisma.fileAsset.delete).toHaveBeenCalledWith({
+      where: { id: "asset-standalone-1" },
+    });
+  });
+
+  it("keeps standalone assets still referenced by teaching decks", async () => {
+    prisma.fileAsset.findMany.mockResolvedValue([
+      {
+        id: "asset-standalone-1",
+        storageKey: "workspace/讲义.pdf",
+        storageBackend: "r2",
+      },
+    ]);
+    prisma.contentBlock.findMany.mockResolvedValue([]);
+    prisma.teachingDeckItem.findMany.mockResolvedValue([
+      {
+        id: "item-1",
+        assetId: "asset-standalone-1",
+        deck: { id: "deck-1", title: "课堂讲解" },
+      },
+    ]);
+
+    await service.cleanupUnreferencedAssets(["asset-standalone-1"], {
+      includeStandalone: true,
+    });
+
+    expect(backend.removeObject).not.toHaveBeenCalled();
+    expect(prisma.fileAsset.delete).not.toHaveBeenCalled();
+  });
 });
 
 describe("AssetsService direct upload", () => {

@@ -893,12 +893,24 @@ export class AssetsService {
       }));
   }
 
-  async cleanupUnreferencedAssets(assetIds: string[]) {
+  /**
+   * 默认只清理文档附件（embedded）；独立文件平时保留在文件库中，
+   * 只有在删除文件夹这种“归属目录整体消失”的场景才通过
+   * includeStandalone=true 一并清理。仍被文档或课件引用的资产不删除。
+   */
+  async cleanupUnreferencedAssets(
+    assetIds: string[],
+    options?: { includeStandalone?: boolean },
+  ) {
     const uniqueIds = [...new Set(assetIds.filter(Boolean))];
     if (uniqueIds.length === 0) return;
     const [assets, references] = await Promise.all([
       this.prisma.fileAsset.findMany({
-        where: { id: { in: uniqueIds }, forumPostId: null, kind: "embedded" },
+        where: {
+          id: { in: uniqueIds },
+          forumPostId: null,
+          ...(options?.includeStandalone ? {} : { kind: "embedded" as const }),
+        },
       }),
       this.getAssetReferences(uniqueIds),
     ]);

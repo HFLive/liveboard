@@ -534,10 +534,21 @@ export class FilesService {
         where: { fileId: { in: files.map((file) => file.id) } },
         select: { id: true },
       });
-      affectedAssetIds.push(...assets.map((asset) => asset.id));
+      // 独立文件直接挂在文件夹上（folderId），不随文件夹级联删除；
+      // 这里一并收集，删除文件夹时同步清理它们及其存储对象。
+      const standaloneAssets = await tx.fileAsset.findMany({
+        where: { folderId: { in: [...folderIds] }, kind: "standalone" },
+        select: { id: true },
+      });
+      affectedAssetIds.push(
+        ...assets.map((asset) => asset.id),
+        ...standaloneAssets.map((asset) => asset.id),
+      );
       await tx.folder.delete({ where: { id: folderId } });
     });
-    await this.assets.cleanupUnreferencedAssets(affectedAssetIds);
+    await this.assets.cleanupUnreferencedAssets(affectedAssetIds, {
+      includeStandalone: true,
+    });
 
     return { ok: true };
   }
