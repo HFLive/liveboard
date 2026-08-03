@@ -3,6 +3,7 @@ import { API_URL } from "./client";
 import {
   AI_USAGE_CONSUMED_EVENT,
   askAiStream,
+  attachmentDownloadUrl,
   uploadAssetDirect,
   configureHttpAccess,
   disableHttps,
@@ -13,6 +14,7 @@ import {
   getMe,
   getPublicSettings,
   importMarkdown,
+  resolveBlockAssetUrl,
   setHttpsAutoRenew,
 } from "./index";
 
@@ -594,5 +596,44 @@ describe("Direct asset upload API", () => {
       }),
     ).rejects.toMatchObject({ message: "文档附件容量不足", status: 400 });
     expect(FakeXMLHttpRequest.instances).toHaveLength(0);
+  });
+});
+
+describe("Block asset URL resolution", () => {
+  it("resolves relative asset paths to the current API base", () => {
+    expect(resolveBlockAssetUrl("/assets/asset-1")).toBe(
+      `${API_URL}/assets/asset-1`,
+    );
+  });
+
+  it("rewrites legacy absolute asset URLs to the current API base", () => {
+    expect(resolveBlockAssetUrl("http://localhost:4000/assets/asset-1")).toBe(
+      `${API_URL}/assets/asset-1`,
+    );
+    expect(resolveBlockAssetUrl("https://old.example.com/assets/asset-2")).toBe(
+      `${API_URL}/assets/asset-2`,
+    );
+  });
+
+  it("leaves external and non-asset URLs untouched", () => {
+    expect(resolveBlockAssetUrl("https://example.com/image.png")).toBe(
+      "https://example.com/image.png",
+    );
+    expect(resolveBlockAssetUrl("/other/path.png")).toBe("/other/path.png");
+  });
+
+  it("forces download for asset attachment URLs regardless of stored host", () => {
+    expect(attachmentDownloadUrl("/assets/asset-1")).toBe(
+      `${API_URL}/assets/asset-1?download=1`,
+    );
+    expect(attachmentDownloadUrl("http://localhost:4000/assets/asset-1")).toBe(
+      `${API_URL}/assets/asset-1?download=1`,
+    );
+  });
+
+  it("returns non-asset attachment URLs unchanged", () => {
+    expect(attachmentDownloadUrl("https://example.com/file.pdf")).toBe(
+      "https://example.com/file.pdf",
+    );
   });
 });

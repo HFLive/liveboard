@@ -22,6 +22,7 @@ import {
   FileAssetSummary,
   listLibraryAssets,
   listAssetReferences,
+  resolveBlockAssetUrl,
 } from "@/lib/api";
 import {
   assetTypeLabel,
@@ -378,7 +379,10 @@ export function LibraryClient() {
                     <div className="asset-preview">
                       {isImage ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img alt={asset.filename} src={asset.url} />
+                        <img
+                          alt={asset.filename}
+                          src={resolveBlockAssetUrl(asset.url)}
+                        />
                       ) : (
                         <Icon aria-hidden="true" />
                       )}
@@ -495,7 +499,10 @@ export function LibraryClient() {
               <div className="asset-detail-preview">
                 {selectedAsset.mimeType.startsWith("image/") ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img alt={selectedAsset.filename} src={selectedAsset.url} />
+                  <img
+                    alt={selectedAsset.filename}
+                    src={resolveBlockAssetUrl(selectedAsset.url)}
+                  />
                 ) : (
                   <File aria-hidden="true" />
                 )}

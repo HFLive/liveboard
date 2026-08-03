@@ -7,7 +7,6 @@ import {
   NotImplementedException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { canEdit, isSuperAdmin, isSystemAdmin } from "@liveboard/shared";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
@@ -86,7 +85,6 @@ export function getAssetPreviewKind(
 @Injectable()
 export class AssetsService {
   constructor(
-    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly permissions: PermissionsService,
     private readonly storage: StorageService,
@@ -1424,11 +1422,10 @@ export class AssetsService {
   }
 
   private getAssetUrl(assetId: string) {
-    const baseUrl = this.config.get<string>(
-      "API_PUBLIC_URL",
-      "http://localhost:4000",
-    );
-    return `${baseUrl.replace(/\/$/, "")}/assets/${assetId}`;
+    // 返回相对路径而非绝对地址：内容块会把该 url 持久化进 dataJson，绝对地址
+    // 会绑定写入时的主机/端口（如 http://localhost:4000），换设备或部署地址变化
+    // 后图片即失效。前端渲染时再经 apiResourceUrl 解析到当前 API 入口。
+    return `/assets/${assetId}`;
   }
 }
 
