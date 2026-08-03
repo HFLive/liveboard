@@ -179,10 +179,14 @@ describe("responsive workspace contracts", () => {
 
   it("exposes compact mobile entry points for enabled editors", () => {
     expect(viewerCss).toMatch(
-      /@media \(max-width: 720px\)[\s\S]*?\.workspace\.content-viewer \.content-viewer-edit-link\s*{[\s\S]*?display: inline-grid;[\s\S]*?width: 42px;[\s\S]*?height: 42px/,
+      /@media \(max-width: 720px\)[\s\S]*?\.workspace\.content-viewer \.content-viewer-edit-link\s*{[\s\S]*?display: inline-grid;[\s\S]*?padding: 0 11px/,
     );
     expect(viewerCss).toMatch(
       /\.workspace\.content-viewer \.content-viewer-edit-link > span\s*{\s*display: none/,
+    );
+    // 「阅读」「编辑」移动端都收成纯图标按钮，尺寸一致。
+    expect(viewerCss).toMatch(
+      /\.reader-settings > summary > span\s*{\s*display: none/,
     );
     expect(mobileCss).not.toMatch(
       /\.teaching-list-panel \.list-toolbar > \.button,[\s\S]*?\.exercises-workspace \.exercise-toolbar-actions > \.button\s*{\s*display: none/,
