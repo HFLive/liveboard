@@ -59,6 +59,9 @@ describe("FilesService", () => {
     $transaction: jest.fn(),
     $executeRaw: jest.fn(),
   };
+  const assets = {
+    cleanupUnreferencedAssets: jest.fn(),
+  };
   let service: FilesService;
 
   beforeEach(() => {
@@ -66,7 +69,7 @@ describe("FilesService", () => {
     service = new FilesService(
       prisma as unknown as PrismaService,
       permissions as unknown as PermissionsService,
-      { cleanupUnreferencedAssets: jest.fn() } as never,
+      assets as never,
     );
     permissions.getEffectiveLevelForFile.mockResolvedValue("editor");
     prisma.file.findUnique.mockResolvedValue({ workspaceId: "workspace-1" });
@@ -390,6 +393,9 @@ describe("FilesService", () => {
       { id: "other-folder", parentId: null },
     ]);
     tx.file.findMany.mockResolvedValue([{ id: "file-1" }, { id: "file-2" }]);
+    tx.fileAsset.findMany
+      .mockResolvedValueOnce([{ id: "asset-embedded-1" }])
+      .mockResolvedValueOnce([{ id: "asset-standalone-1" }]);
 
     await service.deleteFolder("editor-1", "folder-1", {
       recursive: true,
@@ -399,6 +405,21 @@ describe("FilesService", () => {
     expect(tx.folder.delete).toHaveBeenCalledWith({
       where: { id: "folder-1" },
     });
+    expect(tx.fileAsset.findMany).toHaveBeenCalledWith({
+      where: { fileId: { in: ["file-1", "file-2"] } },
+      select: { id: true },
+    });
+    expect(tx.fileAsset.findMany).toHaveBeenCalledWith({
+      where: {
+        folderId: { in: ["folder-1", "folder-2", "folder-3"] },
+        kind: "standalone",
+      },
+      select: { id: true },
+    });
+    expect(assets.cleanupUnreferencedAssets).toHaveBeenCalledWith(
+      ["asset-embedded-1", "asset-standalone-1"],
+      { includeStandalone: true },
+    );
   });
 
   it("permanently deletes a file", async () => {
