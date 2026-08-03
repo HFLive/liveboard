@@ -32,10 +32,14 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
   const loadingTaskRef = useRef<PDFDocumentLoadingTask | null>(null);
   const renderTaskRef = useRef<RenderTask | null>(null);
   const readyRef = useRef(false);
+  // 记录最近一次通过回车提交的页码，供 onBlur 判断输入是否已被提交，
+  // 避免「提交后又 blur 丢弃」把刚跳转的页码闪回旧值。
+  const committedPageRef = useRef(1);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageDraft, setPageDraft] = useState("1");
   const [zoom, setZoom] = useState(1);
+  const [fitScale, setFitScale] = useState(1);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [error, setError] = useState("");
@@ -48,6 +52,8 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
     setZoom(1);
     setError("");
     setProgress(null);
+    setFitScale(1);
+    committedPageRef.current = 1;
     readyRef.current = false;
 
     // 直传端点是与 /preview 平级的 /preview-url，对文档附件与课堂文件路径都成立。
@@ -101,6 +107,9 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
         // fetch 会以网络错误失败。任何直传失败都回退一次到服务器中转（同源或
         // 带 cookie，必定可达），避免预览在未配 CORS 的 direct 模式下挂掉。
         if (directUrl && attempt === 0) {
+          // 释放已失败的直传 loadingTask，避免 worker 泄漏；新任务会覆盖
+          // loadingTaskRef，因此须在回退前显式销毁。
+          void loadingTaskRef.current?.destroy().catch(() => {});
           await openDocument(pdfjs, null, 1);
           return;
         }
@@ -153,7 +162,8 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
       disposed = true;
       controller.abort();
       renderTaskRef.current?.cancel();
-      void loadingTaskRef.current?.destroy();
+      // destroy 在 worker 未就绪时可能 reject，必须吞掉避免未处理 rejection。
+      void loadingTaskRef.current?.destroy().catch(() => {});
       loadingTaskRef.current = null;
     };
   }, [previewPath]);
@@ -175,18 +185,25 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!document || !canvas || viewportWidth <= 0) return;
+    if (!canvas) return;
+    // 文档未就绪或无可用宽度时清空画布，避免切换文件后残留上一份 PDF 的最后一页。
+    if (!document || viewportWidth <= 0) {
+      canvas.width = 0;
+      canvas.height = 0;
+      return;
+    }
     let disposed = false;
     void document
       .getPage(pageNumber)
       .then((page) => {
         if (disposed) return;
         const baseViewport = page.getViewport({ scale: 1 });
-        const fitScale = Math.min(
+        const nextFitScale = Math.min(
           1.5,
           Math.max(0.25, (viewportWidth - 28) / baseViewport.width),
         );
-        const viewport = page.getViewport({ scale: fitScale * zoom });
+        setFitScale(nextFitScale);
+        const viewport = page.getViewport({ scale: nextFitScale * zoom });
         const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
         const context = canvas.getContext("2d");
         if (!context) throw new Error("浏览器无法创建 PDF 画布");
@@ -228,7 +245,15 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
       setPageDraft(String(pageNumber));
       return;
     }
-    setPageNumber(Math.max(1, Math.min(document.numPages, parsed)));
+    goToPage(Math.max(1, Math.min(document.numPages, parsed)));
+  }
+
+  // 所有换页入口统一走这里，同步 committedPageRef，避免翻页按钮换页后
+  // 输入框草稿与当前页不一致。
+  function goToPage(next: number) {
+    committedPageRef.current = next;
+    setPageNumber(next);
+    setPageDraft(String(next));
   }
 
   if (error) {
@@ -251,7 +276,7 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
         <button
           aria-label="上一页"
           disabled={!document || pageNumber <= 1}
-          onClick={() => setPageNumber((page) => Math.max(1, page - 1))}
+          onClick={() => goToPage(Math.max(1, pageNumber - 1))}
           type="button"
         >
           <ChevronLeft aria-hidden="true" />
@@ -264,8 +289,13 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
             min={1}
             onChange={(event) => setPageDraft(event.target.value)}
             // 只有回车才提交；blur 丢弃未提交的输入，否则先失焦提交再点下一页
-            // 会让翻页基于刚跳转的页码计算，导致下一页按钮看似失灵。
-            onBlur={() => setPageDraft(String(pageNumber))}
+            // 会让翻页基于刚跳转的页码计算，导致下一页按钮看似失灵。但刚通过
+            // 回车提交的页码不能丢（此时 pageNumber 仍是异步旧值），否则会闪回旧页。
+            onBlur={() => {
+              if (pageDraft !== String(committedPageRef.current)) {
+                setPageDraft(String(pageNumber));
+              }
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 commitPage((event.target as HTMLInputElement).value);
@@ -281,9 +311,9 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
           aria-label="下一页"
           disabled={!document || pageNumber >= document.numPages}
           onClick={() =>
-            setPageNumber((page) =>
-              document ? Math.min(document.numPages, page + 1) : page,
-            )
+            document
+              ? goToPage(Math.min(document.numPages, pageNumber + 1))
+              : undefined
           }
           type="button"
         >
@@ -298,7 +328,7 @@ export function PdfAssetPreview({ previewPath }: { previewPath: string }) {
         >
           <ZoomOut aria-hidden="true" />
         </button>
-        <span>{Math.round(zoom * 100)}%</span>
+        <span>{Math.round(fitScale * zoom * 100)}%</span>
         <button
           aria-label="放大"
           disabled={!document || zoom >= 2}
