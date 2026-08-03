@@ -27,6 +27,7 @@ vi.mock("@/lib/api", () => ({
   deleteLibraryAsset: vi.fn(),
   listLibraryAssets: vi.fn(),
   listAssetReferences: vi.fn(),
+  resolveBlockAssetUrl: vi.fn((url: string) => url),
   uploadAsset: vi.fn(),
 }));
 
