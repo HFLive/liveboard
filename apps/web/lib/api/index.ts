@@ -54,6 +54,32 @@ export function apiResourceUrl(path: string) {
   return path.startsWith("http") ? path : `${API_URL}${path}`;
 }
 
+// 提取 url 中的 /assets/<id> 路径（兼容历史的绝对地址）。
+// 早期内容块会把 http://localhost:4000/assets/<id> 之类的绝对地址写进 dataJson，
+// 换设备或部署地址变化后失效；这里统一抽出资产路径交给 apiResourceUrl 重新解析。
+function extractAssetPath(url: string): string | null {
+  if (!url.startsWith("/") && !/^https?:\/\//i.test(url)) return null;
+
+  let candidate = url;
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      candidate = new URL(url).pathname;
+    } catch {
+      return null;
+    }
+  }
+
+  const match = candidate.match(/^\/assets\/[^/?#]+/);
+  return match ? match[0] : null;
+}
+
+// 内容块图片/附件 url 规范化：资产地址统一解析到当前 API 入口，
+// 外部链接与非资产相对路径原样返回。
+export function resolveBlockAssetUrl(url: string) {
+  const assetPath = extractAssetPath(url);
+  return assetPath ? apiResourceUrl(assetPath) : url;
+}
+
 // 附件资源默认按 Content-Disposition: inline 返回安全图片，便于 <img> 引用；
 // 下载场景需要显式带上 download=1，让 API 强制改为 attachment，避免浏览器
 // 直接打开裸文件页。
@@ -95,11 +121,9 @@ export function fetchPreviewUrl(
 // 内容块里的附件链接指向 /assets/:id，点击图片类附件会打开裸图页；
 // 统一补 download=1 强制下载，外部链接原样返回。
 export function attachmentDownloadUrl(url: string) {
-  const isAssetUrl =
-    url.startsWith("/assets/") || url.startsWith(`${API_URL}/assets/`);
-  if (!isAssetUrl) return url;
-  const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}download=1`;
+  const assetPath = extractAssetPath(url);
+  if (!assetPath) return url;
+  return apiResourceUrl(`${assetPath}?download=1`);
 }
 
 let currentUserRequest: Promise<{ user: UserProfile }> | null = null;

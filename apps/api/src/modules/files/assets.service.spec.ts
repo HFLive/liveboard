@@ -1,5 +1,4 @@
 import { BadRequestException, ConflictException } from "@nestjs/common";
-import type { ConfigService } from "@nestjs/config";
 import { Readable } from "node:stream";
 import type { PermissionsService } from "../permissions/permissions.service";
 import type { PrismaService } from "../prisma/prisma.service";
@@ -144,7 +143,6 @@ describe("AssetsService consistency", () => {
     storage.backendFor.mockResolvedValue(backend);
     storage.presignDownload.mockResolvedValue(null);
     service = new AssetsService(
-      { get: (_key: string, fallback?: unknown) => fallback } as ConfigService,
       prisma as unknown as PrismaService,
       permissions as unknown as PermissionsService,
       storage as unknown as StorageService,
@@ -855,7 +853,6 @@ describe("AssetsService direct upload", () => {
   beforeEach(() => {
     jest.resetAllMocks();
     service = new AssetsService(
-      { get: (_key: string, fallback?: unknown) => fallback } as ConfigService,
       prisma as unknown as PrismaService,
       permissions as unknown as PermissionsService,
       storage as unknown as StorageService,

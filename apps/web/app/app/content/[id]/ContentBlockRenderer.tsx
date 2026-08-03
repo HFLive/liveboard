@@ -1,7 +1,11 @@
 import type { ContentBlockType } from "@liveboard/shared";
 import { normalizeBilibiliEmbedUrl } from "@liveboard/shared/bilibili";
 import { useEffect, useState } from "react";
-import { attachmentDownloadUrl, type ContentBlock } from "@/lib/api";
+import {
+  attachmentDownloadUrl,
+  resolveBlockAssetUrl,
+  type ContentBlock,
+} from "@/lib/api";
 import { DocumentImageViewer } from "./DocumentImageViewer";
 import { MathFormula, RichText } from "./RichText";
 
@@ -313,7 +317,7 @@ export function RenderBlockContent({ block }: { block: ContentBlock }) {
     return url ? (
       <DocumentImageViewer
         alt={text || "图片"}
-        src={url}
+        src={resolveBlockAssetUrl(url)}
         widthPercent={imageWidth}
       />
     ) : (

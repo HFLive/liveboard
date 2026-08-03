@@ -59,6 +59,7 @@ import {
   PermissionGrantSummary,
   publishFile,
   reorderBlocks,
+  resolveBlockAssetUrl,
   updateFile,
   updateBlock,
   uploadAssetDirect,
@@ -1443,7 +1444,7 @@ export function FileEditor({ fileId }: { fileId: string }) {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 alt={getBlockText(block) || "图片"}
-                src={url}
+                src={resolveBlockAssetUrl(url)}
                 style={{ width: `${widthPercent}%` }}
               />
             </figure>
