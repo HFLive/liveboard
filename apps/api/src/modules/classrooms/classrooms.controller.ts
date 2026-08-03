@@ -310,6 +310,24 @@ export class ClassroomsController {
     stream!.pipe(response);
   }
 
+  @Get(":id/files/:fileId/preview-url")
+  async filePreviewUrl(
+    @CurrentUserId() userId: string | null,
+    @Param("id") classroomId: string,
+    @Param("fileId") fileId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    // 直传 URL 是一次性短期签名，浏览器拿去流式加载 PDF，不能缓存。
+    response.setHeader("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL);
+    return {
+      url: await this.classroomsService.getFilePreviewUrl(
+        userId,
+        classroomId,
+        fileId,
+      ),
+    };
+  }
+
   @Get(":id/files/:fileId/preview")
   async previewFile(
     @CurrentUserId() userId: string | null,

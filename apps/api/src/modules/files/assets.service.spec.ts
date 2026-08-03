@@ -7,9 +7,11 @@ import type { StorageService } from "../storage/storage.service";
 import {
   AssetsService,
   getAssetPreviewKind,
+  MAX_PDF_PREVIEW_SIZE_BYTES,
   normalizeAssetMimeType,
   readWebpDimensions,
 } from "./assets.service";
+import { PDF_PREVIEW_PRESIGN_EXPIRY_SECONDS } from "../storage/storage.service";
 
 describe("asset preview classification", () => {
   it.each([
@@ -326,6 +328,91 @@ describe("AssetsService consistency", () => {
     await expect(
       service.getAssetForPreview("user-1", "asset-1"),
     ).rejects.toThrow("文本文件必须使用 UTF-8 编码");
+  });
+
+  describe("getAssetPreviewUrl", () => {
+    function mockPdfAsset(sizeBytes = 1024) {
+      prisma.fileAsset.findUnique.mockResolvedValue({
+        id: "asset-1",
+        uploadedBy: "user-1",
+        folderId: "folder-1",
+        fileId: null,
+        forumPostId: null,
+        storageKey: "asset-key",
+        storageBackend: "minio",
+        filename: "handout.pdf",
+        mimeType: "application/pdf",
+        sizeBytes,
+      });
+      prisma.contentBlock.findMany.mockResolvedValue([]);
+      prisma.teachingDeckItem.findMany.mockResolvedValue([]);
+      prisma.teachingDeckItem.findFirst.mockResolvedValue(null);
+      prisma.user.findUnique.mockResolvedValue({
+        status: "active",
+        systemRole: "member",
+      });
+      permissions.getEffectiveLevelForFolder.mockResolvedValue("viewer");
+    }
+
+    it("returns a signed direct URL for PDFs when the backend presigns", async () => {
+      mockPdfAsset();
+      storage.presignDownload.mockResolvedValue(
+        "https://r2.example/signed-pdf",
+      );
+
+      await expect(
+        service.getAssetPreviewUrl("user-1", "asset-1"),
+      ).resolves.toBe("https://r2.example/signed-pdf");
+      expect(storage.presignDownload).toHaveBeenCalledWith(
+        "minio",
+        "asset-key",
+        expect.objectContaining({
+          filename: "handout.pdf",
+          mimeType: "application/pdf",
+          inline: true,
+          expirySeconds: PDF_PREVIEW_PRESIGN_EXPIRY_SECONDS,
+        }),
+      );
+    });
+
+    it("returns null so the caller falls back to the proxy stream", async () => {
+      mockPdfAsset();
+      storage.presignDownload.mockResolvedValue(null);
+
+      await expect(
+        service.getAssetPreviewUrl("user-1", "asset-1"),
+      ).resolves.toBeNull();
+    });
+
+    it("does not sign non-PDF previews", async () => {
+      mockPdfAsset();
+      prisma.fileAsset.findUnique.mockResolvedValue({
+        id: "asset-1",
+        uploadedBy: "user-1",
+        folderId: "folder-1",
+        fileId: null,
+        forumPostId: null,
+        storageKey: "asset-key",
+        storageBackend: "minio",
+        filename: "notes.txt",
+        mimeType: "text/plain",
+        sizeBytes: 128,
+      });
+
+      await expect(
+        service.getAssetPreviewUrl("user-1", "asset-1"),
+      ).resolves.toBeNull();
+      expect(storage.presignDownload).not.toHaveBeenCalled();
+    });
+
+    it("rejects PDFs over the preview size limit", async () => {
+      mockPdfAsset(MAX_PDF_PREVIEW_SIZE_BYTES + 1);
+
+      await expect(
+        service.getAssetPreviewUrl("user-1", "asset-1"),
+      ).rejects.toThrow("PDF 超过 25MB");
+      expect(storage.presignDownload).not.toHaveBeenCalled();
+    });
   });
 
   it("blocks deletion and returns the referencing teaching deck", async () => {

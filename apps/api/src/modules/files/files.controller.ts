@@ -522,6 +522,19 @@ export class FilesController {
     };
   }
 
+  @Get("assets/:id/preview-url")
+  async previewAssetUrl(
+    @CurrentUserId() userId: string | null,
+    @Param("id") assetId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    // 直传 URL 是一次性短期签名，浏览器拿去流式加载 PDF，不能缓存。
+    response.setHeader("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL);
+    return {
+      url: await this.assetsService.getAssetPreviewUrl(userId, assetId),
+    };
+  }
+
   @Get("assets/:id/preview")
   async previewAsset(
     @CurrentUserId() userId: string | null,

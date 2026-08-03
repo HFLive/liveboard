@@ -71,6 +71,8 @@ export interface PresignDownloadTarget {
   mimeType: string;
   inline: boolean;
   cacheControl?: string;
+  /** 覆盖默认有效期；PDF 预览需要跨整个阅读会话逐页拉取，时长由调用方决定。 */
+  expirySeconds?: number;
 }
 
 export interface StorageFileDistribution {
@@ -80,7 +82,12 @@ export interface StorageFileDistribution {
 }
 
 const SETTINGS_CACHE_TTL_MS = 30_000;
-const PRESIGN_EXPIRY_SECONDS = 600;
+export const PRESIGN_EXPIRY_SECONDS = 600;
+/**
+ * PDF 预览直传签名有效期：disableAutoFetch 下翻页会按需对同一签名 URL 发
+ * Range 请求，有效期必须覆盖整个阅读会话，不能沿用 600s 的附件/图片短签。
+ */
+export const PDF_PREVIEW_PRESIGN_EXPIRY_SECONDS = 3600;
 /** R2 内联图片签名是短期 bearer token，缩短权限撤销后的残余可访问窗口。 */
 export const R2_INLINE_IMAGE_PRESIGN_EXPIRY_SECONDS = 120;
 const PENDING_UPLOAD_CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
@@ -626,8 +633,9 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
   /**
    * 直出模式下为对象生成预签名地址；中转模式或后端不支持时返回 null，
    * 调用方回退到服务器流式中转。Vercel 下经过文件头校验的 R2 位图可以在
-   * API 权限校验后短期签名直出，避免图片字节经过 Vercel；其他 inline 资源
-   * 继续中转，尤其不能改变阿里云 OSS 默认域名的预览兼容策略。
+   * API 权限校验后短期签名直出，避免图片字节经过 Vercel；PDF 预览同样在
+   * direct 模式下签名直出，让浏览器直接拉对象存储做流式加载。其他 inline
+   * 资源继续中转，尤其不能改变阿里云 OSS 默认域名的预览兼容策略。
    */
   async presignDownload(
     storageBackend: StorageBackendName,
@@ -640,12 +648,22 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
       this.deploymentTarget === "vercel" &&
       storageBackend === "r2" &&
       isSafeInlineImageMime(target.mimeType);
-    if (target.inline && !directInlineR2Image) return null;
+    // 与 getAssetPreviewKind 的判定一致：.pdf 文件可能以 application/octet-stream
+    // 落库（未声明 MIME 的上传归一化结果），这些 PDF 预览也应能直传。
+    const inlinePdf =
+      target.inline &&
+      (target.mimeType === "application/pdf" ||
+        target.mimeType === "application/octet-stream");
+    if (target.inline && !directInlineR2Image && !inlinePdf) return null;
     const backend = await this.backendFor(storageBackend);
     return backend.presignGet(key, {
-      expirySeconds: directInlineR2Image
-        ? R2_INLINE_IMAGE_PRESIGN_EXPIRY_SECONDS
-        : PRESIGN_EXPIRY_SECONDS,
+      // 位图短签（120s）压缩权限撤销后的残余窗口；PDF 预览由调用方决定
+      // 更长有效期，覆盖逐页拉取的一整个阅读会话。
+      expirySeconds:
+        target.expirySeconds ??
+        (directInlineR2Image
+          ? R2_INLINE_IMAGE_PRESIGN_EXPIRY_SECONDS
+          : PRESIGN_EXPIRY_SECONDS),
       responseContentDisposition: `${
         target.inline ? "inline" : "attachment"
       }; filename*=UTF-8''${encodeURIComponent(target.filename)}`,

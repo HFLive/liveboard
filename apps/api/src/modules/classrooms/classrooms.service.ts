@@ -17,7 +17,10 @@ import {
   isSafeInlineImageMime,
   type StorageBackendName,
 } from "../storage/storage-backend";
-import { StorageService } from "../storage/storage.service";
+import {
+  PDF_PREVIEW_PRESIGN_EXPIRY_SECONDS,
+  StorageService,
+} from "../storage/storage.service";
 import { requireResourceName } from "../../common/resource-name";
 import { putObjectWithCompensation } from "../storage/upload-compensation";
 import { DEFAULT_CLASSROOM_STORAGE_QUOTA_BYTES } from "../../common/storage-quota";
@@ -858,6 +861,38 @@ export class ClassroomsService {
       redirectUrl: null,
       stream: (await backend.getObject(file.storageKey)) as Readable,
     };
+  }
+
+  /**
+   * 课堂 PDF 预览的直传签名：鉴权与大小校验通过后，在 direct 下载模式下返回
+   * 短期预签名 URL，让浏览器直接拉对象存储做流式加载；非 PDF 或后端不支持时
+   * 返回 null，调用方回退到 /preview 中转。
+   */
+  async getFilePreviewUrl(
+    userId: string | null,
+    classroomId: string,
+    fileId: string,
+  ): Promise<string | null> {
+    const user = await this.requireUser(userId);
+    await this.requireClassroomAccess(user, classroomId);
+    const file = await this.prisma.classroomFile.findFirst({
+      where: { id: fileId, classroomId },
+    });
+    if (!file) throw new NotFoundException("课堂文件不存在");
+
+    const kind = getAssetPreviewKind(file.filename, file.mimeType);
+    if (kind !== "pdf") return null;
+    if (file.sizeBytes > MAX_PDF_PREVIEW_SIZE_BYTES) {
+      throw new BadRequestException("PDF 超过 25MB，请下载后查看");
+    }
+
+    return this.storage.presignDownload(file.storageBackend, file.storageKey, {
+      filename: file.filename,
+      mimeType: file.mimeType,
+      inline: true,
+      // 阅读会话内逐页按需拉取，签名必须比附件/图片短签更长。
+      expirySeconds: PDF_PREVIEW_PRESIGN_EXPIRY_SECONDS,
+    });
   }
 
   async previewFile(

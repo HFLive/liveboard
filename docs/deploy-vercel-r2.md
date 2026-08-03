@@ -193,8 +193,13 @@ JSON 编辑器使用**数组**，不是 `{ "rules": [...] }` 包装对象：
       "https://liveboard.example.com"
     ],
     "AllowedMethods": ["GET", "PUT"],
-    "AllowedHeaders": ["Content-Type"],
-    "ExposeHeaders": ["ETag"],
+    "AllowedHeaders": ["Content-Type", "Range"],
+    "ExposeHeaders": [
+      "ETag",
+      "Content-Length",
+      "Accept-Ranges",
+      "Content-Range"
+    ],
     "MaxAgeSeconds": 3600
   }
 ]
@@ -205,6 +210,10 @@ JSON 编辑器使用**数组**，不是 `{ "rules": [...] }` 包装对象：
 - Origin 只有协议和主机名，不带路径，不带结尾 `/`。
 - 上线过渡期可同时保留 Vercel Web 域名和正式域名。
 - `GET` 用于 API 鉴权后跳转的短期图片签名地址，`PUT` 用于浏览器直传。
+- `AllowedHeaders` 里的 `Range` 是 PDF 预览流式加载（pdf.js 按需拉取页面）所必需的：
+  浏览器跨域请求带 `Range` 头会触发预检，不放行则请求被拒。
+- `ExposeHeaders` 里的 `Content-Length`/`Accept-Ranges`/`Content-Range` 是 pdf.js
+  判断并读取 Range 分片响应的必需响应头，不暴露则流式加载退化为整份下载。
 - 允许 `GET` 不会公开 Bucket；请求仍必须携带有效的 R2 签名。
 - Production 不要使用 `AllowedOrigins: ["*"]`。
 
@@ -704,6 +713,8 @@ FROM "User";
 
 - 上传进度正常，浏览器请求直接发往 R2。
 - 支持的 PDF/Markdown/TXT 可以预览。
+- PDF 预览的加载请求直接发往 R2（网络面板目标为 R2 域名而非 Vercel），首屏快速出现，
+  翻页为 `206 Partial Content` 的 Range 请求，进度条与页码跳转正常。
 - 下载成功。
 - 删除后页面记录和 R2 对象按业务规则清理。
 - 浏览器控制台没有 R2 CORS 错误。
@@ -867,7 +878,7 @@ Ready 只代表构建和 Function 发布成功，不代表外部依赖全部可�
 - [ ] 个人 GitHub fork 已连接 Vercel，团队仓库仍是代码源。
 - [ ] Neon 使用 PostgreSQL 16、Singapore，已保存 pooled/direct 两条 URL。
 - [ ] Upstash 在 Singapore，Eviction 关闭，`REDIS_URL` 使用 `rediss://`。
-- [ ] R2 Bucket 私有，Token 只限目标 Bucket，CORS 是正式 Origin 数组格式。
+- [ ] R2 Bucket 私有，Token 只限目标 Bucket，CORS 是正式 Origin 数组格式且放行 `Range` 请求头。
 - [ ] API Root 是 `apps/api`，Web Root 是 `apps/web`，均允许读取 Root 外文件。
 - [ ] 两个 Project 均使用 Node 22.x。
 - [ ] API/Web Install 与 Build Command 填在正确栏位。
