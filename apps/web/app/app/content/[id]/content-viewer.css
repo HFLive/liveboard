@@ -517,14 +517,20 @@
     justify-content: flex-end;
   }
 
+  /* 移动端两个操作都收成纯图标按钮：同高（沿用 .button 的
+     control-height）、同 padding，尺寸完全一致。 */
+  .reader-settings > summary {
+    padding: 0 11px;
+  }
+
+  .reader-settings > summary > span {
+    display: none;
+  }
+
   .workspace.content-viewer .content-viewer-edit-link {
     display: inline-grid;
-    width: 42px;
-    min-width: 42px;
-    height: 42px;
-    min-height: 42px;
-    padding: 0;
     place-items: center;
+    padding: 0 11px;
   }
 
   .workspace.content-viewer .content-viewer-edit-link > span {

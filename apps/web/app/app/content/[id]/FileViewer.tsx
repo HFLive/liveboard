@@ -170,7 +170,7 @@ export function FileViewer({ fileId }: { fileId: string }) {
               <details className="reader-settings">
                 <summary aria-label="打开阅读设置" className="button secondary">
                   <ALargeSmall aria-hidden="true" className="button-icon" />
-                  阅读
+                  <span>阅读</span>
                 </summary>
                 <div className="reader-settings-popover">
                   <strong>阅读设置</strong>
