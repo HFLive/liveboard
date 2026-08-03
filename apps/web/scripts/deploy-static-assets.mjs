@@ -91,16 +91,14 @@ const verifyPublishedAsset = async (sourceStaticDir, distDir) => {
     throw new Error("[static-assets] Next.js 静态目录中没有可验证的文件。");
   }
 
+  // 仅验证构建清单文件（含 JavaScript MIME 检查）。若构建中仍存在 .mjs 模块文件，
+  // 一并验证其 MIME，但不强制要求存在——PDF worker 改由 Web 站点从 public/ 提供，
+  // 不再进入 EdgeOne 的 /_next/static，避免了 EdgeOne 对 .mjs 的类型问题。
+  const verificationFiles = [localFile];
   const moduleFile = findFirstFile(sourceStaticDir, (entryPath) =>
     entryPath.endsWith(".mjs"),
   );
-  if (!moduleFile) {
-    throw new Error(
-      "[static-assets] Next.js 静态目录中没有可验证 MIME 的 .mjs 文件。",
-    );
-  }
-  const verificationFiles = [localFile];
-  if (moduleFile !== localFile) {
+  if (moduleFile && moduleFile !== localFile) {
     verificationFiles.push(moduleFile);
   }
 

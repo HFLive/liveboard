@@ -112,14 +112,15 @@ LiveBoard 支持双目标部署，自托管能力保持不变：
   `/_next/static/*` 使用 Vercel 原生分发、Cloudflare Pages 或 Tencent EdgeOne
   Makers；默认 `vercel`。Cloudflare 与 EdgeOne 的域名、项目名和 Secret 可以同时
   保留，切换 provider 时 `postbuild` 只向选中的 Direct Upload Project 上传本次
-  相同构建，并通过正式静态域名逐字节校验一个构建文件、校验一个 `.mjs` 的
-  JavaScript Content-Type；上传或校验失败必须阻止 Vercel 上线；本地、Preview 和
-  自托管不得上传。
+  相同构建，并通过正式静态域名逐字节校验构建文件（含存在时的 `.mjs`）的
+  JavaScript Content-Type；PDF.js worker 由 Web 站点从 `public/` 提供，不进入
+  EdgeOne（EdgeOne 上传把 `.mjs` 存成 `application/octet-stream`，而 `new URL()`
+  输出 `.js` 会被 webpack 编译出无法解析的裸导入）；上传或校验失败必须阻止
+  Vercel 上线；本地、Preview 和自托管不得上传。
   Cloudflare Token 只能授予 Account / Cloudflare Pages / Edit；EdgeOne 使用独立
   Makers API Token；二者都只能配置在 Web Production。业务 R2 Bucket 继续私有。
-  EdgeOne 对 `/_next/static/*.mjs` 必须返回 JavaScript MIME（
-  `application/javascript; charset=utf-8`），不能使用 `application/octet-stream`，
-  否则 PDF.js worker 等浏览器模块无法加载。
+  构建若重新引入 `.mjs`，EdgeOne 的 `/_next/static/*.mjs` 必须返回 JavaScript
+  MIME（`application/javascript; charset=utf-8`），不能是 `application/octet-stream`。
 
 ## UI 设计原则
 

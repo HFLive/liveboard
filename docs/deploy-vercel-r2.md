@@ -430,26 +430,35 @@ Cloudflare 配置；新部署不要设置它。
 由 Web 的 `postbuild` 自动调用。它仅在 `VERCEL=1` 且
 `VERCEL_ENV=production` 时执行，复制**本次相同构建**的 `.next/static`，写入一年
 `immutable` 缓存与跨域响应头，再上传到当前 provider。上传、凭据或配置校验失败
-会让 Vercel 构建失败。上传后脚本还会通过当前正式静态域名读取一个本次构建文件与
-一个 `.mjs`，逐字节比对并校验 JavaScript Content-Type，防止项目名错误、域名未
+会让 Vercel 构建失败。上传后脚本还会通过当前正式静态域名读取本次构建文件（若构建中存在 `.mjs` 也一并
+校验），逐字节比对并校验 JavaScript Content-Type，防止项目名错误、域名未
 关联到新部署、证书异常或模块 MIME 错误时继续上线。本地、Preview、自托管构建和
 `STATIC_ASSET_PROVIDER=vercel` 都会明确跳过外部上传。
 
-切换后，从新部署 HTML 中复制任一实际构建文件名并检查；如果启用 PDF 预览，也要
-检查实际的 `pdf.worker.min.<hash>.mjs`：
+切换后，从新部署 HTML 中复制任一实际构建文件名并检查：
 
 ```bash
 curl -I https://<当前静态域名>/_next/static/chunks/<实际文件名>.js
-curl -I https://<当前静态域名>/_next/static/media/pdf.worker.min.<hash>.mjs
 ```
 
-两者都预期至少包含 `200`、正确的 JavaScript Content-Type（`.mjs` 不能是
-`application/octet-stream`），以及：
+预期至少包含 `200`、正确的 JavaScript Content-Type，以及：
 
 ```text
 Cache-Control: public, max-age=31536000, immutable
 Access-Control-Allow-Origin: *
 ```
+
+PDF.js worker 由 Web 站点自身提供，不进入 EdgeOne：EdgeOne 上传会把 `.mjs` 存成
+`application/octet-stream`，而用 `new URL()` 输出 `.js` 又会被 webpack 编译出无法
+解析的裸导入。worker 位于 `apps/web/public/pdf.worker.<版本>.js`，升级 pdfjs-dist
+时同步更新文件名与 `PdfAssetPreview.tsx` 里的路径。直接访问 Web 域名验证：
+
+```bash
+curl -I https://<Web 域名>/pdf.worker.v6.1.200.js
+```
+
+预期 `200` 且 `Content-Type` 为 `application/javascript`（不能是
+`application/octet-stream`）。
 
 最后必须从目标用户的真实网络分别测试完整页面，而不只比较服务商默认域名。无备案
 时 EdgeOne 也只能使用不含中国大陆的节点，不能把 Cloudflare 或 EdgeOne 方案描述
