@@ -10,6 +10,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { IsBoolean, IsOptional, IsString } from "class-validator";
 import { createReadStream, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -18,13 +19,19 @@ import { CurrentUserId } from "../../common/current-user-id.decorator";
 import { MigrationService } from "./migration.service";
 
 class StartExportDto {
+  @IsOptional()
+  @IsBoolean()
   includeObjects?: boolean;
   /** 对象直推目标 R2（server→vercel 方向）：包内不含对象，需源服务器配置 TARGET_R2_*。 */
+  @IsOptional()
+  @IsBoolean()
   pushToR2?: boolean;
 }
 
 class StartImportDto {
+  @IsString()
   source!: string;
+  @IsString()
   confirm!: string;
 }
 
