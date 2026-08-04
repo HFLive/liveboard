@@ -33,12 +33,17 @@ import {
   type ObjectRef,
 } from "../src/modules/migration/migration-engine";
 import {
+  BASELINE_MIGRATION,
+  normalizeBundledMigrations,
+} from "../src/modules/migration/migration-history";
+import {
   migrationDataDir,
   parsePostgresUrl,
   pgConnectionArgs,
   runPgTool,
   databaseUrlForTools,
   appVersion,
+  targetMigrationsDir,
 } from "./migrate-cli";
 import { createSourceBackends, targetR2Backend } from "./migrate-backends";
 import { writeJobState } from "../src/modules/migration/migration-job-file";
@@ -210,10 +215,25 @@ async function collectMigrations(
       `源数据库存在未完成的 migration，拒绝导出（fail-closed）：${unfinished.map((r) => r.migration_name).join(", ")}`,
     );
   }
-  return rows.map((row) => ({
-    name: row.migration_name,
-    checksum: row.checksum,
-  }));
+  // 单 baseline 收口后，过渡库的 _prisma_migrations 仍保留被 baseline 合并的旧
+  // 历史记录（应用已不打包这些文件夹）。manifest 只记录应用打包的迁移，否则
+  // 导入端无法逐条校验/resolve，必然 fail-closed。
+  const normalized = await normalizeBundledMigrations(
+    rows.map((row) => ({ name: row.migration_name, checksum: row.checksum })),
+    targetMigrationsDir(),
+    false,
+  );
+  if (normalized.skippedLegacy > 0) {
+    console.log(
+      `[export] 已跳过 ${normalized.skippedLegacy} 条被单 baseline 合并的旧历史记录`,
+    );
+  }
+  if (!normalized.migrations.some((m) => m.name === BASELINE_MIGRATION)) {
+    throw new Error(
+      "源数据库 _prisma_migrations 缺少单 baseline 记录，无法确定收口后的迁移历史，拒绝导出（fail-closed）。",
+    );
+  }
+  return normalized.migrations;
 }
 
 async function tarBundle(parentDir: string, bundleName: string): Promise<void> {

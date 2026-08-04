@@ -193,7 +193,7 @@ liveboard-migration-<jobId>.tar
 
 1. **dump 排除数据**：`--exclude-table-data` 增加 `MigrationJob`。表结构随 dump 还原（源/目标同版本，结构一致），源端任务记录不带入目标。
 2. **导入期间不依赖目标库存状态**：导入第一步就是腾空目标库，期间目标 DB 完全不可用，`MigrationJob` 也不存在。导入任务状态写**本地状态文件**（`/opt/liveboard/migration/jobs/<id>.json`）+ 进程内内存；还原完成、表恢复后才把导入任务记录 upsert 回 `MigrationJob`。
-3. **resolve 覆盖全部历史**：还原后按 manifest `migrations` 列表**逐条** `prisma migrate resolve --applied`（包括 baseline 和 MigrationJob 对应的 migration），而不是只 resolve baseline；执行前先核对每条 migration 在目标应用 `prisma/migrations` 目录中存在且 checksum 一致，不一致 fail-closed。
+3. **resolve 覆盖全部历史**：还原后按 manifest `migrations` 列表**逐条** `prisma migrate resolve --applied`（包括 baseline 和 MigrationJob 对应的 migration），而不是只 resolve baseline；执行前先归一化历史（见 §7.1 第 4 条），仅对目标应用 `prisma/migrations` 目录中存在的迁移 resolve，且 checksum 一致，不一致 fail-closed。
 4. 导入期间目标侧 Web/API 对普通用户不可用（DB 被重建）；进度由 CLI 输出与状态文件提供，UI 通过不依赖 DB 的只读端点读取状态文件。
 
 ## 6. 导出器详细设计
@@ -264,7 +264,7 @@ pg_dump -Fc \
 1. `formatVersion` 支持；
 2. **`appVersion` 与目标应用版本完全一致**。不一致直接拒绝并提示两条出路：把其中一侧升级到同版本，或对 dump 执行 `docs/migrate-data-to-vercel-r2.md` §4 的离线升级流程后重新打包/导入（一期不提供自动化）；
 3. `dumpSha256` 与实际文件一致；
-4. manifest `migrations` 列表与目标应用 `prisma/migrations` 目录逐条比对（名称存在、checksum 一致、顺序兼容），不一致拒绝；
+4. manifest `migrations` 列表与目标应用 `prisma/migrations` 目录**归一化后**比对：目标目录中存在文件夹的迁移须 checksum 一致，不一致拒绝；**没有文件夹的迁移**在包内含 baseline（`00000000000000_baseline_v1`）时视为"单 baseline 已合并的旧历史"直接跳过——过渡库的 `_prisma_migrations` 仍保留被 baseline 合并的旧记录（应用已不打包其文件夹），原样比对会让所有过渡后导出的包无法导入；无文件夹且无 baseline 时仍拒绝（目标版本不兼容）。导出端 `collectMigrations` 同样只记录应用打包的迁移，并校验源库含 baseline。
 5. 目标允许已有数据（已确认决策）：导入器会**先彻底腾空目标数据库**再还原，**不做自动备份**。这是不可逆操作，导入前必须有管理员二次确认（输入确认语），并建议目标为低价值/测试数据。
 6. 还原后**不得运行** `bootstrap-production.ts` / `seed.cjs` / `db reset`——源数据自带最高管理员与 workspace，`bootstrapProduction` 检测到已有 super_admin 会自动跳过，天然安全。
 
