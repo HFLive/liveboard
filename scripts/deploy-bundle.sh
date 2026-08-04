@@ -210,6 +210,10 @@ fi
 BUNDLE_DIR="$RELEASE_DIR"
 COMPOSE_FILE="$BUNDLE_DIR/docker-compose.yml"
 IMAGES_FILE="$BUNDLE_DIR/images.tar.gz"
+# compose 项目上下文参数：所有 docker compose 调用（包括为 baseline 历史过渡
+# 生成的 wrapper 脚本）必须一致，否则从非发布目录运行时 docker compose 找不到
+# liveboard 项目。发布路径约定不含空格，可安全按空白拆分。
+COMPOSE_BASE_ARGS="--project-name liveboard --project-directory $BUNDLE_DIR --file $COMPOSE_FILE"
 MANIFEST_FILE="$BUNDLE_DIR/manifest.txt"
 NGINX_FILE="$BUNDLE_DIR/nginx.conf"
 
@@ -336,11 +340,7 @@ compose() {
   LIVEBOARD_API_IMAGE="liveboard-api:${VERSION}" \
     LIVEBOARD_WEB_IMAGE="liveboard-web:${VERSION}" \
     LIVEBOARD_MIGRATION_HOST_DIR="$STATE_DIR/migration" \
-    docker compose \
-      --project-name liveboard \
-      --project-directory "$BUNDLE_DIR" \
-      --file "$COMPOSE_FILE" \
-      "$@"
+    docker compose $COMPOSE_BASE_ARGS "$@"
 }
 
 echo "启动基础设施服务..."
@@ -386,14 +386,20 @@ if [ "${EXISTING_MIGRATIONS:-0}" -gt 0 ] 2>/dev/null; then
 #!/bin/sh
 db=$(printf '%s' "$DATABASE_URL" | sed -E 's|.*/([^/?]+)(\?.*)?$|\1|')
 shift
-exec docker compose exec -T postgres sh -c "exec psql -U \"\$POSTGRES_USER\" -d \"$db\" \"\$@\"" psql-wrapper "$@"
+exec docker compose $LIVEBOARD_COMPOSE_ARGS exec -T postgres sh -c "exec psql -U \"\$POSTGRES_USER\" -d \"$db\" \"\$@\"" psql-wrapper "$@"
 LBWEOF
   cat > "$RELEASE_DIR/transition-prisma.sh" <<'LBWEOF'
 #!/bin/sh
-exec docker compose run --rm --no-deps -e DATABASE_URL="$DATABASE_URL" migrate node node_modules/prisma/build/index.js "$@"
+exec docker compose $LIVEBOARD_COMPOSE_ARGS run --rm --no-deps -e DATABASE_URL="$DATABASE_URL" migrate node node_modules/prisma/build/index.js "$@"
 LBWEOF
   chmod +x "$RELEASE_DIR/transition-psql.sh" "$RELEASE_DIR/transition-prisma.sh"
+  # wrapper 需要与 compose() 完全相同的项目上下文；此处以环境变量传入，重新生成的
+  # wrapper 也能解析到 liveboard 项目，而不是依赖安装器的工作目录。
   if ! DATABASE_URL="postgresql://${POSTGRES_USER:-liveboard}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-liveboard}?schema=public" \
+    LIVEBOARD_COMPOSE_ARGS="$COMPOSE_BASE_ARGS" \
+    LIVEBOARD_API_IMAGE="liveboard-api:${VERSION}" \
+    LIVEBOARD_WEB_IMAGE="liveboard-web:${VERSION}" \
+    LIVEBOARD_MIGRATION_HOST_DIR="$STATE_DIR/migration" \
     PSQL="$RELEASE_DIR/transition-psql.sh" \
     PRISMA_CMD="$RELEASE_DIR/transition-prisma.sh" \
     sh "$RELEASE_DIR/legacy-baseline-transition.sh" --execute; then

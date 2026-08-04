@@ -96,6 +96,17 @@ printf '%s\n' 'release=v1.0.0' >"$BUNDLE_DIR/manifest.txt"
 
 cat >"$BIN_DIR/docker" <<'EOF'
 #!/bin/sh
+# 模拟 Docker Compose v2：exec/run 必须携带项目上下文（--project-name liveboard），
+# 否则复现真实环境的 "no configuration file provided" 失败（回归：过渡 wrapper
+# 曾因裸 docker compose 找不到 liveboard 项目而在升级时失败）。
+case " $* " in
+  *" compose "*" exec "*|*" compose "*" run "*)
+    case " $* " in
+      *"--project-name liveboard"*) : ;;
+      *) echo "mock docker: no configuration file provided" >&2; exit 1 ;;
+    esac
+    ;;
+esac
 case " $* " in
   *" compose version "* | *" image inspect "* | *" load "*)
     exit 0
@@ -305,6 +316,14 @@ PATH="$BIN_DIR:$PATH" \
 grep -q '检测到既有数据库 migration 历史' "$TEST_DIR/transition-run.log"
 test -s "$TRANSITION_PRISMA_LOG"
 grep -q 'migrate resolve --applied 00000000000000_baseline_v1' "$TRANSITION_PRISMA_LOG"
+grep -q -- 'docker compose $LIVEBOARD_COMPOSE_ARGS exec' "$SECOND_STATE_DIR/releases/v1.0.2/transition-psql.sh" || {
+  echo "transition-psql.sh 应携带 compose 项目上下文。" >&2
+  exit 1
+}
+grep -q -- 'docker compose $LIVEBOARD_COMPOSE_ARGS run' "$SECOND_STATE_DIR/releases/v1.0.2/transition-prisma.sh" || {
+  echo "transition-prisma.sh 应携带 compose 项目上下文。" >&2
+  exit 1
+}
 if grep -q '数据库历史过渡失败' "$TEST_DIR/transition-run.log"; then
   echo "升级不应报告数据库历史过渡失败。" >&2
   exit 1

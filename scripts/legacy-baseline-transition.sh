@@ -109,9 +109,39 @@ BEGIN
       FOREIGN KEY ("forumPostId") REFERENCES "ForumPost"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   END IF;
 END $$;
+-- 镜像增量 migration 20260804000000_add_migration_job（双向打包迁移新增）。
+-- fresh 部署由 migrate deploy 应用；既有库经这里补齐后，下方必须
+-- resolve --applied 该迁移，否则 migrate deploy 会尝试重复建表而失败。
+CREATE TYPE "MigrationJobKind" AS ENUM ('export', 'import');
+CREATE TYPE "MigrationJobStatus" AS ENUM ('pending', 'running', 'succeeded', 'failed');
+CREATE TABLE "MigrationJob" (
+    "id" TEXT NOT NULL,
+    "kind" "MigrationJobKind" NOT NULL,
+    "status" "MigrationJobStatus" NOT NULL DEFAULT 'pending',
+    "packageName" TEXT,
+    "appVersion" TEXT,
+    "manifest" JSONB,
+    "phase" TEXT NOT NULL DEFAULT '',
+    "progress" JSONB,
+    "error" TEXT,
+    "createdById" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "startedAt" TIMESTAMP(3),
+    "finishedAt" TIMESTAMP(3),
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "MigrationJob_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX "MigrationJob_createdById_createdAt_idx" ON "MigrationJob"("createdById", "createdAt");
+ALTER TABLE "MigrationJob" ADD CONSTRAINT "MigrationJob_createdById_fkey"
+  FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 COMMIT;
 SQL
 )
+
+# 桥接 SQL 已覆盖、需要显式标记 applied 的增量 migration。fresh 部署时这些迁移
+# 由 migrate deploy 应用；既有库的建表/枚举已直接写入 BRIDGE_SQL，过渡时必须
+# resolve --applied，否则 migrate deploy 会尝试重复执行。
+BRIDGE_COVERED_MIGRATIONS="20260804000000_add_migration_job"
 
 fail() {
   echo "[legacy-baseline-transition] 错误: $*" >&2
@@ -201,18 +231,26 @@ fi
 
 echo "[legacy-baseline-transition] 历史校验通过：$seen_count 条旧 migration 全部成功且 checksum 匹配。"
 
-# 3. 检查是否已经过渡（bridge 已应用 或 baseline 已 resolve）
+# 3. 检查是否已经过渡（bridge 已应用 或 baseline 已 resolve）。bridge 判断必须
+#    同时覆盖 PendingUpload.storageBackend 与 MigrationJob：历史 release 的桥接
+#    SQL 只补齐前者，若只按它判断会把"部分应用"误判为已完成，导致增量 migration
+#    （MigrationJob）缺失而 diff 失败。
 BRIDGE_APPLIED=$(db_query "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'PendingUpload' AND column_name = 'storageBackend';") || exit 1
+MIGRATION_JOB_PRESENT=$(db_query "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'MigrationJob';") || exit 1
 ALREADY_RESOLVED=$(db_query "SELECT COUNT(*) FROM _prisma_migrations WHERE migration_name = '$BASELINE' AND finished_at IS NOT NULL;") || exit 1
 
-if [ "$BRIDGE_APPLIED" -gt 0 ] || [ "$ALREADY_RESOLVED" -gt 0 ]; then
-  if [ "$ALREADY_RESOLVED" -gt 0 ]; then
-    echo "[legacy-baseline-transition] baseline 已标记完成，重复执行安全，退出。"
-    exit 0
-  fi
-  echo "[legacy-baseline-transition] 检测到 bridge 已应用（PendingUpload.storageBackend 已存在），将只进行 baseline resolve。"
+if [ "$ALREADY_RESOLVED" -gt 0 ]; then
+  echo "[legacy-baseline-transition] baseline 已标记完成，重复执行安全，退出。"
+  exit 0
+fi
+
+# 桥接 SQL 对 PendingUpload 相关语句带 IF NOT EXISTS，MigrationJob 在此状态下
+# 必不存在，重复执行安全。
+if [ "${BRIDGE_APPLIED:-0}" -gt 0 ] && [ "${MIGRATION_JOB_PRESENT:-0}" -gt 0 ]; then
+  echo "[legacy-baseline-transition] 检测到 bridge 已完整应用，将只进行 baseline resolve。"
   NEED_BRIDGE=0
 else
+  echo "[legacy-baseline-transition] 检测到 bridge 缺失或部分应用，将执行桥接 SQL。"
   NEED_BRIDGE=1
 fi
 
@@ -247,6 +285,17 @@ echo "[legacy-baseline-transition] 校验桥接后的实际 schema 与最终 sch
 echo "[legacy-baseline-transition] 标记 baseline 已应用…"
 "$PRISMA_CMD" migrate resolve --applied "$BASELINE" ||
   fail "prisma migrate resolve 失败。"
+
+echo "[legacy-baseline-transition] 标记桥接 SQL 已覆盖的增量迁移已应用…"
+for migration in $BRIDGE_COVERED_MIGRATIONS; do
+  [ -n "$migration" ] || continue
+  already=$(db_query "SELECT COUNT(*) FROM _prisma_migrations WHERE migration_name = '$migration' AND finished_at IS NOT NULL;") || exit 1
+  if [ "${already:-0}" -eq 0 ]; then
+    echo "[legacy-baseline-transition]   resolve --applied $migration"
+    "$PRISMA_CMD" migrate resolve --applied "$migration" ||
+      fail "prisma migrate resolve 失败（${migration}）。"
+  fi
+done
 
 echo "[legacy-baseline-transition] 运行 prisma migrate deploy 确认无 pending…"
 "$PRISMA_CMD" migrate deploy ||

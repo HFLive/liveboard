@@ -53,6 +53,7 @@ export MOCK_BRIDGE_APPLIED="0"
 export MOCK_BASELINE_RESOLVED="0"
 export MOCK_PSQL_FAIL="0"
 export MOCK_PRISMA_DIFF_FAIL="0"
+export MOCK_MIGRATION_JOB_PRESENT="0"
 
 # mock psql：根据 -c 查询返回固定数据
 cat > "$BIN_DIR/psql" <<'MOCK'
@@ -78,6 +79,12 @@ case "$query" in
     ;;
   *"WHERE migration_name = '00000000000000_baseline_v1'"*)
     echo "$MOCK_BASELINE_RESOLVED"
+    ;;
+  *"WHERE migration_name = '20260804000000_add_migration_job'"*)
+    echo "${MOCK_BRIDGE_MIGRATION_RESOLVED:-0}"
+    ;;
+  *"FROM information_schema.tables"*"MigrationJob"*)
+    echo "${MOCK_MIGRATION_JOB_PRESENT:-0}"
     ;;
   *)
     echo ""
@@ -115,6 +122,7 @@ grep -q "历史校验通过" "$TEST_DIR/check.log" || fail_test "check-only 应�
 grep -q "执行桥接 SQL" "$TEST_DIR/exec.log" || fail_test "execute 应执行桥接 SQL"
 grep -q "migrate diff --from-url" "$PRISMA_LOG" || fail_test "execute 应校验 schema drift"
 grep -q "migrate resolve --applied 00000000000000_baseline_v1" "$PRISMA_LOG" || fail_test "execute 应 resolve baseline"
+grep -q "migrate resolve --applied 20260804000000_add_migration_job" "$PRISMA_LOG" || fail_test "execute 应标记桥接覆盖的增量迁移已应用"
 grep -q "migrate deploy" "$PRISMA_LOG" || fail_test "execute 应运行 migrate deploy"
 grep -q "过渡完成" "$TEST_DIR/exec.log" || fail_test "execute 应报告过渡完成"
 
@@ -193,12 +201,24 @@ if grep -q "migrate resolve" "$PRISMA_LOG"; then
 fi
 MOCK_PRISMA_DIFF_FAIL=0
 
-# 10. bridge 已应用但 baseline 未 resolve → 跳过 bridge 只 resolve
+# 10. bridge 已完整应用但 baseline 未 resolve → 跳过 bridge 只 resolve
 MOCK_BRIDGE_APPLIED=1
+MOCK_MIGRATION_JOB_PRESENT=1
 : > "$PRISMA_LOG"
 "$SCRIPT" --execute > "$TEST_DIR/rebridge.log" 2>&1 || fail_test "bridge 已应用时 execute 应成功"
 grep -q "跳过桥接 SQL" "$TEST_DIR/rebridge.log" || fail_test "应跳过已应用的 bridge"
 grep -q "migrate resolve" "$PRISMA_LOG" || fail_test "仍应 resolve baseline"
 MOCK_BRIDGE_APPLIED=0
+MOCK_MIGRATION_JOB_PRESENT=0
+
+# 11. bridge 部分应用（PendingUpload 已补齐、MigrationJob 缺失）→ 仍执行桥接 SQL
+MOCK_BRIDGE_APPLIED=1
+MOCK_MIGRATION_JOB_PRESENT=0
+: > "$PRISMA_LOG"
+"$SCRIPT" --execute > "$TEST_DIR/partial-bridge.log" 2>&1 || fail_test "部分应用时 execute 应成功"
+grep -q "执行桥接 SQL" "$TEST_DIR/partial-bridge.log" || fail_test "部分应用时应重新执行桥接 SQL"
+grep -q "migrate resolve --applied 20260804000000_add_migration_job" "$PRISMA_LOG" || fail_test "部分应用时应 resolve 增量迁移"
+MOCK_BRIDGE_APPLIED=0
+MOCK_MIGRATION_JOB_PRESENT=0
 
 echo "all legacy-baseline-transition tests passed"
