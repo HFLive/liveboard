@@ -1,10 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import {
-  readJobState,
-  writeJobState,
-} from "./migration-job-file";
+import { readJobState, writeJobState } from "./migration-job-file";
 
 describe("migration-job-file", () => {
   let dir: string;

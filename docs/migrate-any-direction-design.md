@@ -30,12 +30,12 @@
 
 把 LiveBoard 的数据从一套部署迁移到另一套部署，四方向全覆盖：
 
-| 源 → 目标 | 形态 |
-| --------- | ---- |
-| server → server | 自建服务器（MinIO / 阿里云 OSS）→ 自建服务器 |
+| 源 → 目标       | 形态                                                   |
+| --------------- | ------------------------------------------------------ |
+| server → server | 自建服务器（MinIO / 阿里云 OSS）→ 自建服务器           |
 | server → vercel | 自建服务器 → Vercel（Cloudflare R2 + 托管 PostgreSQL） |
-| vercel → server | Vercel → 自建服务器 |
-| vercel → vercel | Vercel → 另一套 Vercel |
+| vercel → server | Vercel → 自建服务器                                    |
+| vercel → vercel | Vercel → 另一套 Vercel                                 |
 
 设计目标：
 
@@ -66,13 +66,13 @@
 
 2. **对象存储**（MinIO / 阿里云 OSS / Cloudflare R2，可混用）：二进制文件只以 `storageKey` 字符串存于 DB，对应 5 类对象，且**每行记录自带 `storageBackend` 字段**：
 
-   | 来源表/字段 | kind |
-   | ----------- | ---- |
-   | `User.avatarStorageKey` | avatar |
-   | `User.bannerStorageKey` | banner |
-   | `Workspace.favicon*`（默认/亮/暗三种变体） | favicon |
-   | `FileAsset.storageKey` | file_asset |
-   | `ClassroomFile.storageKey` | classroom_file |
+   | 来源表/字段                                | kind           |
+   | ------------------------------------------ | -------------- |
+   | `User.avatarStorageKey`                    | avatar         |
+   | `User.bannerStorageKey`                    | banner         |
+   | `Workspace.favicon*`（默认/亮/暗三种变体） | favicon        |
+   | `FileAsset.storageKey`                     | file_asset     |
+   | `ClassroomFile.storageKey`                 | classroom_file |
 
 `storageKey` 全局唯一且与 bucket 无关，这是"换存储后端后引用仍然成立"的关键。注意 `storageKey` 形如 `workspace/file.pdf`，**含 `/`**，打包时必须做平铺与清洗（见 §4）。
 
@@ -80,14 +80,14 @@
 
 不从头发明，尽量复用已证明的代码：
 
-| 资产 | 位置 | 复用方式 |
-| ---- | ---- | -------- |
-| 对象枚举（按 DB 引用收集 storageKey + backend） | `apps/api/scripts/migrate-storage-to-r2.ts` 的 `collectRefs` | 导出/导入两侧直接复用；去掉"翻转源库 backend"副作用 |
-| 对象逐项复制 + 校验 + 切换 | 同上 `migrateOne`、`Summary` | 导入侧改目标为"当前激活 backend"，目标后端参数化（原实现硬编码 `r2`）；期望大小改为仅以 manifest 为准 |
-| 数据库备份/恢复配方 | `docs/migrate-data-to-vercel-r2.md`（pg_dump 排除表、pg_restore、离线升级、单 baseline） | 沿用其 dump/restore 参数与校验思路；目标腾空与 resolve 步骤按本文 §7 加强 |
-| 迁移后校验 | `apps/api/scripts/verify-vercel-data-migration.ts` | 改编为通用校验函数（行数对比、孤立引用、缺失对象=0） |
-| 最高管理员判定 | `StorageService.requireSuperAdmin`（`apps/api/src/modules/storage/storage.service.ts`）、`isSuperAdmin`（`packages/shared/src/permissions.ts`） | 新模块复用 |
-| 存储后端抽象 | `apps/api/src/modules/storage/storage-backend.ts`、`StorageService.backendFor`/`activeBackend` | 导入写对象、导出读对象统一走这套接口 |
+| 资产                                            | 位置                                                                                                                                            | 复用方式                                                                                              |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 对象枚举（按 DB 引用收集 storageKey + backend） | `apps/api/scripts/migrate-storage-to-r2.ts` 的 `collectRefs`                                                                                    | 导出/导入两侧直接复用；去掉"翻转源库 backend"副作用                                                   |
+| 对象逐项复制 + 校验 + 切换                      | 同上 `migrateOne`、`Summary`                                                                                                                    | 导入侧改目标为"当前激活 backend"，目标后端参数化（原实现硬编码 `r2`）；期望大小改为仅以 manifest 为准 |
+| 数据库备份/恢复配方                             | `docs/migrate-data-to-vercel-r2.md`（pg_dump 排除表、pg_restore、离线升级、单 baseline）                                                        | 沿用其 dump/restore 参数与校验思路；目标腾空与 resolve 步骤按本文 §7 加强                             |
+| 迁移后校验                                      | `apps/api/scripts/verify-vercel-data-migration.ts`                                                                                              | 改编为通用校验函数（行数对比、孤立引用、缺失对象=0）                                                  |
+| 最高管理员判定                                  | `StorageService.requireSuperAdmin`（`apps/api/src/modules/storage/storage.service.ts`）、`isSuperAdmin`（`packages/shared/src/permissions.ts`） | 新模块复用                                                                                            |
+| 存储后端抽象                                    | `apps/api/src/modules/storage/storage-backend.ts`、`StorageService.backendFor`/`activeBackend`                                                  | 导入写对象、导出读对象统一走这套接口                                                                  |
 
 **设计规则（本次核心决策）**：
 
@@ -180,12 +180,12 @@ liveboard-migration-<jobId>.tar
 
 ### 5.2 后台按钮可用范围
 
-| 方向 | 导出按钮 | 导入按钮 | 说明 |
-| ---- | -------- | -------- | ---- |
-| server → server | ✅ 源服务器 | ✅ 目标服务器 | 全程按钮；包经管理员电脑搬运后**以路径式导入**（§6.5） |
-| server → vercel | ✅ 源服务器 | ❌ Vercel 无按钮 | DB 还原由管理员电脑执行；对象由源服务器直推 R2 |
-| vercel → server | ❌ Vercel 无按钮 | ✅ 目标服务器 | DB 由管理员电脑 dump；对象由目标服务器直拉 R2 |
-| vercel → vercel | ❌ | ❌ | 管理员电脑执行引擎 + 向导 |
+| 方向            | 导出按钮         | 导入按钮         | 说明                                                   |
+| --------------- | ---------------- | ---------------- | ------------------------------------------------------ |
+| server → server | ✅ 源服务器      | ✅ 目标服务器    | 全程按钮；包经管理员电脑搬运后**以路径式导入**（§6.5） |
+| server → vercel | ✅ 源服务器      | ❌ Vercel 无按钮 | DB 还原由管理员电脑执行；对象由源服务器直推 R2         |
+| vercel → server | ❌ Vercel 无按钮 | ✅ 目标服务器    | DB 由管理员电脑 dump；对象由目标服务器直拉 R2          |
+| vercel → vercel | ❌               | ❌               | 管理员电脑执行引擎 + 向导                              |
 
 ### 5.3 MigrationJob 规则（消除与验证链路的冲突）
 
@@ -228,12 +228,12 @@ pg_dump -Fc \
 
 ### 6.3 对象传输策略（按方向，即"离目标近谁搬"）
 
-| 方向 | 策略 | 说明 |
-| ---- | ---- | ---- |
-| server → server | 打进包（默认），或源存储是公网 OSS 时由目标服务器直拉 | MinIO 一般只监听内网，目标拉不到 → 走包 |
-| server → vercel | 源服务器**直接推 R2**（`migrateOne` 复制逻辑，目标改为 R2）| 避免大文件先下后传；DB dump 仍需随包走管理员电脑 |
-| vercel → server | **目标服务器从 R2 直拉** | Vercel 无法推送，目标服务器（有 R2 凭据）主动拉 |
-| vercel → vercel | 管理员电脑或任一台服务器执行 R2→R2 复制 | 两侧都够不到内网存储，必须第三方中转 |
+| 方向            | 策略                                                        | 说明                                             |
+| --------------- | ----------------------------------------------------------- | ------------------------------------------------ |
+| server → server | 打进包（默认），或源存储是公网 OSS 时由目标服务器直拉       | MinIO 一般只监听内网，目标拉不到 → 走包          |
+| server → vercel | 源服务器**直接推 R2**（`migrateOne` 复制逻辑，目标改为 R2） | 避免大文件先下后传；DB dump 仍需随包走管理员电脑 |
+| vercel → server | **目标服务器从 R2 直拉**                                    | Vercel 无法推送，目标服务器（有 R2 凭据）主动拉  |
+| vercel → vercel | 管理员电脑或任一台服务器执行 R2→R2 复制                     | 两侧都够不到内网存储，必须第三方中转             |
 
 直推/直拉的**凭据与执行主体**（v2 补齐）：
 
@@ -352,12 +352,14 @@ Redis 中的运行时状态（会话、登录失败计数、分片上传会话�
 > 每一阶段独立可交付、可验证；引擎一次建成，四个方向逐个接线。
 
 ### P0 基础设施
+
 - `apps/api/Dockerfile`：runner 镜像加入 `postgresql16-client`（已确认决策，重打自托管离线发布包）。
 - Prisma：新增 `MigrationJob` 模型 + migration（记录任务状态/进度/方向/结果；dump 排除规则见 §5.3）。
 - docker-compose 与 `.run` 安装器：新增 `/opt/liveboard/migration` ↔ 容器 `/data/migration` 挂载（§6.5）。
 - "维护/只读模式"开关（已确认决策）：拒绝普通写操作 + 前端横幅；super_admin 保留登录、开关与导出能力；导出期间默认开启。
 
 ### P1 引擎 + server → server
+
 - 新增 `apps/api/scripts/migrate-export.ts`、`migrate-import.ts`、`migrate-verify.ts`（抽取 `collectRefs`/`migrateOne` 的通用化版本：去掉源库翻转副作用、目标后端参数化、期望大小仅以 manifest 为准）。
 - 新 `MigrationModule`（`apps/api/src/modules/migration/`）：`POST admin/migration/export`、`POST admin/migration/import`、`GET admin/migration/jobs/:id`（含读本地状态文件的降级路径，§5.3）。
 - Web 后台 `/app/admin/migration` 页：导出按钮 + 进度 + 取包指引；导入支持"选择 incoming 目录中的包"（主）与浏览器上传小包（辅）+ 二次确认输入框 + 结果展示。
@@ -365,17 +367,20 @@ Redis 中的运行时状态（会话、登录失败计数、分片上传会话�
 - 产出与校验：server→server 全程按钮跑通，`migrate-verify` 全绿。
 
 ### P2 server → vercel
+
 - 导出器支持"对象直推 R2"模式（复用 `migrateOne` 复制逻辑，目标 = R2；目标 R2 凭据走一次性交接，§6.3）。
 - `migrate-import --finalize-objects`：DB 还原后在管理员电脑执行的"逐对象 stat + backend 翻转"收尾命令。
 - 向导页指导管理员在电脑执行 DB 还原（直连 URL）+ resolve + Vercel 环境配置。
 - 产出：源服务器点导出 → 对象直推 R2 + 下载 `database.dump` → 管理员电脑一条命令还原 → finalize → Vercel 后台填 AI 密钥。
 
 ### P3 vercel → server / vercel → vercel
+
 - 提供"管理员电脑可跑的导出工具"（用公网直连连接串 `pg_dump` + 从源 R2 拉对象），复用同一引擎。
 - vercel→server 的对象由目标服务器从源 R2 直拉（凭据一次性交接）；vercel→vercel 由管理员电脑/中转服务器执行 R2→R2 复制（`SOURCE_R2_*`/`TARGET_R2_*` 双配置，§6.3）。
 - 文档补齐向导。
 
 ### P4 文档
+
 - `docs/migrate-server-to-server.md`（操作手册，含演练清单与回滚规则）；
 - `docs/migrate-to-vercel-r2.md`（server→vercel 一键向导版，可替代/引用现有手册）；
 - `docs/migrate-from-vercel.md`（vercel→server / vercel→vercel）。
@@ -388,28 +393,28 @@ Redis 中的运行时状态（会话、登录失败计数、分片上传会话�
 
 ## 11. 风险与边界
 
-| 风险 | 说明 | 缓解 |
-| ---- | ---- | ---- |
-| 服务器缺 `pg_dump` 二进制 | 当前 runner 镜像未带 | P0 加 `postgresql16-client`（锁定 major），重打离线发布包 |
-| pg client 与服务端版本不匹配 | client major < server major 会失败 | 文档明示版本约束；Neon 侧用管理员电脑时同样检查 |
-| Vercel 无服务器限制 | 无 psql、函数时长/内存受限、无持久磁盘 | 凡有 Vercel 的方向，DB 步骤落到管理员电脑（直连 URL）；Vercel 侧零迁移代码 |
-| 大包存储与传输 | 课堂文件可能很大（视频），浏览器上传有 100m 上限，容器无大容量临时盘 | 迁移目录挂载（§6.5）+ 路径式导入为主 + 流式下载/Range；浏览器上传仅小包 |
-| 密钥跨环境 | AI apiKey / OSS Secret 密文物理上在 dump 中 | 导入后第一步强制抹除（§7.5）；包按高敏数据管理（§8）；目标重新填写密钥 |
-| 版本漂移 | 源/目标 schema 不一致 | 强制同版本 fail-closed；跨版本走既有手册离线升级路径 |
-| MigrationJob 与验证链路冲突 | 新表破坏 resolve/drift 校验 | §5.3 规则：排除数据、本地状态文件、resolve 全部历史 |
-| 导入期间目标不可用 | 目标 DB 被腾空重建 | 状态文件 + 不依赖 DB 的只读状态端点；向导明示停机窗口 |
-| 导出窗口写活动 | 快照后删除会造成对象缺失 | 导出期间默认开启维护模式（§6.4）+ 校验阻断 |
+| 风险                         | 说明                                                                 | 缓解                                                                       |
+| ---------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| 服务器缺 `pg_dump` 二进制    | 当前 runner 镜像未带                                                 | P0 加 `postgresql16-client`（锁定 major），重打离线发布包                  |
+| pg client 与服务端版本不匹配 | client major < server major 会失败                                   | 文档明示版本约束；Neon 侧用管理员电脑时同样检查                            |
+| Vercel 无服务器限制          | 无 psql、函数时长/内存受限、无持久磁盘                               | 凡有 Vercel 的方向，DB 步骤落到管理员电脑（直连 URL）；Vercel 侧零迁移代码 |
+| 大包存储与传输               | 课堂文件可能很大（视频），浏览器上传有 100m 上限，容器无大容量临时盘 | 迁移目录挂载（§6.5）+ 路径式导入为主 + 流式下载/Range；浏览器上传仅小包    |
+| 密钥跨环境                   | AI apiKey / OSS Secret 密文物理上在 dump 中                          | 导入后第一步强制抹除（§7.5）；包按高敏数据管理（§8）；目标重新填写密钥     |
+| 版本漂移                     | 源/目标 schema 不一致                                                | 强制同版本 fail-closed；跨版本走既有手册离线升级路径                       |
+| MigrationJob 与验证链路冲突  | 新表破坏 resolve/drift 校验                                          | §5.3 规则：排除数据、本地状态文件、resolve 全部历史                        |
+| 导入期间目标不可用           | 目标 DB 被腾空重建                                                   | 状态文件 + 不依赖 DB 的只读状态端点；向导明示停机窗口                      |
+| 导出窗口写活动               | 快照后删除会造成对象缺失                                             | 导出期间默认开启维护模式（§6.4）+ 校验阻断                                 |
 
 ## 12. 已确认决策（2026-08-04）
 
-| # | 决策 | 结论 |
-| - | ---- | ---- |
-| 1 | 服务器 `pg_dump` 方案 | 改 runner 镜像加 `postgresql-client`，重打自托管离线发布包 |
-| 2 | "维护/只读模式"开关 | 做，纳入 P0 |
-| 3 | AI 密钥迁移 | 不迁移，导入后目标重新填写；目标无需共享 `AI_ENCRYPTION_KEY` |
-| 4 | 导入目标已有数据 | 允许；直接清空目标数据后导入，**不做自动备份**（导入前二次确认护栏） |
-| 5 | 版本兼容策略 | 一期强制源/目标同版本 fail-closed；跨版本引用既有手册 §4 离线升级 |
-| 6 | 目标腾空方式 | `DROP SCHEMA public CASCADE` 后重建，不做表级 TRUNCATE |
-| 7 | MigrationJob 处理 | dump 排除数据；导入期间用本地状态文件；resolve 覆盖全部 migration |
-| 8 | 导入输入方式 | 路径式导入（`/opt/liveboard/migration/incoming/`）为主，浏览器上传仅 ≤100m 小包 |
-| 9 | 直推/直拉凭据交接 | 一次性加密临时文件，任务结束即删，不落库不进日志 |
+| #   | 决策                  | 结论                                                                            |
+| --- | --------------------- | ------------------------------------------------------------------------------- |
+| 1   | 服务器 `pg_dump` 方案 | 改 runner 镜像加 `postgresql-client`，重打自托管离线发布包                      |
+| 2   | "维护/只读模式"开关   | 做，纳入 P0                                                                     |
+| 3   | AI 密钥迁移           | 不迁移，导入后目标重新填写；目标无需共享 `AI_ENCRYPTION_KEY`                    |
+| 4   | 导入目标已有数据      | 允许；直接清空目标数据后导入，**不做自动备份**（导入前二次确认护栏）            |
+| 5   | 版本兼容策略          | 一期强制源/目标同版本 fail-closed；跨版本引用既有手册 §4 离线升级               |
+| 6   | 目标腾空方式          | `DROP SCHEMA public CASCADE` 后重建，不做表级 TRUNCATE                          |
+| 7   | MigrationJob 处理     | dump 排除数据；导入期间用本地状态文件；resolve 覆盖全部 migration               |
+| 8   | 导入输入方式          | 路径式导入（`/opt/liveboard/migration/incoming/`）为主，浏览器上传仅 ≤100m 小包 |
+| 9   | 直推/直拉凭据交接     | 一次性加密临时文件，任务结束即删，不落库不进日志                                |

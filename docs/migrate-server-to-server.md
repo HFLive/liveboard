@@ -105,12 +105,12 @@ tsx scripts/migrate-import.ts --job-id import-1 --source <包或目录> --confir
   [--target-backend minio|oss|r2] [--finalize-objects|--pull-source-r2] [--concurrency 4]
 ```
 
-| 标志 | 用途 | 方向 |
-| ---- | ---- | ---- |
-| `--no-objects` | 只记对象清单，不打进包 | vercel→server / vercel→vercel |
-| `--push-r2` | 对象直推目标 R2，包内不含对象 | server→vercel |
-| `--finalize-objects` | 目标端只做"stat + backend 翻转"收尾 | server→vercel |
-| `--pull-source-r2` | 对象从源 R2 直拉进目标后端 | vercel→server / vercel→vercel |
+| 标志                 | 用途                                | 方向                          |
+| -------------------- | ----------------------------------- | ----------------------------- |
+| `--no-objects`       | 只记对象清单，不打进包              | vercel→server / vercel→vercel |
+| `--push-r2`          | 对象直推目标 R2，包内不含对象       | server→vercel                 |
+| `--finalize-objects` | 目标端只做"stat + backend 翻转"收尾 | server→vercel                 |
+| `--pull-source-r2`   | 对象从源 R2 直拉进目标后端          | vercel→server / vercel→vercel |
 
 ## 5. 演练清单
 
@@ -131,12 +131,12 @@ tsx scripts/migrate-import.ts --job-id import-1 --source <包或目录> --confir
 
 ## 7. 迁移数据目录
 
-| 位置 | 宿主机 | 容器 |
-| ---- | ---- | ---- |
-| 导出包 | `/opt/liveboard/migration/exports/` | `/data/migration/exports/` |
-| 导入输入 | `/opt/liveboard/migration/incoming/` | `/data/migration/incoming/` |
-| 任务状态 | `/opt/liveboard/migration/jobs/` | `/data/migration/jobs/` |
-| 维护模式 | `/opt/liveboard/migration/maintenance.json` | 同上 |
+| 位置     | 宿主机                                      | 容器                        |
+| -------- | ------------------------------------------- | --------------------------- |
+| 导出包   | `/opt/liveboard/migration/exports/`         | `/data/migration/exports/`  |
+| 导入输入 | `/opt/liveboard/migration/incoming/`        | `/data/migration/incoming/` |
+| 任务状态 | `/opt/liveboard/migration/jobs/`            | `/data/migration/jobs/`     |
+| 维护模式 | `/opt/liveboard/migration/maintenance.json` | 同上                        |
 
 本地开发可用环境变量 `MIGRATION_DATA_DIR` 指到任意可写目录；docker-compose 用
 `LIVEBOARD_MIGRATION_HOST_DIR` 覆盖宿主目录。

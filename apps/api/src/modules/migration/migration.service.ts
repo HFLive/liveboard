@@ -355,7 +355,9 @@ export class MigrationService {
     try {
       await requireSuperAdmin(this.prisma, userId);
       if (!ensureMigrationDirs(this.paths)) {
-        throw new ServiceUnavailableException("无法访问迁移数据目录，请检查挂载");
+        throw new ServiceUnavailableException(
+          "无法访问迁移数据目录，请检查挂载",
+        );
       }
       if (!file) throw new BadRequestException("未收到文件");
       if (!file.path) throw new BadRequestException("上传文件未落盘");
@@ -408,7 +410,9 @@ export class MigrationService {
       this.assertMigrationSupported();
       await requireSuperAdmin(this.prisma, userId);
       if (!ensureMigrationDirs(this.paths)) {
-        throw new ServiceUnavailableException("无法访问迁移数据目录，请检查挂载");
+        throw new ServiceUnavailableException(
+          "无法访问迁移数据目录，请检查挂载",
+        );
       }
       await this.assertNoRunningJobInFiles();
       const job = await this.createJobRow(userId, "export");

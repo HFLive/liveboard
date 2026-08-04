@@ -29,7 +29,8 @@ export async function readMaintenanceStateFile(
   } catch (caught) {
     // 文件不存在视为从未开启；其它读错误（权限/损坏/并发写坏）向上抛，由调用方
     // 决定 fail-closed（维护模式按开启处理），绝不静默当作"关闭"放行写请求。
-    if ((caught as { code?: unknown }).code === "ENOENT") return MAINTENANCE_OFF;
+    if ((caught as { code?: unknown }).code === "ENOENT")
+      return MAINTENANCE_OFF;
     throw caught;
   }
   const parsed = JSON.parse(raw) as Partial<MaintenanceState>;

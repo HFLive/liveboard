@@ -38,10 +38,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   // jobId 会拼进临时目录名并参与 rm -rf：必须先按与 jobStatePath 相同的规则校验，
   // 防止 `../` 路径穿越越界删除（resolvePackageDir 的 rm 在首次校验之前执行）。
-  if (
-    args.jobId !== null &&
-    !/^[A-Za-z0-9_-]{1,64}$/.test(args.jobId)
-  ) {
+  if (args.jobId !== null && !/^[A-Za-z0-9_-]{1,64}$/.test(args.jobId)) {
     throw new Error(`无效的迁移任务 ID: ${args.jobId}`);
   }
   const prisma = new PrismaClient();

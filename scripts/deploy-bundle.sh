@@ -133,7 +133,11 @@ mkdir -p "$STATE_DIR" "$BACKUP_DIR" "$RELEASES_DIR"
 # 数据迁移目录：导出包/导入包/维护模式状态文件。api 容器以 UID 1000 (node)
 # 运行，需把该目录属主交给它，否则迁移功能无法写入状态与包文件。
 mkdir -p "$STATE_DIR/migration"
-chown 1000:1000 "$STATE_DIR/migration"
+# chown 仅 root 可执行（生产 install/upgrade 走 root）；非 root 环境（测试、
+# 自定义 STATE_DIR 的开发场景）跳过，目录权限由部署环境自行保证。
+if [ "$(id -u)" -eq 0 ]; then
+  chown 1000:1000 "$STATE_DIR/migration"
+fi
 chmod 700 "$STATE_DIR/migration"
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   lock_pid=$(sed -n '1p' "$LOCK_DIR/pid" 2>/dev/null || true)

@@ -17,11 +17,11 @@
 
 `SOURCE_R2_*` 只用于本次迁移，用后即删：
 
-| 变量 | 含义 |
-| ---- | ---- |
-| `SOURCE_R2_ACCOUNT_ID` / `SOURCE_R2_BUCKET` | 源 R2 账号与 Bucket |
-| `SOURCE_R2_ACCESS_KEY_ID` / `SOURCE_R2_SECRET_ACCESS_KEY` | 源 R2 API Token |
-| `SOURCE_R2_ENDPOINT`（可选） | R2 兼容网关才需覆盖 |
+| 变量                                                      | 含义                |
+| --------------------------------------------------------- | ------------------- |
+| `SOURCE_R2_ACCOUNT_ID` / `SOURCE_R2_BUCKET`               | 源 R2 账号与 Bucket |
+| `SOURCE_R2_ACCESS_KEY_ID` / `SOURCE_R2_SECRET_ACCESS_KEY` | 源 R2 API Token     |
+| `SOURCE_R2_ENDPOINT`（可选）                              | R2 兼容网关才需覆盖 |
 
 ## 3. vercel → server
 

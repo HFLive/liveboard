@@ -60,7 +60,12 @@ function r2Backend(prefix = "R2"): R2StorageBackend | null {
   }
 }
 
-const R2_SUFFIXES = ["ACCOUNT_ID", "BUCKET", "ACCESS_KEY_ID", "SECRET_ACCESS_KEY"];
+const R2_SUFFIXES = [
+  "ACCOUNT_ID",
+  "BUCKET",
+  "ACCESS_KEY_ID",
+  "SECRET_ACCESS_KEY",
+];
 
 /**
  * 某前缀的 R2 变量是否完整配置。
@@ -69,8 +74,8 @@ const R2_SUFFIXES = ["ACCOUNT_ID", "BUCKET", "ACCESS_KEY_ID", "SECRET_ACCESS_KEY
  * - 部分齐全 → throw（静默回退会让源==目标导致"假成功"导入，必须显式报错）。
  */
 function assertR2PrefixComplete(prefix: string): boolean {
-  const anyPresent = R2_SUFFIXES.some(
-    (suffix) => process.env[`${prefix}_${suffix}`]?.trim(),
+  const anyPresent = R2_SUFFIXES.some((suffix) =>
+    process.env[`${prefix}_${suffix}`]?.trim(),
   );
   if (!anyPresent) return false;
   const missing = R2_SUFFIXES.filter(

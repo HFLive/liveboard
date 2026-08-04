@@ -61,10 +61,7 @@ export class ActiveUserGuard implements CanActivate {
         typeof prismaCode === "string" && prismaCode.startsWith("P");
       if (!dbUnavailable) throw caught;
       const method = (request.method ?? "GET").toUpperCase();
-      if (
-        method === "GET" &&
-        (await this.maintenance.isEnabled())
-      ) {
+      if (method === "GET" && (await this.maintenance.isEnabled())) {
         request.currentUserId = session.userId;
         request.degradedSession = true;
         return true;

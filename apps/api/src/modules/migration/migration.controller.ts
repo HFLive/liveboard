@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { createReadStream, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Request, Response } from "express";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
@@ -29,17 +30,21 @@ class StartImportDto {
 
 /**
  * 浏览器上传落盘目录（≤100MB 小包）；与 service 的 MIGRATION_DATA_DIR 一致。
- * 目录创建必须容错：Vercel 只读文件系统、宿主未挂载时在模块加载期直接 EROFS
- * 会把整个 API 击穿。失败时忽略，上传接口会在请求期由 ensureMigrationDirs 降级拒绝。
+ * 目录创建必须容错：Vercel 只读文件系统、宿主未挂载、CI 直跑（无挂载）时，
+ * 应用仍必须能启动。multer 的 DiskStorage 构造器在实例化 FileInterceptor 时
+ * 会自行 mkdirSync(dest)——这一步不在 controller 的 try/catch 覆盖范围内，
+ * 直接把不可写路径传给它会在 Nest 实例化 controller 时抛 EACCES，击穿整个 API。
+ * 因此不可写时回退到系统临时目录；上传接口在请求期由 ensureMigrationDirs 判定
+ * 不可用并拒绝（同时清理 multer 已落盘的临时文件）。
  */
-const UPLOAD_DEST = path.join(
+let UPLOAD_DEST = path.join(
   process.env.MIGRATION_DATA_DIR?.trim() || "/data/migration",
   "incoming",
 );
 try {
   mkdirSync(UPLOAD_DEST, { recursive: true, mode: 0o700 });
 } catch {
-  // 忽略：目录不可用（Vercel / 未挂载）时相关接口会在请求期拒绝。
+  UPLOAD_DEST = tmpdir();
 }
 
 const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024;

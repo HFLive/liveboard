@@ -87,7 +87,12 @@ beforeEach(() => {
   URL.revokeObjectURL = vi.fn();
   vi.mocked(getMigrationInfo).mockResolvedValue({ info });
   vi.mocked(getAdminMaintenance).mockResolvedValue({
-    maintenance: { enabled: false, reason: null, updatedAt: null, updatedBy: null },
+    maintenance: {
+      enabled: false,
+      reason: null,
+      updatedAt: null,
+      updatedBy: null,
+    },
   });
   vi.mocked(listMigrationIncoming).mockResolvedValue({
     packages: [packageItem],
@@ -121,9 +126,7 @@ describe("MigrationClient", () => {
     await waitFor(() => expect(startMigrationImport).toHaveBeenCalledTimes(1));
     // 导入启动成功后选择与确认语被清空，导入按钮回到禁用态。
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /清空并导入/ }),
-      ).toBeDisabled(),
+      expect(screen.getByRole("button", { name: /清空并导入/ })).toBeDisabled(),
     );
   });
 

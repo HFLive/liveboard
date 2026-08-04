@@ -26,12 +26,12 @@
 
 `TARGET_R2_*` 只用于本次迁移，**用后即删**，不写入 `StorageSettings`、不进日志：
 
-| 变量 | 含义 |
-| ---- | ---- |
-| `TARGET_R2_ACCOUNT_ID` | 目标 R2 账号 ID（Cloudflare 仪表盘） |
-| `TARGET_R2_BUCKET` | 目标 R2 Bucket（与 Vercel 应用 `R2_BUCKET` 一致） |
-| `TARGET_R2_ACCESS_KEY_ID` / `TARGET_R2_SECRET_ACCESS_KEY` | 目标 R2 API Token |
-| `TARGET_R2_ENDPOINT`（可选） | R2 兼容网关才需覆盖端点；真实 Cloudflare R2 省略 |
+| 变量                                                      | 含义                                              |
+| --------------------------------------------------------- | ------------------------------------------------- |
+| `TARGET_R2_ACCOUNT_ID`                                    | 目标 R2 账号 ID（Cloudflare 仪表盘）              |
+| `TARGET_R2_BUCKET`                                        | 目标 R2 Bucket（与 Vercel 应用 `R2_BUCKET` 一致） |
+| `TARGET_R2_ACCESS_KEY_ID` / `TARGET_R2_SECRET_ACCESS_KEY` | 目标 R2 API Token                                 |
+| `TARGET_R2_ENDPOINT`（可选）                              | R2 兼容网关才需覆盖端点；真实 Cloudflare R2 省略  |
 
 ## 3. 源服务器导出（对象直推 R2）
 
