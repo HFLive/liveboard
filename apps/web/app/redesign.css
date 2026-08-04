@@ -115,6 +115,28 @@ textarea {
 
 /* Application frame and navigation */
 
+/* 维护/只读模式横幅：普通用户看到提示，最高管理员到管理中心关闭。 */
+.maintenance-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: var(--danger-soft);
+  color: var(--danger);
+  padding: 7px 16px;
+  font-size: 12px;
+}
+
+.maintenance-banner > svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.maintenance-banner .muted {
+  color: var(--muted);
+}
+
 .app-frame {
   grid-template-columns: 108px minmax(0, 1fr);
   min-height: 100dvh;

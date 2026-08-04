@@ -1,0 +1,498 @@
+.migration-page {
+  min-width: 0;
+}
+
+.migration-page .migration-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  width: min(760px, 100%);
+  margin-inline: auto;
+}
+
+.migration-page .migration-sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+  min-width: 0;
+  padding: 0;
+}
+
+.migration-page .migration-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  min-width: 0;
+}
+
+.migration-page .migration-section + .migration-section {
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
+
+.migration-page .migration-section .panel-head {
+  padding: 0 0 13px;
+}
+
+.migration-page .migration-section .panel-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.migration-page .migration-section .panel-head p {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.migration-page .migration-section .panel-head p strong {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.migration-unavailable-panel {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  width: min(760px, 100%);
+  margin: 0 auto 22px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 16px 0;
+}
+
+.migration-unavailable-panel > svg {
+  width: 22px;
+  height: 22px;
+  color: var(--danger);
+}
+
+.migration-unavailable-panel p {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.migration-unavailable-panel code {
+  font-size: 11px;
+}
+
+/* 维护模式开关 */
+.maintenance-toggle-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.maintenance-state {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.maintenance-state .maintenance-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  align-self: center;
+}
+
+.maintenance-state.on .maintenance-dot {
+  background: var(--danger);
+}
+
+.maintenance-state.off .maintenance-dot {
+  background: var(--accent);
+}
+
+.maintenance-state small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.maintenance-toggle-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.maintenance-reason-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.maintenance-reason-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+}
+
+.maintenance-toggle-controls .button {
+  flex: 0 0 auto;
+}
+
+/* 导出 */
+.export-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.export-hint {
+  margin: 0;
+  font-size: 12px;
+}
+
+.export-push-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.export-push-toggle input {
+  margin-top: 2px;
+  accent-color: var(--accent, #4f6bf7);
+}
+
+.export-push-toggle code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.export-hint code,
+.import-upload-row code,
+.import-actions code {
+  font-size: 11px;
+}
+
+.export-result-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+/* 导入 */
+.import-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  min-width: 0;
+}
+
+.import-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.import-upload-row p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.import-upload-button {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.import-upload-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.import-package-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.import-package-label {
+  padding: 0 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.import-package-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding: 10px 0;
+  cursor: pointer;
+}
+
+/* 第一个选项前是 label（span），用 first-of-type 匹配首行选项。 */
+.import-package-option:first-of-type {
+  border-top: none;
+}
+
+.import-package-option:hover {
+  background: var(--fill-subtle);
+}
+
+.import-package-option input {
+  width: 15px;
+  height: 15px;
+}
+
+.import-package-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.import-package-meta {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.import-confirm-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.import-confirm-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+}
+
+.import-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.import-actions p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.import-actions .inline-icon {
+  width: 15px;
+  height: 15px;
+  margin-right: 4px;
+  color: var(--danger);
+  vertical-align: -2px;
+}
+
+.import-actions .button {
+  flex: 0 0 auto;
+}
+
+/* 任务列表 */
+.jobs-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  min-width: 0;
+}
+
+.job-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+}
+
+.job-row:first-child {
+  border-top: none;
+}
+
+.job-row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.job-kind {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--fill-active);
+  color: var(--muted);
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.job-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.job-status-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.job-status-running {
+  color: var(--accent);
+}
+
+.job-status-succeeded {
+  color: var(--accent);
+}
+
+.job-status-failed {
+  color: var(--danger);
+}
+
+.job-status-pending {
+  color: var(--muted);
+}
+
+.job-time {
+  margin-left: auto;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.job-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.job-progress-bar {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--fill-active);
+}
+
+.job-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.job-progress span {
+  font-size: 11px;
+}
+
+.job-error {
+  margin: 0;
+  font-size: 12px;
+}
+
+.job-download {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.job-download code {
+  font-size: 11px;
+}
+
+.spin {
+  animation: migration-spin 0.9s linear infinite;
+}
+
+@keyframes migration-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 980px) {
+  .migration-page .migration-layout {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .migration-unavailable-panel {
+    width: 100%;
+  }
+}
+
+@media (max-width: 680px) {
+  .maintenance-toggle-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .maintenance-toggle-controls .button {
+    width: 100%;
+  }
+
+  .import-upload-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .import-package-option {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  .import-package-meta {
+    grid-column: 2;
+  }
+
+  .import-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .import-actions .button {
+    width: 100%;
+  }
+
+  .job-row-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .job-time {
+    margin-left: 0;
+    width: 100%;
+  }
+}

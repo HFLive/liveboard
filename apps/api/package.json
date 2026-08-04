@@ -16,7 +16,10 @@
     "db:reset": "dotenv -e ../../.env -- prisma migrate reset",
     "db:seed": "dotenv -e ../../.env -- node prisma/seed.cjs",
     "migrate-storage-to-r2": "dotenv -e ../../.env -- tsx scripts/migrate-storage-to-r2.ts",
-    "verify-vercel-data-migration": "dotenv -e ../../.env -- tsx scripts/verify-vercel-data-migration.ts"
+    "verify-vercel-data-migration": "dotenv -e ../../.env -- tsx scripts/verify-vercel-data-migration.ts",
+    "migrate-export": "dotenv -e ../../.env -- tsx scripts/migrate-export.ts",
+    "migrate-import": "dotenv -e ../../.env -- tsx scripts/migrate-import.ts",
+    "migrate-verify": "dotenv -e ../../.env -- tsx scripts/migrate-verify.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.600.0",
@@ -35,7 +38,8 @@
     "prisma": "^6.1.0",
     "redis": "^5.12.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "tsx": "^4.19.0"
   },
   "devDependencies": {
     "@nestjs/cli": "11.0.23",
@@ -46,7 +50,6 @@
     "dotenv-cli": "^8.0.0",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",
-    "tsx": "^4.19.0",
     "typescript": "^5.7.2"
   }
 }

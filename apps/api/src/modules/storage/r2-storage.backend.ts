@@ -26,15 +26,21 @@ export interface R2ClientConfig {
   bucket: string;
   accessKeyId: string;
   secretAccessKey: string;
+  /**
+   * 可选 Endpoint 覆盖。缺省按 accountId 推导 Cloudflare 端点。
+   * 仅用于 R2 兼容的 S3 网关（如本地 MinIO 做联调、内部网关）。
+   */
+  endpoint?: string;
 }
 
 export const R2_PRESIGN_PUT_TTL_SECONDS = 60;
 
-const R2_REQUIRED_ENV_VARS = [
-  "R2_ACCOUNT_ID",
-  "R2_BUCKET",
-  "R2_ACCESS_KEY_ID",
-  "R2_SECRET_ACCESS_KEY",
+/** 变量后缀（不含前缀）。前缀为 `R2_`（应用自身）或 `SOURCE_R2_`/`TARGET_R2_`（迁移）。 */
+const R2_REQUIRED_SUFFIXES = [
+  "ACCOUNT_ID",
+  "BUCKET",
+  "ACCESS_KEY_ID",
+  "SECRET_ACCESS_KEY",
 ] as const;
 
 export function r2Endpoint(accountId: string) {
@@ -44,29 +50,38 @@ export function r2Endpoint(accountId: string) {
 /** 返回缺失的 R2 环境变量名；全部存在时返回空数组。 */
 export function missingR2EnvVars(
   config: Record<string, string | undefined>,
+  prefix = "R2",
 ): string[] {
-  return R2_REQUIRED_ENV_VARS.filter((name) => !config[name]?.trim());
+  return R2_REQUIRED_SUFFIXES.map((suffix) => `${prefix}_${suffix}`).filter(
+    (name) => !config[name]?.trim(),
+  );
 }
 
 export function resolveR2ClientConfig(
   config: Record<string, string | undefined>,
+  prefix = "R2",
 ): R2ClientConfig {
-  const missing = missingR2EnvVars(config);
+  const missing = missingR2EnvVars(config, prefix);
   if (missing.length > 0) {
-    throw new Error(`Vercel 环境缺少以下 R2 环境变量: ${missing.join(", ")}`);
+    throw new Error(`缺少 R2 环境变量（${prefix}）: ${missing.join(", ")}`);
   }
+  const endpoint = config[`${prefix}_ENDPOINT`]?.trim();
   return {
-    accountId: config.R2_ACCOUNT_ID!.trim(),
-    bucket: config.R2_BUCKET!.trim(),
-    accessKeyId: config.R2_ACCESS_KEY_ID!.trim(),
-    secretAccessKey: config.R2_SECRET_ACCESS_KEY!.trim(),
+    accountId: config[`${prefix}_ACCOUNT_ID`]!.trim(),
+    bucket: config[`${prefix}_BUCKET`]!.trim(),
+    accessKeyId: config[`${prefix}_ACCESS_KEY_ID`]!.trim(),
+    secretAccessKey: config[`${prefix}_SECRET_ACCESS_KEY`]!.trim(),
+    ...(endpoint ? { endpoint } : {}),
   };
 }
 
 function buildClient(config: R2ClientConfig) {
   return new S3Client({
     region: "auto",
-    endpoint: r2Endpoint(config.accountId),
+    endpoint: config.endpoint ?? r2Endpoint(config.accountId),
+    // 自定义 endpoint（MinIO 等 S3 兼容网关）时用 path-style 寻址；
+    // 真实 Cloudflare R2 保持默认虚拟主机式。
+    forcePathStyle: Boolean(config.endpoint),
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
@@ -82,7 +97,9 @@ function buildClient(config: R2ClientConfig) {
 /**
  * Cloudflare R2（S3 兼容端点）后端。
  *
- * - Endpoint 固定由 `R2_ACCOUNT_ID` 推导，不允许管理员填写任意 Endpoint。
+ * - Endpoint 由 `R2_ACCOUNT_ID` 推导；设置 `R2_ENDPOINT`（或 `SOURCE_R2_`/`TARGET_R2_`
+ *   前缀版）可覆盖为 R2 兼容网关（迁移/联调场景）。应用自身的存储配置仍由
+ *   `R2_ACCOUNT_ID` 推导，不对外开放填写。
  * - Bucket 保持私有，不配置 ACL 或 public-read。
  * - 直传使用 60 秒有效的预签名 PUT，签入 Content-Type。
  * - 上传/下载都通过 AWS SDK 的 Node Readable 流式传递，不整块读入内存。
@@ -97,13 +114,23 @@ export class R2StorageBackend implements ObjectStorageBackend {
     this.client = buildClient(config);
   }
 
-  async putObject(key: string, data: Buffer | Readable, mimeType: string) {
+  async putObject(
+    key: string,
+    data: Buffer | Readable,
+    mimeType: string,
+    contentLength?: number,
+  ) {
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
         Body: data,
         ContentType: mimeType,
+        // 流式上传必须显式给 Content-Length，否则 SDK 走 aws-chunked 且
+        // MinIO 等 S3 兼容网关会因 decoded length 为 undefined 拒绝。
+        ...(contentLength !== undefined
+          ? { ContentLength: contentLength }
+          : {}),
       }),
     );
   }

@@ -31,6 +31,9 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+# 数据迁移导出/导入依赖 pg_dump/pg_restore/psql。锁定 major 16，与自托管
+# postgres:16-alpine 匹配（pg client major 必须 ≥ server major）。
+RUN apk add --no-cache postgresql16-client
 COPY --chown=node:node --from=builder /prod/api apps/api
 WORKDIR /app/apps/api
 USER node

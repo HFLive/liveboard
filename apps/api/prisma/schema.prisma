@@ -86,6 +86,18 @@ enum StorageDownloadMode {
   direct
 }
 
+enum MigrationJobKind {
+  export
+  import
+}
+
+enum MigrationJobStatus {
+  pending
+  running
+  succeeded
+  failed
+}
+
 enum StorageUploadMode {
   relay
   direct
@@ -150,6 +162,7 @@ model User {
   actedNotifications      Notification[]          @relation("NotificationActor")
   notificationRecipients  NotificationRecipient[]
   forumPostVotes          ForumPostVote[]
+  migrationJobs           MigrationJob[]
 }
 
 model Notification {
@@ -201,6 +214,32 @@ model ServerMetricSample {
   sampledAt          DateTime @default(now())
 
   @@index([sampledAt])
+}
+
+/**
+ * 数据迁移任务记录（导出/导入）。数据不随迁移包带走（dump 排除其数据），
+ * 导入期间目标库被重建时任务状态写本地状态文件（/data/migration/jobs/），
+ * 还原完成后再 upsert 回本表（见 docs/migrate-any-direction-design.md §5.3）。
+ */
+model MigrationJob {
+  id          String             @id @default(cuid())
+  kind        MigrationJobKind
+  status      MigrationJobStatus @default(pending)
+  packageName String?
+  appVersion  String?
+  manifest    Json?
+  phase       String          @default("")
+  progress    Json?
+  error       String?
+  createdById String?
+  createdAt   DateTime           @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  updatedAt   DateTime           @updatedAt
+
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([createdById, createdAt])
 }
 
 model Workspace {

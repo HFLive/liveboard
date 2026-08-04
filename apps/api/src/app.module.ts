@@ -19,6 +19,9 @@ import { UsersModule } from "./modules/users/users.module";
 import { TeachingModule } from "./modules/teaching/teaching.module";
 import { ClassroomsModule } from "./modules/classrooms/classrooms.module";
 import { BadgesModule } from "./modules/badges/badges.module";
+import { MaintenanceModule } from "./modules/maintenance/maintenance.module";
+import { MaintenanceModeGuard } from "./modules/maintenance/maintenance.guard";
+import { MigrationModule } from "./modules/migration/migration.module";
 
 @Module({
   imports: [
@@ -40,7 +43,13 @@ import { BadgesModule } from "./modules/badges/badges.module";
     ClassroomsModule,
     TeachingModule,
     BadgesModule,
+    MaintenanceModule,
+    MigrationModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: ActiveUserGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: ActiveUserGuard },
+    // 维护模式守卫必须排在 ActiveUserGuard 之后，才能读取注入的 currentUserId。
+    { provide: APP_GUARD, useClass: MaintenanceModeGuard },
+  ],
 })
 export class AppModule {}

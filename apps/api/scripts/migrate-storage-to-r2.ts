@@ -37,6 +37,7 @@ import type {
   StorageBackendName,
 } from "../src/modules/storage/storage-backend";
 import { ATOMIC_UPLOAD_PART_SIZE_BYTES } from "../src/modules/storage/storage-backend";
+import { messageOf } from "../src/modules/migration/migration-engine";
 
 interface Args {
   execute: boolean;
@@ -462,6 +463,8 @@ export async function migrateOne(
       ref.mimeType ?? "application/octet-stream",
     );
   } catch (caught) {
+    // 写目标失败时释放源下载流，避免大批量失败时句柄累积。
+    stream.destroy();
     summary.failed += 1;
     console.error(
       `[migrate-storage-to-r2] FAILED ${label} 目标写入失败: ${messageOf(caught)}`,
@@ -500,11 +503,6 @@ export async function migrateOne(
   }
   summary.migrated += 1;
   console.log(`[migrate-storage-to-r2] OK ${label}`);
-}
-
-function messageOf(caught: unknown) {
-  if (caught instanceof Error) return caught.message;
-  return String(caught);
 }
 
 if (require.main === module) {
