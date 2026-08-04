@@ -221,4 +221,19 @@ grep -q "migrate resolve --applied 20260804000000_add_migration_job" "$PRISMA_LO
 MOCK_BRIDGE_APPLIED=0
 MOCK_MIGRATION_JOB_PRESENT=0
 
+# 12. 过渡后重复执行：_prisma_migrations 含 baseline 与桥接覆盖增量 migration
+#     （过渡完成后的真实状态）→ 历史校验放行这两类记录，且 baseline 已 resolve
+#     → 安全退出，不重复执行 bridge，也不调用 prisma。
+cp "$MIGRATIONS_FILE" "$TEST_DIR/migrations-transitioned.csv"
+printf '%s|%s|2026-07-29 00:00:00\n' "00000000000000_baseline_v1" "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" >> "$TEST_DIR/migrations-transitioned.csv"
+printf '%s|%s|2026-07-29 00:00:00\n' "20260804000000_add_migration_job" "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" >> "$TEST_DIR/migrations-transitioned.csv"
+MOCK_MIGRATIONS_FILE="$TEST_DIR/migrations-transitioned.csv"
+MOCK_BASELINE_RESOLVED=1
+: > "$PRISMA_LOG"
+"$SCRIPT" --execute > "$TEST_DIR/transitioned.log" 2>&1 || fail_test "过渡后重复执行应成功退出"
+grep -q "baseline 已标记完成" "$TEST_DIR/transitioned.log" || fail_test "过渡后重复执行应提示已过渡"
+[ ! -s "$PRISMA_LOG" ] || fail_test "过渡后重复执行不应调用 prisma"
+MOCK_BASELINE_RESOLVED=0
+MOCK_MIGRATIONS_FILE="$MIGRATIONS_FILE"
+
 echo "all legacy-baseline-transition tests passed"

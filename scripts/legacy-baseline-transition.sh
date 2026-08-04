@@ -8,8 +8,9 @@
 # 重复建表。
 #
 # 本脚本在数据库备份后、正常 `migrate deploy` 前调用：
-#   1. 只读检查 `_prisma_migrations` 精确匹配已知的旧 LiveBoard 历史，
-#      且所有记录成功完成（校验名称与 checksum，不接受只看数量）。
+#   1. 只读检查 `_prisma_migrations`：旧历史必须精确匹配已知的 LiveBoard
+#      清单，且所有记录成功完成（校验名称与 checksum，不接受只看数量）。
+#      过渡后由本脚本写入的 baseline 与桥接覆盖增量 migration 按名称放行。
 #   2. 检查实际 schema 与旧版本期望状态一致；存在未知 migration、失败记录
 #      或 schema drift 时立即停止，禁止自动 resolve。
 #   3. 执行经过审查的“旧最终 schema → 新最终 schema”桥接 SQL（不放回
@@ -202,6 +203,18 @@ while IFS= read -r row <&3; do
     *" $name "*) fail "检测到重复的 migration 记录: $name" ;;
   esac
   seen_names="$seen_names $name"
+
+  # 桥接 SQL 已覆盖的增量 migration 在过渡完成后同样存在于 _prisma_migrations
+  # （migrate resolve --applied 写入）。它们是合法历史：按名称接受、校验已完成，
+  # 不计入 golden 清单数量（与 baseline 一致），也不校验 checksum。
+  case " $BRIDGE_COVERED_MIGRATIONS " in
+    *" $name "*)
+      if [ -z "$finished" ] || [ "$finished" = "NULL" ]; then
+        fail "migration $name 尚未完成（finished_at 为空），存在失败记录，拒绝过渡。"
+      fi
+      continue
+      ;;
+  esac
 
   # 必须在 golden 清单中
   match=$(printf '%s\n' "$GOLDEN_LOOKUP" | grep -c "^$name=" || true)
