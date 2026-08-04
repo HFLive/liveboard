@@ -7,11 +7,14 @@ import {
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import { PrismaService } from "../modules/prisma/prisma.service";
+import { MaintenanceService } from "../modules/maintenance/maintenance.service";
 import { IS_PUBLIC_KEY } from "./public.decorator";
 import { verifySessionCookies } from "./session-cookie";
 
 export interface AuthenticatedRequest extends Request {
   currentUserId?: string;
+  /** 导入腾空窗口（DB 不可用）期间降级放行的标记：会话 cookie 已验证，但未做 DB 用户状态检查。 */
+  degradedSession?: boolean;
 }
 
 @Injectable()
@@ -19,6 +22,7 @@ export class ActiveUserGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
+    private readonly maintenance: MaintenanceService,
   ) {}
 
   async canActivate(context: ExecutionContext) {
@@ -38,10 +42,35 @@ export class ActiveUserGuard implements CanActivate {
       throw new UnauthorizedException("Missing or invalid session");
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: session.userId },
-      select: { id: true, status: true, sessionVersion: true },
-    });
+    let user: {
+      id: string;
+      status: string;
+      sessionVersion: number;
+    } | null;
+    try {
+      user = await this.prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { id: true, status: true, sessionVersion: true },
+      });
+    } catch (caught) {
+      // 导入腾空窗口（DROP SCHEMA 重建库）期间 User 表缺失，DB 查询抛
+      // P2021 等 Prisma 错误。此时维护模式开启：GET 请求降级为"仅校验会话
+      // cookie 签名"，让任务进度轮询可用；写请求与非维护窗口保持 fail-closed。
+      const prismaCode = (caught as { code?: unknown })?.code;
+      const dbUnavailable =
+        typeof prismaCode === "string" && prismaCode.startsWith("P");
+      if (!dbUnavailable) throw caught;
+      const method = (request.method ?? "GET").toUpperCase();
+      if (
+        method === "GET" &&
+        (await this.maintenance.isEnabled())
+      ) {
+        request.currentUserId = session.userId;
+        request.degradedSession = true;
+        return true;
+      }
+      throw caught;
+    }
     if (
       !user ||
       user.status !== "active" ||

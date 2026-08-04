@@ -82,6 +82,10 @@ services:
       - "127.0.0.1:4000:4000"
     volumes:
       - /run/liveboard:/run/liveboard
+      # 数据迁移目录：导出包/导入包/维护模式状态文件。生产为
+      # /opt/liveboard/migration（安装器创建并 chown 到容器运行用户）；
+      # 本地开发可用 LIVEBOARD_MIGRATION_HOST_DIR 指到可写目录。
+      - ${LIVEBOARD_MIGRATION_HOST_DIR:-/opt/liveboard/migration}:/data/migration
     depends_on:
       postgres:
         condition: service_healthy

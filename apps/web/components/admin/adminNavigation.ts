@@ -1,4 +1,5 @@
 import {
+  ArrowLeftRight,
   BadgeCheck,
   Bot,
   CloudCog,
@@ -93,6 +94,13 @@ export const adminNavGroups = [
         label: "系统设置",
         description: "时区、HTTPS 与网站图标",
         icon: Settings,
+        superAdminOnly: true,
+      },
+      {
+        href: APP_ROUTES.adminMigration,
+        label: "数据迁移",
+        description: "打包导出与导入，换服务器搬家",
+        icon: ArrowLeftRight,
         superAdminOnly: true,
       },
     ],

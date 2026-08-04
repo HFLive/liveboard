@@ -83,6 +83,8 @@ export interface ObjectStorageBackend {
     key: string,
     data: Buffer | Readable,
     mimeType: string,
+    /** 流式上传时已知的字节数；R2(S3) 流上传需显式 Content-Length。 */
+    contentLength?: number,
   ): Promise<void>;
   getObject(key: string): Promise<Readable>;
   removeObject(key: string): Promise<void>;

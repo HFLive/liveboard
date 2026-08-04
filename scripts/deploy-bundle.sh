@@ -130,6 +130,11 @@ case "$VERSION" in
 esac
 
 mkdir -p "$STATE_DIR" "$BACKUP_DIR" "$RELEASES_DIR"
+# 数据迁移目录：导出包/导入包/维护模式状态文件。api 容器以 UID 1000 (node)
+# 运行，需把该目录属主交给它，否则迁移功能无法写入状态与包文件。
+mkdir -p "$STATE_DIR/migration"
+chown 1000:1000 "$STATE_DIR/migration"
+chmod 700 "$STATE_DIR/migration"
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   lock_pid=$(sed -n '1p' "$LOCK_DIR/pid" 2>/dev/null || true)
   if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
@@ -320,9 +325,13 @@ for image in \
   fi
 done
 
+# 迁移数据目录由 deploy 脚本创建并 chown（$STATE_DIR/migration，见下方 mkdir）：
+# 这里显式传给 compose，确保挂载路径与脚本创建路径一致——LIVEBOARD_STATE_DIR
+# 自定义时不会落到 docker-compose.yml 的 /opt/liveboard/migration 默认值上。
 compose() {
   LIVEBOARD_API_IMAGE="liveboard-api:${VERSION}" \
     LIVEBOARD_WEB_IMAGE="liveboard-web:${VERSION}" \
+    LIVEBOARD_MIGRATION_HOST_DIR="$STATE_DIR/migration" \
     docker compose \
       --project-name liveboard \
       --project-directory "$BUNDLE_DIR" \

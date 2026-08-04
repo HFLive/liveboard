@@ -2147,3 +2147,144 @@ export function gradeSubmission(
     },
   );
 }
+
+// ---- 维护模式与数据迁移（最高管理员） ----------------------------------------
+
+export interface MaintenanceStatus {
+  enabled: boolean;
+  reason: string | null;
+}
+
+export function getMaintenanceStatus() {
+  return request<MaintenanceStatus>("/maintenance/status");
+}
+
+export function getAdminMaintenance() {
+  return request<{
+    maintenance: MaintenanceStatus & {
+      updatedAt: string | null;
+      updatedBy: string | null;
+    };
+  }>("/admin/maintenance");
+}
+
+export function setMaintenanceEnabled(enabled: boolean, reason?: string) {
+  return request<{
+    maintenance: MaintenanceStatus & {
+      updatedAt: string | null;
+      updatedBy: string | null;
+    };
+  }>("/admin/maintenance", {
+    method: "POST",
+    body: JSON.stringify({ enabled, reason }),
+  });
+}
+
+export interface MigrationJobSummary {
+  id: string;
+  kind: "export" | "import";
+  status: "pending" | "running" | "succeeded" | "failed";
+  phase: string;
+  progress: { done: number; total: number; label?: string } | null;
+  packageName: string | null;
+  appVersion: string | null;
+  error: string | null;
+  createdBy: string | null;
+  createdAt: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface IncomingPackage {
+  name: string;
+  type: "tar" | "dir";
+  sizeBytes: number;
+  hasManifest: boolean;
+}
+
+export interface MigrationInfo {
+  available: boolean;
+  dataDir: string;
+  confirmPhrase: string;
+  maxUploadSizeBytes: number;
+  deploymentTarget: "server" | "vercel";
+  targetBackend: "minio" | "oss" | "r2";
+  /** 源服务器是否已配置 TARGET_R2_*，可用于"对象直推目标 R2"导出。 */
+  pushToR2Available?: boolean;
+}
+
+export function getMigrationInfo() {
+  return request<{ info: MigrationInfo }>("/admin/migration/info");
+}
+
+export function startMigrationExport(input: {
+  includeObjects?: boolean;
+  pushToR2?: boolean;
+}) {
+  return request<{ job: MigrationJobSummary }>("/admin/migration/export", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function startMigrationImport(input: {
+  source: string;
+  confirm: string;
+}) {
+  return request<{ job: MigrationJobSummary }>("/admin/migration/import", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listMigrationJobs() {
+  return request<{ jobs: MigrationJobSummary[] }>("/admin/migration/jobs");
+}
+
+export function getMigrationJob(jobId: string) {
+  return request<{ job: MigrationJobSummary }>(
+    `/admin/migration/jobs/${encodeURIComponent(jobId)}`,
+  );
+}
+
+export function listMigrationIncoming() {
+  return request<{ packages: IncomingPackage[] }>("/admin/migration/incoming");
+}
+
+export async function uploadMigrationPackage(file: File) {
+  const formData = new FormData();
+  formData.set("file", file);
+  const path = "/admin/migration/incoming/upload";
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  if (!response.ok) {
+    redirectToLoginOnUnauthorized(response.status, path);
+    const body = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    const message = Array.isArray(body?.message)
+      ? body.message.join("；")
+      : body?.message;
+    throw new ApiError(message ?? "迁移包上传失败", response.status);
+  }
+  return (await response.json()) as {
+    package: { name: string; sizeBytes: number };
+  };
+}
+
+/** 导出包浏览器下载：凭据 fetch → blob，跨域时也能带 cookie。 */
+export async function downloadMigrationExport(name: string) {
+  const response = await fetch(
+    apiResourceUrl(`/admin/migration/exports/${encodeURIComponent(name)}`),
+    { credentials: "include" },
+  );
+  if (!response.ok) {
+    redirectToLoginOnUnauthorized(response.status, name);
+    throw new ApiError("导出包下载失败", response.status);
+  }
+  return response.blob();
+}

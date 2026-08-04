@@ -89,12 +89,17 @@ export class OssStorageBackend implements ObjectStorageBackend {
       : this.client;
   }
 
-  async putObject(key: string, data: Buffer | Readable, mimeType: string) {
+  async putObject(
+    key: string,
+    data: Buffer | Readable,
+    mimeType: string,
+    contentLength?: number,
+  ) {
     await this.client.putObject(
       this.bucket,
       key,
       data,
-      Buffer.isBuffer(data) ? data.length : undefined,
+      Buffer.isBuffer(data) ? data.length : (contentLength ?? undefined),
       { "Content-Type": mimeType },
     );
   }

@@ -2,6 +2,7 @@ import { UnauthorizedException } from "@nestjs/common";
 import type { ExecutionContext } from "@nestjs/common";
 import type { Reflector } from "@nestjs/core";
 import type { PrismaService } from "../modules/prisma/prisma.service";
+import type { MaintenanceService } from "../modules/maintenance/maintenance.service";
 import {
   ActiveUserGuard,
   type AuthenticatedRequest,
@@ -11,7 +12,8 @@ import { createSessionCookieValue } from "./session-cookie";
 describe("ActiveUserGuard", () => {
   const reflector = { getAllAndOverride: jest.fn() };
   const prisma = { user: { findUnique: jest.fn() } };
-  const request: Partial<AuthenticatedRequest> = { cookies: {} };
+  const maintenance = { isEnabled: jest.fn() };
+  const request: Partial<AuthenticatedRequest> = { cookies: {}, method: "GET" };
   const context = {
     getHandler: jest.fn(),
     getClass: jest.fn(),
@@ -24,10 +26,14 @@ describe("ActiveUserGuard", () => {
     process.env.SESSION_SECRET = "test-session-secret-with-sufficient-length";
     process.env.SESSION_COOKIE_SECURE = "true";
     request.cookies = {};
+    request.method = "GET";
     delete request.currentUserId;
+    delete request.degradedSession;
+    maintenance.isEnabled.mockResolvedValue(false);
     guard = new ActiveUserGuard(
       reflector as unknown as Reflector,
       prisma as unknown as PrismaService,
+      maintenance as unknown as MaintenanceService,
     );
   });
 
@@ -105,5 +111,53 @@ describe("ActiveUserGuard", () => {
       UnauthorizedException,
     );
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("degrades GET during maintenance when the DB is unavailable", async () => {
+    reflector.getAllAndOverride.mockReturnValue(false);
+    request.cookies = {
+      liveboard_session: createSessionCookieValue("user-1", 4),
+    };
+    request.method = "GET";
+    maintenance.isEnabled.mockResolvedValue(true);
+    prisma.user.findUnique.mockRejectedValue(
+      Object.assign(new Error("table does not exist"), { code: "P2021" }),
+    );
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(request.currentUserId).toBe("user-1");
+    expect(request.degradedSession).toBe(true);
+  });
+
+  it("rejects non-GET writes during maintenance when the DB is unavailable", async () => {
+    reflector.getAllAndOverride.mockReturnValue(false);
+    request.cookies = {
+      liveboard_session: createSessionCookieValue("user-1", 4),
+    };
+    request.method = "POST";
+    maintenance.isEnabled.mockResolvedValue(true);
+    const dbError = Object.assign(new Error("table does not exist"), {
+      code: "P2021",
+    });
+    prisma.user.findUnique.mockRejectedValue(dbError);
+
+    await expect(guard.canActivate(context)).rejects.toThrow(/does not exist/);
+    expect(request.currentUserId).toBeUndefined();
+  });
+
+  it("rethrows DB errors when maintenance is off", async () => {
+    reflector.getAllAndOverride.mockReturnValue(false);
+    request.cookies = {
+      liveboard_session: createSessionCookieValue("user-1", 4),
+    };
+    maintenance.isEnabled.mockResolvedValue(false);
+    const dbError = Object.assign(new Error("table does not exist"), {
+      code: "P2021",
+    });
+    prisma.user.findUnique.mockRejectedValue(dbError);
+
+    await expect(guard.canActivate(context)).rejects.toThrow(/does not exist/);
+    expect(request.currentUserId).toBeUndefined();
+    expect(request.degradedSession).toBeUndefined();
   });
 });
