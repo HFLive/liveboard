@@ -38,6 +38,7 @@ import {
   loadManifest,
   type MigrationManifest,
 } from "../src/modules/migration/migration-manifest";
+import { normalizeBundledMigrations } from "../src/modules/migration/migration-history";
 import {
   formatVerifyResult,
   verifyImport,
@@ -161,34 +162,29 @@ async function sha256File(file: string): Promise<string> {
   return hash.digest("hex");
 }
 
-async function validateMigrationHistory(
+/**
+ * 归一化并校验包内迁移历史（§7.1 前置校验的一部分）。
+ *
+ * 目标应用只打包单 baseline 收口后的迁移文件夹，而源库 `_prisma_migrations`
+ * 过渡后仍保留被 baseline 合并的旧历史记录（文件夹已不存在）。归一化会：
+ * 保留目标有文件夹的迁移并校验 checksum；跳过无文件夹但有 baseline 覆盖的旧
+ * 历史；无文件夹且无 baseline 时 fail-closed（目标版本不兼容）。归一化后的
+ * manifest.migrations 供后续逐条 resolve 与导入后校验使用。
+ */
+async function normalizeAndValidateMigrationHistory(
   manifest: MigrationManifest,
 ): Promise<void> {
-  const migrationsDir = targetMigrationsDir();
-  for (const migration of manifest.migrations) {
-    // migration.name 来自不受信的 manifest，必须限制为安全字符，防止 `../`
-    // 借 path.join 越界读取容器内任意文件。
-    if (!/^[A-Za-z0-9_.-]+$/.test(migration.name)) {
-      throw new Error(
-        `迁移包 migration 名不合法，拒绝导入（fail-closed）：${migration.name}`,
-      );
-    }
-    const sqlFile = path.join(migrationsDir, migration.name, "migration.sql");
-    let actualChecksum: string;
-    try {
-      actualChecksum = await sha256File(sqlFile);
-    } catch {
-      throw new Error(
-        `目标应用缺少 migration ${migration.name}，与本迁移包版本不一致，拒绝导入（fail-closed）。` +
-          `请先把目标升级到与源一致的版本，或对 dump 执行离线升级流程后重新打包。`,
-      );
-    }
-    if (actualChecksum !== migration.checksum) {
-      throw new Error(
-        `migration ${migration.name} 的 checksum 与迁移包不一致，拒绝导入（fail-closed）。`,
-      );
-    }
+  const result = await normalizeBundledMigrations(
+    manifest.migrations,
+    targetMigrationsDir(),
+    true,
+  );
+  if (result.skippedLegacy > 0) {
+    console.log(
+      `[import] 跳过 ${result.skippedLegacy} 条已并入 baseline 的旧历史迁移记录`,
+    );
   }
+  manifest.migrations = result.migrations;
 }
 
 async function validateDumpHasNoExcludedData(dumpFile: string): Promise<void> {
@@ -677,7 +673,7 @@ async function main() {
         "database.dump 校验失败（sha256 与 manifest 不一致），拒绝导入",
       );
     }
-    await validateMigrationHistory(manifest);
+    await normalizeAndValidateMigrationHistory(manifest);
     await validateDumpHasNoExcludedData(dumpFile);
     for (const obj of manifest.objects) await validateManifestPath(obj);
 
