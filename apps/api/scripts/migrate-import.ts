@@ -38,7 +38,10 @@ import {
   loadManifest,
   type MigrationManifest,
 } from "../src/modules/migration/migration-manifest";
-import { normalizeBundledMigrations } from "../src/modules/migration/migration-history";
+import {
+  EXCLUDED_MIGRATION_TABLES,
+  normalizeBundledMigrations,
+} from "../src/modules/migration/migration-history";
 import {
   formatVerifyResult,
   verifyImport,
@@ -67,13 +70,6 @@ import {
   type OssSettingsFields,
 } from "./migrate-backends";
 import { resolvePackageDir } from "./migrate-package";
-
-const EXCLUDED_TABLES = new Set([
-  "_prisma_migrations",
-  "PendingUpload",
-  "ServerMetricSample",
-  "MigrationJob",
-]);
 
 /** 目标 StorageSettings 的字段子集（清库前捕获，含 OSS 凭据与目标后端）。 */
 interface TargetStorageFields {
@@ -197,7 +193,7 @@ async function validateDumpHasNoExcludedData(dumpFile: string): Promise<void> {
     );
   }
   const list = result.stdout ?? "";
-  for (const table of EXCLUDED_TABLES) {
+  for (const table of EXCLUDED_MIGRATION_TABLES) {
     if (new RegExp(`TABLE DATA\\s+\\S+\\s+${table}\\s`).test(list)) {
       throw new Error(
         `迁移包 database.dump 含 ${table} 的数据项，包不合法，拒绝导入。`,
