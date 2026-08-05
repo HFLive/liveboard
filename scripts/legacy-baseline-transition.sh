@@ -237,12 +237,20 @@ while IFS= read -r row <&3; do
 done 3< "$TMP_MIGRATIONS"
 rm -f "$TMP_MIGRATIONS"
 
-# 2. 名称集合必须精确等于 golden 清单（不多不少），除非 baseline 已存在
-if [ "$seen_count" -ne "$expected_count" ]; then
+# 2. 名称集合必须精确等于 golden 清单（不多不少），除非 baseline 已存在。
+#    baseline 已存在的库说明已处于单 baseline 历史模型，无需逐条匹配旧 41 条：
+#    - 过渡完成的旧库仍保留全部旧历史（数量相等）；
+#    - 导入还原/新建的库只有 baseline + 桥接覆盖增量、无旧历史（数量为 0）。
+#    个别 migration 的名称/checksum/完成态仍由上方循环逐条校验，未跳过。
+if [ "$baseline_present" -eq 0 ] && [ "$seen_count" -ne "$expected_count" ]; then
   fail "migration 数量不符：期望 $expected_count 条已知历史，实际 $seen_count 条。请使用旧版本检查数据库。"
 fi
 
-echo "[legacy-baseline-transition] 历史校验通过：$seen_count 条旧 migration 全部成功且 checksum 匹配。"
+if [ "$baseline_present" -eq 1 ]; then
+  echo "[legacy-baseline-transition] 历史校验通过：数据库已含 baseline（$seen_count 条旧历史），无需过渡。"
+else
+  echo "[legacy-baseline-transition] 历史校验通过：$seen_count 条旧 migration 全部成功且 checksum 匹配。"
+fi
 
 # 3. 检查是否已经过渡（bridge 已应用 或 baseline 已 resolve）。bridge 判断必须
 #    同时覆盖 PendingUpload.storageBackend 与 MigrationJob：历史 release 的桥接
