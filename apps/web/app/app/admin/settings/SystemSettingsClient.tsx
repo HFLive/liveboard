@@ -645,7 +645,9 @@ export function SystemSettingsClient() {
                         </p>
                       ) : null}
                       {httpsStatus.lastError ? (
-                        <p className="error-text">{httpsStatus.lastError}</p>
+                        <p className="https-last-error">
+                          {httpsStatus.lastError}
+                        </p>
                       ) : null}
                       <div className="https-management-controls">
                         <label className="https-renew-control">

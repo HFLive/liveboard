@@ -442,7 +442,7 @@ export function ClassroomDetailClient({
   if (!classroom) {
     return (
       <div className="workspace classroom-detail-workspace">
-        <p className="error-text">{error ?? "课堂不存在"}</p>
+        <p className="classroom-missing">{error ?? "课堂不存在"}</p>
       </div>
     );
   }

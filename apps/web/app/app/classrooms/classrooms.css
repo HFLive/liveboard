@@ -525,6 +525,14 @@
   margin: 18px 0;
 }
 
+/* 课堂不存在/加载失败是页面内容，不能复用全局 .error-text 浮动 toast
+   （toast 淡出后页面会只剩空白）。 */
+.classroom-missing {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
 .workspace .classroom-create-modal {
   width: min(720px, calc(100vw - 32px));
 }
