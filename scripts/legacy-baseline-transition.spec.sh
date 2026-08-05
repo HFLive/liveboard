@@ -236,4 +236,19 @@ grep -q "baseline 已标记完成" "$TEST_DIR/transitioned.log" || fail_test "�
 MOCK_BASELINE_RESOLVED=0
 MOCK_MIGRATIONS_FILE="$MIGRATIONS_FILE"
 
+# 13. 导入还原/新建的库：_prisma_migrations 只有 baseline 与桥接覆盖增量
+#     （无旧 41 条历史，数量为 0）→ 已处于单 baseline 模型，无需过渡，安全退出。
+: > "$TEST_DIR/migrations-baseline-only.csv"
+printf '%s|%s|2026-07-29 00:00:00\n' "00000000000000_baseline_v1" "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" >> "$TEST_DIR/migrations-baseline-only.csv"
+printf '%s|%s|2026-07-29 00:00:00\n' "20260804000000_add_migration_job" "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" >> "$TEST_DIR/migrations-baseline-only.csv"
+MOCK_MIGRATIONS_FILE="$TEST_DIR/migrations-baseline-only.csv"
+MOCK_BASELINE_RESOLVED=1
+: > "$PRISMA_LOG"
+"$SCRIPT" --execute > "$TEST_DIR/baseline-only.log" 2>&1 || fail_test "仅含 baseline 的库应安全退出"
+grep -q "数据库已含 baseline" "$TEST_DIR/baseline-only.log" || fail_test "仅含 baseline 的库应提示已含 baseline"
+grep -q "baseline 已标记完成" "$TEST_DIR/baseline-only.log" || fail_test "仅含 baseline 的库应提示已过渡"
+[ ! -s "$PRISMA_LOG" ] || fail_test "仅含 baseline 的库不应调用 prisma"
+MOCK_BASELINE_RESOLVED=0
+MOCK_MIGRATIONS_FILE="$MIGRATIONS_FILE"
+
 echo "all legacy-baseline-transition tests passed"
