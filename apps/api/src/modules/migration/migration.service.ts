@@ -330,9 +330,7 @@ export class MigrationService {
     }
     const status = state?.status ?? row?.status;
     if (status === "running" || status === "pending") {
-      throw new BadRequestException(
-        "任务仍在运行中，不能清除报错信息",
-      );
+      throw new BadRequestException("任务仍在运行中，不能清除报错信息");
     }
     if (state) {
       await writeJobState(this.paths.jobsDir, jobId, { error: null });
