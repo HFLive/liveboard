@@ -422,6 +422,21 @@
   font-size: 12px;
 }
 
+.job-error-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.job-error-row .error-text {
+  flex: 1 1 0;
+  min-width: 0;
+  word-break: break-all;
+}
+
 .job-download {
   display: flex;
   align-items: center;

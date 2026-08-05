@@ -307,6 +307,52 @@ export class MigrationService {
     return this.mergeJob(jobId, state, row);
   }
 
+  /**
+   * 清除失败任务的报错信息（"已读/知道了"）：只清 error，保留任务记录与状态，
+   * 避免每次进入迁移页都重复弹出同一条失败原因。运行中/排队中的任务不允许清除。
+   * 状态文件与 DB 行都清，导入窗口（DB 不可用）期间仅清状态文件。
+   */
+  async dismissJobError(
+    userId: string | null,
+    jobId: string,
+  ): Promise<JobSummary> {
+    const mode = await this.authorizeForStateRead(userId);
+    const [state, row] = await Promise.all([
+      readJobState(this.paths.jobsDir, jobId),
+      mode === "degraded"
+        ? Promise.resolve(null)
+        : this.prisma.migrationJob
+            .findUnique({ where: { id: jobId } })
+            .catch(() => null),
+    ]);
+    if (!state && !row) {
+      throw new NotFoundException("迁移任务不存在");
+    }
+    const status = state?.status ?? row?.status;
+    if (status === "running" || status === "pending") {
+      throw new BadRequestException(
+        "任务仍在运行中，不能清除报错信息",
+      );
+    }
+    if (state) {
+      await writeJobState(this.paths.jobsDir, jobId, { error: null });
+    }
+    if (row) {
+      await this.prisma.migrationJob
+        .update({ where: { id: jobId }, data: { error: null } })
+        .catch(() => undefined);
+    }
+    const [freshState, freshRow] = await Promise.all([
+      readJobState(this.paths.jobsDir, jobId),
+      mode === "degraded"
+        ? Promise.resolve(null)
+        : this.prisma.migrationJob
+            .findUnique({ where: { id: jobId } })
+            .catch(() => null),
+    ]);
+    return this.mergeJob(jobId, freshState, freshRow ?? row);
+  }
+
   async listIncoming(userId: string | null): Promise<IncomingPackage[]> {
     // 导入窗口期间 DB 不可用：降级为仅读文件系统（incoming 列表为低敏感数据）。
     await this.authorizeForStateRead(userId);
