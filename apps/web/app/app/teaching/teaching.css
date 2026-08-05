@@ -974,6 +974,13 @@
   min-width: 0;
 }
 
+/* 练习加载失败是幻灯片内的持久内容，不能复用全局 .error-text 浮动 toast。 */
+.embedded-exercise-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.95rem;
+}
+
 .embedded-exercise-head {
   display: flex;
   align-items: flex-end;

@@ -137,6 +137,14 @@
   text-underline-offset: 3px;
 }
 
+/* 上次续期失败是持久状态，内联展示，不能复用全局 .error-text 浮动 toast。 */
+.system-settings-page .https-last-error {
+  margin: 4px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+  word-break: break-all;
+}
+
 .system-settings-page .https-management-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

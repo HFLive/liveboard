@@ -499,7 +499,8 @@ function EmbeddedExercise({ exerciseSetId }: { exerciseSetId: string }) {
     }
   }
 
-  if (error && !exercise) return <p className="error-text">{error}</p>;
+  if (error && !exercise)
+    return <p className="embedded-exercise-error">{error}</p>;
   return (
     <div className="embedded-exercise">
       <div className="embedded-exercise-head">

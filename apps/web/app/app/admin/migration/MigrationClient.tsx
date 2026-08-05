@@ -668,7 +668,7 @@ function JobRow({
       ) : null}
       {job.error ? (
         <div className="job-error-row">
-          <p className="error-text job-error">{job.error}</p>
+          <p className="job-error">{job.error}</p>
           <button
             className="button secondary small"
             disabled={dismissing === job.id}

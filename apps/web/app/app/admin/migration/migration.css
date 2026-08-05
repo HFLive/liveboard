@@ -417,8 +417,11 @@
   font-size: 11px;
 }
 
+/* 任务行内的报错是持久内容，不能复用全局 .error-text 的浮动 toast 样式，
+   否则每次进入页面都会把旧报错弹成顶部浮层。 */
 .job-error {
   margin: 0;
+  color: var(--danger);
   font-size: 12px;
 }
 
@@ -431,7 +434,7 @@
   flex-wrap: wrap;
 }
 
-.job-error-row .error-text {
+.job-error-row .job-error {
   flex: 1 1 0;
   min-width: 0;
   word-break: break-all;
