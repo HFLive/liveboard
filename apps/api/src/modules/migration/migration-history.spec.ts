@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   BASELINE_MIGRATION,
+  EXCLUDED_MIGRATION_TABLES,
+  excludeTableDataArgs,
   normalizeBundledMigrations,
   sha256File,
   type MigrationRecord,
@@ -88,5 +90,21 @@ describe("migration-history normalizeBundledMigrations", () => {
     await expect(
       normalizeBundledMigrations([evil, baseline()], dir, true),
     ).rejects.toThrow(/不合法/);
+  });
+});
+
+describe("migration-history excludeTableDataArgs", () => {
+  it("为混合大小写表名生成带引号的 pg_dump 排除参数", () => {
+    const args = excludeTableDataArgs();
+    expect(EXCLUDED_MIGRATION_TABLES).toHaveLength(4);
+    // 带引号：pg_dump 模式不带引号会被折叠为小写，匹配不到 "PendingUpload" 等
+    expect(args).toContain('--exclude-table-data="PendingUpload"');
+    expect(args).toContain('--exclude-table-data="ServerMetricSample"');
+    expect(args).toContain('--exclude-table-data="MigrationJob"');
+    expect(args).toContain('--exclude-table-data="_prisma_migrations"');
+    // 裸名（不带引号）是折叠小写匹配不到的旧写法，回归防它复活
+    expect(args.some((a) => a === "--exclude-table-data=PendingUpload")).toBe(
+      false,
+    );
   });
 });

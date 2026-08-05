@@ -34,6 +34,8 @@ import {
 } from "../src/modules/migration/migration-engine";
 import {
   BASELINE_MIGRATION,
+  EXCLUDED_MIGRATION_TABLES,
+  excludeTableDataArgs,
   normalizeBundledMigrations,
 } from "../src/modules/migration/migration-history";
 import {
@@ -53,13 +55,6 @@ import {
   writeMaintenanceStateFile,
 } from "../src/modules/migration/maintenance-file";
 import { MIGRATION_FORMAT_VERSION } from "../src/modules/migration/migration-manifest";
-
-const EXCLUDED_TABLES = new Set([
-  "_prisma_migrations",
-  "PendingUpload",
-  "ServerMetricSample",
-  "MigrationJob",
-]);
 
 /** 保留的最近导出包数量；旧包（含 .tar 与解包目录）会被清理，避免 exports/ 无限增长。 */
 const KEEP_EXPORTS = Math.max(
@@ -186,7 +181,7 @@ async function collectTableCounts(
   }>;
   const counts: Record<string, number> = {};
   for (const row of tables) {
-    if (EXCLUDED_TABLES.has(row.table_name)) continue;
+    if (EXCLUDED_MIGRATION_TABLES.includes(row.table_name)) continue;
     const result = (await prisma.$queryRawUnsafe(
       `SELECT COUNT(*)::int AS count FROM "public"."${row.table_name}"`,
     )) as Array<{ count: number }>;
@@ -367,13 +362,9 @@ async function main() {
         "-d",
         conn.database,
         "-Fc",
-        // 排除表模式不带引号：args 数组直传 spawn（不经 shell），内嵌引号只会被
-        // pg_dump 当作标识符引用原样吃掉；未加引号的模式按大小写不敏感匹配，
-        // 这几个表名无特殊字符，逐字匹配即可。
-        "--exclude-table-data=_prisma_migrations",
-        "--exclude-table-data=PendingUpload",
-        "--exclude-table-data=ServerMetricSample",
-        "--exclude-table-data=MigrationJob",
+        // 混合大小写表名必须带引号（excludeTableDataArgs）：pg_dump 的模式不带
+        // 引号会被折叠为小写，PendingUpload 等将匹配不到，数据漏进 dump。
+        ...excludeTableDataArgs(),
         "-f",
         dumpFile,
       ],

@@ -24,6 +24,27 @@ export interface MigrationRecord {
 /** 单 baseline 收口后的基线迁移名；旧历史记录（文件夹已不打包）都并入它。 */
 export const BASELINE_MIGRATION = "00000000000000_baseline_v1";
 
+/**
+ * 迁移包 dump 必须排除数据、仅保留结构的表。
+ * 导出/导入两端共用，保证 pg_dump 排除与导入端校验保持一致。
+ */
+export const EXCLUDED_MIGRATION_TABLES: readonly string[] = [
+  "_prisma_migrations",
+  "PendingUpload",
+  "ServerMetricSample",
+  "MigrationJob",
+];
+
+/**
+ * pg_dump 的 `--exclude-table-data` 参数。混合大小写表名必须带引号：
+ * pg_dump 的 -t/-T/--exclude-table-data 模式遵循 psql `\d` 规则，不带引号的
+ * 模式会被折叠为小写再匹配——`PendingUpload` 折叠成 `pendingupload` 匹配不到
+ * `"PendingUpload"`，数据会静默漏进 dump（导入端 fail-closed）。
+ */
+export function excludeTableDataArgs(): string[] {
+  return EXCLUDED_MIGRATION_TABLES.map((t) => `--exclude-table-data="${t}"`);
+}
+
 /** 迁移名安全字符：来自不受信的 manifest，必须防 `../` 借 path.join 越界。 */
 const MIGRATION_NAME_PATTERN = /^[A-Za-z0-9_.-]+$/;
 
