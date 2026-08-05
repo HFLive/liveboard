@@ -111,6 +111,15 @@ export class MigrationController {
     return { job: await this.migration.getJob(userId, id) };
   }
 
+  /** 清除失败任务的报错信息（已读），不再每次进入迁移页重复弹出。 */
+  @Post("admin/migration/jobs/:id/dismiss")
+  async dismissJobError(
+    @CurrentUserId() userId: string | null,
+    @Param("id") id: string,
+  ) {
+    return { job: await this.migration.dismissJobError(userId, id) };
+  }
+
   @Get("admin/migration/incoming")
   async listIncoming(@CurrentUserId() userId: string | null) {
     return { packages: await this.migration.listIncoming(userId) };

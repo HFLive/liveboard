@@ -15,6 +15,7 @@ import {
   XCircle,
 } from "lucide-react";
 import {
+  dismissMigrationJobError,
   downloadMigrationExport,
   getAdminMaintenance,
   getMigrationInfo,
@@ -72,6 +73,7 @@ export function MigrationClient() {
   const [pushToR2, setPushToR2] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [dismissingJob, setDismissingJob] = useState<string | null>(null);
   const [starting, setStarting] = useState<"export" | "import" | null>(null);
   const [togglingMaintenance, setTogglingMaintenance] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -222,6 +224,21 @@ export function MigrationClient() {
     } finally {
       // 只在仍等于当前 name 时清空：并发下载互不提前清掉彼此的"下载中…"。
       setDownloading((current) => (current === name ? null : current));
+    }
+  }
+
+  async function onDismissError(jobId: string) {
+    setError(null);
+    setMessage(null);
+    setDismissingJob(jobId);
+    try {
+      await dismissMigrationJobError(jobId);
+      setMessage("已清除报错信息");
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "清除报错信息失败");
+    } finally {
+      setDismissingJob(null);
     }
   }
 
@@ -420,6 +437,8 @@ export function MigrationClient() {
                       job={job}
                       onDownload={onDownload}
                       downloading={downloading}
+                      dismissing={dismissingJob}
+                      onDismissError={onDismissError}
                     />
                   ))}
               </div>
@@ -567,6 +586,8 @@ export function MigrationClient() {
                       job={job}
                       onDownload={onDownload}
                       downloading={downloading}
+                      dismissing={dismissingJob}
+                      onDismissError={onDismissError}
                     />
                   ))
               )}
@@ -582,10 +603,14 @@ function JobRow({
   job,
   onDownload,
   downloading,
+  dismissing,
+  onDismissError,
 }: {
   job: MigrationJobSummary;
   onDownload: (name: string) => void;
   downloading: string | null;
+  dismissing: string | null;
+  onDismissError: (jobId: string) => void;
 }) {
   const running = job.status === "running" || job.status === "pending";
   const progress = job.progress;
@@ -641,7 +666,19 @@ function JobRow({
           </span>
         </div>
       ) : null}
-      {job.error ? <p className="error-text job-error">{job.error}</p> : null}
+      {job.error ? (
+        <div className="job-error-row">
+          <p className="error-text job-error">{job.error}</p>
+          <button
+            className="button secondary small"
+            disabled={dismissing === job.id}
+            onClick={() => onDismissError(job.id)}
+            type="button"
+          >
+            {dismissing === job.id ? "清除中…" : "清除报错"}
+          </button>
+        </div>
+      ) : null}
       {job.status === "succeeded" &&
       job.kind === "export" &&
       job.packageName ? (

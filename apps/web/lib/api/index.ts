@@ -2242,6 +2242,14 @@ export function listMigrationJobs() {
   return request<{ jobs: MigrationJobSummary[] }>("/admin/migration/jobs");
 }
 
+/** 清除失败任务的报错信息（已读），避免每次进入迁移页重复弹出同一条错误。 */
+export function dismissMigrationJobError(jobId: string) {
+  return request<{ job: MigrationJobSummary }>(
+    `/admin/migration/jobs/${encodeURIComponent(jobId)}/dismiss`,
+    { method: "POST" },
+  );
+}
+
 export function getMigrationJob(jobId: string) {
   return request<{ job: MigrationJobSummary }>(
     `/admin/migration/jobs/${encodeURIComponent(jobId)}`,
