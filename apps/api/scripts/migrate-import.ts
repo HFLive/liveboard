@@ -21,7 +21,7 @@
  *     --confirm CONFIRM-IMPORT [--target-backend minio|oss|r2] [--concurrency 4] \
  *     [--finalize-objects|--pull-source-r2] [--ensure-maintenance]
  */
-import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { createReadStream } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -320,24 +320,37 @@ async function wipeSecrets(
   if (targetBackend === "oss" && preservedOss) {
     // OSS 目标：把导入前捕获的目标自身 OSS 配置（含加密 secret，密钥未变）写回，
     // 导入完成后应用无需重新配置即可继续访问 OSS。
-    await prisma.$executeRaw(
-      Prisma.sql`UPDATE "StorageSettings" SET "backend" = 'oss',
-        "ossRegion" = ${preservedOss.ossRegion},
-        "ossBucket" = ${preservedOss.ossBucket},
-        "ossEndpoint" = ${preservedOss.ossEndpoint},
-        "ossAccessKeyId" = ${preservedOss.ossAccessKeyId},
-        "ossAccessKeySecret" = ${preservedOss.ossAccessKeySecret},
-        "ossInternal" = ${preservedOss.ossInternal},
-        "ossInternalEndpoint" = ${preservedOss.ossInternalEndpoint}`,
-    );
+    await prisma.storageSettings.updateMany({
+      data: {
+        backend: "oss",
+        ossRegion: preservedOss.ossRegion,
+        ossBucket: preservedOss.ossBucket,
+        ossEndpoint: preservedOss.ossEndpoint,
+        ossAccessKeyId: preservedOss.ossAccessKeyId,
+        ossAccessKeySecret: preservedOss.ossAccessKeySecret,
+        ossInternal: preservedOss.ossInternal,
+        ossInternalEndpoint: preservedOss.ossInternalEndpoint,
+      },
+    });
   } else {
     // StorageSettings.backend 强制改回目标后端（还原后 DB 里是源端的值），
     // 清空 OSS 凭据；MinIO/R2 配置来自环境变量，无需 DB 凭据。
-    await prisma.$executeRaw(
-      Prisma.sql`UPDATE "StorageSettings" SET "backend" = ${targetBackend},
-        "ossRegion" = NULL, "ossBucket" = NULL, "ossEndpoint" = NULL,
-        "ossAccessKeyId" = NULL, "ossAccessKeySecret" = NULL, "ossInternal" = false, "ossInternalEndpoint" = NULL`,
-    );
+    //
+    // 注意：不能用 $executeRaw 把 targetBackend 参数直接绑进 enum 列——
+    // Prisma 会把 JS 字符串参数标为 text，Postgres 的 enum 不接受 text 参数
+    // （42804）。用 Prisma 客户端的 updateMany 走枚举序列化，绕开强转问题。
+    await prisma.storageSettings.updateMany({
+      data: {
+        backend: targetBackend,
+        ossRegion: null,
+        ossBucket: null,
+        ossEndpoint: null,
+        ossAccessKeyId: null,
+        ossAccessKeySecret: null,
+        ossInternal: false,
+        ossInternalEndpoint: null,
+      },
+    });
   }
 }
 
