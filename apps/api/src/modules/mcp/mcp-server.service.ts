@@ -1,8 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { Request, Response } from "express";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpToolsService, type AuthProvider } from "./mcp-tools.service";
 
 /**
@@ -42,8 +42,16 @@ export class McpServerService {
       return;
     }
 
+    // 动态 require：MCP SDK 的深层依赖（@hono/node-server）在 Vercel 的
+    // @vercel/nft 文件追踪中可能被遗漏（SDK 使用 ./ 通配符 exports）。
+    // 放在方法内延迟加载，失败时只影响 /mcp 端点，其余 API 正常。
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const {
+      StreamableHTTPServerTransport: Transport,
+    } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
+
     const server = this.tools.createServer(this.getUserId);
-    const transport = new StreamableHTTPServerTransport({
+    const transport = new Transport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
     });
