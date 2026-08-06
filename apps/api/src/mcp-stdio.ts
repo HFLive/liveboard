@@ -1,5 +1,4 @@
 import { NestFactory } from "@nestjs/core";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { AppModule } from "./app.module";
 import { McpServerService } from "./modules/mcp/mcp-server.service";
 
@@ -27,6 +26,10 @@ async function main() {
   });
   const mcp = app.get(McpServerService);
   const server = mcp.createServer();
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const {
+    StdioServerTransport,
+  } = require("@modelcontextprotocol/sdk/server/stdio.js");
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
