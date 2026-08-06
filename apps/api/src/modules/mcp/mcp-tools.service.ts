@@ -70,12 +70,11 @@ export class McpToolsService {
     // 动态 require：与 mcp-server.service.ts 同理，避免顶层静态 import 在
     // Vercel 上因依赖追踪遗漏导致整个 API 进程 crash。
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const server: McpServer = new (
-      require("@modelcontextprotocol/sdk/server/mcp.js").McpServer
-    )({
-      name: "liveboard-docs",
-      version: "1.0.0",
-    });
+    const server: McpServer =
+      new (require("@modelcontextprotocol/sdk/server/mcp.js").McpServer)({
+        name: "liveboard-docs",
+        version: "1.0.0",
+      });
 
     const op = (extra: unknown) => {
       const userId = getUserId(extra);
