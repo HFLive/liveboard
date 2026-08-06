@@ -1,5 +1,5 @@
 import { HttpException, Injectable } from "@nestjs/common";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { FilesService } from "../files/files.service";
@@ -67,10 +67,14 @@ export class McpToolsService {
    * （SDK 的 Protocol.connect 不允许同一实例并发连接两个 transport）。
    */
   createServer(getUserId: AuthProvider): McpServer {
-    const server = new McpServer({
-      name: "liveboard-docs",
-      version: "1.0.0",
-    });
+    // 动态 require：与 mcp-server.service.ts 同理，避免顶层静态 import 在
+    // Vercel 上因依赖追踪遗漏导致整个 API 进程 crash。
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const server: McpServer =
+      new (require("@modelcontextprotocol/sdk/server/mcp.js").McpServer)({
+        name: "liveboard-docs",
+        version: "1.0.0",
+      });
 
     const op = (extra: unknown) => {
       const userId = getUserId(extra);
