@@ -77,6 +77,10 @@ export function ProfileClient() {
   const [awardedBadges, setAwardedBadges] = useState<UserBadgeSummary[]>([]);
   const [equippedBadgeIds, setEquippedBadgeIds] = useState<string[]>([]);
   const [savingBadges, setSavingBadges] = useState(false);
+  const [savingPreference, setSavingPreference] = useState(false);
+  const [preferenceMessage, setPreferenceMessage] = useState<string | null>(
+    null,
+  );
   const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
   const [cropSourceUrl, setCropSourceUrl] = useState<string | null>(null);
   const [savingCrop, setSavingCrop] = useState(false);
@@ -234,6 +238,31 @@ export function ProfileClient() {
       );
     } finally {
       setSavingCrop(false);
+    }
+  }
+
+  async function onChangeOpenMode(openContentInCurrentTab: boolean) {
+    setError(null);
+    setPreferenceMessage(null);
+    if (!user) return;
+    setSavingPreference(true);
+    try {
+      const result = await updateProfile({
+        displayName: user.displayName,
+        bio: user.bio ?? "",
+        openContentInCurrentTab,
+      });
+      setUser(result.user);
+      window.dispatchEvent(new Event("liveboard:profile-updated"));
+      setPreferenceMessage(
+        openContentInCurrentTab
+          ? "文档已改为当前标签页打开"
+          : "文档已改为新标签页打开",
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "保存偏好设置失败");
+    } finally {
+      setSavingPreference(false);
     }
   }
 
@@ -491,6 +520,33 @@ export function ProfileClient() {
                 <strong>{user ? userStatusLabel(user.status) : "-"}</strong>
               </div>
             </div>
+          </section>
+          <section className="action-panel profile-preference-panel">
+            <h2>偏好设置</h2>
+            <p className="muted">
+              打开文档、帖子、用户主页等站内链接时，默认用新标签页还是当前标签页展示。切换后立即生效。
+            </p>
+            <div className="segmented-control profile-open-mode">
+              <button
+                className={user?.openContentInCurrentTab ? "" : "active"}
+                disabled={savingPreference || !user}
+                onClick={() => void onChangeOpenMode(false)}
+                type="button"
+              >
+                新标签页
+              </button>
+              <button
+                className={user?.openContentInCurrentTab ? "active" : ""}
+                disabled={savingPreference || !user}
+                onClick={() => void onChangeOpenMode(true)}
+                type="button"
+              >
+                当前标签页
+              </button>
+            </div>
+            {preferenceMessage ? (
+              <p className="success-text">{preferenceMessage}</p>
+            ) : null}
           </section>
           <details className="password-disclosure">
             <summary>

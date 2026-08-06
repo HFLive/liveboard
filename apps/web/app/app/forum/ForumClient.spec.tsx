@@ -1,7 +1,18 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { listForumOverview } from "@/lib/api";
 import { ForumClient } from "./ForumClient";
+
+const routerState = vi.hoisted(() => ({ push: vi.fn() }));
+const openModeState = vi.hoisted(() => ({ current: false }));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => routerState,
+}));
+
+vi.mock("@/components/app-shell/UserPreferencesProvider", () => ({
+  useContentOpenMode: () => openModeState.current,
+}));
 
 vi.mock("@/lib/api", () => ({
   listForumOverview: vi.fn(),
@@ -10,6 +21,8 @@ vi.mock("@/lib/api", () => ({
 describe("ForumClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    openModeState.current = false;
+    routerState.push.mockClear();
     vi.mocked(listForumOverview).mockResolvedValue({
       categories: [
         {
@@ -127,5 +140,19 @@ describe("ForumClient", () => {
       within(topic as HTMLElement).getByText("2 条回复"),
     ).toBeInTheDocument();
     expect(topic?.querySelector(".user-badges--compact")).not.toBeNull();
+  });
+
+  it("偏好为当前标签页时，帖子标题链接不带 target 且点帖子行走 router.push", async () => {
+    openModeState.current = true;
+    render(<ForumClient />);
+
+    const title = await screen.findByRole("link", { name: "第一次课程讨论" });
+    expect(title).not.toHaveAttribute("target", "_blank");
+
+    const topic = screen.getByText("整理本周课堂中的疑问。").closest("article");
+    expect(topic).not.toBeNull();
+    fireEvent.click(topic as HTMLElement);
+
+    expect(routerState.push).toHaveBeenCalledWith("/app/forum/thread-1");
   });
 });

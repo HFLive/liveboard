@@ -12,6 +12,7 @@ import {
 } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
@@ -77,6 +78,7 @@ import {
 import { formatRelativeTime, permissionLabel } from "@/lib/labels";
 import { APP_ROUTES, contentDetail } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
+import { useContentOpenMode } from "@/components/app-shell/UserPreferencesProvider";
 import { SortIconSelect } from "@/components/SortIconSelect";
 import { PermissionUserPicker } from "@/components/PermissionUserPicker";
 import { AssetPreviewDialog } from "@/components/asset-preview/AssetPreviewDialog";
@@ -227,6 +229,8 @@ function treeDepthStyle(depth: number): TreeDepthStyle {
 }
 
 export function ContentClient() {
+  const router = useRouter();
+  const openContentInCurrentTab = useContentOpenMode();
   const [folders, setFolders] = useState<FolderNode[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [files, setFiles] = useState<FileSummary[]>([]);
@@ -1196,6 +1200,15 @@ export function ContentClient() {
     setOpenContentRowMenu(null);
   }
 
+  function openContent(fileId: string) {
+    const href = contentDetail(fileId);
+    if (openContentInCurrentTab) {
+      router.push(href);
+    } else {
+      window.open(href, "_blank", "noopener,noreferrer");
+    }
+  }
+
   function onContentRowClick(
     event: ReactMouseEvent<HTMLElement>,
     item: ContentRowItem,
@@ -1212,7 +1225,7 @@ export function ContentClient() {
     if (item.kind === "folder") {
       void selectFolder(item.folder.id);
     } else {
-      window.open(contentDetail(item.file.id), "_blank", "noopener,noreferrer");
+      openContent(item.file.id);
     }
   }
 
@@ -1284,7 +1297,7 @@ export function ContentClient() {
           <Link
             href={contentDetail(item.file.id)}
             rel="noopener noreferrer"
-            target="_blank"
+            target={openContentInCurrentTab ? undefined : "_blank"}
           >
             <FileText aria-hidden="true" />
             打开
@@ -1447,7 +1460,7 @@ export function ContentClient() {
                 className="content-file-link"
                 href={contentDetail(item.file.id)}
                 rel="noopener noreferrer"
-                target="_blank"
+                target={openContentInCurrentTab ? undefined : "_blank"}
                 title={label}
               >
                 <FileText aria-hidden="true" />
@@ -1609,7 +1622,7 @@ export function ContentClient() {
             className="content-drive-card-main"
             href={contentDetail(item.file.id)}
             rel="noopener noreferrer"
-            target="_blank"
+            target={openContentInCurrentTab ? undefined : "_blank"}
           >
             <span aria-hidden="true" className="content-drive-card-icon">
               <FileText />
@@ -2222,7 +2235,9 @@ export function ContentClient() {
                               className="content-file-link"
                               href={contentDetail(file.id)}
                               rel="noopener noreferrer"
-                              target="_blank"
+                              target={
+                                openContentInCurrentTab ? undefined : "_blank"
+                              }
                             >
                               <FileText aria-hidden="true" />
                               {file.status === "draft" ? (

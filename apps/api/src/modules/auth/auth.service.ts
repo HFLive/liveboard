@@ -175,7 +175,11 @@ export class AuthService {
     input: UpdateProfileDto,
   ): Promise<UserProfile> {
     const user = await this.requireActiveUser(userId);
-    const data: { displayName?: string; bio?: string | null } = {};
+    const data: {
+      displayName?: string;
+      bio?: string | null;
+      openContentInCurrentTab?: boolean;
+    } = {};
 
     if (typeof input.displayName === "string") {
       const displayName = input.displayName.trim();
@@ -187,6 +191,10 @@ export class AuthService {
 
     if (typeof input.bio === "string") {
       data.bio = input.bio.trim() || null;
+    }
+
+    if (typeof input.openContentInCurrentTab === "boolean") {
+      data.openContentInCurrentTab = input.openContentInCurrentTab;
     }
 
     const updated = await this.prisma.user.update({
@@ -604,6 +612,7 @@ export class AuthService {
     avatarUpdatedAt?: Date | null;
     bio?: string | null;
     bannerUpdatedAt?: Date | null;
+    openContentInCurrentTab: boolean;
     systemRole: UserSummary["systemRole"];
     status: UserSummary["status"];
     badgeAssignments?: Array<{
@@ -622,6 +631,7 @@ export class AuthService {
       bannerUrl: user.bannerUpdatedAt
         ? `/auth/banner/${user.id}?v=${user.bannerUpdatedAt.getTime()}`
         : null,
+      openContentInCurrentTab: user.openContentInCurrentTab,
     };
   }
 }

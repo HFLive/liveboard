@@ -39,6 +39,7 @@ import {
   teachingPresent,
 } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
+import { useContentOpenMode } from "@/components/app-shell/UserPreferencesProvider";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import { ForumUserAvatar } from "../ForumUserAvatar";
 import { ForumImagePicker } from "../ForumImagePicker";
@@ -51,6 +52,7 @@ interface ForumThreadClientProps {
 
 export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
   const router = useRouter();
+  const openContentInCurrentTab = useContentOpenMode();
   const { tasks, uploadFiles, cancelUpload, dismissUpload } = useUploadTask();
   const [thread, setThread] = useState<ForumThreadDetail | null>(null);
   useDocumentTitle(thread?.title ?? null);
@@ -774,7 +776,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                             : exerciseDetail(resource.id)
                       }
                       key={`${resource.type}:${resource.id}`}
-                      target="_blank"
+                      target={openContentInCurrentTab ? undefined : "_blank"}
                     >
                       <small>
                         {resource.type === "document"

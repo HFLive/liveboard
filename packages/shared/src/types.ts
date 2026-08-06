@@ -125,6 +125,8 @@ export interface AdminBadgeSummary extends BadgeSummary {
 export interface UserProfile extends UserSummary {
   bio: string | null;
   bannerUrl: string | null;
+  /** 打开文档时是否始终使用当前标签页（而非新标签页）。 */
+  openContentInCurrentTab: boolean;
 }
 
 export interface UserPublicActivity {

@@ -135,6 +135,8 @@ CREATE TABLE "MigrationJob" (
 CREATE INDEX "MigrationJob_createdById_createdAt_idx" ON "MigrationJob"("createdById", "createdAt");
 ALTER TABLE "MigrationJob" ADD CONSTRAINT "MigrationJob_createdById_fkey"
   FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+-- 镜像增量 migration 20260806121603_add_user_open_content_in_current_tab。
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "openContentInCurrentTab" BOOLEAN NOT NULL DEFAULT false;
 COMMIT;
 SQL
 )
@@ -142,7 +144,7 @@ SQL
 # 桥接 SQL 已覆盖、需要显式标记 applied 的增量 migration。fresh 部署时这些迁移
 # 由 migrate deploy 应用；既有库的建表/枚举已直接写入 BRIDGE_SQL，过渡时必须
 # resolve --applied，否则 migrate deploy 会尝试重复执行。
-BRIDGE_COVERED_MIGRATIONS="20260804000000_add_migration_job"
+BRIDGE_COVERED_MIGRATIONS="20260804000000_add_migration_job 20260806121603_add_user_open_content_in_current_tab"
 
 fail() {
   echo "[legacy-baseline-transition] 错误: $*" >&2

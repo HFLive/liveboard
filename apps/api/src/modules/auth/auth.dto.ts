@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -31,6 +32,10 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(500)
   bio?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  openContentInCurrentTab?: boolean;
 }
 
 export class ChangePasswordDto {
