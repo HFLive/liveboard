@@ -282,7 +282,9 @@ export function ApiTokensClient() {
                       <span>从未使用</span>
                     )}
                     {token.expiresAt ? (
-                      <span>过期于 {formatDateTimeWithYear(token.expiresAt)}</span>
+                      <span>
+                        过期于 {formatDateTimeWithYear(token.expiresAt)}
+                      </span>
                     ) : null}
                   </div>
                   <div className="token-row-actions">
