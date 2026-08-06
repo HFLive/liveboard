@@ -597,7 +597,7 @@ export function ContentClient() {
       setIsBreadcrumbOverflowOpen(false);
     }
 
-    function closeMenus(event: MouseEvent) {
+    function closeMenus(event: Event) {
       const target = event.target;
 
       if (
@@ -611,11 +611,11 @@ export function ContentClient() {
     }
 
     document.addEventListener("mousedown", closeMenus);
-    document.addEventListener("scroll", closeFloatingMenus, true);
+    document.addEventListener("scroll", closeMenus, true);
     window.addEventListener("resize", closeFloatingMenus);
     return () => {
       document.removeEventListener("mousedown", closeMenus);
-      document.removeEventListener("scroll", closeFloatingMenus, true);
+      document.removeEventListener("scroll", closeMenus, true);
       window.removeEventListener("resize", closeFloatingMenus);
     };
   }, []);
