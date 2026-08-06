@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   createApiToken,
+  getMe,
   listApiTokens,
   listUsers,
   revokeApiToken,
@@ -25,6 +26,12 @@ export function ApiTokensClient() {
   const [users, setUsers] = useState<
     Array<{ id: string; username: string; displayName: string }>
   >([]);
+  // 普通管理员只能管理自己的令牌；最高管理员可管理全部成员令牌
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [actor, setActor] = useState<{
+    id: string;
+    displayName: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedToken | null>(null);
@@ -46,8 +53,11 @@ export function ApiTokensClient() {
   );
 
   useEffect(() => {
-    Promise.all([listApiTokens(), listUsers()])
-      .then(([tokenResult, userResult]) => {
+    Promise.all([getMe(), listApiTokens(), listUsers()])
+      .then(([meResult, tokenResult, userResult]) => {
+        const me = meResult.user;
+        setIsSuperAdmin(me.systemRole === "super_admin");
+        setActor({ id: me.id, displayName: me.displayName });
         setTokens(tokenResult.tokens);
         const activeUsers = userResult.users
           .filter((user) => user.status === "active")
@@ -57,8 +67,12 @@ export function ApiTokensClient() {
             displayName: user.displayName,
           }));
         setUsers(activeUsers);
-        const firstUser = activeUsers[0];
-        if (firstUser) setUserId(firstUser.id);
+        if (me.systemRole === "super_admin") {
+          const firstUser = activeUsers[0];
+          if (firstUser) setUserId(firstUser.id);
+        } else {
+          setUserId(me.id);
+        }
       })
       .catch((caught) => {
         setError(caught instanceof Error ? caught.message : "加载访问令牌失败");
@@ -185,20 +199,31 @@ export function ApiTokensClient() {
         <form className="token-create-form" onSubmit={onCreate}>
           <div className="token-create-field">
             <label htmlFor="token-user">归属用户</label>
-            <select
-              className="select"
-              id="token-user"
-              onChange={(event) => setUserId(event.target.value)}
-              value={userId}
-            >
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.displayName}（{user.username}）
-                </option>
-              ))}
-            </select>
+            {isSuperAdmin ? (
+              <select
+                className="select"
+                id="token-user"
+                onChange={(event) => setUserId(event.target.value)}
+                value={userId}
+              >
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.displayName}（{user.username}）
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="input"
+                id="token-user"
+                readOnly
+                value={actor?.displayName ?? ""}
+              />
+            )}
             <span className="token-create-hint">
-              令牌将以此用户的身份操作文档
+              {isSuperAdmin
+                ? "令牌将以此用户的身份操作文档"
+                : "管理员只能创建自己的令牌，令牌将以此用户身份操作文档"}
             </span>
           </div>
           <div className="token-create-field">
@@ -236,21 +261,23 @@ export function ApiTokensClient() {
       <section className="token-list">
         <div className="token-list-head">
           <h2>已创建的令牌</h2>
-          <label className="token-list-filter">
-            <span>按用户筛选</span>
-            <select
-              className="select compact-select"
-              onChange={(event) => setFilterUserId(event.target.value)}
-              value={filterUserId}
-            >
-              <option value="all">全部用户</option>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
+          {isSuperAdmin ? (
+            <label className="token-list-filter">
+              <span>按用户筛选</span>
+              <select
+                className="select compact-select"
+                onChange={(event) => setFilterUserId(event.target.value)}
+                value={filterUserId}
+              >
+                <option value="all">全部用户</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
 
         {visibleTokens.length === 0 ? (

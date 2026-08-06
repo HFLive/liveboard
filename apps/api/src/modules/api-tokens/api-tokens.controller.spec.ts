@@ -4,7 +4,10 @@ import { ApiTokensController } from "./api-tokens.controller";
 import { ApiTokenService } from "./api-token.service";
 
 describe("ApiTokensController", () => {
-  const prisma = { user: { findUnique: jest.fn() } };
+  const prisma = {
+    user: { findUnique: jest.fn() },
+    apiToken: { findUnique: jest.fn() },
+  };
   const apiTokens = {
     createToken: jest.fn(),
     listTokens: jest.fn(),
@@ -67,10 +70,10 @@ describe("ApiTokensController", () => {
     });
   });
 
-  it("allows ordinary administrators to create tokens", async () => {
+  it("forces ordinary administrators to create tokens for themselves", async () => {
     prisma.user.findUnique
       .mockResolvedValueOnce({ ...adminUser, systemRole: "admin" }) // requireAdmin
-      .mockResolvedValueOnce({ id: "user-1", status: "active" }); // 目标用户
+      .mockResolvedValueOnce({ id: "admin-1", status: "active" }); // 强制归属自己
     apiTokens.createToken.mockResolvedValue({
       token: "lbt_secret",
       tokenId: "tok-1",
@@ -83,7 +86,50 @@ describe("ApiTokensController", () => {
     });
 
     expect(result.token).toBe("lbt_secret");
-    expect(apiTokens.createToken).toHaveBeenCalled();
+    expect(apiTokens.createToken).toHaveBeenCalledWith({
+      userId: "admin-1",
+      name: "claude-code",
+      expiresAt: undefined,
+    });
+  });
+
+  it("only lists the ordinary administrator's own tokens", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...adminUser,
+      systemRole: "admin",
+    });
+    apiTokens.listTokens.mockResolvedValue([]);
+
+    await controller.list("admin-1", "user-1");
+
+    expect(apiTokens.listTokens).toHaveBeenCalledWith("admin-1");
+  });
+
+  it("rejects revoking another user's token for ordinary administrators", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...adminUser,
+      systemRole: "admin",
+    });
+    prisma.apiToken.findUnique.mockResolvedValue({ userId: "user-1" });
+
+    await expect(controller.revoke("admin-1", "tok-1")).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(apiTokens.revokeToken).not.toHaveBeenCalled();
+  });
+
+  it("allows ordinary administrators to revoke their own tokens", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...adminUser,
+      systemRole: "admin",
+    });
+    prisma.apiToken.findUnique.mockResolvedValue({ userId: "admin-1" });
+    apiTokens.revokeToken.mockResolvedValue(undefined);
+
+    await expect(controller.revoke("admin-1", "tok-1")).resolves.toEqual({
+      ok: true,
+    });
+    expect(apiTokens.revokeToken).toHaveBeenCalledWith("tok-1");
   });
 
   it("rejects creating a token for a missing or disabled user", async () => {
