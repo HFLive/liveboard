@@ -1,0 +1,286 @@
+.api-tokens-page {
+  min-width: 0;
+}
+
+.api-tokens-page section {
+  width: min(960px, 100%);
+  margin: 0 auto;
+}
+
+/* ---- 创建成功：明文一次性展示 ---- */
+
+.token-created {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+  padding: 14px 16px 16px;
+  margin-top: 22px;
+}
+
+.token-created-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.token-created-head strong {
+  font-size: 15px;
+}
+
+.token-created-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.token-created-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 4px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.token-created-close:hover {
+  color: var(--text);
+}
+
+.token-plaintext {
+  display: block;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background: var(--fill-subtle);
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.token-created-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.token-created-meta span {
+  display: flex;
+  gap: 8px;
+}
+
+.token-created-meta strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* ---- 创建表单 ---- */
+
+.token-create {
+  padding: 22px 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.token-create-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.token-create-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.token-create-field label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.token-create-field .input,
+.token-create-field .select {
+  min-width: 0;
+  width: 100%;
+}
+
+.token-create-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.token-create-field:first-child {
+  flex: 1 1 180px;
+}
+
+.token-create-field:nth-child(2) {
+  flex: 1 1 220px;
+}
+
+.token-create-field:nth-child(3) {
+  flex: 1 1 220px;
+}
+
+.token-create-form > .button {
+  flex: 0 0 auto;
+}
+
+/* ---- 令牌列表 ---- */
+
+.token-list {
+  padding: 20px 0 40px;
+}
+
+.token-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+}
+
+.token-list-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.token-list-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.token-list-empty {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 18px 0;
+}
+
+.token-rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.token-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 13px 2px;
+  border-top: 1px solid var(--line);
+}
+
+.token-row:last-child {
+  border-bottom: 1px solid var(--line);
+}
+
+.token-row-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 0 0 200px;
+}
+
+.token-row-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.token-row-user {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.token-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.token-prefix {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.token-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+/* 状态标签只标异常；撤销按钮桌面端 hover 才出现 */
+.token-row-actions .button.secondary {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.token-row:hover .token-row-actions .button.secondary,
+.token-row:focus-within .token-row-actions .button.secondary {
+  opacity: 1;
+}
+
+.token-status {
+  border-radius: 7px;
+  background: var(--fill-active);
+  padding: 3px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 窄屏：行内操作常显、字段纵向堆叠 */
+@media (max-width: 1080px) {
+  .token-row-actions .button.secondary {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 720px) {
+  .token-row {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+
+  .token-row-main {
+    flex-basis: auto;
+    flex: 1 1 auto;
+  }
+
+  .token-row-meta {
+    flex-basis: 100%;
+    order: 3;
+  }
+
+  .token-row-actions {
+    flex-basis: auto;
+  }
+
+  .token-create-form > .button {
+    width: 100%;
+  }
+}

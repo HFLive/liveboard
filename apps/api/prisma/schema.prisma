@@ -163,6 +163,25 @@ model User {
   notificationRecipients  NotificationRecipient[]
   forumPostVotes          ForumPostVote[]
   migrationJobs           MigrationJob[]
+  apiTokens               ApiToken[]              @relation("UserApiTokens")
+}
+
+/// 个人访问令牌（PAT）：MCP 等外部客户端以用户身份调用 API。
+/// 只存 SHA-256 哈希，明文仅在创建时返回一次。
+model ApiToken {
+  id          String     @id @default(cuid())
+  userId      String
+  name        String
+  tokenHash   String     @unique // SHA-256 hex
+  tokenPrefix String // 明文前 10 位，管理端展示识别
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime   @default(now())
+
+  user User @relation("UserApiTokens", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model Notification {

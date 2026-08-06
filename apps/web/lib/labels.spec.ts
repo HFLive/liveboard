@@ -3,6 +3,7 @@ import {
   assetTypeLabel,
   fileStatusLabel,
   formatDateTime,
+  formatDateTimeWithYear,
   getAppTimeZone,
   permissionLabel,
   questionTypeLabel,
@@ -52,6 +53,16 @@ describe("display labels", () => {
     "uses a placeholder for invalid dates",
     (value) => {
       expect(formatDateTime(value)).toBe("-");
+      expect(formatDateTimeWithYear(value)).toBe("-");
     },
   );
+
+  it("includes the year in the with-year variant", () => {
+    setAppTimeZone("Asia/Shanghai");
+    expect(formatDateTimeWithYear("2027-01-01T00:00:00.000Z")).toContain(
+      "2027",
+    );
+    // 普通变体保持原有省略年份的格式
+    expect(formatDateTime("2027-01-01T00:00:00.000Z")).not.toContain("2027");
+  });
 });
