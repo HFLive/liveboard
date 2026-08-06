@@ -31,6 +31,7 @@ import {
   type NotificationUpdateSource,
 } from "@/lib/notifications";
 import { NotificationList } from "@/components/notifications/NotificationList";
+import { useContentOpenMode } from "@/components/app-shell/UserPreferencesProvider";
 import { LogoutButton } from "./LogoutButton";
 import { SiteBrandMark } from "./SiteBrandMark";
 
@@ -58,6 +59,7 @@ function isPrimaryNavActive(pathname: string, href: string) {
 
 export function AppNav() {
   const pathname = usePathname();
+  const openContentInCurrentTab = useContentOpenMode();
   const isPresentationRoute =
     /^\/app\/(?:content\/[^/]+|teaching\/[^/]+)\/present$/.test(pathname);
   const [user, setUser] = useState<UserSummary | null>(null);
@@ -403,7 +405,7 @@ export function AppNav() {
             }
             href={user ? userProfile(user.id) : APP_ROUTES.profile}
             rel="noopener noreferrer"
-            target="_blank"
+            target={openContentInCurrentTab ? undefined : "_blank"}
             title={displayName}
           >
             <span className="rail-avatar" aria-hidden="true">

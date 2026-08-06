@@ -2202,6 +2202,25 @@ button:disabled {
   padding: 12px;
 }
 
+.profile-preference-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.profile-preference-panel > p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.profile-preference-panel .profile-open-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.profile-preference-panel .profile-open-mode button {
+  width: 100%;
+}
+
 /* Responsive application frame */
 
 @media (max-width: 1180px) and (min-width: 761px) {

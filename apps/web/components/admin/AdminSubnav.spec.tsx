@@ -20,6 +20,7 @@ const baseUser = {
   bio: "",
   bannerUrl: null,
   avatarUrl: null,
+  openContentInCurrentTab: false,
 };
 
 describe("AdminSubnav", () => {

@@ -129,6 +129,7 @@ model User {
   bannerMimeType       String?
   bannerUpdatedAt      DateTime?
   bannerStorageBackend StorageBackend @default(minio)
+  openContentInCurrentTab Boolean      @default(false)
   sessionVersion       Int            @default(0)
   systemRole           SystemRole
   status               UserStatus     @default(active)

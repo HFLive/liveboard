@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { UserSummary } from "@liveboard/shared";
+import { useContentOpenMode } from "@/components/app-shell/UserPreferencesProvider";
 import { userProfile } from "@/lib/routes";
 import { UserBadges } from "./UserBadges";
 
@@ -16,12 +17,13 @@ export function UserProfileLink({
   children,
   compactBadges = false,
 }: UserProfileLinkProps) {
+  const openContentInCurrentTab = useContentOpenMode();
   return (
     <Link
       className={["user-profile-link", className].filter(Boolean).join(" ")}
       href={userProfile(user.id)}
       rel="noopener noreferrer"
-      target="_blank"
+      target={openContentInCurrentTab ? undefined : "_blank"}
     >
       <span>{children ?? user.displayName}</span>
       <UserBadges badges={user.badges} compact={compactBadges} />

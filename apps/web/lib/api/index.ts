@@ -218,7 +218,11 @@ export function archiveNotification(notificationId: string) {
   );
 }
 
-export function updateProfile(input: { displayName: string; bio?: string }) {
+export function updateProfile(input: {
+  displayName: string;
+  bio?: string;
+  openContentInCurrentTab?: boolean;
+}) {
   clearCurrentUserCache();
   return request<{ user: UserProfile }>("/auth/me", {
     method: "PATCH",

@@ -21,6 +21,7 @@ const user = {
   bio: "",
   bannerUrl: null,
   avatarUrl: null,
+  openContentInCurrentTab: false,
 };
 
 describe("AdminOverviewClient", () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { MessageSquare, Plus, Search } from "lucide-react";
 import type {
@@ -10,6 +11,7 @@ import type {
 import { listForumOverview } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/labels";
 import { APP_ROUTES, forumThread } from "@/lib/routes";
+import { useContentOpenMode } from "@/components/app-shell/UserPreferencesProvider";
 import { SortIconSelect } from "@/components/SortIconSelect";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import { ForumUserAvatar } from "./ForumUserAvatar";
@@ -24,6 +26,8 @@ const SORT_OPTIONS = [
 ] as const;
 
 export function ForumClient() {
+  const router = useRouter();
+  const openContentInCurrentTab = useContentOpenMode();
   const [categories, setCategories] = useState<ForumCategorySummary[]>([]);
   const [threads, setThreads] = useState<ForumThreadSummary[]>([]);
   const [activeCategoryId, setActiveCategoryId] =
@@ -191,11 +195,15 @@ export function ForumClient() {
                     ) {
                       return;
                     }
-                    window.open(
-                      forumThread(thread.id),
-                      "_blank",
-                      "noopener,noreferrer",
-                    );
+                    if (openContentInCurrentTab) {
+                      router.push(forumThread(thread.id));
+                    } else {
+                      window.open(
+                        forumThread(thread.id),
+                        "_blank",
+                        "noopener,noreferrer",
+                      );
+                    }
                   }}
                 >
                   <ForumUserAvatar
@@ -212,7 +220,9 @@ export function ForumClient() {
                         <Link
                           href={forumThread(thread.id)}
                           rel="noopener noreferrer"
-                          target="_blank"
+                          target={
+                            openContentInCurrentTab ? undefined : "_blank"
+                          }
                         >
                           {thread.title}
                         </Link>

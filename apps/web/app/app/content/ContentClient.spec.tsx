@@ -9,14 +9,36 @@ import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FolderNode } from "@liveboard/shared";
 import { ContentClient } from "./ContentClient";
+import { UserPreferencesProvider } from "@/components/app-shell/UserPreferencesProvider";
 import {
   deleteFolder,
   deleteLibraryAsset,
   getFolderTree,
+  getMe,
   listFiles,
   uploadAsset,
   updateContentPins,
 } from "@/lib/api";
+
+function makeUser(openContentInCurrentTab = false) {
+  return {
+    id: "user-1",
+    username: "admin",
+    displayName: "管理员",
+    avatarUrl: null,
+    bannerUrl: null,
+    bio: null,
+    systemRole: "member" as const,
+    status: "active" as const,
+    openContentInCurrentTab,
+  };
+}
+
+const routerState = vi.hoisted(() => ({ push: vi.fn() }));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => routerState,
+}));
 
 vi.mock("@/lib/api", () => ({
   apiResourceUrl: vi.fn((path: string) => path),
@@ -28,6 +50,19 @@ vi.mock("@/lib/api", () => ({
   deleteLibraryAsset: vi.fn().mockResolvedValue({ ok: true }),
   deletePermissionGrant: vi.fn(),
   getFolderTree: vi.fn(),
+  getMe: vi.fn().mockResolvedValue({
+    user: {
+      id: "user-1",
+      username: "admin",
+      displayName: "管理员",
+      avatarUrl: null,
+      bannerUrl: null,
+      bio: null,
+      systemRole: "member",
+      status: "active",
+      openContentInCurrentTab: false,
+    },
+  }),
   importMarkdown: vi.fn(),
   listAssignablePermissionUsers: vi
     .fn()
@@ -863,5 +898,82 @@ describe("ContentClient folder deletion", () => {
     expect(window.localStorage.getItem("liveboard:content-active-folder")).toBe(
       "folder-2",
     );
+  });
+});
+
+describe("ContentClient 文档打开偏好", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.localStorage.clear();
+    routerState.push.mockClear();
+    vi.mocked(getFolderTree)
+      .mockResolvedValueOnce({ folders: folderTree, canManagePins: false })
+      .mockResolvedValue({ folders: [], canManagePins: false });
+    vi.mocked(getMe).mockResolvedValue({ user: makeUser(false) });
+    vi.mocked(listFiles).mockResolvedValue({ files: [], standaloneAssets: [] });
+  });
+
+  it("默认（新标签页）时，文档链接带 target=_blank", async () => {
+    vi.mocked(listFiles).mockResolvedValueOnce({
+      files: [folderTree[0]!.files[0]!],
+      standaloneAssets: [],
+    });
+
+    render(
+      <UserPreferencesProvider>
+        <ContentClient />
+      </UserPreferencesProvider>,
+    );
+
+    await enterFolderFromTree("课程资料");
+    const table = screen.getByRole("table");
+    const documentLink = await within(table).findByRole("link", {
+      name: "课程导读",
+    });
+    expect(documentLink).toHaveAttribute("target", "_blank");
+  });
+
+  it("偏好为当前标签页时，点击文档行用 router.push 在当前标签页打开", async () => {
+    vi.mocked(getMe).mockResolvedValue({ user: makeUser(true) });
+    vi.mocked(listFiles).mockResolvedValueOnce({
+      files: [folderTree[0]!.files[0]!],
+      standaloneAssets: [],
+    });
+    window.open = vi.fn() as unknown as typeof window.open;
+
+    render(
+      <UserPreferencesProvider>
+        <ContentClient />
+      </UserPreferencesProvider>,
+    );
+
+    await enterFolderFromTree("课程资料");
+    fireEvent.click(screen.getByRole("row", { name: /课程导读/ }));
+
+    await waitFor(() =>
+      expect(routerState.push).toHaveBeenCalledWith("/app/content/file-1"),
+    );
+    expect(window.open).not.toHaveBeenCalled();
+  });
+
+  it("偏好为当前标签页时，文档链接不带 target=_blank", async () => {
+    vi.mocked(getMe).mockResolvedValue({ user: makeUser(true) });
+    vi.mocked(listFiles).mockResolvedValueOnce({
+      files: [folderTree[0]!.files[0]!],
+      standaloneAssets: [],
+    });
+
+    render(
+      <UserPreferencesProvider>
+        <ContentClient />
+      </UserPreferencesProvider>,
+    );
+
+    await enterFolderFromTree("课程资料");
+    const table = screen.getByRole("table");
+    const documentLink = await within(table).findByRole("link", {
+      name: "课程导读",
+    });
+    expect(documentLink).not.toHaveAttribute("target", "_blank");
   });
 });
