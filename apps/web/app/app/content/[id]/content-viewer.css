@@ -321,7 +321,8 @@
   width: 100%;
   max-width: 760px;
   margin: 0 auto;
-  padding: 40px 0 104px;
+  /* 底部留白给目录跳转留出滚动空间：靠后的标题也要能滚到页面顶端 */
+  padding: 40px 0 min(80dvh, 720px);
   color: var(--text-soft);
   font-family:
     "Noto Serif SC", "Songti SC", STSong, SimSun, "Noto Serif CJK SC", serif;
@@ -555,11 +556,16 @@
   }
 
   .content-viewer-toc {
-    position: static;
+    /* 下滑时目录固定在顶部 rail 正下方；8px 间隙用 padding-top 承载，
+       让背景盖住间隙，避免内容从目录上方透出 */
+    position: sticky;
+    top: 58px;
+    z-index: 5;
     max-height: none;
-    margin-top: 8px;
+    margin-top: 0;
     border-left: 0;
-    padding: 0 0 14px;
+    background: var(--bg);
+    padding: 8px 0 14px;
   }
 
   .content-viewer-toc nav {
@@ -576,12 +582,15 @@
   }
 
   .content-viewer-document {
-    padding: 8px 0 80px;
+    padding: 8px 0 min(80dvh, 720px);
     line-height: 1.82;
   }
 
   .content-viewer-block[data-block-type^="heading_"] {
     margin-top: 2.25em;
+    /* 锚点跳转时避开顶部 rail（58px）与固定目录（约 77px），
+       否则标题会被盖住 */
+    scroll-margin-top: 140px;
   }
 
   .content-viewer-block:first-child {

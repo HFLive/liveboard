@@ -127,9 +127,11 @@
   color: var(--muted);
 }
 
-.actions button:hover {
-  background: var(--fill-active);
-  color: var(--text);
+@media (hover: hover) {
+  .actions button:hover {
+    background: var(--fill-active);
+    color: var(--text);
+  }
 }
 
 .actions svg {
@@ -140,6 +142,8 @@
 .compact .link {
   grid-template-columns: 30px minmax(0, 1fr);
   gap: 8px;
+  /* 为右上角已读/删除按钮（绝对定位）预留空间，长文字在其左侧截断 */
+  padding-right: 68px;
   padding-block: 9px;
 }
 
@@ -153,12 +157,6 @@
   top: 5px;
   right: 3px;
   border-radius: 8px;
-  background: var(--fill-hover);
-}
-
-.compact .item:hover .titleRow time,
-.compact .item:focus-within .titleRow time {
-  visibility: hidden;
 }
 
 @media (max-width: 720px) {

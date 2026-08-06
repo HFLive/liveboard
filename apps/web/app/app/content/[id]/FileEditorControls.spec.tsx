@@ -2,11 +2,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ContentBlock } from "@/lib/api";
 import {
-  DocumentPreview,
+  AddBlockForm,
   flattenInternalDocuments,
   RichTextBlockEditor,
-  syncScrollProgress,
   TableBlockEditor,
+  WysiwygBlock,
 } from "./FileEditor";
 
 const paragraph = {
@@ -17,24 +17,124 @@ const paragraph = {
   dataJson: { text: "选中文字", inlineFormat: "markdown" },
 } as ContentBlock;
 
+function renderWysiwygBlock(
+  block: ContentBlock,
+  {
+    editing = false,
+    internalDocuments = [],
+    onRequestEdit = vi.fn(),
+    onExitEdit = vi.fn(),
+  }: {
+    editing?: boolean;
+    internalDocuments?: Parameters<typeof WysiwygBlock>[0]["internalDocuments"];
+    onRequestEdit?: () => void;
+    onExitEdit?: () => void;
+  } = {},
+) {
+  render(
+    <WysiwygBlock
+      block={block}
+      dragging={false}
+      dropTarget={null}
+      editing={editing}
+      internalDocuments={internalDocuments}
+      onDelete={vi.fn()}
+      onDragEnd={vi.fn()}
+      onDragOver={vi.fn()}
+      onDragStart={vi.fn()}
+      onDrop={vi.fn()}
+      onExitEdit={onExitEdit}
+      onInsertAfter={vi.fn()}
+      onOpenAssetPicker={vi.fn()}
+      onOpenMenu={vi.fn()}
+      onPatch={vi.fn()}
+      onRequestEdit={onRequestEdit}
+      onSave={vi.fn()}
+      onUpdateText={vi.fn()}
+      onUpdateType={vi.fn()}
+    />,
+  );
+}
+
 describe("FileEditor structured controls", () => {
-  it("renders the complete document in the separate format preview", () => {
-    render(
-      <DocumentPreview
-        blocks={[
-          paragraph,
-          {
-            ...paragraph,
-            id: "math-1",
-            type: "math",
-            dataJson: { text: "x^2", display: true },
-          } as ContentBlock,
-        ]}
-      />,
+  it("renders blocks in final-document form instead of raw code", () => {
+    renderWysiwygBlock({
+      ...paragraph,
+      dataJson: { text: "**加粗** 正文", inlineFormat: "markdown" },
+    } as ContentBlock);
+
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    const strong = document.querySelector(".doc-block-render strong");
+    expect(strong).not.toBeNull();
+    expect(strong?.textContent).toBe("加粗");
+  });
+
+  it("enters source editing when the rendered block is clicked", () => {
+    const onRequestEdit = vi.fn();
+    renderWysiwygBlock(paragraph, { onRequestEdit });
+
+    fireEvent.click(screen.getByText("选中文字"));
+    expect(onRequestEdit).toHaveBeenCalled();
+  });
+
+  it("keeps links interactive instead of entering edit mode", () => {
+    const onRequestEdit = vi.fn();
+    renderWysiwygBlock(
+      {
+        ...paragraph,
+        dataJson: {
+          text: "[外部](https://example.com)",
+          inlineFormat: "markdown",
+        },
+      } as ContentBlock,
+      { onRequestEdit },
     );
 
-    expect(screen.getByText("选中文字")).toBeInTheDocument();
-    expect(document.querySelector(".katex")).not.toBeNull();
+    fireEvent.click(screen.getByRole("link"));
+    expect(onRequestEdit).not.toHaveBeenCalled();
+  });
+
+  it("shows the markdown source textarea while editing", () => {
+    renderWysiwygBlock(paragraph, { editing: true });
+
+    const textarea = screen.getByRole("textbox");
+    expect((textarea as HTMLTextAreaElement).value).toBe("选中文字");
+    expect(screen.getByTitle("内容块类型")).toBeInTheDocument();
+  });
+
+  it("leaves edit mode when focus moves outside the block", () => {
+    const onExitEdit = vi.fn();
+    renderWysiwygBlock(paragraph, { editing: true, onExitEdit });
+
+    const textarea = screen.getByRole("textbox");
+    fireEvent.blur(textarea, { relatedTarget: document.body });
+    expect(onExitEdit).toHaveBeenCalled();
+  });
+
+  it("keeps editing when focus moves within the block toolbar", () => {
+    const onExitEdit = vi.fn();
+    renderWysiwygBlock(paragraph, { editing: true, onExitEdit });
+
+    const textarea = screen.getByRole("textbox");
+    const typeSelect = screen.getByTitle("内容块类型");
+    fireEvent.blur(textarea, { relatedTarget: typeSelect });
+    expect(onExitEdit).not.toHaveBeenCalled();
+  });
+
+  it("renders editor images without the zoom role", () => {
+    renderWysiwygBlock({
+      ...paragraph,
+      type: "image",
+      dataJson: {
+        text: "图",
+        url: "https://example.com/a.png",
+        widthPercent: 100,
+      },
+    } as ContentBlock);
+
+    const image = document.querySelector(".doc-block-render img");
+    expect(image).not.toBeNull();
+    expect(image?.getAttribute("role")).not.toBe("button");
   });
 
   it("wraps the selected text from the rich-text toolbar", () => {
@@ -94,7 +194,7 @@ describe("FileEditor structured controls", () => {
     );
   });
 
-  it("flattens accessible document locations and matches pane progress", () => {
+  it("flattens accessible document locations", () => {
     const documents = flattenInternalDocuments([
       {
         id: "folder-1",
@@ -123,11 +223,70 @@ describe("FileEditor structured controls", () => {
       path: "课程",
       title: "课程导读",
     });
+  });
 
-    const source = { scrollTop: 400, scrollHeight: 1000, clientHeight: 200 };
-    const target = { scrollTop: 0, scrollHeight: 500, clientHeight: 100 };
-    expect(syncScrollProgress(source, target)).toBe(0.5);
-    expect(target.scrollTop).toBe(200);
+  it("keeps editing when focus enters the internal-document overlay", () => {
+    const onExitEdit = vi.fn();
+    renderWysiwygBlock(
+      { ...paragraph, type: "heading_1" } as ContentBlock,
+      {
+        editing: true,
+        internalDocuments: [
+          {
+            id: "file-2",
+            title: "课程导读",
+            path: "教学资料",
+            status: "published",
+          },
+        ],
+        onExitEdit,
+      },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /站内文档/ }));
+    const searchInput = screen.getByRole("textbox", { name: "搜索站内文档" });
+    // 弹层搜索框 autoFocus 夺焦后，blur 的 relatedTarget 在弹层内，
+    // 不应触发退出编辑态（否则弹层宿主会随编辑态卸载、选择器瞬间消失）。
+    const textarea = document.querySelector<HTMLTextAreaElement>(
+      ".doc-block-input",
+    );
+    fireEvent.blur(textarea as HTMLTextAreaElement, {
+      relatedTarget: searchInput,
+    });
+    expect(onExitEdit).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("inserts a table immediately when the /table shortcut is typed", () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(<AddBlockForm onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "/table " },
+    });
+    expect(onSubmit).toHaveBeenCalledWith("table", "");
+  });
+
+  it("submits typed content when clicking outside the add-block form", () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(<AddBlockForm onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "新段落" },
+    });
+    fireEvent.mouseDown(document.body);
+    expect(onSubmit).toHaveBeenCalledWith("paragraph", "新段落");
+  });
+
+  it("cancels an empty add-block form when clicking outside", () => {
+    const onCancel = vi.fn();
+    render(
+      <AddBlockForm onCancel={onCancel} onSubmit={vi.fn()} />,
+    );
+
+    fireEvent.mouseDown(document.body);
+    expect(onCancel).toHaveBeenCalled();
+    expect(onCancel.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   it("adds rows and edits cells in the table grid", () => {

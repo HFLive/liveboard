@@ -2,6 +2,9 @@
   display: grid;
   align-content: start;
   width: 100%;
+  /* 宽屏时与论坛页一致收窄居中，列表行不至于被拉得过宽 */
+  max-width: 1004px;
+  margin-inline: auto;
   min-width: 0;
 }
 
@@ -135,10 +138,12 @@
 @media (max-width: 720px) {
   .toolbar {
     display: grid;
+    grid-template-columns: 1fr;
     gap: 10px;
   }
 
   .tools {
+    width: 100%;
     min-width: 0;
     flex-wrap: wrap;
   }
@@ -148,5 +153,9 @@
   .category select {
     min-height: 36px;
     font-size: 12px;
+  }
+
+  .markAll {
+    margin-left: auto;
   }
 }

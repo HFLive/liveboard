@@ -170,7 +170,14 @@ function bilibiliWatchUrl(embedUrl: string) {
   return watchUrl.toString();
 }
 
-export function RenderBlockContent({ block }: { block: ContentBlock }) {
+export function RenderBlockContent({
+  block,
+  imageZoom = true,
+}: {
+  block: ContentBlock;
+  /** 编辑器中整块可点击进入编辑态，插图不再拦截点击做放大查看。 */
+  imageZoom?: boolean;
+}) {
   const text = getBlockText(block);
   const data = asBlockData(block.dataJson);
   const richText = (value: string) => (
@@ -315,11 +322,21 @@ export function RenderBlockContent({ block }: { block: ContentBlock }) {
       widthPercent === null ? 100 : Math.max(25, Math.min(100, widthPercent));
 
     return url ? (
-      <DocumentImageViewer
-        alt={text || "图片"}
-        src={resolveBlockAssetUrl(url)}
-        widthPercent={imageWidth}
-      />
+      imageZoom ? (
+        <DocumentImageViewer
+          alt={text || "图片"}
+          src={resolveBlockAssetUrl(url)}
+          widthPercent={imageWidth}
+        />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          alt={text || "图片"}
+          className="render-image"
+          src={resolveBlockAssetUrl(url)}
+          style={{ width: `${imageWidth}%` }}
+        />
+      )
     ) : (
       <div className="render-placeholder">图片：{text || "等待上传"}</div>
     );

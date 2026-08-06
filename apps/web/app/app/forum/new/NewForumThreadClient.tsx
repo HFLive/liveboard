@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
-import { ArrowLeft, Send } from "lucide-react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { ArrowLeft, ChevronDown, Send } from "lucide-react";
 import type { ForumCategorySummary } from "@liveboard/shared";
 import {
   createForumThread,
@@ -26,7 +26,7 @@ export function NewForumThreadClient() {
   const [categoryId, setCategoryId] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [publishMenuOpen, setPublishMenuOpen] = useState(false);
   const [images, setImages] = useState<File[]>([]);
   const [processingImages, setProcessingImages] = useState(false);
   const [createdTarget, setCreatedTarget] = useState<{
@@ -36,6 +36,9 @@ export function NewForumThreadClient() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 菜单里的「匿名发布」点击时置位，随后触发的 submit 读取并复位。
+  const pendingAnonymousRef = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -65,6 +68,22 @@ export function NewForumThreadClient() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!publishMenuOpen) {
+      return;
+    }
+    function closeOnOutside(event: MouseEvent) {
+      if (
+        event.target instanceof Element &&
+        !event.target.closest(".forum-publish-dropdown")
+      ) {
+        setPublishMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", closeOnOutside);
+    return () => document.removeEventListener("mousedown", closeOnOutside);
+  }, [publishMenuOpen]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -73,6 +92,9 @@ export function NewForumThreadClient() {
       setError("请先选择版块");
       return;
     }
+
+    const isAnonymous = pendingAnonymousRef.current;
+    pendingAnonymousRef.current = false;
 
     setSubmitting(true);
 
@@ -142,44 +164,47 @@ export function NewForumThreadClient() {
 
       <section className="forum-compose-layout" aria-label="论坛发帖">
         <form
+          ref={formRef}
           className="forum-new-shell forum-new-form surface"
           onSubmit={handleSubmit}
         >
-          <fieldset className="forum-category-picker">
-            <legend>选择版块</legend>
-            <select
-              className="select"
-              disabled={loading || categories.length === 0}
-              onChange={(event) => setCategoryId(event.target.value)}
-              value={categoryId}
-            >
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-            {selectedCategory ? (
-              <p>{selectedCategory.description ?? "暂无说明"}</p>
-            ) : null}
-            {!loading && categories.length === 0 ? (
-              <p className="notice-box">暂无可用版块，请联系管理员创建。</p>
-            ) : null}
-          </fieldset>
+          <div className="forum-compose-row">
+            <fieldset className="forum-category-picker">
+              <legend>选择版块</legend>
+              <select
+                className="select"
+                disabled={loading || categories.length === 0}
+                onChange={(event) => setCategoryId(event.target.value)}
+                value={categoryId}
+              >
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+              {selectedCategory ? (
+                <p>{selectedCategory.description ?? "暂无说明"}</p>
+              ) : null}
+              {!loading && categories.length === 0 ? (
+                <p className="notice-box">暂无可用版块，请联系管理员创建。</p>
+              ) : null}
+            </fieldset>
 
-          <label className="label">
-            <span className="forum-field-label">
-              标题
-              <small>{title.length}/120</small>
-            </span>
-            <input
-              autoFocus
-              className="input"
-              maxLength={120}
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-          </label>
+            <label className="label">
+              <span className="forum-field-label">
+                标题
+                <small>{title.length}/120</small>
+              </span>
+              <input
+                autoFocus
+                className="input"
+                maxLength={120}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </label>
+          </div>
 
           <label className="label">
             <span className="forum-field-label">
@@ -203,27 +228,58 @@ export function NewForumThreadClient() {
           />
 
           <div className="forum-new-actions">
-            <label className="forum-anonymous-option">
-              <input
-                checked={isAnonymous}
-                onChange={(event) => setIsAnonymous(event.target.checked)}
-                type="checkbox"
-              />
-              <span>
-                <strong>匿名</strong>
-              </span>
-            </label>
             <Link className="button secondary" href={APP_ROUTES.forum}>
               取消
             </Link>
-            <button
-              className="button forum-submit-button"
-              disabled={!canSubmit}
-              type="submit"
-            >
-              <Send aria-hidden="true" className="button-icon" />
-              {submitting ? "发布中" : createdTarget ? "重试上传图片" : "发布"}
-            </button>
+            {createdTarget ? (
+              <button
+                className="button forum-submit-button"
+                disabled={!canSubmit}
+                type="submit"
+              >
+                <Send aria-hidden="true" className="button-icon" />
+                {submitting ? "发布中" : "重试上传图片"}
+              </button>
+            ) : (
+              <div className="forum-publish-dropdown">
+                <button
+                  className="button forum-submit-button"
+                  disabled={!canSubmit}
+                  type="submit"
+                >
+                  <Send aria-hidden="true" className="button-icon" />
+                  {submitting ? "发布中" : "发布"}
+                </button>
+                <button
+                  aria-expanded={publishMenuOpen}
+                  aria-label="更多发布方式"
+                  className="forum-publish-caret"
+                  disabled={!canSubmit}
+                  onClick={() => setPublishMenuOpen((open) => !open)}
+                  title="更多发布方式"
+                  type="button"
+                >
+                  <ChevronDown aria-hidden="true" />
+                </button>
+                {publishMenuOpen ? (
+                  <div className="context-menu forum-publish-menu-list">
+                    <button
+                      disabled={!canSubmit}
+                      onClick={() => {
+                        pendingAnonymousRef.current = true;
+                        setPublishMenuOpen(false);
+                        // 菜单项在点击时会被卸载，卸载中的 submit 按钮不会触发提交，
+                        // 所以这里手动 requestSubmit。
+                        formRef.current?.requestSubmit();
+                      }}
+                      type="button"
+                    >
+                      匿名发布
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
         </form>
       </section>
