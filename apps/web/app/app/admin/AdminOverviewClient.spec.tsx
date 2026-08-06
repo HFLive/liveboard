@@ -42,9 +42,7 @@ describe("AdminOverviewClient", () => {
     await waitFor(() =>
       expect(screen.getByText("内容与资源")).toBeInTheDocument(),
     );
-    expect(
-      screen.getByRole("link", { name: /存储后端/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /存储后端/ })).toBeInTheDocument();
   });
 
   it("exposes badges and access tokens to administrators but not capacity or forum management", async () => {
