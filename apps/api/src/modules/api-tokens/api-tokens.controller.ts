@@ -18,7 +18,11 @@ import {
   MaxLength,
   MinLength,
 } from "class-validator";
-import { isSuperAdmin, isSystemAdmin } from "@liveboard/shared";
+import {
+  isSuperAdmin,
+  isSystemAdmin,
+  type SystemRole,
+} from "@liveboard/shared";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import { PrismaService } from "../prisma/prisma.service";
 import { ApiTokenService } from "./api-token.service";
@@ -99,23 +103,52 @@ export class ApiTokensController {
     };
   }
 
-  @Delete("admin/api-tokens/:id")
+  /** 校验令牌存在且（非最高管理员时）归属当前用户。 */
+  private async requireOwnedToken(
+    actor: { id: string; systemRole: SystemRole },
+    tokenId: string,
+  ) {
+    const token = await this.prisma.apiToken.findUnique({
+      where: { id: tokenId },
+      select: { userId: true },
+    });
+    if (!token) throw new NotFoundException("令牌不存在");
+    if (!isSuperAdmin(actor.systemRole) && token.userId !== actor.id) {
+      throw new ForbiddenException("只能管理自己的令牌");
+    }
+    return token;
+  }
+
+  @Post("admin/api-tokens/:id/revoke")
   async revoke(
     @CurrentUserId() userId: string | null,
     @Param("id") tokenId: string,
   ) {
     const actor = await this.requireAdmin(userId);
-    if (!isSuperAdmin(actor.systemRole)) {
-      const token = await this.prisma.apiToken.findUnique({
-        where: { id: tokenId },
-        select: { userId: true },
-      });
-      if (!token) throw new NotFoundException("令牌不存在");
-      if (token.userId !== actor.id) {
-        throw new ForbiddenException("只能撤销自己的令牌");
-      }
-    }
+    await this.requireOwnedToken(actor, tokenId);
     await this.apiTokens.revokeToken(tokenId);
+    return { ok: true };
+  }
+
+  @Post("admin/api-tokens/:id/restore")
+  async restore(
+    @CurrentUserId() userId: string | null,
+    @Param("id") tokenId: string,
+  ) {
+    const actor = await this.requireAdmin(userId);
+    await this.requireOwnedToken(actor, tokenId);
+    await this.apiTokens.restoreToken(tokenId);
+    return { ok: true };
+  }
+
+  @Delete("admin/api-tokens/:id")
+  async remove(
+    @CurrentUserId() userId: string | null,
+    @Param("id") tokenId: string,
+  ) {
+    const actor = await this.requireAdmin(userId);
+    await this.requireOwnedToken(actor, tokenId);
+    await this.apiTokens.deleteToken(tokenId);
     return { ok: true };
   }
 }

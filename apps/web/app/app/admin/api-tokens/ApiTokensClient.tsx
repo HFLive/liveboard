@@ -5,10 +5,12 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   createApiToken,
+  deactivateApiToken,
+  deleteApiToken,
   getMe,
   listApiTokens,
   listUsers,
-  revokeApiToken,
+  restoreApiToken,
   type ApiTokenSummary,
   type CreateApiTokenResult,
 } from "@/lib/api";
@@ -44,7 +46,10 @@ export function ApiTokensClient() {
   const [name, setName] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [creating, setCreating] = useState(false);
-  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [busyTokenId, setBusyTokenId] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<
+    "deactivate" | "restore" | "delete" | null
+  >(null);
   const [filterUserId, setFilterUserId] = useState("all");
 
   const visibleTokens = useMemo(
@@ -106,26 +111,71 @@ export function ApiTokensClient() {
     }
   }
 
-  async function onRevoke(token: ApiTokenSummary) {
+  async function onDeactivate(token: ApiTokenSummary) {
     if (
       !window.confirm(
-        `确定撤销令牌「${token.name}」吗？撤销后立即失效，且不可恢复。`,
+        `确定停用令牌「${token.name}」吗？停用后立即失效，可随时恢复。`,
       )
     ) {
       return;
     }
-    setRevokingId(token.id);
+    setBusyTokenId(token.id);
+    setBusyAction("deactivate");
     setError(null);
     setMessage(null);
     try {
-      await revokeApiToken(token.id);
+      await deactivateApiToken(token.id);
       const tokenResult = await listApiTokens();
       setTokens(tokenResult.tokens);
-      setMessage(`已撤销令牌「${token.name}」`);
+      setMessage(`已停用令牌「${token.name}」`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "撤销令牌失败");
+      setError(caught instanceof Error ? caught.message : "停用令牌失败");
     } finally {
-      setRevokingId(null);
+      setBusyTokenId(null);
+      setBusyAction(null);
+    }
+  }
+
+  async function onRestore(token: ApiTokenSummary) {
+    setBusyTokenId(token.id);
+    setBusyAction("restore");
+    setError(null);
+    setMessage(null);
+    try {
+      await restoreApiToken(token.id);
+      const tokenResult = await listApiTokens();
+      setTokens(tokenResult.tokens);
+      setMessage(`已恢复令牌「${token.name}」`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "恢复令牌失败");
+    } finally {
+      setBusyTokenId(null);
+      setBusyAction(null);
+    }
+  }
+
+  async function onDelete(token: ApiTokenSummary) {
+    if (
+      !window.confirm(
+        `确定删除令牌「${token.name}」吗？删除后将彻底移除，不可恢复。`,
+      )
+    ) {
+      return;
+    }
+    setBusyTokenId(token.id);
+    setBusyAction("delete");
+    setError(null);
+    setMessage(null);
+    try {
+      await deleteApiToken(token.id);
+      const tokenResult = await listApiTokens();
+      setTokens(tokenResult.tokens);
+      setMessage(`已删除令牌「${token.name}」`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "删除令牌失败");
+    } finally {
+      setBusyTokenId(null);
+      setBusyAction(null);
     }
   }
 
@@ -348,17 +398,42 @@ export function ApiTokensClient() {
                   </div>
                   <div className="token-row-actions">
                     {revoked ? (
-                      <span className="token-status">已撤销</span>
+                      <span className="token-status">已停用</span>
                     ) : expired ? (
                       <span className="token-status">已过期</span>
                     ) : null}
+                    {revoked ? (
+                      <button
+                        className="button secondary"
+                        disabled={busyTokenId === token.id}
+                        onClick={() => onRestore(token)}
+                        type="button"
+                      >
+                        {busyTokenId === token.id && busyAction === "restore"
+                          ? "恢复中…"
+                          : "恢复"}
+                      </button>
+                    ) : (
+                      <button
+                        className="button secondary"
+                        disabled={busyTokenId === token.id}
+                        onClick={() => onDeactivate(token)}
+                        type="button"
+                      >
+                        {busyTokenId === token.id && busyAction === "deactivate"
+                          ? "停用中…"
+                          : "停用"}
+                      </button>
+                    )}
                     <button
-                      className="button secondary"
-                      disabled={revoked || revokingId === token.id}
-                      onClick={() => onRevoke(token)}
+                      className="button secondary danger"
+                      disabled={busyTokenId === token.id}
+                      onClick={() => onDelete(token)}
                       type="button"
                     >
-                      {revokingId === token.id ? "撤销中…" : "撤销"}
+                      {busyTokenId === token.id && busyAction === "delete"
+                        ? "删除中…"
+                        : "删除"}
                     </button>
                   </div>
                 </li>

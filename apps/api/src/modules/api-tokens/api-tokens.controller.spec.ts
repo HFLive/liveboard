@@ -12,6 +12,8 @@ describe("ApiTokensController", () => {
     createToken: jest.fn(),
     listTokens: jest.fn(),
     revokeToken: jest.fn(),
+    restoreToken: jest.fn(),
+    deleteToken: jest.fn(),
   };
   let controller: ApiTokensController;
 
@@ -167,11 +169,44 @@ describe("ApiTokensController", () => {
 
   it("revokes a token idempotently", async () => {
     prisma.user.findUnique.mockResolvedValue(adminUser);
+    prisma.apiToken.findUnique.mockResolvedValue({ userId: "user-1" });
     apiTokens.revokeToken.mockResolvedValue(undefined);
 
     await expect(controller.revoke("admin-1", "tok-1")).resolves.toEqual({
       ok: true,
     });
     expect(apiTokens.revokeToken).toHaveBeenCalledWith("tok-1");
+  });
+
+  it("restores a deactivated token", async () => {
+    prisma.user.findUnique.mockResolvedValue(adminUser);
+    prisma.apiToken.findUnique.mockResolvedValue({ userId: "user-1" });
+    apiTokens.restoreToken.mockResolvedValue(undefined);
+
+    await expect(controller.restore("admin-1", "tok-1")).resolves.toEqual({
+      ok: true,
+    });
+    expect(apiTokens.restoreToken).toHaveBeenCalledWith("tok-1");
+  });
+
+  it("deletes a token permanently", async () => {
+    prisma.user.findUnique.mockResolvedValue(adminUser);
+    prisma.apiToken.findUnique.mockResolvedValue({ userId: "user-1" });
+    apiTokens.deleteToken.mockResolvedValue(undefined);
+
+    await expect(controller.remove("admin-1", "tok-1")).resolves.toEqual({
+      ok: true,
+    });
+    expect(apiTokens.deleteToken).toHaveBeenCalledWith("tok-1");
+  });
+
+  it("rejects management of a missing token", async () => {
+    prisma.user.findUnique.mockResolvedValue(adminUser);
+    prisma.apiToken.findUnique.mockResolvedValue(null);
+
+    await expect(controller.remove("admin-1", "tok-1")).rejects.toThrow(
+      "令牌不存在",
+    );
+    expect(apiTokens.deleteToken).not.toHaveBeenCalled();
   });
 });
