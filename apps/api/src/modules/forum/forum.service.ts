@@ -805,7 +805,7 @@ export class ForumService {
   async listCategoriesForAdmin(
     userId: string | null,
   ): Promise<ForumCategorySummary[]> {
-    await this.requireAdmin(userId);
+    await this.requireSuperAdmin(userId);
     const workspace = await this.getDefaultWorkspace();
     await this.ensureDefaultCategories(workspace.id);
     const categories = await this.prisma.forumCategory.findMany({
@@ -821,7 +821,7 @@ export class ForumService {
     userId: string | null,
     input: CreateForumCategoryDto,
   ): Promise<ForumCategorySummary> {
-    await this.requireAdmin(userId);
+    await this.requireSuperAdmin(userId);
     const workspace = await this.getDefaultWorkspace();
     const category = await this.prisma.forumCategory.create({
       data: {
@@ -841,7 +841,7 @@ export class ForumService {
     categoryId: string,
     input: UpdateForumCategoryDto,
   ): Promise<ForumCategorySummary> {
-    await this.requireAdmin(userId);
+    await this.requireSuperAdmin(userId);
     const data: {
       name?: string;
       description?: string | null;
@@ -870,7 +870,7 @@ export class ForumService {
   }
 
   async deleteCategory(userId: string | null, categoryId: string) {
-    await this.requireAdmin(userId);
+    await this.requireSuperAdmin(userId);
     const threadCount = await this.prisma.forumThread.count({
       where: { categoryId },
     });
@@ -941,11 +941,13 @@ export class ForumService {
     return user;
   }
 
-  private async requireAdmin(userId: string | null) {
+  private async requireSuperAdmin(userId: string | null) {
     const user = await this.requireActiveUser(userId);
 
-    if (!isSystemAdmin(user.systemRole)) {
-      throw new ForbiddenException("Only admins can manage forum settings");
+    if (!isSuperAdmin(user.systemRole)) {
+      throw new ForbiddenException(
+        "Only super admins can manage forum settings",
+      );
     }
 
     return user;

@@ -78,7 +78,7 @@ describe("BadgesService", () => {
     });
   });
 
-  it("allows only the highest administrator to create badges", async () => {
+  it("rejects badge creation from non-administrators", async () => {
     const { service } = createService();
 
     await expect(
@@ -88,5 +88,35 @@ describe("BadgesService", () => {
         color: "blue",
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("allows administrators to create badges", async () => {
+    const { service, prisma } = createService();
+    prisma.user.findUnique.mockResolvedValue({
+      id: "admin-1",
+      status: "active",
+      systemRole: "admin",
+    });
+    prisma.workspace.findFirst.mockResolvedValue({ id: "workspace-1" });
+    prisma.badge.create.mockResolvedValue({
+      id: "badge-1",
+      name: "认证教师",
+      description: "通过教师认证",
+      color: "blue",
+    });
+
+    const result = await service.create("admin-1", {
+      name: "认证教师",
+      description: "通过教师认证",
+      color: "blue",
+    });
+
+    expect(result).toMatchObject({ id: "badge-1" });
+    expect(prisma.badge.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        workspaceId: "workspace-1",
+        createdById: "admin-1",
+      }),
+    });
   });
 });

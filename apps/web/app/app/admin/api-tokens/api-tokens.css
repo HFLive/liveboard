@@ -63,6 +63,11 @@
   white-space: nowrap;
 }
 
+/* 多行命令（含 \ 续行）：保留换行，长行自动折行 */
+.token-plaintext--multiline {
+  white-space: pre-wrap;
+}
+
 .token-created-meta {
   display: flex;
   flex-wrap: wrap;
@@ -131,6 +136,35 @@
 
 .token-create-form > .button {
   flex: 0 0 auto;
+}
+
+/* ---- 使用方式 ---- */
+
+.token-usage {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.token-usage h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.token-usage > p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.token-usage-command {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.token-usage-command-label {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 /* ---- 令牌列表 ---- */
@@ -234,7 +268,7 @@
   flex: 0 0 auto;
 }
 
-/* 状态标签只标异常；撤销按钮桌面端 hover 才出现 */
+/* 状态标签只标异常；行操作按钮桌面端 hover 才出现 */
 .token-row-actions .button.secondary {
   opacity: 0;
   transition: opacity 120ms ease;

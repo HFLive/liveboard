@@ -39,15 +39,13 @@ describe("AdminOverviewClient", () => {
       screen.getByRole("heading", { level: 1, name: "管理总览" }),
     ).toBeInTheDocument();
     expect(screen.getByText("人员与权限")).toBeInTheDocument();
-    expect(screen.getByText("内容与资源")).toBeInTheDocument();
     await waitFor(() =>
-      expect(
-        screen.getByRole("link", { name: /存储后端/ }),
-      ).toBeInTheDocument(),
+      expect(screen.getByText("内容与资源")).toBeInTheDocument(),
     );
+    expect(screen.getByRole("link", { name: /存储后端/ })).toBeInTheDocument();
   });
 
-  it("does not expose super administrator entries to administrators", async () => {
+  it("exposes badges and access tokens to administrators but not capacity or forum management", async () => {
     vi.mocked(getMe).mockResolvedValue({
       user: { ...user, systemRole: "admin" },
     });
@@ -55,9 +53,17 @@ describe("AdminOverviewClient", () => {
     render(<AdminOverviewClient />);
 
     await waitFor(() => expect(getMe).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("link", { name: /成员管理/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /徽章管理/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /访问令牌/ })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /容量管理/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /版块管理/ }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /系统设置/ }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /成员管理/ })).toBeInTheDocument();
   });
 });

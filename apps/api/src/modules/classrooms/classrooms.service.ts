@@ -7,7 +7,11 @@ import {
   NotImplementedException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { isSystemAdmin, type ClassroomMemberRole } from "@liveboard/shared";
+import {
+  isSuperAdmin,
+  isSystemAdmin,
+  type ClassroomMemberRole,
+} from "@liveboard/shared";
 import type { PendingUpload, Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
@@ -371,6 +375,9 @@ export class ClassroomsService {
     }
     await this.requireClassroom(classroomId);
     if (input.storageQuotaBytes !== undefined) {
+      if (!isSuperAdmin(user.systemRole)) {
+        throw new ForbiddenException("只有最高管理员可以调整容量上限");
+      }
       if (
         input.storageQuotaBytes !== null &&
         (!Number.isInteger(input.storageQuotaBytes) ||

@@ -86,7 +86,7 @@ export class ApiTokenService {
     }));
   }
 
-  /** 撤销 = 置 revokedAt（幂等）；令牌不存在返回 404。 */
+  /** 停用 = 置 revokedAt（幂等，可恢复）；令牌不存在返回 404。 */
   async revokeToken(tokenId: string): Promise<void> {
     try {
       await this.prisma.apiToken.update({
@@ -94,16 +94,41 @@ export class ApiTokenService {
         data: { revokedAt: new Date() },
       });
     } catch (caught) {
-      const code = (caught as { code?: unknown })?.code;
-      if (code === "P2025") {
-        throw new NotFoundException("令牌不存在");
-      }
-      throw caught;
+      this.handleMissingToken(caught);
     }
   }
 
+  /** 恢复 = 清空 revokedAt（幂等）；令牌不存在返回 404。 */
+  async restoreToken(tokenId: string): Promise<void> {
+    try {
+      await this.prisma.apiToken.update({
+        where: { id: tokenId },
+        data: { revokedAt: null },
+      });
+    } catch (caught) {
+      this.handleMissingToken(caught);
+    }
+  }
+
+  /** 删除 = 物理移除；令牌不存在返回 404。 */
+  async deleteToken(tokenId: string): Promise<void> {
+    try {
+      await this.prisma.apiToken.delete({ where: { id: tokenId } });
+    } catch (caught) {
+      this.handleMissingToken(caught);
+    }
+  }
+
+  private handleMissingToken(caught: unknown): never {
+    const code = (caught as { code?: unknown })?.code;
+    if (code === "P2025") {
+      throw new NotFoundException("令牌不存在");
+    }
+    throw caught;
+  }
+
   /**
-   * PAT 验证。任何失败（不存在/已撤销/已过期/用户禁用）统一返回 null，
+   * PAT 验证。任何失败（不存在/已停用/已过期/用户禁用）统一返回 null，
    * 由调用方给出统一 401 措辞，不区分具体原因。
    */
   async authenticate(rawToken: string): Promise<ApiTokenIdentity | null> {

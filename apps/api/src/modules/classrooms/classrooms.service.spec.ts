@@ -74,6 +74,19 @@ describe("ClassroomsService", () => {
     expect(prisma.classroomMember.delete).not.toHaveBeenCalled();
   });
 
+  it("forbids ordinary administrators from changing classroom storage quotas", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "admin-1",
+      status: "active",
+      systemRole: "admin",
+    });
+    prisma.classroom.findUnique.mockResolvedValue({ id: "classroom-1" });
+
+    await expect(
+      service.update("admin-1", "classroom-1", { storageQuotaBytes: 1024 }),
+    ).rejects.toThrow("只有最高管理员可以调整容量上限");
+  });
+
   it("allows a classroom teacher to publish an announcement", async () => {
     const author = {
       id: "teacher-1",

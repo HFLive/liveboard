@@ -505,7 +505,22 @@ export function listApiTokens(userId?: string) {
   return request<{ tokens: ApiTokenSummary[] }>(`/admin/api-tokens${search}`);
 }
 
-export function revokeApiToken(tokenId: string) {
+/** 停用令牌（软禁用，可恢复）。 */
+export function deactivateApiToken(tokenId: string) {
+  return request<{ ok: boolean }>(`/admin/api-tokens/${tokenId}/revoke`, {
+    method: "POST",
+  });
+}
+
+/** 恢复已停用的令牌。 */
+export function restoreApiToken(tokenId: string) {
+  return request<{ ok: boolean }>(`/admin/api-tokens/${tokenId}/restore`, {
+    method: "POST",
+  });
+}
+
+/** 删除令牌（物理移除，不可恢复）。 */
+export function deleteApiToken(tokenId: string) {
   return request<{ ok: boolean }>(`/admin/api-tokens/${tokenId}`, {
     method: "DELETE",
   });

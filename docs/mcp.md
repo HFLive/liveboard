@@ -27,11 +27,11 @@ MCP 客户端无法携带浏览器 cookie，因此使用独立的个人访问令
 - 请求头 `Authorization: Bearer lbt_...`
 - 数据库只存 SHA-256 哈希，**明文只在创建时显示一次**，请立即保存
 - 令牌挂在一个具体用户下，权限与 Web 端完全一致（含 lecturer 特例）
-- 默认不过期，可手动撤销；创建时可指定 `expiresAt`
+- 默认不过期，可手动停用（可恢复）或删除；创建时可指定 `expiresAt`
 
 ### 创建（Web 管理界面）
 
-最高管理员登录后在 **管理中心 → 访问令牌**（`/app/admin/api-tokens`）创建、复制与撤销令牌。
+管理员（含最高管理员）登录后在 **管理中心 → 访问令牌**（`/app/admin/api-tokens`）创建、复制、停用/恢复与删除令牌。普通管理员只能管理自己的令牌；最高管理员可以查看并管理全部成员的令牌（含按用户筛选、代他人创建）。
 
 ### 创建（CLI）
 
@@ -41,7 +41,7 @@ pnpm --filter @liveboard/api api-token:create -- --user admin --name claude-code
 pnpm --filter @liveboard/api api-token:create -- --user admin --name claude-code --expiresAt 2027-01-01T00:00:00Z
 ```
 
-### 创建 / 列出 / 撤销（管理 API，需最高管理员 cookie 会话）
+### 创建 / 列出 / 停用 / 恢复 / 删除（管理 API，需管理员 cookie 会话）
 
 ```bash
 # 创建（明文只返回这一次）
@@ -52,11 +52,17 @@ curl -X POST <API>/admin/api-tokens \
 # 列出（不返回 tokenHash）
 curl <API>/admin/api-tokens -H "Cookie: liveboard_session=..."
 
-# 撤销（立即失效）
+# 停用（立即失效，可恢复）
+curl -X POST <API>/admin/api-tokens/<tokenId>/revoke -H "Cookie: liveboard_session=..."
+
+# 恢复
+curl -X POST <API>/admin/api-tokens/<tokenId>/restore -H "Cookie: liveboard_session=..."
+
+# 删除（物理移除，不可恢复）
 curl -X DELETE <API>/admin/api-tokens/<tokenId> -H "Cookie: liveboard_session=..."
 ```
 
-建议为每个客户端单独建令牌，便于按名审计与撤销。
+建议为每个客户端单独建令牌，便于按名审计与停用/删除。
 
 ## 客户端配置
 
@@ -167,8 +173,8 @@ claude mcp add --transport stdio liveboard \
 
 ## 运维与安全
 
-- 令牌泄露：立即 `DELETE /admin/api-tokens/<id>` 撤销；撤销后旧的 `lbt_` 令牌即时失效。
+- 令牌泄露：立即 `POST /admin/api-tokens/<id>/revoke` 停用；停用后旧的 `lbt_` 令牌即时失效（可恢复，确认无误后删除）。
 - `lastUsedAt` 记录最近使用时间（5 分钟节流），可用于发现异常使用。
-- 建议定期轮换：为每个客户端建独立令牌，按需重建并撤销旧的。
+- 建议定期轮换：为每个客户端建独立令牌，按需重建并停用/删除旧的。
 - `MCP_ENABLED=false` 可临时关闭整个端点。
 - stdio 模式不校验 PAT，`MCP_STDIO_USER_ID` 决定操作者身份，切勿在不可信环境运行。
