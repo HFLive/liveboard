@@ -6,10 +6,11 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import type {
-  AdminBadgeSummary,
-  BadgeColor,
-  UserBadgeSummary,
+import {
+  isSystemAdmin,
+  type AdminBadgeSummary,
+  type BadgeColor,
+  type UserBadgeSummary,
 } from "@liveboard/shared";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -91,7 +92,7 @@ export class BadgesService {
   }
 
   async listAdmin(userId: string | null): Promise<AdminBadgeSummary[]> {
-    await this.requireSuperAdmin(userId);
+    await this.requireAdmin(userId);
     const badges = await this.prisma.badge.findMany({
       include: { assignments: { select: { userId: true } } },
       orderBy: [{ createdAt: "asc" }],
@@ -106,7 +107,7 @@ export class BadgesService {
   }
 
   async create(userId: string | null, input: BadgeInput) {
-    const actor = await this.requireSuperAdmin(userId);
+    const actor = await this.requireAdmin(userId);
     const workspace = await this.getDefaultWorkspace();
     const normalized = this.normalizeInput(input);
     try {
@@ -131,7 +132,7 @@ export class BadgesService {
     badgeId: string,
     input: BadgeUpdateInput,
   ) {
-    await this.requireSuperAdmin(userId);
+    await this.requireAdmin(userId);
     await this.requireBadge(badgeId);
     const data = this.normalizeUpdateInput(input);
     try {
@@ -149,14 +150,14 @@ export class BadgesService {
   }
 
   async remove(userId: string | null, badgeId: string) {
-    await this.requireSuperAdmin(userId);
+    await this.requireAdmin(userId);
     await this.requireBadge(badgeId);
     await this.prisma.badge.delete({ where: { id: badgeId } });
     return { ok: true };
   }
 
   async award(userId: string | null, badgeId: string, targetUserId: string) {
-    const actor = await this.requireSuperAdmin(userId);
+    const actor = await this.requireAdmin(userId);
     await Promise.all([
       this.requireBadge(badgeId),
       this.requireActiveUser(targetUserId),
@@ -170,7 +171,7 @@ export class BadgesService {
   }
 
   async revoke(userId: string | null, badgeId: string, targetUserId: string) {
-    await this.requireSuperAdmin(userId);
+    await this.requireAdmin(userId);
     await this.prisma.userBadge.deleteMany({
       where: { badgeId, userId: targetUserId },
     });
@@ -246,10 +247,10 @@ export class BadgesService {
     return user;
   }
 
-  private async requireSuperAdmin(userId: string | null) {
+  private async requireAdmin(userId: string | null) {
     const user = await this.requireActiveUser(userId);
-    if (user.systemRole !== "super_admin") {
-      throw new ForbiddenException("仅最高管理员可以管理徽章");
+    if (!isSystemAdmin(user.systemRole)) {
+      throw new ForbiddenException("仅管理员可以管理徽章");
     }
     return user;
   }

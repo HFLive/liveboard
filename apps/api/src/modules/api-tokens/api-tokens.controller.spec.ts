@@ -46,7 +46,7 @@ describe("ApiTokensController", () => {
 
   it("creates a token and returns the plaintext once", async () => {
     prisma.user.findUnique
-      .mockResolvedValueOnce(adminUser) // requireSuperAdmin
+      .mockResolvedValueOnce(adminUser) // requireAdmin
       .mockResolvedValueOnce({ id: "user-1", status: "active" }); // 目标用户
     apiTokens.createToken.mockResolvedValue({
       token: "lbt_secret",
@@ -65,6 +65,25 @@ describe("ApiTokensController", () => {
       name: "claude-code",
       expiresAt: undefined,
     });
+  });
+
+  it("allows ordinary administrators to create tokens", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ ...adminUser, systemRole: "admin" }) // requireAdmin
+      .mockResolvedValueOnce({ id: "user-1", status: "active" }); // 目标用户
+    apiTokens.createToken.mockResolvedValue({
+      token: "lbt_secret",
+      tokenId: "tok-1",
+      tokenPrefix: "lbt_secret",
+    });
+
+    const result = await controller.create("admin-1", {
+      userId: "user-1",
+      name: "claude-code",
+    });
+
+    expect(result.token).toBe("lbt_secret");
+    expect(apiTokens.createToken).toHaveBeenCalled();
   });
 
   it("rejects creating a token for a missing or disabled user", async () => {

@@ -56,4 +56,27 @@ describe("UsersService", () => {
     ).rejects.toThrow("必须保留至少一位正常状态的最高管理员");
     expect(tx.user.update).not.toHaveBeenCalled();
   });
+
+  it("forbids ordinary administrators from changing storage quotas", async () => {
+    prisma.user.findUnique
+      .mockReset()
+      .mockResolvedValueOnce({ ...actor, systemRole: "admin" })
+      .mockResolvedValueOnce({ ...target, systemRole: "member" });
+
+    await expect(
+      service.updateUser("admin-1", "member-1", { storageQuotaBytes: 1024 }),
+    ).rejects.toThrow("只有最高管理员可以调整容量上限");
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it("forbids ordinary administrators from reading storage quotas", async () => {
+    prisma.user.findUnique.mockReset().mockResolvedValue({
+      ...actor,
+      systemRole: "admin",
+    });
+
+    await expect(service.listUserStorage("admin-1")).rejects.toThrow(
+      "只有最高管理员可以管理容量设置",
+    );
+  });
 });

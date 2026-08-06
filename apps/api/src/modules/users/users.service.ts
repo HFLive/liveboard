@@ -142,7 +142,7 @@ export class UsersService {
   async listUserStorage(
     actorUserId: string | null,
   ): Promise<UserStorageSummary[]> {
-    await this.requireAdmin(actorUserId);
+    await this.requireSuperAdmin(actorUserId);
 
     const [users, groupedAssets, workspace] = await Promise.all([
       this.prisma.user.findMany({
@@ -195,7 +195,7 @@ export class UsersService {
   async getStorageQuotaDefaults(
     actorUserId: string | null,
   ): Promise<StorageQuotaDefaults> {
-    await this.requireAdmin(actorUserId);
+    await this.requireSuperAdmin(actorUserId);
     const workspace = await this.prisma.workspace.findFirst();
     return {
       memberAttachmentQuotaBytes:
@@ -218,7 +218,7 @@ export class UsersService {
       classroomStorageQuotaBytes?: number | null;
     },
   ): Promise<StorageQuotaDefaults> {
-    await this.requireAdmin(actorUserId);
+    await this.requireSuperAdmin(actorUserId);
     for (const [key, value] of Object.entries(input)) {
       if (
         value !== undefined &&
@@ -770,6 +770,9 @@ export class UsersService {
     }
 
     if (input.storageQuotaBytes !== undefined) {
+      if (!isSuperAdmin(actor.systemRole)) {
+        throw new ForbiddenException("只有最高管理员可以调整容量上限");
+      }
       if (
         input.storageQuotaBytes !== null &&
         (!Number.isInteger(input.storageQuotaBytes) ||
@@ -848,6 +851,14 @@ export class UsersService {
       throw new ForbiddenException("Only admins can manage users");
     }
 
+    return actor;
+  }
+
+  private async requireSuperAdmin(actorUserId: string | null) {
+    const actor = await this.requireAdmin(actorUserId);
+    if (!isSuperAdmin(actor.systemRole)) {
+      throw new ForbiddenException("只有最高管理员可以管理容量设置");
+    }
     return actor;
   }
 

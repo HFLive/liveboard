@@ -13,6 +13,9 @@ describe("ForumService", () => {
       createMany: jest.fn(),
       count: jest.fn(),
       findMany: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
     },
     forumThread: {
       findMany: jest.fn(),
@@ -330,5 +333,57 @@ describe("ForumService", () => {
     expect(prisma.forumThread.delete).toHaveBeenCalledWith({
       where: { id: "thread-1" },
     });
+  });
+
+  it("does not allow ordinary administrators to manage forum categories", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "admin-1",
+      username: "admin",
+      displayName: "管理员",
+      systemRole: "admin",
+      status: "active",
+    });
+
+    await expect(
+      service.createCategory("admin-1", { name: "新版块" }),
+    ).rejects.toThrow("Only super admins can manage forum settings");
+    await expect(
+      service.updateCategory("admin-1", "category-1", { name: "改名" }),
+    ).rejects.toThrow("Only super admins can manage forum settings");
+    await expect(
+      service.deleteCategory("admin-1", "category-1"),
+    ).rejects.toThrow("Only super admins can manage forum settings");
+    expect(prisma.forumCategory.create).not.toHaveBeenCalled();
+    expect(prisma.forumCategory.update).not.toHaveBeenCalled();
+    expect(prisma.forumCategory.delete).not.toHaveBeenCalled();
+  });
+
+  it("lets the highest administrator create a forum category", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "super-1",
+      username: "root",
+      displayName: "最高管理员",
+      systemRole: "super_admin",
+      status: "active",
+    });
+    prisma.workspace.findFirst.mockResolvedValue({ id: "workspace-1" });
+    prisma.forumCategory.create.mockResolvedValue({
+      id: "category-1",
+      workspaceId: "workspace-1",
+      name: "新版块",
+      description: null,
+      sortOrder: 100,
+      createdAt: new Date("2026-08-01T00:00:00Z"),
+      updatedAt: new Date("2026-08-01T00:00:00Z"),
+    });
+
+    const result = await service.createCategory("super-1", { name: "新版块" });
+
+    expect(result).toMatchObject({ id: "category-1", name: "新版块" });
+    expect(prisma.forumCategory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ workspaceId: "workspace-1" }),
+      }),
+    );
   });
 });

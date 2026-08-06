@@ -35,10 +35,10 @@ describe("AdminSubnav", () => {
     render(<AdminSubnav />);
 
     expect(screen.getByText("人员与权限")).toBeInTheDocument();
-    expect(screen.getByText("内容与资源")).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByText("系统与服务")).toBeInTheDocument(),
+      expect(screen.getByText("内容与资源")).toBeInTheDocument(),
     );
+    expect(screen.getByText("系统与服务")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "成员管理" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -48,7 +48,7 @@ describe("AdminSubnav", () => {
     expect(screen.getByRole("link", { name: "文档权限" })).toBeInTheDocument();
   });
 
-  it("hides super administrator services from ordinary administrators", async () => {
+  it("shows badges and access tokens to administrators while hiding capacity and forum management", async () => {
     vi.mocked(getMe).mockResolvedValue({
       user: { ...baseUser, systemRole: "admin" },
     });
@@ -56,7 +56,16 @@ describe("AdminSubnav", () => {
     render(<AdminSubnav />);
 
     await waitFor(() => expect(getMe).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText("系统与服务")).not.toBeInTheDocument();
+    // 管理员可见：徽章管理、访问令牌
+    expect(screen.getByRole("link", { name: "徽章管理" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "访问令牌" })).toBeInTheDocument();
+    // 管理员不可见：容量管理、版块管理、系统设置等最高管理员专属项
+    expect(
+      screen.queryByRole("link", { name: "容量管理" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "版块管理" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "系统设置" }),
     ).not.toBeInTheDocument();
