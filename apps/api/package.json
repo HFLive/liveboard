@@ -19,12 +19,15 @@
     "verify-vercel-data-migration": "dotenv -e ../../.env -- tsx scripts/verify-vercel-data-migration.ts",
     "migrate-export": "dotenv -e ../../.env -- tsx scripts/migrate-export.ts",
     "migrate-import": "dotenv -e ../../.env -- tsx scripts/migrate-import.ts",
-    "migrate-verify": "dotenv -e ../../.env -- tsx scripts/migrate-verify.ts"
+    "migrate-verify": "dotenv -e ../../.env -- tsx scripts/migrate-verify.ts",
+    "api-token:create": "dotenv -e ../../.env -- tsx scripts/create-api-token.ts",
+    "mcp:stdio": "nest build && dotenv -e ../../.env -- node dist/mcp-stdio.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.600.0",
     "@aws-sdk/s3-request-presigner": "^3.600.0",
     "@liveboard/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@nestjs/common": "^11.1.28",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.1.28",
@@ -39,7 +42,8 @@
     "redis": "^5.12.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "tsx": "^4.19.0"
+    "tsx": "^4.19.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@nestjs/cli": "11.0.23",

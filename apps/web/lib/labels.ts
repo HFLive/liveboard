@@ -60,6 +60,29 @@ export function fileStatusLabel(status: FileStatus) {
 }
 
 export function formatDateTime(value: string | null | undefined) {
+  return formatDateValue(value, {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** 带年份的日期时间，用于跨年才看得出差别的场景（如令牌过期时间）。 */
+export function formatDateTimeWithYear(value: string | null | undefined) {
+  return formatDateValue(value, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatDateValue(
+  value: string | null | undefined,
+  options: Intl.DateTimeFormatOptions,
+) {
   if (!value) {
     return "-";
   }
@@ -72,10 +95,7 @@ export function formatDateTime(value: string | null | undefined) {
 
   return new Intl.DateTimeFormat("zh-CN", {
     timeZone: getAppTimeZone(),
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
+    ...options,
   }).format(date);
 }
 

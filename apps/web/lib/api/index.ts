@@ -470,6 +470,47 @@ export interface PermissionGrantListResponse {
   inheritedGrants: InheritedPermissionGrantSummary[];
 }
 
+/** 个人访问令牌（PAT）：供 MCP 等外部客户端以用户身份调用 API。 */
+export interface ApiTokenSummary {
+  id: string;
+  name: string;
+  userId: string;
+  username: string;
+  tokenPrefix: string;
+  createdAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+}
+
+export interface CreateApiTokenResult {
+  token: string;
+  tokenId: string;
+  tokenPrefix: string;
+}
+
+export function createApiToken(input: {
+  userId: string;
+  name: string;
+  expiresAt?: string;
+}) {
+  return request<CreateApiTokenResult>("/admin/api-tokens", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listApiTokens(userId?: string) {
+  const search = userId ? `?userId=${encodeURIComponent(userId)}` : "";
+  return request<{ tokens: ApiTokenSummary[] }>(`/admin/api-tokens${search}`);
+}
+
+export function revokeApiToken(tokenId: string) {
+  return request<{ ok: boolean }>(`/admin/api-tokens/${tokenId}`, {
+    method: "DELETE",
+  });
+}
+
 export function getDefaultPermissionWorkspace() {
   return request<{ workspace: { id: string; name: string } }>(
     "/permissions/workspace-default",
