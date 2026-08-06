@@ -17,4 +17,4 @@ data/
 backups/
 releases/
 # Claude Code 本地权限/环境配置（每台机器各不相同，勿提交）
-.claude/settings.local.json
+.claude/
