@@ -20,6 +20,12 @@ interface CreatedToken extends CreateApiTokenResult {
   userId: string;
 }
 
+/** 生成把令牌配置进 Claude Code 的命令（多行，可直接粘贴到终端）。 */
+const mcpAddCommand = (token: string) =>
+  `claude mcp add liveboard \\
+  --transport http https://board.hsfz.live/api/mcp \\
+  --header "Authorization: Bearer ${token}"`;
+
 export function ApiTokensClient() {
   useDocumentTitle("访问令牌");
   const [tokens, setTokens] = useState<ApiTokenSummary[]>([]);
@@ -28,14 +34,11 @@ export function ApiTokensClient() {
   >([]);
   // 普通管理员只能管理自己的令牌；最高管理员可管理全部成员令牌
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [actor, setActor] = useState<{
-    id: string;
-    displayName: string;
-  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedToken | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedCommand, setCopiedCommand] = useState(false);
 
   const [userId, setUserId] = useState("");
   const [name, setName] = useState("");
@@ -57,7 +60,6 @@ export function ApiTokensClient() {
       .then(([meResult, tokenResult, userResult]) => {
         const me = meResult.user;
         setIsSuperAdmin(me.systemRole === "super_admin");
-        setActor({ id: me.id, displayName: me.displayName });
         setTokens(tokenResult.tokens);
         const activeUsers = userResult.users
           .filter((user) => user.status === "active")
@@ -138,6 +140,17 @@ export function ApiTokensClient() {
     }
   }
 
+  async function onCopyCommand() {
+    if (!created) return;
+    try {
+      await navigator.clipboard.writeText(mcpAddCommand(created.token));
+      setCopiedCommand(true);
+      setTimeout(() => setCopiedCommand(false), 2000);
+    } catch {
+      setError("复制失败，请手动选中复制");
+    }
+  }
+
   const selectedUserName = useMemo(() => {
     if (!created) return "";
     const user = users.find((item) => item.id === created.userId);
@@ -182,6 +195,14 @@ export function ApiTokensClient() {
               {selectedUserName}
             </span>
           </div>
+          <div className="token-usage-command">
+            <span className="token-usage-command-label">
+              在 MCP 客户端中使用（已填入令牌）：
+            </span>
+            <code className="token-plaintext token-plaintext--multiline">
+              {mcpAddCommand(created.token)}
+            </code>
+          </div>
           <div className="button-row">
             <button className="button secondary" onClick={onCopy} type="button">
               {copied ? (
@@ -191,15 +212,27 @@ export function ApiTokensClient() {
               )}
               {copied ? "已复制" : "复制令牌"}
             </button>
+            <button
+              className="button secondary"
+              onClick={onCopyCommand}
+              type="button"
+            >
+              {copiedCommand ? (
+                <Check aria-hidden="true" />
+              ) : (
+                <Copy aria-hidden="true" />
+              )}
+              {copiedCommand ? "已复制" : "复制命令"}
+            </button>
           </div>
         </section>
       ) : null}
 
       <section className="token-create">
         <form className="token-create-form" onSubmit={onCreate}>
-          <div className="token-create-field">
-            <label htmlFor="token-user">归属用户</label>
-            {isSuperAdmin ? (
+          {isSuperAdmin ? (
+            <div className="token-create-field">
+              <label htmlFor="token-user">归属用户</label>
               <select
                 className="select"
                 id="token-user"
@@ -212,20 +245,11 @@ export function ApiTokensClient() {
                   </option>
                 ))}
               </select>
-            ) : (
-              <input
-                className="input"
-                id="token-user"
-                readOnly
-                value={actor?.displayName ?? ""}
-              />
-            )}
-            <span className="token-create-hint">
-              {isSuperAdmin
-                ? "令牌将以此用户的身份操作文档"
-                : "管理员只能创建自己的令牌，令牌将以此用户身份操作文档"}
-            </span>
-          </div>
+              <span className="token-create-hint">
+                令牌将以此用户的身份操作文档
+              </span>
+            </div>
+          ) : null}
           <div className="token-create-field">
             <label htmlFor="token-name">名称</label>
             <input
@@ -256,6 +280,14 @@ export function ApiTokensClient() {
             {creating ? "创建中…" : "创建令牌"}
           </button>
         </form>
+      </section>
+
+      <section className="token-usage">
+        <h2>在 MCP 客户端中使用</h2>
+        <p>把下面命令里的令牌换成你的访问令牌，即可把本站接入 Claude Code：</p>
+        <code className="token-plaintext token-plaintext--multiline">
+          {mcpAddCommand("lbt_xxxxxxxx")}
+        </code>
       </section>
 
       <section className="token-list">
