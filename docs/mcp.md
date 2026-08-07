@@ -6,9 +6,9 @@ MCP 服务器由 API 提供（`POST/GET /mcp`，Streamable HTTP，无状态）�
 
 ## 能力范围（v1）
 
-12 个工具：文件夹树/文件列表/文件详情/内容块列表，创建/更新/发布/删除文件，创建/更新/删除/重排内容块。
+16 个工具：文件夹树/文件列表/文件详情/内容块列表，创建/更新/发布/删除文件，创建/更新/删除/重排内容块，上传附件（自托管 base64 中转 / Vercel 直传，图片自动压缩为 WebP）。
 
-v1 **不含**：Markdown 导入导出、全文搜索、附件上传（`image`/`attachment` 块只能引用工作区内已上传的附件，需先在 Web 端上传）。
+v1 **不含**：Markdown 导入导出、全文搜索。
 
 ## 配置
 
@@ -121,26 +121,30 @@ claude mcp add --transport stdio liveboard \
 
 ## 工具清单
 
-| 工具               | 入参                                    | 说明                                           |
-| ------------------ | --------------------------------------- | ---------------------------------------------- |
-| `list_folder_tree` | —                                       | 当前用户可查看的文件夹树（含权限等级）         |
-| `list_files`       | `folderId?`                             | 文件夹内文件与独立附件（草稿对 viewer 不可见） |
-| `get_file`         | `fileId`                                | 文件详情（含 permission）                      |
-| `list_blocks`      | `fileId`                                | 内容块列表（按顺序）                           |
-| `create_file`      | `folderId, title, type?`                | 创建文件（需文件夹编辑/lecturer 权限）         |
-| `update_file`      | `fileId, title?, folderId?`             | 改标题/移动（至少一项）                        |
-| `publish_file`     | `fileId`                                | 发布（draft → published）                      |
-| `delete_file`      | `fileId`                                | **硬删除**（连同内容块，不可恢复）             |
-| `create_block`     | `fileId, type, dataJson, afterBlockId?` | 末尾/指定块后插入                              |
-| `update_block`     | `blockId, type?, dataJson`              | 更新内容                                       |
-| `delete_block`     | `blockId`                               | 删除内容块                                     |
-| `reorder_blocks`   | `fileId, blockIds[]`                    | 全量重排                                       |
+| 工具                   | 入参                                                 | 说明                                                         |
+| ---------------------- | ---------------------------------------------------- | ------------------------------------------------------------ |
+| `list_folder_tree`     | —                                                    | 当前用户可查看的文件夹树（含权限等级）                       |
+| `list_files`           | `folderId?`                                          | 文件夹内文件与独立附件（草稿对 viewer 不可见）               |
+| `get_file`             | `fileId`                                             | 文件详情（含 permission）                                    |
+| `list_blocks`          | `fileId`                                             | 内容块列表（按顺序）                                         |
+| `create_file`          | `folderId, title, type?`                             | 创建文件（需文件夹编辑/lecturer 权限）                       |
+| `update_file`          | `fileId, title?, folderId?`                          | 改标题/移动（至少一项）                                      |
+| `publish_file`         | `fileId`                                             | 发布（draft → published）                                    |
+| `delete_file`          | `fileId`                                             | **硬删除**（连同内容块，不可恢复）                           |
+| `create_block`         | `fileId, type, dataJson, afterBlockId?`              | 末尾/指定块后插入                                            |
+| `update_block`         | `blockId, type?, dataJson`                           | 更新内容                                                     |
+| `delete_block`         | `blockId`                                            | 删除内容块                                                   |
+| `reorder_blocks`       | `fileId, blockIds[]`                                 | 全量重排                                                     |
+| `upload_asset`         | `fileId?, folderId?, filename, mimeType?, data`      | 上传图片/附件（base64 中转，自托管，≤7MB，返回 assetId+url） |
+| `upload_asset_url`     | `fileId?, folderId?, filename, sizeBytes, mimeType?` | 获取直传 PUT 地址（Vercel，≤8MB，单请求 PUT）                |
+| `upload_asset_confirm` | `uploadId`                                           | 确认直传（服务端自动压缩图片为 WebP，返回 assetId+url）      |
+| `upload_asset_abort`   | `uploadId`                                           | 取消直传（释放预留并清理临时对象，幂等）                     |
 
 各块类型的 `dataJson` 结构（与 Web 编辑器一致，服务端校验）：
 
 - `heading_1..6` / `paragraph` / `bulleted_list` / `numbered_list` / `todo` / `code` / `quote`：`{"text": "..."}`
 - `divider`：`{}`
-- `image` / `attachment`：`{"assetId": "..."}`（须引用工作区内附件）
+- `image` / `attachment`：`{"assetId": "...", "url": "/assets/<id>", "text": "<文件名>", "filename": "<文件名>", "mimeType": "...", "sizeBytes": N}`（`assetId` 与 `url` 来自 `upload_asset` / `upload_asset_confirm` 返回值；`url` 缺失时前端渲染"等待上传"占位）
 - `bilibili`：`{"embedCode": "..."}`（≤5000 字符）
 - `math`：`{"text": "..."}`（LaTeX，≤50000 字符）
 - `table`：`{"rows": [["单元格", ...], ...]}`（1–50 行，每行 1–20 列）
@@ -169,7 +173,8 @@ claude mcp add --transport stdio liveboard \
 
 - 无状态会话：每次请求独立处理，不依赖内存 session。冷启动后客户端会自动重新 `initialize`，无感。
 - `GET /mcp` 的 SSE 流在函数时限（约 120 秒）后会被平台切断；v1 无服务端主动通知，客户端只损失通知通道，工具调用走 POST 不受影响。
-- 请求体上限 10 MB（与自托管一致）。
+- 请求体受平台限制（约 4.5 MB），因此上传不走 base64 中转：Vercel 下 `upload_asset` 会返回指引错误，请用 `upload_asset_url` 获取预签名 PUT 地址 → 直接把文件字节 PUT 到对象存储（单请求，≤8MB，300 秒内完成）→ `upload_asset_confirm` 确认；confirm 时服务端下载并自动压缩图片为 WebP（最长边 1600px、质量 0.82，与 Web 端一致），非图片原样保留。未确认的临时对象由 R2 Lifecycle 兜底清理（1 天）。
+- 自托管无平台请求体限制（API 侧 10 MB），用 `upload_asset` base64 中转（≤7MB），同样服务端自动压缩图片。
 
 ## 运维与安全
 
