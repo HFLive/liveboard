@@ -14,10 +14,14 @@ describe("ActiveUserGuard", () => {
   const prisma = { user: { findUnique: jest.fn() } };
   const maintenance = { isEnabled: jest.fn() };
   const request: Partial<AuthenticatedRequest> = { cookies: {}, method: "GET" };
+  const response = { clearCookie: jest.fn() };
   const context = {
     getHandler: jest.fn(),
     getClass: jest.fn(),
-    switchToHttp: () => ({ getRequest: () => request }),
+    switchToHttp: () => ({
+      getRequest: () => request,
+      getResponse: () => response,
+    }),
   } as unknown as ExecutionContext;
   let guard: ActiveUserGuard;
 
@@ -48,7 +52,7 @@ describe("ActiveUserGuard", () => {
     ["inactive", 4],
     ["active", 5],
   ])(
-    "rejects a %s user with a mismatched session state",
+    "rejects a %s user with a mismatched session state and clears the stale cookie",
     async (status, version) => {
       reflector.getAllAndOverride.mockReturnValue(false);
       request.cookies = {
@@ -64,8 +68,40 @@ describe("ActiveUserGuard", () => {
         UnauthorizedException,
       );
       expect(request.currentUserId).toBeUndefined();
+      expect(response.clearCookie).toHaveBeenCalledWith(
+        "liveboard_session",
+        expect.any(Object),
+      );
     },
   );
+
+  it("clears a present-but-invalid session cookie", async () => {
+    reflector.getAllAndOverride.mockReturnValue(false);
+    request.cookies = { liveboard_session: "tampered-or-expired-value" };
+
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(response.clearCookie).toHaveBeenCalledWith(
+      "liveboard_session",
+      expect.any(Object),
+    );
+    expect(response.clearCookie).toHaveBeenCalledWith(
+      "liveboard_session_http",
+      expect.any(Object),
+    );
+  });
+
+  it("does not clear cookies when no session cookie is present", async () => {
+    reflector.getAllAndOverride.mockReturnValue(false);
+    request.cookies = {};
+
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(response.clearCookie).not.toHaveBeenCalled();
+  });
 
   it("attaches the validated active user to the request", async () => {
     reflector.getAllAndOverride.mockReturnValue(false);
