@@ -3,15 +3,15 @@
 import Link from "next/link";
 import type { Route } from "next";
 import {
-  Archive,
-  BadgeCheck,
   BellRing,
   Check,
   ClipboardCheck,
+  FileCheck,
   KeyRound,
   Megaphone,
   MessageCircle,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import type { NotificationCategory, NotificationItem } from "@liveboard/shared";
 import { apiResourceUrl } from "@/lib/api";
@@ -24,7 +24,7 @@ const CATEGORY_META: Record<
 > = {
   task: { label: "待处理", Icon: ClipboardCheck },
   classroom: { label: "课堂", Icon: Megaphone },
-  feedback: { label: "反馈", Icon: BadgeCheck },
+  feedback: { label: "反馈", Icon: FileCheck },
   interaction: { label: "互动", Icon: MessageCircle },
   permission: { label: "权限", Icon: KeyRound },
   system: { label: "系统", Icon: BellRing },
@@ -95,12 +95,12 @@ export function NotificationList({
                 )}
               </button>
               <button
-                aria-label={`清除消息“${item.title}”`}
+                aria-label={`删除消息“${item.title}”`}
                 onClick={() => onArchive(item)}
-                title="清除"
+                title="删除"
                 type="button"
               >
-                <Archive aria-hidden="true" />
+                <Trash2 aria-hidden="true" />
               </button>
             </span>
           </article>

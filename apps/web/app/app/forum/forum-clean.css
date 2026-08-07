@@ -869,6 +869,14 @@
   outline: 0;
 }
 
+/* 发帖页第一行：版块与标题并排，版块固定窄列，标题占满剩余宽度。 */
+.forum-compose-row {
+  display: grid;
+  grid-template-columns: minmax(0, 230px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
 .forum-category-picker {
   display: grid;
   gap: 7px;
@@ -879,18 +887,17 @@
 
 .forum-category-picker legend {
   margin: 0 0 2px;
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 700;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .forum-category-picker .select {
   width: 100%;
-  max-width: 360px;
+  max-width: none;
 }
 
 .forum-category-picker > p {
-  max-width: 560px;
   margin: 0;
   color: var(--muted);
   font-size: 13px;
@@ -931,9 +938,63 @@
   align-items: center;
 }
 
-/* 发帖页操作行：匿名选项靠左，取消与发布靠右。 */
-.forum-new-actions .forum-anonymous-option {
-  margin-right: auto;
+/* 发帖页操作行：取消与发布都靠右，发布（可下拉选匿名发布）在最右。 */
+.forum-publish-dropdown {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+/* 发布与箭头合成一颗实心按钮，箭头区用白色细线分隔。
+   workspace 会把所有 .button 重绘成深色，这里用同色把两半拼成一体；
+   workspace 的 hover 会清掉 border-color，用 :not(:disabled) 把 hover 规则
+   升到 (0,5,0) 钉住隔断线，不依赖样式表加载顺序。 */
+.workspace .forum-publish-dropdown > .forum-submit-button,
+.workspace .forum-publish-dropdown > .forum-submit-button:hover,
+.workspace .forum-publish-dropdown > .forum-submit-button:hover:not(:disabled) {
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  border-right: 1px solid rgba(255, 255, 255, 0.28);
+  padding-right: 4px;
+  background: var(--text);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset;
+}
+
+.workspace .forum-publish-caret {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--text);
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset;
+  cursor: pointer;
+}
+
+.workspace .forum-publish-caret:disabled {
+  pointer-events: none;
+}
+
+.workspace .forum-publish-caret:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.forum-publish-caret svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 极简菜单：无边框，仅阴影浮起；尺寸与条目样式沿用 workspace 菜单皮肤。 */
+.forum-publish-menu-list {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  max-width: calc(100vw - 24px);
+  border: 0;
 }
 
 .forum-reply-actions .forum-anonymous-option.compact {
@@ -1277,29 +1338,28 @@
     padding: 14px;
   }
 
+  .forum-compose-row {
+    grid-template-columns: minmax(0, 128px) minmax(0, 1fr);
+    gap: 10px;
+  }
+
   .forum-new-actions {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    display: flex;
     align-items: center;
+    justify-content: flex-end;
+    flex-direction: row;
     gap: 8px;
     width: 100%;
   }
 
-  .forum-new-actions .forum-anonymous-option {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .forum-new-actions .forum-submit-button {
-    grid-column: 3;
-    grid-row: 1;
-    width: auto;
-  }
-
+  .forum-new-actions .forum-submit-button,
   .forum-new-actions .button.secondary {
-    grid-column: 2;
-    grid-row: 1;
     width: auto;
+  }
+
+  .forum-publish-menu-list {
+    top: auto;
+    bottom: calc(100% + 6px);
   }
 
   .forum-image-preview-grid {

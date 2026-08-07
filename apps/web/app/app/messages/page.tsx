@@ -1,5 +1,13 @@
-import { NotificationsClient } from "./NotificationsClient";
+import { Suspense } from "react";
+import {
+  NotificationsClient,
+  NotificationsSkeleton,
+} from "./NotificationsClient";
 
 export default function MessagesPage() {
-  return <NotificationsClient />;
+  return (
+    <Suspense fallback={<NotificationsSkeleton />}>
+      <NotificationsClient />
+    </Suspense>
+  );
 }

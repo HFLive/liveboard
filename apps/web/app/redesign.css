@@ -257,7 +257,6 @@ textarea {
 
 .rail-activity-button:hover,
 .rail-activity-button.active {
-  background: rgba(255, 255, 255, 0.08);
   color: #fff;
 }
 
@@ -283,7 +282,7 @@ textarea {
   bottom: 12px;
   left: 116px;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   width: min(390px, calc(100vw - 132px));
   max-height: min(620px, calc(100dvh - 24px));
   overflow: hidden;
@@ -343,33 +342,6 @@ textarea {
   opacity: 0.35;
 }
 
-.rail-activity-filters {
-  display: flex;
-  gap: 2px;
-  border-bottom: 1px solid var(--line);
-  padding: 6px 10px;
-}
-
-.rail-activity-filters button {
-  min-height: 27px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--muted);
-  padding: 4px 8px;
-  font-size: 9px;
-}
-
-.rail-activity-filters button:hover {
-  background: var(--fill-hover);
-  color: var(--text);
-}
-
-.rail-activity-filters button[aria-pressed="true"] {
-  background: var(--fill-active);
-  color: var(--text);
-}
-
 .rail-activity-list {
   display: grid;
   align-content: start;
@@ -393,11 +365,12 @@ textarea {
 }
 
 .rail-activity-all {
-  border-top: 1px solid var(--line);
   color: var(--text-soft);
-  padding: 9px 12px;
+  padding: 0 8px;
+  border-radius: 7px;
   font-size: 10px;
-  text-align: center;
+  line-height: 28px;
+  white-space: nowrap;
 }
 
 .rail-activity-all:hover {
@@ -479,17 +452,16 @@ textarea {
   font-weight: 600;
 }
 
-.rail-user:hover,
-.rail-user.active {
-  border-color: transparent;
-  background: rgba(255, 255, 255, 0.07);
+.rail-user:hover {
   color: #fff;
+}
+
+.rail-user:not(.profile-context):hover .rail-avatar {
+  filter: brightness(1.18);
 }
 
 .rail-user.profile-context,
 .rail-user.profile-context:hover {
-  border-color: transparent;
-  background: transparent;
   color: inherit;
 }
 
@@ -2521,7 +2493,7 @@ button:disabled {
     bottom: auto;
     left: 8px;
     width: auto;
-    max-height: calc(100dvh - 72px);
+    max-height: min(560px, calc(100dvh - 96px));
   }
 
   .nav-button {
@@ -3996,9 +3968,10 @@ body,
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
-  border: 0;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--fill-subtle);
+  /* 白底融入弹窗主体，用边框区分区块，不再用暖米色填充 */
+  background: var(--surface);
   padding: 10px;
 }
 

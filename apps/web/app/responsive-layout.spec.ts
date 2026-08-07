@@ -203,10 +203,10 @@ describe("responsive workspace contracts", () => {
 
   it("keeps forum compose actions together on one mobile row", () => {
     expect(forumCss).toMatch(
-      /\.forum-new-actions\s*{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto auto/,
+      /\.forum-new-actions\s*{[\s\S]*?display: flex;[\s\S]*?justify-content: flex-end;[\s\S]*?flex-direction: row/,
     );
     expect(forumCss).toMatch(
-      /\.forum-new-actions \.button\.secondary\s*{[\s\S]*?grid-column: 2;[\s\S]*?grid-row: 1;[\s\S]*?width: auto/,
+      /\.forum-new-actions \.forum-submit-button,[\s\S]*?\.forum-new-actions \.button\.secondary\s*{[\s\S]*?width: auto/,
     );
   });
 
@@ -292,10 +292,10 @@ describe("responsive workspace contracts", () => {
       /\.teaching-editor-workspace \.teaching-save-label\s*{[\s\S]*?display: none/,
     );
     expect(editorCss).toMatch(
-      /@media \(max-width: 760px\)[\s\S]*?\.content-editor-workspace[\s\S]*?\.editor-pane:not\(\.mobile-pane-active\)\s*{[\s\S]*?display: none/,
+      /@media \(max-width: 760px\)[\s\S]*?\.content-editor-workspace \.doc-block\s*{[\s\S]*?grid-template-columns: 44px minmax\(0, 1fr\)/,
     );
     expect(editorCss).toMatch(
-      /@media \(max-width: 760px\)[\s\S]*?\.content-editor-workspace \.editor-outline\s*{\s*padding-inline: 14px/,
+      /@media \(max-width: 760px\)[\s\S]*?\.content-editor-workspace \.editor-outline\s*{[\s\S]*?position: sticky;[\s\S]*?top: 58px;[\s\S]*?padding: 8px 14px 10px/,
     );
     expect(editorCss).toMatch(
       /@media \(max-width: 760px\)[\s\S]*?\.content-editor-workspace \.editor-more-menu \.context-menu\s*{[\s\S]*?position: absolute;[\s\S]*?top: calc\(100% \+ 6px\);[\s\S]*?right: 0;[\s\S]*?bottom: auto;[\s\S]*?left: auto/,

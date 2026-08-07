@@ -333,19 +333,6 @@
     right: 0;
   }
 
-  .rail-activity-popover {
-    top: 58px;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    width: auto;
-    max-height: none;
-    border: 0;
-    border-top: 1px solid var(--line);
-    border-radius: 0;
-    box-shadow: none;
-  }
-
   .app-main {
     min-width: 0;
     min-height: calc(100dvh - 58px);
@@ -367,7 +354,7 @@
 
   /* Editors use one primary pane at a time on compact screens. This avoids
      turning a desktop two-pane workspace into an extremely long stacked page. */
-  .mobile-editor-pane-switch {
+  .workspace .mobile-editor-pane-switch {
     position: sticky;
     z-index: 60;
     top: 58px;
@@ -378,10 +365,10 @@
     width: 100%;
     min-height: 46px;
     border-radius: 0;
-    background: color-mix(in srgb, var(--bg) 96%, transparent);
-    padding: 4px 0 8px;
+    /* 实色背景，半透明在滚动时会透出内容；上下 padding 相等使按钮居中留白均衡 */
+    background: var(--bg);
+    padding: 6px 0;
     box-shadow: 0 1px 0 var(--line);
-    backdrop-filter: blur(12px);
   }
 
   .mobile-editor-pane-switch button {

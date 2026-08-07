@@ -3,7 +3,8 @@
   min-width: 0;
   overflow: hidden;
   border-radius: 8px;
-  background: var(--fill-subtle);
+  /* 容器透明：内部输入框/列表自带浅灰底与分隔线，无需整块暖色填充 */
+  background: transparent;
 }
 
 .filters {

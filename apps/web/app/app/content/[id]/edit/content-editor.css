@@ -1,3 +1,7 @@
+/* 文档编辑页：所见即所得单栏。
+   块默认按最终文档的阅读排版渲染（与查看页一致），点击进入源码编辑态，
+   编辑期间显示 markdown 原文与块类型选择。整页随文档自然滚动。 */
+
 .media-picker-trigger {
   display: flex;
   align-items: center;
@@ -74,70 +78,300 @@
   position: relative;
 }
 
-@media (min-width: 1121px) {
-  .app-main:has(.content-editor-workspace) {
-    display: flex;
-    flex-direction: column;
-    height: 100dvh;
-    overflow: hidden;
-  }
+/* ── 文档栏 ─────────────────────────────────────────
+   整页自然滚动，文档列居中；标题输入框与文档列同宽对齐。 */
 
-  .app-main:has(.content-editor-workspace) > .mobile-route-content {
-    display: flex;
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-
-  .content-editor-workspace {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .content-editor-workspace .editor-title-bar {
-    flex: 0 0 auto;
-  }
-
-  .content-editor-workspace .editor-workspace {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .content-editor-workspace .editor-split {
-    height: 100%;
-    min-height: 0;
-    align-items: stretch;
-  }
-
-  .content-editor-workspace .editor-pane {
-    position: static;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    align-self: stretch;
-    min-height: 0;
-    max-height: none;
-  }
-
-  .editor-format-pane {
-    min-height: 0;
-  }
-
-  .editor-format-scroll,
-  .editor-preview-scroll {
-    height: 100%;
-    max-height: none;
-    overflow: auto;
-    scrollbar-gutter: stable;
-  }
+.content-editor-workspace .title-input {
+  width: min(860px, 100%);
 }
 
+.wysiwyg-document {
+  --reader-font-size: 19px;
+  width: min(860px, 100%);
+  margin: 0 auto;
+  /* 底部留白给大纲跳转留出滚动空间：靠后的目标也要能滚到页面顶端 */
+  padding-bottom: min(80dvh, 720px);
+}
+
+.content-editor-workspace .document-editor {
+  width: 100%;
+  gap: 4px;
+  /* 与大纲横线之间留出距离，第一个块不贴线 */
+  margin-top: 16px;
+}
+
+/* ── 渲染态排版 ─────────────────────────────────────
+   与查看页同一套阅读排版（宋体、相对字号），「所见」就是读者最终看到的样子。 */
+
+.doc-block-render {
+  min-height: 2em;
+  padding: 2px 0;
+  font-family:
+    "Noto Serif SC", "Songti SC", STSong, SimSun, "Noto Serif CJK SC", serif;
+  font-size: var(--reader-font-size);
+  line-height: 1.88;
+  color: var(--text-soft);
+  text-rendering: optimizeLegibility;
+  cursor: text;
+}
+
+.doc-block-render :is(h1, h2, h3, h4, h5, h6) {
+  border: 0;
+  color: var(--text);
+  padding: 0;
+  font-family: inherit;
+  font-weight: 720;
+  letter-spacing: -0.025em;
+}
+
+.doc-block-render h1 {
+  font-size: 1.72em;
+  line-height: 1.32;
+}
+
+.doc-block-render h2 {
+  font-size: 1.42em;
+  line-height: 1.38;
+}
+
+.doc-block-render h3 {
+  font-size: 1.22em;
+  line-height: 1.45;
+}
+
+.doc-block-render h4 {
+  font-size: 1.08em;
+  line-height: 1.5;
+}
+
+.doc-block-render :is(h5, h6) {
+  font-size: 1em;
+  line-height: 1.55;
+}
+
+.doc-block-render h6 {
+  color: var(--text-soft);
+  letter-spacing: 0.04em;
+}
+
+.doc-block-render
+  :is(
+    .render-paragraph,
+    .render-list,
+    .render-list li,
+    .render-quote,
+    .render-todo,
+    .render-todo > span,
+    .render-question,
+    .render-placeholder,
+    .render-table,
+    .render-table th,
+    .render-table td
+  ) {
+  font-family: inherit;
+}
+
+.doc-block-render
+  :is(
+    .render-paragraph,
+    .render-list,
+    .render-quote,
+    .render-todo,
+    .render-question,
+    .render-placeholder
+  ) {
+  font-size: 1em;
+  line-height: inherit;
+}
+
+.doc-block-render .render-paragraph {
+  text-wrap: pretty;
+}
+
+.doc-block-render .render-list {
+  gap: 0.35em;
+  padding-left: 1.5em;
+}
+
+.doc-block-render .render-quote {
+  border-left-width: 3px;
+  border-left-color: var(--accent);
+  background: transparent;
+  padding: 0.2em 0 0.2em 1.1em;
+  color: var(--text-soft);
+}
+
+.doc-block-render .render-code {
+  border: 0;
+  border-radius: 10px;
+  background: var(--code);
+  padding: 1em 1.1em;
+  font-size: 0.82em;
+}
+
+.doc-block-render .render-divider {
+  width: 42px;
+  margin: 0.4em auto;
+  background: var(--line-strong);
+}
+
+.doc-block-render .render-table {
+  font-size: 0.86em;
+  line-height: 1.55;
+}
+
+.doc-block-render .render-image {
+  border: 0;
+  border-radius: 8px;
+}
+
+/* 空段落平时不可见，hover 块时才给出可编辑提示 */
+.doc-block-render.is-empty::after {
+  content: "空段落 · 点击编辑";
+  color: var(--muted);
+  font-size: 0.78em;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.doc-block:hover .doc-block-render.is-empty::after,
+.doc-block:focus-within .doc-block-render.is-empty::after {
+  opacity: 1;
+}
+
+/* 标题块之间留出阅读节奏，分割线自有一段留白 */
+.doc-block[data-block-type^="heading_"] {
+  margin-top: 22px;
+}
+
+.doc-block[data-block-type="divider"] {
+  margin-block: 12px;
+}
+
+.doc-block:first-child[data-block-type^="heading_"] {
+  margin-top: 0;
+}
+
+/* 大纲跳转的目标让开顶部固定区：桌面仅 sticky 大纲（约 44px 高）。
+   取值精确贴合固定区高度，多余的空隙会露出目标上方的上一个块。 */
+.doc-block {
+  scroll-margin-top: 45px;
+}
+
+/* 编辑中的块给一条完整描边，与 hover 的淡底色区分 */
+.doc-block.editing {
+  border-color: var(--line-strong);
+  background: var(--fill-subtle);
+}
+
+/* 编辑态的内容（textarea、工具栏）与外框之间留出内边距，
+   避免内侧框贴着外侧框 */
+.doc-block.editing .doc-block-body {
+  padding: 6px 8px 8px;
+}
+
+/* hover 浮现的铅笔按钮：提示「点击编辑」 */
+.doc-block-edit-float {
+  position: absolute;
+  z-index: 3;
+  top: 6px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  cursor: pointer;
+}
+
+.doc-block:hover .doc-block-edit-float,
+.doc-block:focus-within .doc-block-edit-float,
+.doc-block-edit-float:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.doc-block-edit-float:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.doc-block-edit-float svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 源码编辑态：类型选择行 */
+.doc-block-toolbar {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding-left: 1px;
+  opacity: 1;
+}
+
+.doc-block-source-hint {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+}
+
+/* 底部与块间的添加表单：平时只有一行输入框，聚焦后展开类型选择；
+   没有提交按钮，输入内容后点击框外自动插入，空白点击框外自动收起。 */
+.doc-add-block {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  margin-top: 24px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  padding: 8px;
+  transition: background 120ms ease;
+}
+
+.doc-add-block:hover,
+.doc-add-block:focus-within {
+  background: var(--fill-subtle);
+}
+
+.doc-add-block .select {
+  display: none;
+}
+
+.doc-add-block:focus-within .select {
+  display: block;
+}
+
+.doc-add-block .doc-new-block-input {
+  min-height: 42px;
+  border-radius: 9px;
+  padding: 9px 12px;
+  font-size: 15px;
+}
+
+/* 大纲条：文档列顶部的横向标题导航；滚动时固定在视口顶部不离开视线 */
 .editor-outline {
+  position: sticky;
+  z-index: 5;
+  top: 0;
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
   border-bottom: 1px solid var(--line);
+  background: var(--bg);
   padding: 7px 0 10px;
 }
 
@@ -154,14 +388,16 @@
   overflow-x: auto;
 }
 
+/* 与查看页移动端目录同款：贴合文字宽度、统一内边距（不区分标题层级），
+   常显淡色胶囊，hover 加深 */
 .editor-outline button {
   flex: 0 0 auto;
-  max-width: 180px;
+  max-width: 210px;
   overflow: hidden;
   border: 0;
   border-radius: 7px;
-  background: transparent;
-  padding: 5px 8px 5px calc(8px + (var(--heading-level) - 1) * 5px);
+  background: var(--fill-subtle);
+  padding: 6px 9px;
   color: var(--text-soft);
   font: inherit;
   font-size: 11px;
@@ -390,40 +626,23 @@
     min-width: 0;
   }
 
-  .content-editor-workspace .mobile-editor-pane-switch {
-    width: calc(100% - 28px);
-    margin: 14px 14px 0;
+  .wysiwyg-document {
+    width: 100%;
   }
 
-  .editor-split {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-    padding-top: 16px;
-  }
-
-  .content-editor-workspace
-    .editor-split
-    > .editor-pane:not(.mobile-pane-active) {
-    display: none;
-  }
-
-  .content-editor-workspace .editor-pane-head {
-    display: none;
-  }
-
-  .content-editor-workspace .editor-format-scroll,
-  .content-editor-workspace .editor-preview-scroll {
-    max-height: none;
-    overflow: visible;
-  }
-
-  .content-editor-workspace .editor-outline {
+  /* 块的外框（hover/编辑态背景）与页面边缘留一点距离，与大纲 14px 内缩对齐 */
+  .content-editor-workspace .document-editor {
     padding-inline: 14px;
   }
 
-  .content-editor-workspace .editor-document-shell {
-    min-height: calc(100dvh - 210px);
-    padding: 14px 10px 88px;
+  .content-editor-workspace .editor-outline {
+    /* 下滑时大纲固定在顶部 rail 正下方；8px 间隙用 padding-top 承载，
+       让背景盖住间隙避免内容透出 */
+    position: sticky;
+    top: 58px;
+    z-index: 5;
+    background: var(--bg);
+    padding: 8px 14px 10px;
   }
 
   .content-editor-workspace .doc-block {
@@ -431,6 +650,9 @@
     gap: 0;
     border-radius: 8px;
     padding-block: 5px;
+    /* 大纲跳转时避开顶部 rail 与固定大纲（58px + 45px），
+       精确贴合固定区，多余空隙会露出目标上方的上一个块 */
+    scroll-margin-top: 104px;
   }
 
   .content-editor-workspace .doc-block.drop-target::before {
@@ -460,8 +682,13 @@
     min-height: 44px;
   }
 
+  /* 移动端整块点击即进入编辑，铅笔按钮无需常驻 */
+  .content-editor-workspace .doc-block-edit-float {
+    display: none;
+  }
+
   .content-editor-workspace .doc-block-toolbar {
-    min-height: 28px;
+    min-height: 32px;
     opacity: 1;
   }
 
@@ -492,21 +719,6 @@
     padding-inline: 16px;
   }
 
-  .editor-preview-pane {
-    order: initial;
-    padding: 0 10px 72px;
-  }
-
-  .content-editor-workspace .editor-preview-scroll {
-    border-radius: 10px;
-    padding: 10px;
-  }
-
-  .content-editor-workspace .editor-preview-document {
-    gap: 16px;
-    padding: 20px 16px;
-  }
-
   .media-block-fields,
   .media-block-fields.attachment-fields {
     grid-template-columns: minmax(0, 1fr);
@@ -524,10 +736,6 @@
 
   .content-editor-workspace .doc-inline-inserter {
     margin-left: 44px;
-  }
-
-  .content-editor-workspace .doc-add-block-actions {
-    justify-content: flex-end;
   }
 
   .content-editor-workspace .editor-more-menu .context-menu {

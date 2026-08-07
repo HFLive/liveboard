@@ -8,6 +8,17 @@ import {
 } from "@/lib/api";
 import { NotificationsClient } from "./NotificationsClient";
 
+const { routerReplaceMock, useSearchParamsMock } = vi.hoisted(() => ({
+  routerReplaceMock: vi.fn(),
+  useSearchParamsMock: vi.fn(() => new URLSearchParams("")),
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/app/messages",
+  useRouter: () => ({ replace: routerReplaceMock }),
+  useSearchParams: useSearchParamsMock,
+}));
+
 vi.mock("@/lib/api", () => ({
   apiResourceUrl: (path: string) => path,
   archiveNotification: vi.fn(),
@@ -35,6 +46,7 @@ const notification = {
 describe("NotificationsClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useSearchParamsMock.mockReturnValue(new URLSearchParams(""));
     vi.mocked(listNotifications).mockResolvedValue({
       items: [notification],
       unreadCount: 1,
@@ -60,20 +72,79 @@ describe("NotificationsClient", () => {
     await waitFor(() =>
       expect(markAllNotificationsRead).toHaveBeenCalledTimes(1),
     );
-    expect(screen.getByText("没有未读消息")).toBeInTheDocument();
+    // 工具栏计数与空状态各一处
+    expect(screen.getAllByText("没有未读消息")).toHaveLength(2);
   });
 
-  it("requests only unread messages when the unread segment is selected", async () => {
+  it("loads unread by default and switches between all and unread segments", async () => {
     render(<NotificationsClient />);
     await screen.findByRole("link", { name: /第一章练习/ });
 
-    fireEvent.click(screen.getByRole("button", { name: "未读" }));
+    // 默认主页是未读
+    expect(listNotifications).toHaveBeenLastCalledWith({
+      status: "unread",
+      category: undefined,
+      limit: 30,
+    });
 
+    fireEvent.click(screen.getByRole("button", { name: "全部" }));
+    await waitFor(() =>
+      expect(listNotifications).toHaveBeenLastCalledWith({
+        status: "all",
+        category: undefined,
+        limit: 30,
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "未读" }));
     await waitFor(() =>
       expect(listNotifications).toHaveBeenLastCalledWith({
         status: "unread",
         category: undefined,
         limit: 30,
+      }),
+    );
+  });
+
+  it("restores the all segment from the URL on first render", async () => {
+    useSearchParamsMock.mockReturnValue(new URLSearchParams("?status=all"));
+    render(<NotificationsClient />);
+    await screen.findByRole("link", { name: /第一章练习/ });
+
+    expect(listNotifications).toHaveBeenLastCalledWith({
+      status: "all",
+      category: undefined,
+      limit: 30,
+    });
+    expect(screen.getByRole("button", { name: "全部" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "未读" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("syncs segment changes to the URL", async () => {
+    render(<NotificationsClient />);
+    await screen.findByRole("link", { name: /第一章练习/ });
+
+    fireEvent.click(screen.getByRole("button", { name: "全部" }));
+    await waitFor(() =>
+      expect(routerReplaceMock).toHaveBeenCalledWith(
+        "/app/messages?status=all",
+        {
+          scroll: false,
+        },
+      ),
+    );
+
+    routerReplaceMock.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "未读" }));
+    await waitFor(() =>
+      expect(routerReplaceMock).toHaveBeenCalledWith("/app/messages", {
+        scroll: false,
       }),
     );
   });

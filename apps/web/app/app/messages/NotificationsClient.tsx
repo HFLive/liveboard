@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import type { NotificationCategory, NotificationItem } from "@liveboard/shared";
 import {
   archiveNotification,
@@ -37,7 +39,14 @@ const CATEGORY_OPTIONS: Array<{
 ];
 
 export function NotificationsClient() {
-  const [status, setStatus] = useState<StatusFilter>("all");
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // 未读是默认主页；?status=all 显式切换全部。
+  // 从 URL 惰性初始化，避免首帧「未读→全部」的闪烁。
+  const [status, setStatus] = useState<StatusFilter>(() =>
+    searchParams.get("status") === "all" ? "all" : "unread",
+  );
   const [category, setCategory] = useState<CategoryFilter>("all");
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -45,6 +54,26 @@ export function NotificationsClient() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [errorNotice, setError] = useFeedbackNotice();
+
+  // 同页导航（弹窗「查看全部」）时 URL 变化，同步选中项
+  const urlStatus: StatusFilter =
+    searchParams.get("status") === "all" ? "all" : "unread";
+
+  useEffect(() => {
+    setStatus((current) => (current === urlStatus ? current : urlStatus));
+  }, [urlStatus]);
+
+  // segment 切换同时写 URL，保证「查看全部」从任何状态都能回到默认未读
+  function selectStatus(value: StatusFilter) {
+    setStatus(value);
+    const next = new URLSearchParams(searchParams.toString());
+    if (value === "all") next.set("status", "all");
+    else next.delete("status");
+    const qs = next.toString();
+    router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, {
+      scroll: false,
+    });
+  }
 
   const load = useCallback(
     async (cursor?: string) => {
@@ -140,7 +169,7 @@ export function NotificationsClient() {
       await archiveNotification(item.id);
       broadcastNotificationsUpdated("page");
     } catch {
-      setError("未能清除消息");
+      setError("未能删除消息");
       await load();
     }
   }
@@ -148,9 +177,13 @@ export function NotificationsClient() {
   function open(item: NotificationItem) {
     if (!item.unread) return;
     setItems((current) =>
-      current.map((candidate) =>
-        candidate.id === item.id ? { ...candidate, unread: false } : candidate,
-      ),
+      current
+        .map((candidate) =>
+          candidate.id === item.id
+            ? { ...candidate, unread: false }
+            : candidate,
+        )
+        .filter((candidate) => status !== "unread" || candidate.unread),
     );
     setUnreadCount((current) => Math.max(0, current - 1));
     void setNotificationRead(item.id, true)
@@ -200,14 +233,14 @@ export function NotificationsClient() {
         </div>
         <div className={styles.tools}>
           <div className={styles.segments} aria-label="消息状态">
-            {(["all", "unread"] as const).map((value) => (
+            {(["unread", "all"] as const).map((value) => (
               <button
                 aria-pressed={status === value}
                 key={value}
-                onClick={() => setStatus(value)}
+                onClick={() => selectStatus(value)}
                 type="button"
               >
-                {value === "all" ? "全部" : "未读"}
+                {value === "unread" ? "未读" : "全部"}
               </button>
             ))}
           </div>
@@ -273,6 +306,49 @@ export function NotificationsClient() {
           {loadingMore ? "正在加载…" : "加载更多"}
         </button>
       ) : null}
+    </section>
+  );
+}
+
+// 预渲染骨架：与 NotificationsClient 的初始 loading 态一致。
+// 页面静态预渲染时 useSearchParams 使 client 子树被跳过，
+// 该骨架作为 Suspense fallback 直接进入首屏 HTML。
+export function NotificationsSkeleton() {
+  return (
+    <section className={styles.workspace}>
+      <header className={styles.toolbar}>
+        <div>
+          <strong>消息</strong>
+          <span>正在加载…</span>
+        </div>
+        <div className={styles.tools}>
+          <div className={styles.segments} aria-label="消息状态">
+            {(["未读", "全部"] as const).map((label) => (
+              <button aria-pressed={false} disabled key={label} type="button">
+                {label}
+              </button>
+            ))}
+          </div>
+          <label className={styles.category}>
+            <span className="sr-only">消息类型</span>
+            <select defaultValue={CATEGORY_OPTIONS[0]?.value ?? "all"} disabled>
+              {CATEGORY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className={styles.markAll} disabled type="button">
+            全部已读
+          </button>
+        </div>
+      </header>
+      <div aria-label="正在加载消息" className={styles.skeleton}>
+        {Array.from({ length: 6 }, (_, index) => (
+          <span key={index} />
+        ))}
+      </div>
     </section>
   );
 }

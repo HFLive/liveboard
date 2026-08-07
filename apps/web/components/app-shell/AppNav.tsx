@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   Bot,
   Bell,
-  CheckCheck,
   ChevronDown,
   Files,
   MessageSquare,
@@ -21,7 +20,6 @@ import {
   archiveNotification,
   getMe,
   listNotifications,
-  markAllNotificationsRead,
   setNotificationRead,
 } from "@/lib/api";
 import { APP_ROUTES, userProfile } from "@/lib/routes";
@@ -67,9 +65,6 @@ export function AppNav() {
   const [activityItems, setActivityItems] = useState<NotificationItem[]>([]);
   const [activityUnreadCount, setActivityUnreadCount] = useState(0);
   const [activityOpen, setActivityOpen] = useState(false);
-  const [activityFilter, setActivityFilter] = useState<
-    "all" | "unread" | "task"
-  >("all");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const activeNavLinkRef = useRef<HTMLAnchorElement | null>(null);
   const displayName = userLoaded ? (user?.displayName ?? "未登录") : "账户信息";
@@ -141,7 +136,7 @@ export function AppNav() {
   useEffect(() => {
     if (!user) return;
 
-    const loadSecondaryNavigationData = () => void loadActivity("all");
+    const loadSecondaryNavigationData = () => void loadActivity();
     const usesIdleCallback = typeof window.requestIdleCallback === "function";
     const idleCallback: number = usesIdleCallback
       ? window.requestIdleCallback(loadSecondaryNavigationData, {
@@ -164,19 +159,16 @@ export function AppNav() {
 
   useEffect(() => {
     if (!user) return;
-    const timer = window.setInterval(
-      () => void loadActivity(activityFilter),
-      60_000,
-    );
+    const timer = window.setInterval(() => void loadActivity(), 60_000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activityFilter, user]);
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
     const onNotificationsUpdated = (event: Event) => {
       if ((event as CustomEvent<NotificationUpdateSource>).detail !== "nav") {
-        void loadActivity(activityFilter);
+        void loadActivity();
       }
     };
     window.addEventListener(
@@ -189,15 +181,12 @@ export function AppNav() {
         onNotificationsUpdated,
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activityFilter, user]);
+  }, [user]);
 
-  async function loadActivity(
-    filter: "all" | "unread" | "task" = activityFilter,
-  ) {
+  async function loadActivity() {
     try {
       const result = await listNotifications({
-        status: filter === "unread" ? "unread" : "all",
-        category: filter === "task" ? "task" : undefined,
+        status: "unread",
         limit: 12,
       });
       setActivityItems(result.items);
@@ -243,7 +232,7 @@ export function AppNav() {
             ? { ...candidate, unread: !read }
             : candidate,
         )
-        .filter((candidate) => activityFilter !== "unread" || candidate.unread),
+        .filter((candidate) => candidate.unread),
     );
     setActivityUnreadCount((current) => Math.max(0, current + (read ? -1 : 1)));
     try {
@@ -263,27 +252,6 @@ export function AppNav() {
       .catch(() => {
         void loadActivity();
       });
-  }
-
-  async function onMarkAllActivityRead() {
-    if (activityUnreadCount === 0) return;
-    try {
-      await markAllNotificationsRead();
-      setActivityUnreadCount(0);
-      setActivityItems((current) =>
-        activityFilter === "unread"
-          ? []
-          : current.map((item) => ({ ...item, unread: false })),
-      );
-      broadcastNotificationsUpdated("nav");
-    } catch {
-      await loadActivity();
-    }
-  }
-
-  async function changeActivityFilter(filter: "all" | "unread" | "task") {
-    setActivityFilter(filter);
-    await loadActivity(filter);
   }
 
   if (isPresentationRoute) {
@@ -430,15 +398,13 @@ export function AppNav() {
               ) : null}
             </span>
             <div>
-              <button
-                aria-label="全部标为已读"
-                disabled={activityUnreadCount === 0}
-                onClick={() => void onMarkAllActivityRead()}
-                title="全部已读"
-                type="button"
+              <Link
+                className="rail-activity-all"
+                href={`${APP_ROUTES.notifications}?status=unread`}
+                onClick={() => setActivityOpen(false)}
               >
-                <CheckCheck aria-hidden="true" />
-              </button>
+                查看全部
+              </Link>
               <button
                 aria-label="关闭消息"
                 onClick={() => setActivityOpen(false)}
@@ -448,24 +414,6 @@ export function AppNav() {
                 <X aria-hidden="true" />
               </button>
             </div>
-          </div>
-          <div className="rail-activity-filters" aria-label="消息筛选">
-            {(
-              [
-                ["all", "全部"],
-                ["unread", "未读"],
-                ["task", "待处理"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                aria-pressed={activityFilter === value}
-                key={value}
-                onClick={() => void changeActivityFilter(value)}
-                type="button"
-              >
-                {label}
-              </button>
-            ))}
           </div>
           <div className="rail-activity-list">
             {activityItems.length > 0 ? (
@@ -478,20 +426,11 @@ export function AppNav() {
               />
             ) : (
               <div className="rail-activity-empty">
-                <strong>
-                  {activityFilter === "unread" ? "没有未读消息" : "暂无消息"}
-                </strong>
+                <strong>没有未读消息</strong>
                 <span>课堂、练习、反馈和论坛动态会显示在这里。</span>
               </div>
             )}
           </div>
-          <Link
-            className="rail-activity-all"
-            href={APP_ROUTES.notifications}
-            onClick={() => setActivityOpen(false)}
-          >
-            查看全部消息
-          </Link>
         </div>
       ) : null}
     </aside>

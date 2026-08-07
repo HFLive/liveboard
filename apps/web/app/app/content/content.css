@@ -88,11 +88,6 @@
   text-align: left;
 }
 
-.content-folder-link:hover,
-.content-file-link:hover {
-  color: var(--accent-dark);
-}
-
 .content-folder-link svg,
 .content-file-link svg {
   flex: 0 0 17px;
@@ -953,15 +948,23 @@
   background: var(--fill-hover);
 }
 
+/* 列表行 hover 是通栏矩形，去掉 redesign 共享规则给首尾单元格加的
+   10px 圆角两端。 */
+.workspace.content-workspace
+  .content-drive-table
+  tr:hover
+  td:first-child:not(.empty-cell),
+.workspace.content-workspace
+  .content-drive-table
+  tr:hover
+  td:last-child:not(.empty-cell) {
+  border-radius: 0;
+}
+
 .content-drive-table .content-folder-link,
 .content-drive-table .content-file-link {
   min-height: 44px;
   font-weight: 620;
-}
-
-.content-drive-table .content-folder-link:hover,
-.content-drive-table .content-file-link:hover {
-  color: var(--accent-dark);
 }
 
 .content-drive-table .content-folder-link svg,
@@ -1856,5 +1859,19 @@
 
   .content-workspace .asset-preview-dialog .modal-foot {
     padding-left: 15px;
+  }
+}
+
+/* 行操作按钮去掉 hover 背景：桌面端悬停与触屏点击后的 sticky hover
+   都不再出现按钮底色，只保留行背景反馈。 */
+.workspace.content-workspace .content-row-menu-button:hover:not(:disabled) {
+  background: transparent;
+}
+
+/* 触屏点击行后 tr:hover 会 sticky 保留，redesign 共享规则会给整行 td
+   填上 fill-hover 形成额外色块；触屏上禁用，只保留行自身背景。 */
+@media (hover: none) {
+  .workspace.content-workspace .table tr:hover td:not(.empty-cell) {
+    background: transparent;
   }
 }
