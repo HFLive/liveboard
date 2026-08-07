@@ -43,6 +43,8 @@ interface VercelJobProgress {
 const OBJECTS_PER_TICK = 20;
 const JOB_LOCK_TTL_MS = 60_000;
 const JOB_LOCK_KEY_PREFIX = "liveboard:backup:job:";
+/** 请求内推进预算：Vercel 函数最长 60s，预留请求与执行开销余量。 */
+export const VERCEL_ADVANCE_BUDGET_MS = 45_000;
 
 /** R2 备份前缀（对象复制到 backup/<jobId>/<storageKey>）。 */
 function backupObjectKey(jobId: string, storageKey: string): string {
@@ -73,6 +75,105 @@ export class BackupVercelExecutor {
     for (const row of rows) {
       await this.withJobLock(row.id, () => this.advanceJob(row));
     }
+  }
+
+  /**
+   * 请求内立即把单个任务推进到完成或预算耗尽：手动备份/回滚链在创建任务的
+   * 请求里驱动，不再等每日 cron 才动第一块。每轮读取最新行推进一块；
+   * 预算耗尽且任务未终态时自动接力续跑（自己叫自己，见
+   * scheduleContinuation），每棒一个函数实例（≤预算），直至完成；
+   * 本轮无进展不接力（防止失控循环），交由每日 cron 兜底。restore 行在
+   * 链等待（pending，等保护备份 finalize 唤醒）时每 1s 重试一次，并接力
+   * 推进仍在进行中的保护备份。deadlineMs 由调用方共享（回滚链两条任务
+   * 合计不超预算）。
+   */
+  async advanceUntilFinished(
+    jobId: string,
+    deadlineMs?: number,
+  ): Promise<void> {
+    const deadline = deadlineMs ?? Date.now() + VERCEL_ADVANCE_BUDGET_MS;
+    let progressed = false; // 本轮推进过（updatedAt 前进）才接力。
+    let chainTarget: string | null = null; // 接力目标（链等待时指向保护备份）。
+    for (;;) {
+      const row = await this.prisma.backupJob
+        .findUnique({ where: { id: jobId } })
+        .catch(() => null);
+      if (!row) return;
+      if (row.status === "succeeded" || row.status === "failed") {
+        // 任务终态：若有被它唤醒的回滚任务，接力给回滚续跑（防链跨请求断链）。
+        if (row.status === "succeeded") {
+          await this.continueDependentRestores(jobId);
+        }
+        return;
+      }
+      if (row.kind === "restore" && row.status === "pending") {
+        // 链等待：保护备份完成后由 finalize 唤醒。预算内每 1s 重试；
+        // 保护备份已终态则不再接力（由 reconcileOrphanedRestores 兜底）。
+        const source = await this.prisma.backupJob
+          .findUnique({ where: { id: row.restoreFromId ?? "" } })
+          .catch(() => null);
+        if (
+          source &&
+          source.status !== "succeeded" &&
+          source.status !== "failed"
+        ) {
+          chainTarget = source.id;
+        } else {
+          chainTarget = null;
+        }
+        if (Date.now() >= deadline) break;
+        await sleep(1000);
+        continue;
+      }
+      chainTarget = null;
+      if (Date.now() >= deadline) break;
+      const before = row.updatedAt.getTime();
+      await this.withJobLock(jobId, () => this.advanceJob(row));
+      const after = await this.prisma.backupJob
+        .findUnique({ where: { id: jobId } })
+        .catch(() => null);
+      if (after && after.updatedAt.getTime() > before) progressed = true;
+    }
+    // 预算耗尽：接力续跑（自己叫自己）。无进展不接力，交给每日 cron 兜底。
+    if (progressed || chainTarget) {
+      await this.scheduleContinuation(chainTarget ?? jobId);
+    }
+  }
+
+  /** 保护备份成功收尾后，唤醒依赖它的回滚任务接力续跑（防链跨请求断链）。 */
+  private async continueDependentRestores(backupId: string): Promise<void> {
+    const restores = await this.prisma.backupJob
+      .findMany({
+        where: {
+          kind: "restore",
+          status: { in: ["pending", "running"] },
+          restoreFromId: backupId,
+        },
+        select: { id: true },
+      })
+      .catch(() => null);
+    for (const restore of restores ?? []) {
+      await this.scheduleContinuation(restore.id);
+    }
+  }
+
+  /**
+   * 接力续跑：向自身公开端点发 GET /internal/cron/backup?jobId=<id>
+   * （Bearer CRON_SECRET），由下一个函数实例继续推进同一任务（每棒 ≤预算）。
+   * 最多等 3s 确保请求发出即返回，不等待下一棒完成；URL 或密钥缺失时
+   * 静默跳过，由每日 cron 兜底。同一任务的并发由 per-job Redis 锁串行化。
+   */
+  private async scheduleContinuation(jobId: string): Promise<void> {
+    const base = selfBaseUrl();
+    const secret = process.env.CRON_SECRET?.trim();
+    if (!base || !secret) return;
+    await fetch(
+      `${base}/internal/cron/backup?jobId=${encodeURIComponent(jobId)}`,
+      {
+        headers: { Authorization: `Bearer ${secret}` },
+        signal: AbortSignal.timeout(3000),
+      },
+    ).catch(() => undefined);
   }
 
   /** 每任务一块；返回后任务行已更新（无论推进到哪一步）。 */
@@ -722,4 +823,17 @@ async function collectTableCounts(
 function messageOfVercel(caught: unknown): string {
   if (caught instanceof Error) return caught.message;
   return String(caught);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 自身公开地址：Vercel 自动注入的生产域名优先，其次 API_HOST（去尾斜杠）。 */
+function selfBaseUrl(): string | null {
+  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (production) return `https://${production}`;
+  const host = process.env.API_HOST?.trim();
+  if (host) return host.replace(/\/+$/, "");
+  return null;
 }
