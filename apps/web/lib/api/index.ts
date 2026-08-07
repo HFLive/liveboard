@@ -2356,3 +2356,134 @@ export async function downloadMigrationExport(name: string) {
   }
   return response.blob();
 }
+
+// ---------------------------------------------------------------------------
+// 备份与回滚（admin/backup）
+// ---------------------------------------------------------------------------
+
+export type BackupJobKind = "auto" | "manual" | "restore";
+export type BackupJobStatus = "pending" | "running" | "succeeded" | "failed";
+
+export interface BackupJobProgress {
+  done: number;
+  total: number;
+  label?: string;
+}
+
+export interface BackupJobSummary {
+  id: string;
+  kind: BackupJobKind;
+  status: BackupJobStatus;
+  phase: string;
+  progress: BackupJobProgress | null;
+  backupPath: string | null;
+  restoreFromId: string | null;
+  neonBranchId: string | null;
+  /** BigInt 以字符串返回（避免 JSON 序列化溢出）。 */
+  dumpSizeBytes: string | null;
+  objectCount: number | null;
+  includeObjects: boolean;
+  /** 回滚前自动创建的保护备份（UI 显示「回滚前自动备份」）。 */
+  isProtection: boolean;
+  manifest: unknown;
+  error: string | null;
+  createdBy: string | null;
+  createdAt: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface BackupSettings {
+  enabled: boolean;
+  /** 固定时刻调度：时 0-23；weekday 为 null 时每天，否则每周该天（0-6=周日..周六）。 */
+  scheduleHour: number;
+  scheduleMinute: number;
+  scheduleWeekday: number | null;
+  /** 自动备份保留份数（手动备份无上限）。 */
+  autoRetention: number;
+  includeObjects: boolean;
+  lastAutoBackupAt: string | null;
+}
+
+export interface BackupInfo {
+  deploymentTarget: "self_hosted" | "vercel";
+  supported: boolean;
+  unavailableReason: string | null;
+  settings: BackupSettings | null;
+  confirmPhrase: string;
+  defaults: {
+    autoRetention: number;
+    schedule: {
+      hour: number;
+      minute: number;
+      weekday: number | null;
+    };
+  };
+  vercelLimits?: { maxBackupBranches: number };
+}
+
+export function getBackupInfo() {
+  return request<{ info: BackupInfo }>("/admin/backup/info");
+}
+
+/** 可编辑的备份设置字段（不含服务端维护的 lastAutoBackupAt）。 */
+export type BackupSettingsUpdate = Pick<
+  BackupSettings,
+  | "enabled"
+  | "scheduleHour"
+  | "scheduleMinute"
+  | "scheduleWeekday"
+  | "autoRetention"
+  | "includeObjects"
+>;
+
+export function updateBackupSettings(input: Partial<BackupSettingsUpdate>) {
+  return request<{ settings: BackupSettings }>("/admin/backup/settings", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listBackupJobs() {
+  return request<{ jobs: BackupJobSummary[] }>("/admin/backup/jobs");
+}
+
+export function getBackupJob(jobId: string) {
+  return request<{ job: BackupJobSummary }>(
+    `/admin/backup/jobs/${encodeURIComponent(jobId)}`,
+  );
+}
+
+/** 硬删除单个备份：数据库与文件一并删除，不可恢复。 */
+export function deleteBackupJob(jobId: string) {
+  return request<{ deleted: true }>(
+    `/admin/backup/jobs/${encodeURIComponent(jobId)}`,
+    { method: "DELETE" },
+  );
+}
+
+/** 清除失败任务的报错信息（已读），避免每次进入备份页重复弹出同一条错误。 */
+export function dismissBackupJobError(jobId: string) {
+  return request<{ job: BackupJobSummary }>(
+    `/admin/backup/jobs/${encodeURIComponent(jobId)}/dismiss`,
+    { method: "POST" },
+  );
+}
+
+export function startManualBackup(input: { includeObjects?: boolean }) {
+  return request<{ job: BackupJobSummary }>("/admin/backup/run", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function startBackupRestore(
+  backupId: string,
+  input: { confirm: string; includeObjects?: boolean },
+) {
+  return request<{ preBackup: BackupJobSummary; restore: BackupJobSummary }>(
+    `/admin/backup/${encodeURIComponent(backupId)}/restore`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}

@@ -1,0 +1,434 @@
+.backup-page {
+  min-width: 0;
+}
+
+.backup-page .backup-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  width: min(760px, 100%);
+  margin-inline: auto;
+}
+
+.backup-page .backup-sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+  min-width: 0;
+  padding: 0;
+}
+
+.backup-page .backup-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  min-width: 0;
+}
+
+/* 区块之间用通栏细线 + 留白分隔，不占卡片。 */
+.backup-page .backup-section + .backup-section {
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
+
+.backup-page .backup-section .panel-head {
+  padding: 0 0 10px;
+}
+
+.backup-page .backup-section .panel-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.backup-page .backup-section .panel-head p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.backup-panel-head {
+  align-items: center;
+}
+
+.backup-panel-head .button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 平台/不可用提示：上下两道通栏线划出，不占卡片。 */
+.backup-notice-panel {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  width: min(760px, 100%);
+  margin: 0 auto 22px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 16px 0;
+}
+
+.backup-notice-panel > svg {
+  width: 22px;
+  height: 22px;
+  color: var(--danger);
+}
+
+.backup-notice-panel p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.backup-platform-hint {
+  width: min(760px, 100%);
+  margin: 0 auto 22px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 设置区：行间以细线分隔，左文案右控件。 */
+.backup-setting-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.backup-setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+}
+
+.backup-setting-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.backup-setting-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.backup-setting-copy small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.backup-setting-toggle input[type="checkbox"],
+.backup-schedule-option input[type="radio"] {
+  accent-color: var(--accent);
+}
+
+.backup-setting-toggle input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
+.backup-schedule-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.backup-schedule-colon {
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.backup-retention-input {
+  width: 76px;
+  min-width: 0;
+  text-align: right;
+}
+
+.backup-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+/* 任务列表分类：编辑式 pill 切换，上细线分隔。 */
+.backup-list-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.backup-list-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  padding: 4px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.backup-list-tab:hover {
+  color: var(--text);
+}
+
+.backup-list-tab[aria-selected="true"] {
+  background: var(--fill-active);
+  color: var(--text);
+}
+
+.backup-tab-count {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 任务列表 */
+.backup-running-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.backup-empty-hint {
+  margin: 0;
+  padding: 14px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.backup-jobs-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  min-width: 0;
+}
+
+.backup-job-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+}
+
+.backup-job-row:first-child {
+  border-top: none;
+}
+
+.backup-job-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.backup-kind {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--fill-active);
+  color: var(--muted);
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+/* 任务 ID（#cmsiryzh）：等宽小字，紧跟类型徽章。 */
+.backup-id {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 11px;
+}
+
+.backup-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.backup-status-running,
+.backup-status-succeeded {
+  color: var(--accent);
+}
+
+.backup-status-failed {
+  color: var(--danger);
+}
+
+.backup-status-pending {
+  color: var(--muted);
+}
+
+.backup-time {
+  margin-left: auto;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.backup-restore-source {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.backup-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.backup-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.backup-progress-bar {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--fill-active);
+}
+
+.backup-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.backup-progress span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* 任务行内的报错是持久内容，不能复用全局 .error-text 的浮动 toast 样式。 */
+.backup-error-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.backup-error {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.backup-job-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 回滚确认弹窗：全站 modal 结构（宽度由 workspace 统一 430px），仅补描述与确认语样式。 */
+.backup-confirm-modal .modal-head p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.backup-confirm-modal .backup-dialog-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.backup-confirm-field {
+  display: grid;
+  gap: 7px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.backup-confirm-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+}
+
+.backup-dialog-phrase {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 700;
+}
+
+.spin {
+  animation: backup-spin 1s linear infinite;
+}
+
+@keyframes backup-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 980px) {
+  .backup-page .backup-layout,
+  .backup-notice-panel,
+  .backup-platform-hint {
+    width: 100%;
+  }
+}
+
+@media (max-width: 680px) {
+  .backup-setting-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .backup-setting-row > :last-child {
+    justify-self: start;
+  }
+
+  .backup-schedule-control {
+    justify-content: flex-start;
+  }
+
+  .backup-job-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .backup-time {
+    margin-left: 0;
+    width: 100%;
+  }
+}

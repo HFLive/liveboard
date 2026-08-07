@@ -11,6 +11,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { requireSuperAdmin } from "../../common/require-super-admin";
+import { backupDataPaths } from "../backup/backup-dirs";
 import {
   ensureMigrationDirs,
   migrationDataPaths,
@@ -19,6 +20,8 @@ import {
 import {
   readJobState,
   writeJobState,
+  STALE_PENDING_MS,
+  STALE_RUNNING_MS,
   type MigrationJobFileState,
 } from "./migration-job-file";
 import { messageOf } from "./migration-engine";
@@ -51,15 +54,6 @@ export interface IncomingPackage {
 
 const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024;
 
-/**
- * stale 状态文件 TTL 兜底：spawn 失败或进程重启可能遗留 pending/running 状态文件，
- * 若不清理会永久锁死后续所有迁移任务。
- * - pending：从 createJobRow 到子进程写 running 仅毫秒级，2 分钟无假阳性；
- * - running：对象导入每 10 个/每阶段都写状态文件，6 小时不会误杀正常任务。
- */
-const STALE_PENDING_MS = 2 * 60 * 1000;
-const STALE_RUNNING_MS = 6 * 60 * 60 * 1000;
-
 /** Prisma P2021（表不存在）：导入腾空窗口（DROP SCHEMA）期间 User/MigrationJob 表被删。 */
 function isTableMissingError(caught: unknown): boolean {
   const error = caught as { code?: unknown; message?: unknown };
@@ -75,6 +69,11 @@ export class MigrationService {
   private readonly logger = new Logger(MigrationService.name);
   private readonly paths: MigrationDataPaths;
   /**
+   * 备份任务状态目录（backup/backup-dirs.ts）。文件级互斥必须覆盖两个目录：
+   * 迁移导入（DROP SCHEMA）与备份/回滚互斥，避免打出不一致快照或同时腾空。
+   */
+  private readonly backupJobsDir: string;
+  /**
    * 本进程正在运行的迁移任务（互斥锁）。启动任务前同步置位以关闭并发竞态，
    * spawnScript 成功后替换为真实 jobId，子进程 exit 时清空；"starting" 是
    * 异步校验期间占位的哨兵值。
@@ -86,6 +85,7 @@ export class MigrationService {
     private readonly config: ConfigService,
   ) {
     this.paths = migrationDataPaths(config);
+    this.backupJobsDir = backupDataPaths(config).backupJobsDir;
   }
 
   // ---- 互斥锁 --------------------------------------------------------------
@@ -106,10 +106,10 @@ export class MigrationService {
 
   /**
    * 文件级互斥检查：任务真实进度以状态文件为准（导入会重建 MigrationJob 表，
-   * 不能依赖 DB），因此同时扫描 jobs/ 下所有状态文件，发现 pending/running
-   * 即拒绝。覆盖本进程之外（进程重启/其他实例）遗留的运行中任务。
-   * 检查前先对超时未更新的 stale 状态做兜底清理，避免 spawn 失败/进程重启
-   * 留下的僵尸状态把任务系统永久锁死。
+   * 不能依赖 DB），因此同时扫描 jobs/ 与备份的 backup-jobs/ 下所有状态文件，
+   * 发现 pending/running 即拒绝。覆盖本进程之外（进程重启/其他实例）遗留的
+   * 运行中任务。检查前先对超时未更新的 stale 状态做兜底清理，避免 spawn 失败
+   * /进程重启留下的僵尸状态把任务系统永久锁死。
    */
   private async assertNoRunningJobInFiles(): Promise<void> {
     await this.reconcileStaleJobStates();
@@ -658,11 +658,15 @@ export class MigrationService {
   private async reconcileJobFromState(jobId: string) {
     const state = await readJobState(this.paths.jobsDir, jobId);
     if (!state) return;
+    // 备份任务的状态文件也会落在共享扫描目录，但回写只处理迁移任务
+    // （备份任务由 backup 模块自己的 reconcile 回写）。
+    const kind: "export" | "import" =
+      state.kind === "import" ? "import" : "export";
     await this.prisma.migrationJob.upsert({
       where: { id: jobId },
       create: {
         id: jobId,
-        kind: state.kind,
+        kind,
         status: state.status,
         phase: state.phase,
         progress: state.progress as never,
@@ -686,20 +690,20 @@ export class MigrationService {
 
   private async readStateFiles(): Promise<Map<string, MigrationJobFileState>> {
     const map = new Map<string, MigrationJobFileState>();
-    try {
-      const entries = await readdir(this.paths.jobsDir, {
-        withFileTypes: true,
-      });
-      for (const entry of entries) {
-        if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-        const state = await readJobState(
-          this.paths.jobsDir,
-          entry.name.replace(/\.json$/, ""),
-        );
-        if (state) map.set(state.jobId, state);
+    for (const dir of [this.paths.jobsDir, this.backupJobsDir]) {
+      try {
+        const entries = await readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+          const state = await readJobState(
+            dir,
+            entry.name.replace(/\.json$/, ""),
+          );
+          if (state) map.set(state.jobId, state);
+        }
+      } catch {
+        // 目录不存在时返回空。
       }
-    } catch {
-      // 目录不存在时返回空。
     }
     return map;
   }

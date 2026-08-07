@@ -11,8 +11,23 @@ import path from "node:path";
  * 数据库不可用时降级为纯状态文件。见 docs/migrate-any-direction-design.md §5.3。
  */
 
-export type MigrationJobKind = "export" | "import";
+export type MigrationJobKind =
+  | "export"
+  | "import"
+  // 备份模块复用同一状态文件协议（见 backup/backup-dirs.ts 的 backupJobsDir）。
+  | "auto_backup"
+  | "manual_backup"
+  | "restore";
 export type MigrationJobStatus = "pending" | "running" | "succeeded" | "failed";
+
+/**
+ * stale 状态文件 TTL 兜底：spawn 失败或进程重启可能遗留 pending/running 状态文件，
+ * 若不清理会永久锁死后续所有迁移/备份任务。迁移与备份共用同一阈值：
+ * - pending：从创建任务行到子进程写 running 仅毫秒级，2 分钟无假阳性；
+ * - running：对象导入每 10 个/每阶段都写状态文件，6 小时不会误杀正常任务。
+ */
+export const STALE_PENDING_MS = 2 * 60 * 1000;
+export const STALE_RUNNING_MS = 6 * 60 * 60 * 1000;
 
 export interface MigrationJobProgress {
   done: number;
@@ -30,6 +45,12 @@ export interface MigrationJobFileState {
   packageName?: string | null;
   manifest?: unknown | null;
   error?: string | null;
+  /** 备份任务是否包含文件对象（备份/回滚任务专用，迁移任务恒缺省）。 */
+  includeObjects?: boolean;
+  /** 回滚前自动创建的保护备份标记（备份任务专用，迁移任务恒缺省）。 */
+  isProtection?: boolean;
+  /** 回滚任务对应的来源备份 id（备份任务缺省）。 */
+  restoreFromId?: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   updatedAt: string;
@@ -97,6 +118,18 @@ export async function writeJobState(
         partial.error !== undefined
           ? (partial.error ?? null)
           : (previous?.error ?? null),
+      includeObjects:
+        partial.includeObjects !== undefined
+          ? partial.includeObjects
+          : (previous?.includeObjects ?? false),
+      isProtection:
+        partial.isProtection !== undefined
+          ? partial.isProtection
+          : (previous?.isProtection ?? false),
+      restoreFromId:
+        partial.restoreFromId !== undefined
+          ? (partial.restoreFromId ?? null)
+          : (previous?.restoreFromId ?? null),
       startedAt:
         partial.startedAt !== undefined
           ? (partial.startedAt ?? null)

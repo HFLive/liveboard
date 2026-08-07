@@ -98,6 +98,19 @@ enum MigrationJobStatus {
   failed
 }
 
+enum BackupJobKind {
+  auto // 自动备份（按 BackupSettings.scheduleMinutes 调度）
+  manual // 手动备份（含回滚前自动保护备份）
+  restore // 回滚任务（从某个备份恢复）
+}
+
+enum BackupJobStatus {
+  pending
+  running
+  succeeded
+  failed
+}
+
 enum StorageUploadMode {
   relay
   direct
@@ -164,6 +177,7 @@ model User {
   notificationRecipients  NotificationRecipient[]
   forumPostVotes          ForumPostVote[]
   migrationJobs           MigrationJob[]
+  backupJobs              BackupJob[]
   apiTokens               ApiToken[]              @relation("UserApiTokens")
 }
 
@@ -262,6 +276,60 @@ model MigrationJob {
   @@index([createdById, createdAt])
 }
 
+/**
+ * 备份与回滚设置（per-workspace 单例行，与 StorageSettings/AiSettings 同模式）。
+ * 两种部署目标共用：self_hosted 把备份写 <MIGRATION_DATA_DIR>/backups/，
+ * vercel 用 Neon 分支快照 + R2 对象复制。设置行惰性创建，不存在时按默认值。
+ */
+model BackupSettings {
+  id              String    @id @default(cuid())
+  workspaceId     String    @unique
+  enabled         Boolean   @default(false)
+  scheduleHour    Int       @default(3) // 固定时刻：时 0-23
+  scheduleMinute  Int       @default(0) // 固定时刻：分 0-59
+  scheduleWeekday Int?      // null=每天；0-6=周日..周六（与 JS getDay 一致）
+  autoRetention   Int       @default(7) // 自动备份保留份数（手动备份无上限）
+  includeObjects  Boolean   @default(true) // 是否同时备份对象存储引用文件
+  lastAutoBackupAt DateTime? // 调度判定的唯一依据（tick 只比较它与当前时间）
+  updatedById     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+/**
+ * 备份/回滚任务记录。与 MigrationJob 同模式：自托管回滚会腾空目标库，
+ * 任务进度写本地状态文件（<dataDir>/backup-jobs/<id>.json），完成后
+ * upsert 回本表；Vercel 无持久盘，进度写本表 + Redis 双份。
+ */
+model BackupJob {
+  id             String         @id @default(cuid())
+  kind           BackupJobKind
+  status         BackupJobStatus @default(pending)
+  backupPath     String? // 自托管：相对数据目录的 backups/<id>
+  restoreFromId  String? // 回滚来源备份 id（kind=restore 时有值）
+  neonBranchId   String? // Vercel：对应 Neon 分支 id（供恢复/删除用）
+  dumpSizeBytes  BigInt? // database.dump 字节数
+  objectCount    Int?
+  includeObjects Boolean        @default(false) // 任务实际范围（启动时从设置快照）
+  isProtection   Boolean        @default(false) // 回滚前自动创建的保护备份
+  manifest       Json?
+  phase          String         @default("")
+  progress       Json?
+  error          String?
+  createdById    String?
+  createdAt      DateTime       @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  updatedAt      DateTime       @updatedAt
+
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([kind, createdAt])
+  @@index([createdById, createdAt])
+}
+
 model Workspace {
   id                         String         @id @default(cuid())
   name                       String
@@ -298,6 +366,7 @@ model Workspace {
   teachingDecks     TeachingDeck[]
   classrooms        Classroom[]
   storageSettings   StorageSettings?
+  backupSettings    BackupSettings?
   pendingUploads    PendingUpload[]
 }
 

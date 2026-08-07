@@ -1,4 +1,5 @@
 import {
+  Archive,
   ArrowLeftRight,
   BadgeCheck,
   Bot,
@@ -103,6 +104,13 @@ export const adminNavGroups = [
         label: "数据迁移",
         description: "打包导出与导入，换服务器搬家",
         icon: ArrowLeftRight,
+        superAdminOnly: true,
+      },
+      {
+        href: APP_ROUTES.adminBackup,
+        label: "备份与回滚",
+        description: "自动/手动备份与从备份恢复",
+        icon: Archive,
         superAdminOnly: true,
       },
       {

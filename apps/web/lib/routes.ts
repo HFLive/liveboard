@@ -28,6 +28,7 @@ export const APP_ROUTES = {
   adminServerStatus: staticRoute("/app/admin/server-status"),
   adminSettings: staticRoute("/app/admin/settings"),
   adminMigration: staticRoute("/app/admin/migration"),
+  adminBackup: staticRoute("/app/admin/backup"),
   adminApiTokens: staticRoute("/app/admin/api-tokens"),
   profile: staticRoute("/app/profile"),
 } as const;
@@ -118,6 +119,7 @@ export function appRouteTitle(pathname: string) {
     [APP_ROUTES.adminServerStatus, "运行状态"],
     [APP_ROUTES.adminSettings, "系统设置"],
     [APP_ROUTES.adminMigration, "数据迁移"],
+    [APP_ROUTES.adminBackup, "备份与回滚"],
     [APP_ROUTES.adminApiTokens, "访问令牌"],
     [APP_ROUTES.profile, "个人设置"],
   ]);
