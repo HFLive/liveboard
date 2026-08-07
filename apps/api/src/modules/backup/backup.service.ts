@@ -28,6 +28,7 @@ import {
 import {
   BackupVercelExecutor,
   VERCEL_ADVANCE_BUDGET_MS,
+  VERCEL_MANUAL_BUDGET_MS,
 } from "./backup-vercel-executor";
 import {
   initialLastAutoBackupAt,
@@ -732,11 +733,12 @@ export class BackupService {
           : settings.includeObjects;
       const job = await this.createJobRow(user.id, "manual", includeObjects);
       if (this.isVercelDeployment()) {
-        // Vercel：不 spawn，创建后立即在请求内分块推进到完成（预算内，
+        // Vercel：不 spawn，创建后立即在请求内分块推进（短预算让请求
+        // 尽快返回，页面按钮不长时间转圈；未完成部分由接力续跑继续，
         // 见 backup-vercel-executor.advanceUntilFinished），不再等每日 cron。
         spawned = true;
         await this.vercelExecutor
-          .advanceUntilFinished(job.id)
+          .advanceUntilFinished(job.id, Date.now() + VERCEL_MANUAL_BUDGET_MS)
           .catch((caught) =>
             this.logger.warn(`Vercel 手动备份推进失败: ${messageOf(caught)}`),
           );

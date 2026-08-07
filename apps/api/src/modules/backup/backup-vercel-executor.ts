@@ -45,6 +45,11 @@ const JOB_LOCK_TTL_MS = 60_000;
 const JOB_LOCK_KEY_PREFIX = "liveboard:backup:job:";
 /** 请求内推进预算：Vercel 函数最长 60s，预留请求与执行开销余量。 */
 export const VERCEL_ADVANCE_BUDGET_MS = 45_000;
+/**
+ * 手动备份请求的推进预算：比续跑棒更短，让「立即备份」请求尽早返回
+ * （页面按钮不长时间转圈），未完成的部分由接力续跑继续。
+ */
+export const VERCEL_MANUAL_BUDGET_MS = 20_000;
 
 /** R2 备份前缀（对象复制到 backup/<jobId>/<storageKey>）。 */
 function backupObjectKey(jobId: string, storageKey: string): string {
