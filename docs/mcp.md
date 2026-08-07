@@ -121,24 +121,24 @@ claude mcp add --transport stdio liveboard \
 
 ## 工具清单
 
-| 工具               | 入参                                    | 说明                                           |
-| ------------------ | --------------------------------------- | ---------------------------------------------- |
-| `list_folder_tree` | —                                       | 当前用户可查看的文件夹树（含权限等级）         |
-| `list_files`       | `folderId?`                             | 文件夹内文件与独立附件（草稿对 viewer 不可见） |
-| `get_file`         | `fileId`                                | 文件详情（含 permission）                      |
-| `list_blocks`      | `fileId`                                | 内容块列表（按顺序）                           |
-| `create_file`      | `folderId, title, type?`                | 创建文件（需文件夹编辑/lecturer 权限）         |
-| `update_file`      | `fileId, title?, folderId?`             | 改标题/移动（至少一项）                        |
-| `publish_file`     | `fileId`                                | 发布（draft → published）                      |
-| `delete_file`      | `fileId`                                | **硬删除**（连同内容块，不可恢复）             |
-| `create_block`     | `fileId, type, dataJson, afterBlockId?` | 末尾/指定块后插入                              |
-| `update_block`     | `blockId, type?, dataJson`              | 更新内容                                       |
-| `delete_block`     | `blockId`                               | 删除内容块                                     |
-| `reorder_blocks`   | `fileId, blockIds[]`                    | 全量重排                                       |
-| `upload_asset`     | `fileId?, folderId?, filename, mimeType?, data` | 上传图片/附件（base64 中转，自托管，≤7MB，返回 assetId+url） |
-| `upload_asset_url` | `fileId?, folderId?, filename, sizeBytes, mimeType?` | 获取直传 PUT 地址（Vercel，≤8MB，单请求 PUT） |
-| `upload_asset_confirm` | `uploadId`                           | 确认直传（服务端自动压缩图片为 WebP，返回 assetId+url） |
-| `upload_asset_abort`   | `uploadId`                           | 取消直传（释放预留并清理临时对象，幂等） |
+| 工具                   | 入参                                                 | 说明                                                         |
+| ---------------------- | ---------------------------------------------------- | ------------------------------------------------------------ |
+| `list_folder_tree`     | —                                                    | 当前用户可查看的文件夹树（含权限等级）                       |
+| `list_files`           | `folderId?`                                          | 文件夹内文件与独立附件（草稿对 viewer 不可见）               |
+| `get_file`             | `fileId`                                             | 文件详情（含 permission）                                    |
+| `list_blocks`          | `fileId`                                             | 内容块列表（按顺序）                                         |
+| `create_file`          | `folderId, title, type?`                             | 创建文件（需文件夹编辑/lecturer 权限）                       |
+| `update_file`          | `fileId, title?, folderId?`                          | 改标题/移动（至少一项）                                      |
+| `publish_file`         | `fileId`                                             | 发布（draft → published）                                    |
+| `delete_file`          | `fileId`                                             | **硬删除**（连同内容块，不可恢复）                           |
+| `create_block`         | `fileId, type, dataJson, afterBlockId?`              | 末尾/指定块后插入                                            |
+| `update_block`         | `blockId, type?, dataJson`                           | 更新内容                                                     |
+| `delete_block`         | `blockId`                                            | 删除内容块                                                   |
+| `reorder_blocks`       | `fileId, blockIds[]`                                 | 全量重排                                                     |
+| `upload_asset`         | `fileId?, folderId?, filename, mimeType?, data`      | 上传图片/附件（base64 中转，自托管，≤7MB，返回 assetId+url） |
+| `upload_asset_url`     | `fileId?, folderId?, filename, sizeBytes, mimeType?` | 获取直传 PUT 地址（Vercel，≤8MB，单请求 PUT）                |
+| `upload_asset_confirm` | `uploadId`                                           | 确认直传（服务端自动压缩图片为 WebP，返回 assetId+url）      |
+| `upload_asset_abort`   | `uploadId`                                           | 取消直传（释放预留并清理临时对象，幂等）                     |
 
 各块类型的 `dataJson` 结构（与 Web 编辑器一致，服务端校验）：
 

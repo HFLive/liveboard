@@ -1087,7 +1087,9 @@ describe("AssetsService direct upload", () => {
 
   it("compressed confirm keeps non-image files on the copy path", async () => {
     const tx = {
-      user: { findUnique: jest.fn().mockResolvedValue({ storageQuotaBytes: 1024 }) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ storageQuotaBytes: 1024 }),
+      },
       workspace: { findUnique: jest.fn().mockResolvedValue(null) },
       fileAsset: {
         findFirst: jest.fn().mockResolvedValue(null),
@@ -1176,8 +1178,11 @@ describe("AssetsService direct upload", () => {
       where: { id: "upload-1" },
     });
     expect(backend.putObject).toHaveBeenCalledTimes(1);
-    const [, data, mimeType] = backend.putObject.mock
-      .calls[0] as unknown as [string, Buffer, string];
+    const [, data, mimeType] = backend.putObject.mock.calls[0] as unknown as [
+      string,
+      Buffer,
+      string,
+    ];
     expect(mimeType).toBe("image/webp");
     expect(data.length).toBeLessThan(png.length);
     expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
@@ -1194,7 +1199,9 @@ describe("AssetsService direct upload", () => {
       Readable.from([Buffer.from("not-an-image")]),
     );
     const tx = {
-      user: { findUnique: jest.fn().mockResolvedValue({ storageQuotaBytes: 1024 }) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ storageQuotaBytes: 1024 }),
+      },
       workspace: { findUnique: jest.fn().mockResolvedValue(null) },
       fileAsset: {
         findFirst: jest.fn().mockResolvedValue(null),

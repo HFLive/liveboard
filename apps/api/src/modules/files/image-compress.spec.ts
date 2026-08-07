@@ -35,11 +35,7 @@ describe("compressImageBuffer", () => {
   it("compresses a large image to WebP within the max edge", async () => {
     const png = await makePng(2000, 1000);
 
-    const result = await compressImageBuffer(
-      png,
-      "image/png",
-      "photo.png",
-    );
+    const result = await compressImageBuffer(png, "image/png", "photo.png");
 
     expect(result).not.toBeNull();
     expect(result!.filename).toBe("photo.webp");
@@ -53,11 +49,7 @@ describe("compressImageBuffer", () => {
   it("does not upscale small images", async () => {
     const png = await makePng(800, 600);
 
-    const result = await compressImageBuffer(
-      png,
-      "image/png",
-      "small.png",
-    );
+    const result = await compressImageBuffer(png, "image/png", "small.png");
 
     expect(result).not.toBeNull();
     const meta = await sharp(result!.buffer).metadata();

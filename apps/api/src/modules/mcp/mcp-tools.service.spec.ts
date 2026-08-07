@@ -335,8 +335,7 @@ describe("McpToolsService", () => {
 
     expect(result.result).not.toHaveProperty("isError", true);
     expect(files.uploadAsset).toHaveBeenCalledTimes(1);
-    const [, , file] = files.uploadAsset.mock
-      .calls[0] as unknown as [
+    const [, , file] = files.uploadAsset.mock.calls[0] as unknown as [
       string,
       { fileId: string; folderId?: string },
       { originalname: string; mimetype: string; size: number; buffer: Buffer },
@@ -484,7 +483,11 @@ describe("McpToolsService", () => {
     await connect("vercel");
     files.signAssetUpload.mockResolvedValue({
       uploadId: "upload-1",
-      instruction: { transport: "put", url: "https://r2.example/obj", headers: [] },
+      instruction: {
+        transport: "put",
+        url: "https://r2.example/obj",
+        headers: [],
+      },
       expiresAt: "2026-08-08T00:00:00Z",
     });
 
