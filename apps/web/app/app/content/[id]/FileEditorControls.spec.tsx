@@ -227,29 +227,25 @@ describe("FileEditor structured controls", () => {
 
   it("keeps editing when focus enters the internal-document overlay", () => {
     const onExitEdit = vi.fn();
-    renderWysiwygBlock(
-      { ...paragraph, type: "heading_1" } as ContentBlock,
-      {
-        editing: true,
-        internalDocuments: [
-          {
-            id: "file-2",
-            title: "课程导读",
-            path: "教学资料",
-            status: "published",
-          },
-        ],
-        onExitEdit,
-      },
-    );
+    renderWysiwygBlock({ ...paragraph, type: "heading_1" } as ContentBlock, {
+      editing: true,
+      internalDocuments: [
+        {
+          id: "file-2",
+          title: "课程导读",
+          path: "教学资料",
+          status: "published",
+        },
+      ],
+      onExitEdit,
+    });
 
     fireEvent.click(screen.getByRole("button", { name: /站内文档/ }));
     const searchInput = screen.getByRole("textbox", { name: "搜索站内文档" });
     // 弹层搜索框 autoFocus 夺焦后，blur 的 relatedTarget 在弹层内，
     // 不应触发退出编辑态（否则弹层宿主会随编辑态卸载、选择器瞬间消失）。
-    const textarea = document.querySelector<HTMLTextAreaElement>(
-      ".doc-block-input",
-    );
+    const textarea =
+      document.querySelector<HTMLTextAreaElement>(".doc-block-input");
     fireEvent.blur(textarea as HTMLTextAreaElement, {
       relatedTarget: searchInput,
     });
@@ -280,9 +276,7 @@ describe("FileEditor structured controls", () => {
 
   it("cancels an empty add-block form when clicking outside", () => {
     const onCancel = vi.fn();
-    render(
-      <AddBlockForm onCancel={onCancel} onSubmit={vi.fn()} />,
-    );
+    render(<AddBlockForm onCancel={onCancel} onSubmit={vi.fn()} />);
 
     fireEvent.mouseDown(document.body);
     expect(onCancel).toHaveBeenCalled();

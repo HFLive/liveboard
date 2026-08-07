@@ -179,7 +179,9 @@ export function NotificationsClient() {
     setItems((current) =>
       current
         .map((candidate) =>
-          candidate.id === item.id ? { ...candidate, unread: false } : candidate,
+          candidate.id === item.id
+            ? { ...candidate, unread: false }
+            : candidate,
         )
         .filter((candidate) => status !== "unread" || candidate.unread),
     );
@@ -223,7 +225,6 @@ export function NotificationsClient() {
     <section className={styles.workspace}>
       <FeedbackNotice notice={errorNotice} tone="error" />
       <header className={styles.toolbar}>
-
         <div>
           <strong>消息</strong>
           <span>
@@ -330,10 +331,7 @@ export function NotificationsSkeleton() {
           </div>
           <label className={styles.category}>
             <span className="sr-only">消息类型</span>
-            <select
-              defaultValue={CATEGORY_OPTIONS[0]?.value ?? "all"}
-              disabled
-            >
+            <select defaultValue={CATEGORY_OPTIONS[0]?.value ?? "all"} disabled>
               {CATEGORY_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}

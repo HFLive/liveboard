@@ -950,8 +950,14 @@
 
 /* 列表行 hover 是通栏矩形，去掉 redesign 共享规则给首尾单元格加的
    10px 圆角两端。 */
-.workspace.content-workspace .content-drive-table tr:hover td:first-child:not(.empty-cell),
-.workspace.content-workspace .content-drive-table tr:hover td:last-child:not(.empty-cell) {
+.workspace.content-workspace
+  .content-drive-table
+  tr:hover
+  td:first-child:not(.empty-cell),
+.workspace.content-workspace
+  .content-drive-table
+  tr:hover
+  td:last-child:not(.empty-cell) {
   border-radius: 0;
 }
 

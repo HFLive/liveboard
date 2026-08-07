@@ -132,9 +132,12 @@ describe("NotificationsClient", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "全部" }));
     await waitFor(() =>
-      expect(routerReplaceMock).toHaveBeenCalledWith("/app/messages?status=all", {
-        scroll: false,
-      }),
+      expect(routerReplaceMock).toHaveBeenCalledWith(
+        "/app/messages?status=all",
+        {
+          scroll: false,
+        },
+      ),
     );
 
     routerReplaceMock.mockClear();

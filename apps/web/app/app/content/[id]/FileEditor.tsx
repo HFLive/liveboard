@@ -730,7 +730,10 @@ export function WysiwygBlock({
     const next = event.relatedTarget;
     // 焦点进入站内文档弹层（portal 到 body，不在块内）时不退出编辑态，
     // 否则弹层宿主组件会随编辑态卸载，选择器瞬间消失。
-    if (next instanceof Element && next.closest(".internal-document-backdrop")) {
+    if (
+      next instanceof Element &&
+      next.closest(".internal-document-backdrop")
+    ) {
       return;
     }
     if (!event.currentTarget.contains(next)) {
@@ -1679,9 +1682,8 @@ export function FileEditor({ fileId }: { fileId: string }) {
   // 退出源码编辑态：有未保存修改先落盘再退出。blur 到块外、Escape、
   // 点击块外空白都会走这里——直接卸载编辑态后 blur 事件到不了
   // React 根监听器（元素已脱离文档），onSave 不会触发，改动会静默丢失。
-  const editingBlock = blocks.find(
-    (block) => block.id === editingBlockId,
-  ) ?? null;
+  const editingBlock =
+    blocks.find((block) => block.id === editingBlockId) ?? null;
 
   function exitEditMode() {
     if (editingBlock && saveState === "dirty") {
