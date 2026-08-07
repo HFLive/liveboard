@@ -159,10 +159,11 @@ export function BackupClient() {
 
   // 有任务运行时轮询；全部结束后停表。慢周期下用 in-flight 标记跳过本轮，
   // 避免请求叠加乱序覆盖（回滚腾空窗口期服务器最脆弱）。
-  // starting 期间也轮询：手动备份请求在后端实际执行（最多 20s 预算），
-  // 任务行创建后立即出现在列表并展示进度，不必等请求返回或手动刷新。
+  // starting/restoring 期间也轮询：手动备份与回滚请求在后端实际执行
+  // （短预算），任务行创建后立即出现在列表并展示进度，不必等请求返回
+  // 或手动刷新。
   useEffect(() => {
-    if (!anyRunning && !starting) return;
+    if (!anyRunning && !starting && !restoring) return;
     pollTimer.current = window.setInterval(() => {
       if (pollInFlight.current) return;
       pollInFlight.current = true;
@@ -173,7 +174,7 @@ export function BackupClient() {
     return () => {
       if (pollTimer.current !== null) window.clearInterval(pollTimer.current);
     };
-  }, [anyRunning, starting, refresh]);
+  }, [anyRunning, starting, restoring, refresh]);
 
   const unavailable = info !== null && !info.supported;
 

@@ -50,6 +50,8 @@ export const VERCEL_ADVANCE_BUDGET_MS = 45_000;
  * （页面按钮不长时间转圈），未完成的部分由接力续跑继续。
  */
 export const VERCEL_MANUAL_BUDGET_MS = 20_000;
+/** 回滚链请求预算：保护备份 + 回滚共享，同样取短值让请求尽早返回。 */
+export const VERCEL_RESTORE_CHAIN_BUDGET_MS = 20_000;
 
 /** R2 备份前缀（对象复制到 backup/<jobId>/<storageKey>）。 */
 function backupObjectKey(jobId: string, storageKey: string): string {
@@ -112,17 +114,31 @@ export class BackupVercelExecutor {
         return;
       }
       if (row.kind === "restore" && row.status === "pending") {
-        // 链等待：保护备份完成后由 finalize 唤醒。预算内每 1s 重试；
-        // 保护备份已终态则不再接力（由 reconcileOrphanedRestores 兜底）。
-        const source = await this.prisma.backupJob
-          .findUnique({ where: { id: row.restoreFromId ?? "" } })
-          .catch(() => null);
-        if (
-          source &&
-          source.status !== "succeeded" &&
-          source.status !== "failed"
-        ) {
-          chainTarget = source.id;
+        // 链等待：回滚必须等它的保护备份成功。保护备份 id 记在 restore
+        // 行的 progress.protectJobId（startRestore 写入；restoreFromId
+        // 是「源备份」，两者不同）。保护备份成功后自唤醒，还在跑则接力
+        // 推进它，失败/缺失则不再接力（reconcileOrphanedRestores 兜底）。
+        const protectId = this.protectJobIdOf(row.progress);
+        const protect = protectId
+          ? await this.prisma.backupJob
+              .findUnique({ where: { id: protectId } })
+              .catch(() => null)
+          : null;
+        if (protect && protect.status === "succeeded") {
+          await this.prisma.backupJob
+            .update({
+              where: { id: jobId },
+              data: {
+                status: "running",
+                phase: "restore/prepare",
+                startedAt: new Date(),
+              },
+            })
+            .catch(() => undefined);
+          continue; // 下一轮以 running 进入 restore 状态机。
+        }
+        if (protect && protect.status !== "failed") {
+          chainTarget = protect.id;
         } else {
           chainTarget = null;
         }
@@ -149,17 +165,21 @@ export class BackupVercelExecutor {
   private async continueDependentRestores(backupId: string): Promise<void> {
     const restores = await this.prisma.backupJob
       .findMany({
-        where: {
-          kind: "restore",
-          status: { in: ["pending", "running"] },
-          restoreFromId: backupId,
-        },
-        select: { id: true },
+        where: { kind: "restore", status: { in: ["pending", "running"] } },
+        select: { id: true, progress: true },
       })
       .catch(() => null);
     for (const restore of restores ?? []) {
-      await this.scheduleContinuation(restore.id);
+      if (this.protectJobIdOf(restore.progress) === backupId) {
+        await this.scheduleContinuation(restore.id);
+      }
     }
+  }
+
+  /** restore 行的保护备份 id（progress.protectJobId，startRestore 写入）。 */
+  private protectJobIdOf(progress: unknown): string | null {
+    const raw = progress as { protectJobId?: string } | null;
+    return typeof raw?.protectJobId === "string" ? raw.protectJobId : null;
   }
 
   /**
@@ -421,18 +441,27 @@ export class BackupVercelExecutor {
     await this.wakePendingRestores(job.id);
   }
 
-  /** 保护备份/备份完成后，唤醒引用它的 pending 回滚任务。 */
+  /** 保护备份/备份完成后，唤醒引用它的 pending 回滚任务（按 progress.protectJobId 匹配）。 */
   private async wakePendingRestores(backupId: string): Promise<void> {
-    await this.prisma.backupJob
-      .updateMany({
-        where: { kind: "restore", status: "pending", restoreFromId: backupId },
-        data: {
-          status: "running",
-          phase: "restore/prepare",
-          startedAt: new Date(),
-        },
+    const restores = await this.prisma.backupJob
+      .findMany({
+        where: { kind: "restore", status: "pending" },
+        select: { id: true, progress: true },
       })
-      .catch(() => undefined);
+      .catch(() => null);
+    for (const restore of restores ?? []) {
+      if (this.protectJobIdOf(restore.progress) !== backupId) continue;
+      await this.prisma.backupJob
+        .update({
+          where: { id: restore.id },
+          data: {
+            status: "running",
+            phase: "restore/prepare",
+            startedAt: new Date(),
+          },
+        })
+        .catch(() => undefined);
+    }
   }
 
   // ---- 回滚状态机（restore）-------------------------------------------------

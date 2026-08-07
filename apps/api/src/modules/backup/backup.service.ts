@@ -29,6 +29,7 @@ import {
   BackupVercelExecutor,
   VERCEL_ADVANCE_BUDGET_MS,
   VERCEL_MANUAL_BUDGET_MS,
+  VERCEL_RESTORE_CHAIN_BUDGET_MS,
 } from "./backup-vercel-executor";
 import {
   initialLastAutoBackupAt,
@@ -830,6 +831,10 @@ export class BackupService {
           restoreFromId: backupId,
           includeObjects: restoreInclude,
           createdById: user.id,
+          // 保护备份 id 记在 progress 里：restoreFromId 语义是「源备份」
+          // （回滚目标、删除引用保护都用它），唤醒逻辑按 protectJobId
+          // 匹配保护备份（executor 的链等待/唤醒均读它）。
+          progress: { protectJobId: preBackup.id } as never,
         },
         select: { id: true },
       });
@@ -851,7 +856,9 @@ export class BackupService {
         this.logger.log(
           `Vercel 回滚链已建立：保护备份 ${preBackup.id} → 回滚 ${restoreRow.id}`,
         );
-        const chainDeadline = Date.now() + VERCEL_ADVANCE_BUDGET_MS;
+        // 链请求预算同样取短值：回滚请求尽早返回，保护备份与回滚的推进
+        // 由接力续跑继续（Neon 恢复操作本身就要数分钟，请求内跑不完）。
+        const chainDeadline = Date.now() + VERCEL_RESTORE_CHAIN_BUDGET_MS;
         await this.vercelExecutor
           .advanceUntilFinished(preBackup.id, chainDeadline)
           .catch((caught) =>
