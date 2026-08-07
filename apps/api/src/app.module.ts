@@ -22,6 +22,7 @@ import { BadgesModule } from "./modules/badges/badges.module";
 import { MaintenanceModule } from "./modules/maintenance/maintenance.module";
 import { MaintenanceModeGuard } from "./modules/maintenance/maintenance.guard";
 import { MigrationModule } from "./modules/migration/migration.module";
+import { BackupModule } from "./modules/backup/backup.module";
 import { ApiTokensModule } from "./modules/api-tokens/api-tokens.module";
 import { McpModule } from "./modules/mcp/mcp.module";
 
@@ -47,6 +48,7 @@ import { McpModule } from "./modules/mcp/mcp.module";
     BadgesModule,
     MaintenanceModule,
     MigrationModule,
+    BackupModule,
     ApiTokensModule,
     McpModule,
   ],

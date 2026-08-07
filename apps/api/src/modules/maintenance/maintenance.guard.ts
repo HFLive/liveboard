@@ -43,9 +43,10 @@ export class MaintenanceModeGuard implements CanActivate {
     if (isPublic) return true;
 
     const path: string = request.path ?? request.originalUrl ?? "/";
-    // 维护模式开关、数据迁移端点：具体鉴权由对应 controller/service 执行。
+    // 维护模式开关、数据迁移、备份与回滚端点：具体鉴权由对应 controller/service 执行。
     if (path.startsWith("/admin/maintenance")) return true;
     if (path.startsWith("/admin/migration")) return true;
+    if (path.startsWith("/admin/backup")) return true;
     // 登出必须始终可用，避免普通用户被维护模式"卡"在会话里。
     if (path === "/auth/logout") return true;
 

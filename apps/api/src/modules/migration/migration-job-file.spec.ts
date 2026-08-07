@@ -63,4 +63,41 @@ describe("migration-job-file", () => {
       ),
     ).resolves.toHaveLength(20);
   });
+
+  it("preserves backup identity fields across writes (includeObjects/isProtection/restoreFromId)", async () => {
+    // 回归：这三个字段是回滚后重建任务记录的仅存信息源（BackupJob 表会被
+    // 还原成备份点快照），writeJobState 若静默丢弃，重建行就会丢失「含文件」、
+    // 「回滚前自动备份」徽标与来源备份（曾导致回滚后显示「仅数据库」）。
+    await writeJobState(dir, "job-1", {
+      kind: "restore",
+      status: "running",
+      phase: "restore/restore",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      includeObjects: true,
+      restoreFromId: "backup-1",
+    });
+    // 后续写不携带这些字段时不得覆盖上一次的值。
+    await writeJobState(dir, "job-1", { phase: "restore/verify" });
+    const state = await readJobState(dir, "job-1");
+    expect(state?.includeObjects).toBe(true);
+    expect(state?.restoreFromId).toBe("backup-1");
+    expect(state?.phase).toBe("restore/verify");
+  });
+
+  it("persists isProtection flag set at creation and honors explicit false", async () => {
+    await writeJobState(dir, "job-1", {
+      kind: "manual_backup",
+      status: "running",
+      phase: "prepare",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      isProtection: true,
+    });
+    let state = await readJobState(dir, "job-1");
+    expect(state?.isProtection).toBe(true);
+
+    // 后续写明确传 false（如普通手动备份任务）应覆盖为 false。
+    await writeJobState(dir, "job-1", { isProtection: false });
+    state = await readJobState(dir, "job-1");
+    expect(state?.isProtection).toBe(false);
+  });
 });

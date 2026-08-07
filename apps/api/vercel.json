@@ -4,6 +4,10 @@
     {
       "path": "/internal/cron/storage-cleanup",
       "schedule": "3 4 * * *"
+    },
+    {
+      "path": "/internal/cron/backup",
+      "schedule": "23 3 * * *"
     }
   ]
 }
