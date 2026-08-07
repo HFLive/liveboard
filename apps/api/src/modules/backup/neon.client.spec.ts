@@ -77,7 +77,7 @@ describe("NeonClient", () => {
     );
   });
 
-  it("waitForOperation 轮询到 finished", async () => {
+  it("waitForOperation 轮询到 finished（项目级路径）", async () => {
     fetchMock
       .mockResolvedValueOnce(
         jsonResponse({ operation: { id: "op-1", state: "running" } }),
@@ -92,6 +92,11 @@ describe("NeonClient", () => {
       client.waitForOperation("op-1", 10_000),
     ).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    // 操作查询是项目级接口，必须带 /projects/{project_id} 前缀。
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://console.neon.tech/api/v2/projects/project-1/operations/op-1",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 
   it("waitForOperation 在 failed 状态抛错", async () => {

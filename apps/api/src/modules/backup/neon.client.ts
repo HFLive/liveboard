@@ -124,9 +124,11 @@ export class NeonClient {
     if (!operationId) return; // 部分响应无操作（如分支已是最新）。
     const deadline = Date.now() + timeoutMs;
     for (;;) {
+      // 操作查询是项目级接口：旧版顶层 /operations/{id} 路径在现网已不存在
+      // （404 Not Found），必须带项目前缀（OpenAPI: GET /projects/{project_id}/operations/{operation_id}）。
       const body = await this.request<{ operation: NeonOperation }>(
         "GET",
-        `/operations/${operationId}`,
+        `/projects/${this.projectId}/operations/${operationId}`,
       );
       const state = body.operation.state ?? body.operation.status;
       if (state === "finished") return;
