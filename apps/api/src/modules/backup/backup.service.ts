@@ -657,7 +657,9 @@ export class BackupService {
         .catch(() => null),
     ]);
     if (!state && !row) throw new NotFoundException("备份任务不存在");
-    const kind = fileKindToJobKind(state?.kind) ?? (row?.kind as BackupJobKind);
+    // 状态文件缺省时（Vercel 无持久盘）必须回退到 DB 行的 kind，
+    // 不能把未知 kind 默认成 restore（否则所有删除都被误判为回滚记录）。
+    const kind = fileKindToJobKind(state?.kind ?? row?.kind) as BackupJobKind;
     if (kind === "restore") {
       throw new BadRequestException("回滚记录是操作日志，不能删除");
     }
