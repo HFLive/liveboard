@@ -32,15 +32,15 @@ describe("authentication middleware", () => {
     expect(middleware(request).headers.get("x-middleware-next")).toBe("1");
   });
 
-  it("does not use an HTTP session cookie over HTTPS", () => {
+  it("accepts an HTTP session cookie over HTTPS (cookie name is not protocol-derived)", () => {
     const request = new NextRequest("https://liveboard.test/app/content", {
       headers: { cookie: "liveboard_session_http=signed-value" },
     });
 
-    expect(middleware(request).status).toBe(307);
+    expect(middleware(request).headers.get("x-middleware-next")).toBe("1");
   });
 
-  it("uses the forwarded protocol behind Nginx", () => {
+  it("accepts an HTTP session cookie behind a forwarded HTTPS proxy", () => {
     const request = new NextRequest("http://liveboard.test/app/content", {
       headers: {
         cookie: "liveboard_session_http=signed-value",
@@ -48,7 +48,48 @@ describe("authentication middleware", () => {
       },
     });
 
-    expect(middleware(request).status).toBe(307);
+    expect(middleware(request).headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("redirects an authenticated login request into the app", () => {
+    const request = new NextRequest("https://liveboard.test/login", {
+      headers: { cookie: "liveboard_session=signed-value" },
+    });
+
+    const response = middleware(request);
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "https://liveboard.test/app/classrooms",
+    );
+  });
+
+  it("does not bounce a session-expired login back into the app", () => {
+    const request = new NextRequest(
+      "https://liveboard.test/login?reason=session-expired",
+      { headers: { cookie: "liveboard_session=signed-value" } },
+    );
+
+    expect(middleware(request).headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("redirects an authenticated root request into the app", () => {
+    const request = new NextRequest("https://liveboard.test/", {
+      headers: { cookie: "liveboard_session_http=signed-value" },
+    });
+
+    const response = middleware(request);
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "https://liveboard.test/app/classrooms",
+    );
+  });
+
+  it("shows the marketing page to an unauthenticated root request", () => {
+    expect(
+      middleware(new NextRequest("https://liveboard.test/")).headers.get(
+        "x-middleware-next",
+      ),
+    ).toBe("1");
   });
 
   it("allows public login requests", () => {
