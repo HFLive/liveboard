@@ -12,10 +12,10 @@
 
 ## 备份内容
 
-| 平台 | 数据库 | 文件对象（可配置开关） |
-|---|---|---|
+| 平台        | 数据库                                          | 文件对象（可配置开关）                          |
+| ----------- | ----------------------------------------------- | ----------------------------------------------- |
 | self_hosted | `pg_dump -Fc` → `backups/<jobId>/database.dump` | 按 DB 引用枚举对象 → `backups/<jobId>/objects/` |
-| vercel | Neon 数据分支（无 compute endpoint） | R2 copyObject → `backup/<jobId>/<storageKey>` |
+| vercel      | Neon 数据分支（无 compute endpoint）            | R2 copyObject → `backup/<jobId>/<storageKey>`   |
 
 dump 排除表：`PendingUpload`（短期上传预留）、`ServerMetricSample`（宿主指标）。
 **`_prisma_migrations` 必须保留**（同库回滚后迁移历史一致，migrate deploy 不会
@@ -80,15 +80,15 @@ super_admin 存在 → 关维护。**DROP 之后失败保持维护模式**（不
 
 ## 关键端点
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/admin/backup/info` | 平台能力、设置、确认语、预设、Vercel 分支上限 |
-| PATCH | `/admin/backup/settings` | 保存设置（校验间隔 60–10080、保留 1–100） |
-| GET | `/admin/backup/jobs[/:id]` | 任务列表/详情；回滚窗口降级为状态文件读取 |
-| POST | `/admin/backup/run` | 手动备份 |
-| POST | `/admin/backup/:id/restore` | 回滚（confirm 必填）→ `{ preBackup, restore }` |
-| POST | `/admin/backup/jobs/:id/dismiss` | 清除失败报错 |
-| GET | `/internal/cron/backup` | Vercel 调度入口（CRON_SECRET） |
+| 方法  | 路径                             | 说明                                           |
+| ----- | -------------------------------- | ---------------------------------------------- |
+| GET   | `/admin/backup/info`             | 平台能力、设置、确认语、预设、Vercel 分支上限  |
+| PATCH | `/admin/backup/settings`         | 保存设置（校验间隔 60–10080、保留 1–100）      |
+| GET   | `/admin/backup/jobs[/:id]`       | 任务列表/详情；回滚窗口降级为状态文件读取      |
+| POST  | `/admin/backup/run`              | 手动备份                                       |
+| POST  | `/admin/backup/:id/restore`      | 回滚（confirm 必填）→ `{ preBackup, restore }` |
+| POST  | `/admin/backup/jobs/:id/dismiss` | 清除失败报错                                   |
+| GET   | `/internal/cron/backup`          | Vercel 调度入口（CRON_SECRET）                 |
 
 全部写端点 `requireSuperAdmin`；Vercel 未配 `NEON_API_KEY`/`NEON_PROJECT_ID`
 时 503。

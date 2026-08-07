@@ -41,6 +41,9 @@ export function ensureBackupDirs(paths: BackupDataPaths): boolean {
 }
 
 /** 备份内容目录（相对数据目录的 backups/<jobId>）。jobId 必须已通过 jobId 校验。 */
-export function backupContentDir(paths: BackupDataPaths, jobId: string): string {
+export function backupContentDir(
+  paths: BackupDataPaths,
+  jobId: string,
+): string {
   return path.join(paths.backupsDir, jobId);
 }

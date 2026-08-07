@@ -94,11 +94,15 @@ export function BackupClient() {
   const [starting, setStarting] = useState(false);
   const [dismissingJob, setDismissingJob] = useState<string | null>(null);
   // 回滚确认对话框。
-  const [restoreTarget, setRestoreTarget] = useState<BackupJobSummary | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<BackupJobSummary | null>(
+    null,
+  );
   const [confirmInput, setConfirmInput] = useState("");
   const [restoring, setRestoring] = useState(false);
   // 删除备份确认对话框。
-  const [deleteTarget, setDeleteTarget] = useState<BackupJobSummary | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BackupJobSummary | null>(
+    null,
+  );
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -354,7 +358,9 @@ export function BackupClient() {
                     <div className="backup-schedule-control">
                       <select
                         className="select"
-                        value={form.scheduleWeekday == null ? "daily" : "weekly"}
+                        value={
+                          form.scheduleWeekday == null ? "daily" : "weekly"
+                        }
                         onChange={(e) =>
                           setField(
                             "scheduleWeekday",
@@ -421,7 +427,9 @@ export function BackupClient() {
                       <span className="backup-setting-title">
                         <strong>自动备份保留份数</strong>
                       </span>
-                      <small>超过后自动删除最旧的自动备份；手动备份无数量上限</small>
+                      <small>
+                        超过后自动删除最旧的自动备份；手动备份无数量上限
+                      </small>
                     </span>
                     <input
                       type="number"
@@ -518,7 +526,8 @@ export function BackupClient() {
               </div>
               {anyRunning && (
                 <p className="backup-running-hint">
-                  有任务正在执行，列表每 4 秒自动刷新；回滚期间站点进入只读维护模式。
+                  有任务正在执行，列表每 4
+                  秒自动刷新；回滚期间站点进入只读维护模式。
                 </p>
               )}
               <div className="backup-jobs-list">
@@ -537,11 +546,9 @@ export function BackupClient() {
                         <span className="backup-kind">
                           {job.isProtection
                             ? "回滚前自动备份"
-                            : KIND_LABELS[job.kind] ?? job.kind}
+                            : (KIND_LABELS[job.kind] ?? job.kind)}
                         </span>
-                        <span className="backup-id">
-                          #{job.id.slice(0, 8)}
-                        </span>
+                        <span className="backup-id">#{job.id.slice(0, 8)}</span>
                         <span
                           className={`backup-status backup-status-${job.status}`}
                         >
@@ -665,8 +672,7 @@ export function BackupClient() {
             </div>
             <div className="modal-body">
               <p className="backup-dialog-desc">
-                将永久删除{" "}
-                <strong>#{deleteTarget.id.slice(0, 8)}</strong>（
+                将永久删除 <strong>#{deleteTarget.id.slice(0, 8)}</strong>（
                 {formatDateTime(deleteTarget.createdAt ?? "")}）的数据库备份
                 {deleteTarget.includeObjects ? "与文件对象" : ""}。
                 <strong>此操作不可恢复</strong>，删除后无法再从此备份回滚。
@@ -716,8 +722,8 @@ export function BackupClient() {
             <div className="modal-body">
               <p className="backup-dialog-desc">
                 将把 <strong>#{restoreTarget.id.slice(0, 8)}</strong>（
-                {formatDateTime(restoreTarget.createdAt ?? "")}）
-                的数据库（{restoreTarget.includeObjects ? "含" : "不含"}文件对象）
+                {formatDateTime(restoreTarget.createdAt ?? "")}） 的数据库（
+                {restoreTarget.includeObjects ? "含" : "不含"}文件对象）
                 恢复到当前站点。<strong>当前全部数据将被该备份覆盖</strong>；
                 回滚前会自动创建一次保护备份。
               </p>

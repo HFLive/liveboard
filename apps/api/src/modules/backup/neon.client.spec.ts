@@ -22,10 +22,13 @@ describe("NeonClient", () => {
 
   it("createBranch 发 POST /branches 并解析分支 id 与操作 id", async () => {
     fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        branch: { id: "br-123", name: "backup-j1" },
-        operations: [{ id: "op-1" }],
-      }, 201),
+      jsonResponse(
+        {
+          branch: { id: "br-123", name: "backup-j1" },
+          operations: [{ id: "op-1" }],
+        },
+        201,
+      ),
     );
     const result = await client.createBranch("backup-j1");
     expect(result).toEqual({ branchId: "br-123", operationId: "op-1" });
@@ -76,10 +79,18 @@ describe("NeonClient", () => {
 
   it("waitForOperation 轮询到 finished", async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ operation: { id: "op-1", state: "running" } }))
-      .mockResolvedValueOnce(jsonResponse({ operation: { id: "op-1", state: "running" } }))
-      .mockResolvedValueOnce(jsonResponse({ operation: { id: "op-1", state: "finished" } }));
-    await expect(client.waitForOperation("op-1", 10_000)).resolves.toBeUndefined();
+      .mockResolvedValueOnce(
+        jsonResponse({ operation: { id: "op-1", state: "running" } }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ operation: { id: "op-1", state: "running" } }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ operation: { id: "op-1", state: "finished" } }),
+      );
+    await expect(
+      client.waitForOperation("op-1", 10_000),
+    ).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -89,15 +100,21 @@ describe("NeonClient", () => {
         operation: { id: "op-1", state: "failed", error: { message: "boom" } },
       }),
     );
-    await expect(client.waitForOperation("op-1", 10_000)).rejects.toThrow("Neon 操作失败");
+    await expect(client.waitForOperation("op-1", 10_000)).rejects.toThrow(
+      "Neon 操作失败",
+    );
   });
 
   it("waitForOperation 超时抛错", async () => {
     // 每个请求都必须返回全新的 Response（Response body 只能读一次）。
     fetchMock.mockImplementation(() =>
-      Promise.resolve(jsonResponse({ operation: { id: "op-1", state: "running" } })),
+      Promise.resolve(
+        jsonResponse({ operation: { id: "op-1", state: "running" } }),
+      ),
     );
-    await expect(client.waitForOperation("op-1", 50)).rejects.toThrow("Neon 操作超时");
+    await expect(client.waitForOperation("op-1", 50)).rejects.toThrow(
+      "Neon 操作超时",
+    );
   });
 
   it("429 抛出速率限制错误", async () => {
@@ -108,7 +125,9 @@ describe("NeonClient", () => {
   });
 
   it("deleteBranch 对 404 幂等成功", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ message: "not found" }, 404));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ message: "not found" }, 404),
+    );
     await expect(client.deleteBranch("br-gone")).resolves.toBeUndefined();
   });
 });

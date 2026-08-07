@@ -12,7 +12,14 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { timingSafeEqual } from "node:crypto";
-import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import {
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from "class-validator";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
 import { RedisService } from "../redis/redis.service";
 import {
@@ -124,13 +131,19 @@ export class BackupController {
   }
 
   @Get("admin/backup/jobs/:id")
-  async getJob(@CurrentUserId() userId: string | null, @Param("id") id: string) {
+  async getJob(
+    @CurrentUserId() userId: string | null,
+    @Param("id") id: string,
+  ) {
     return { job: await this.backup.getJob(userId, id) };
   }
 
   /** 硬删除单个备份：数据库与文件一并删除，不可恢复。 */
   @Delete("admin/backup/jobs/:id")
-  async deleteJob(@CurrentUserId() userId: string | null, @Param("id") id: string) {
+  async deleteJob(
+    @CurrentUserId() userId: string | null,
+    @Param("id") id: string,
+  ) {
     return await this.backup.deleteBackup(id);
   }
 

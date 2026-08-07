@@ -299,7 +299,9 @@ async function main() {
           }
         }
       };
-      await Promise.all(Array.from({ length: args.concurrency }, () => worker()));
+      await Promise.all(
+        Array.from({ length: args.concurrency }, () => worker()),
+      );
       if (missing > 0) {
         throw new Error(
           `备份期间 ${missing} 个源对象缺失，备份不完整，拒绝完成（fail-closed）`,

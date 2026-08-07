@@ -124,7 +124,8 @@ describe("BackupClient", () => {
         ...info,
         deploymentTarget: "vercel",
         supported: false,
-        unavailableReason: "Vercel 备份需要配置 NEON_API_KEY 与 NEON_PROJECT_ID 环境变量",
+        unavailableReason:
+          "Vercel 备份需要配置 NEON_API_KEY 与 NEON_PROJECT_ID 环境变量",
       },
     });
     render(<BackupClient />);
@@ -174,9 +175,7 @@ describe("BackupClient", () => {
       expect(screen.getByText("从该备份回滚")).toBeTruthy();
     });
     fireEvent.click(screen.getByRole("button", { name: "删除" }));
-    expect(
-      screen.getByRole("heading", { name: "删除备份" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "删除备份" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "删除备份" }));
     await waitFor(() => {
       expect(deleteBackupJob).toHaveBeenCalledWith("b1");

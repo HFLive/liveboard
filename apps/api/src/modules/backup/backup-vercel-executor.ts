@@ -1,7 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaClient } from "@prisma/client";
-import { collectObjectRefs, type ObjectRef } from "../migration/migration-engine";
+import {
+  collectObjectRefs,
+  type ObjectRef,
+} from "../migration/migration-engine";
 import { PrismaService } from "../prisma/prisma.service";
 import { RedisService } from "../redis/redis.service";
 import { retentionCandidates } from "./backup-schedule";
@@ -28,7 +31,11 @@ interface VercelJobProgress {
   total: number;
   operationId?: string | null;
   /** copy-objects 阶段的对象清单（按 DB 引用枚举快照，跨 tick 稳定）。 */
-  objects?: Array<{ storageKey: string; sizeBytes: number; mimeType: string | null }>;
+  objects?: Array<{
+    storageKey: string;
+    sizeBytes: number;
+    mimeType: string | null;
+  }>;
   /** 非阻断性错误汇总（如对象回拷失败），成功后并入 manifest 展示。 */
   errors?: string[];
 }
@@ -90,7 +97,9 @@ export class BackupVercelExecutor {
       }
     } catch (caught) {
       // 推进失败：任务落 failed（分支等已创建资源由保留策略兜底清理）。
-      this.logger.error(`Vercel 备份任务 ${job.id} 推进失败: ${messageOfVercel(caught)}`);
+      this.logger.error(
+        `Vercel 备份任务 ${job.id} 推进失败: ${messageOfVercel(caught)}`,
+      );
       await this.prisma.backupJob
         .update({
           where: { id: job.id },
@@ -113,7 +122,15 @@ export class BackupVercelExecutor {
   // ---- 备份状态机（auto / manual）------------------------------------------
 
   private async advanceBackup(
-    job: { id: string; kind: "auto" | "manual" | "restore"; phase: string; progress: unknown; error: string | null; createdAt: Date; includeObjects: boolean },
+    job: {
+      id: string;
+      kind: "auto" | "manual" | "restore";
+      phase: string;
+      progress: unknown;
+      error: string | null;
+      createdAt: Date;
+      includeObjects: boolean;
+    },
     progress: VercelJobProgress,
   ): Promise<void> {
     const stage = progress.stage || "";
@@ -122,17 +139,29 @@ export class BackupVercelExecutor {
 
     if (stage === "") {
       // 创建 Neon 数据分支（无 compute endpoint）。
-      const { branchId, operationId } = await neon.createBranch(`backup-${job.id}`);
+      const { branchId, operationId } = await neon.createBranch(
+        `backup-${job.id}`,
+      );
       await row.update({
         where: { id: job.id },
         data: {
           neonBranchId: branchId,
           status: "running",
           phase: "create-branch",
-          progress: { stage: "branch", done: 0, total: 1, operationId } as never,
+          progress: {
+            stage: "branch",
+            done: 0,
+            total: 1,
+            operationId,
+          } as never,
         },
       });
-      await this.writeRedisState(job.id, { stage: "branch", done: 0, total: 1, operationId });
+      await this.writeRedisState(job.id, {
+        stage: "branch",
+        done: 0,
+        total: 1,
+        operationId,
+      });
       return;
     }
 
@@ -141,21 +170,38 @@ export class BackupVercelExecutor {
       await neon.waitForOperation(progress.operationId ?? null);
       const refs = await collectObjectRefs(this.prisma);
       if (!job.includeObjects) {
-        await this.finalizeBackup(job, refs, [], { ...progress, stage: "finalize" });
+        await this.finalizeBackup(job, refs, [], {
+          ...progress,
+          stage: "finalize",
+        });
         return;
       }
       const objects = refs
-        .map((ref) => ({ storageKey: ref.storageKey, sizeBytes: 0, mimeType: ref.mimeType ?? null }))
+        .map((ref) => ({
+          storageKey: ref.storageKey,
+          sizeBytes: 0,
+          mimeType: ref.mimeType ?? null,
+        }))
         .filter((o) => o.storageKey);
       // 后续 tick 复制对象前先 stat 拿大小（幂等判断用），这里只存清单。
       await row.update({
         where: { id: job.id },
         data: {
           phase: "objects",
-          progress: { stage: "copy-objects", done: 0, total: objects.length, objects },
+          progress: {
+            stage: "copy-objects",
+            done: 0,
+            total: objects.length,
+            objects,
+          },
         },
       });
-      await this.writeRedisState(job.id, { stage: "copy-objects", done: 0, total: objects.length, objects });
+      await this.writeRedisState(job.id, {
+        stage: "copy-objects",
+        done: 0,
+        total: objects.length,
+        objects,
+      });
       return;
     }
 
@@ -170,19 +216,32 @@ export class BackupVercelExecutor {
           const sourceKey = obj.storageKey;
           const targetKey = backupObjectKey(job.id, sourceKey);
           // 幂等续传：目标已存在且大小一致则跳过（重跑安全）。
-          const existing = await backend.statObject(targetKey).catch(() => null);
-          if (existing && existing.size === obj.sizeBytes && obj.sizeBytes > 0) {
+          const existing = await backend
+            .statObject(targetKey)
+            .catch(() => null);
+          if (
+            existing &&
+            existing.size === obj.sizeBytes &&
+            obj.sizeBytes > 0
+          ) {
             done += 1;
             continue;
           }
-          const statResult = obj.sizeBytes > 0 ? existing : await backend.statObject(sourceKey).catch(() => null);
+          const statResult =
+            obj.sizeBytes > 0
+              ? existing
+              : await backend.statObject(sourceKey).catch(() => null);
           if (!statResult) {
             errors.push(`对象不存在 ${sourceKey}`);
             done += 1;
             continue;
           }
           if (obj.sizeBytes === 0) obj.sizeBytes = statResult.size; // 回写清单，供 manifest 与回拷幂等判断。
-          await backend.copyObject(sourceKey, targetKey, obj.mimeType ?? "application/octet-stream");
+          await backend.copyObject(
+            sourceKey,
+            targetKey,
+            obj.mimeType ?? "application/octet-stream",
+          );
           done += 1;
         } catch (caught) {
           errors.push(`复制失败 ${obj.storageKey}: ${messageOfVercel(caught)}`);
@@ -216,7 +275,11 @@ export class BackupVercelExecutor {
   private async finalizeBackup(
     job: { id: string; kind: "auto" | "manual" | "restore"; createdAt: Date },
     refs: ObjectRef[],
-    objects: Array<{ storageKey: string; sizeBytes: number; mimeType: string | null }>,
+    objects: Array<{
+      storageKey: string;
+      sizeBytes: number;
+      mimeType: string | null;
+    }>,
     progress: VercelJobProgress,
   ): Promise<void> {
     const tables = await collectTableCounts(this.prisma).catch(() => ({}));
@@ -257,7 +320,11 @@ export class BackupVercelExecutor {
     await this.prisma.backupJob
       .updateMany({
         where: { kind: "restore", status: "pending", restoreFromId: backupId },
-        data: { status: "running", phase: "restore/prepare", startedAt: new Date() },
+        data: {
+          status: "running",
+          phase: "restore/prepare",
+          startedAt: new Date(),
+        },
       })
       .catch(() => undefined);
   }
@@ -265,7 +332,15 @@ export class BackupVercelExecutor {
   // ---- 回滚状态机（restore）-------------------------------------------------
 
   private async advanceRestore(
-    job: { id: string; status: string; phase: string; progress: unknown; error: string | null; restoreFromId: string | null; createdAt: Date },
+    job: {
+      id: string;
+      status: string;
+      phase: string;
+      progress: unknown;
+      error: string | null;
+      restoreFromId: string | null;
+      createdAt: Date;
+    },
     progress: VercelJobProgress,
   ): Promise<void> {
     const stage = progress.stage || "";
@@ -277,7 +352,9 @@ export class BackupVercelExecutor {
 
     if (stage === "") {
       // 校验来源备份分支存在。
-      const source = await row.findUnique({ where: { id: job.restoreFromId ?? "" } });
+      const source = await row.findUnique({
+        where: { id: job.restoreFromId ?? "" },
+      });
       if (!source?.neonBranchId || source.status !== "succeeded") {
         throw new Error("来源备份缺少 Neon 分支信息，无法回滚");
       }
@@ -288,7 +365,12 @@ export class BackupVercelExecutor {
         sourceBranchId: source.neonBranchId,
         preserveUnderName: `pre-restore-${job.id}`,
       });
-      const next: VercelJobProgress = { stage: "restore/wait", done: 0, total: 1, operationId };
+      const next: VercelJobProgress = {
+        stage: "restore/wait",
+        done: 0,
+        total: 1,
+        operationId,
+      };
       await row.update({
         where: { id: job.id },
         data: { phase: "restore/restore", progress: next as never },
@@ -299,7 +381,11 @@ export class BackupVercelExecutor {
 
     if (stage === "restore/wait") {
       await neon.waitForOperation(progress.operationId ?? null);
-      const next: VercelJobProgress = { stage: "restore/verify", done: 0, total: 1 };
+      const next: VercelJobProgress = {
+        stage: "restore/verify",
+        done: 0,
+        total: 1,
+      };
       await row.update({
         where: { id: job.id },
         data: { phase: "restore/verify", progress: next as never },
@@ -323,7 +409,11 @@ export class BackupVercelExecutor {
       } finally {
         await client.$disconnect().catch(() => undefined);
       }
-      const next: VercelJobProgress = { stage: "restore/objects", done: 0, total: 0 };
+      const next: VercelJobProgress = {
+        stage: "restore/objects",
+        done: 0,
+        total: 0,
+      };
       await row.update({
         where: { id: job.id },
         data: { phase: "restore/objects", progress: next as never },
@@ -334,8 +424,16 @@ export class BackupVercelExecutor {
 
     if (stage === "restore/objects") {
       // 从备份 manifest 拿对象清单回拷（无对象任务直接进 cleanup）。
-      const source = await row.findUnique({ where: { id: job.restoreFromId ?? "" } });
-      const manifest = source?.manifest as { objects?: Array<{ storageKey: string; sizeBytes: number; mimeType: string | null }> } | null;
+      const source = await row.findUnique({
+        where: { id: job.restoreFromId ?? "" },
+      });
+      const manifest = source?.manifest as {
+        objects?: Array<{
+          storageKey: string;
+          sizeBytes: number;
+          mimeType: string | null;
+        }>;
+      } | null;
       const objects = manifest?.objects ?? [];
       let done = progress.done;
       const errors = progress.errors ?? [];
@@ -345,18 +443,29 @@ export class BackupVercelExecutor {
         for (const obj of batch) {
           try {
             const sourceKey = backupObjectKey(job.id, obj.storageKey);
-            const existing = await backend.statObject(sourceKey).catch(() => null);
+            const existing = await backend
+              .statObject(sourceKey)
+              .catch(() => null);
             if (!existing) {
               errors.push(`备份对象缺失 ${obj.storageKey}`);
               done += 1;
               continue;
             }
-            const current = await backend.statObject(obj.storageKey).catch(() => null);
-            if (current && current.size === obj.sizeBytes && obj.sizeBytes > 0) continue;
-            await backend.copyObject(sourceKey, obj.storageKey, obj.mimeType ?? "application/octet-stream");
+            const current = await backend
+              .statObject(obj.storageKey)
+              .catch(() => null);
+            if (current && current.size === obj.sizeBytes && obj.sizeBytes > 0)
+              continue;
+            await backend.copyObject(
+              sourceKey,
+              obj.storageKey,
+              obj.mimeType ?? "application/octet-stream",
+            );
             done += 1;
           } catch (caught) {
-            errors.push(`回拷失败 ${obj.storageKey}: ${messageOfVercel(caught)}`);
+            errors.push(
+              `回拷失败 ${obj.storageKey}: ${messageOfVercel(caught)}`,
+            );
             done += 1;
           }
         }
@@ -372,7 +481,10 @@ export class BackupVercelExecutor {
       };
       await row.update({
         where: { id: job.id },
-        data: { phase: finished ? "restore/cleanup" : "restore/objects", progress: next as never },
+        data: {
+          phase: finished ? "restore/cleanup" : "restore/objects",
+          progress: next as never,
+        },
       });
       await this.writeRedisState(job.id, next);
       return;
@@ -389,9 +501,15 @@ export class BackupVercelExecutor {
         }
       } catch (caught) {
         // 清理失败不阻塞完成：旧分支是回滚的最后防线，保留亦可。
-        this.logger.warn(`Vercel 回滚 ${job.id} 清理旧分支失败: ${messageOfVercel(caught)}`);
+        this.logger.warn(
+          `Vercel 回滚 ${job.id} 清理旧分支失败: ${messageOfVercel(caught)}`,
+        );
       }
-      const next: VercelJobProgress = { stage: "done", done: progress.total, total: progress.total };
+      const next: VercelJobProgress = {
+        stage: "done",
+        done: progress.total,
+        total: progress.total,
+      };
       await row.update({
         where: { id: job.id },
         data: {
@@ -410,7 +528,9 @@ export class BackupVercelExecutor {
 
   private async pruneRetention(): Promise<void> {
     const kind = "auto";
-    const settings = await this.prisma.backupSettings.findFirst().catch(() => null);
+    const settings = await this.prisma.backupSettings
+      .findFirst()
+      .catch(() => null);
     const limit = settings?.autoRetention ?? 7;
     const rows = await this.prisma.backupJob.findMany({
       where: { kind: { in: [kind, "restore"] } },
@@ -429,11 +549,17 @@ export class BackupVercelExecutor {
     for (const row of expired) {
       // 先删 R2 前缀对象（manifest 记录逐个删，无 listObjects 接口不枚举 bucket）。
       if (row.neonBranchId) {
-        await neon.deleteBranch(row.neonBranchId).catch((caught) =>
-          this.logger.warn(`删除 Neon 分支失败 ${row.neonBranchId}: ${messageOfVercel(caught)}`),
-        );
+        await neon
+          .deleteBranch(row.neonBranchId)
+          .catch((caught) =>
+            this.logger.warn(
+              `删除 Neon 分支失败 ${row.neonBranchId}: ${messageOfVercel(caught)}`,
+            ),
+          );
       }
-      const manifest = row.manifest as { objects?: Array<{ storageKey: string }> } | null;
+      const manifest = row.manifest as {
+        objects?: Array<{ storageKey: string }>;
+      } | null;
       if (manifest?.objects?.length) {
         try {
           const backend = await this.storage.backendFor("r2");
@@ -467,9 +593,9 @@ export class BackupVercelExecutor {
           ),
         );
     }
-    const manifest = row?.manifest as
-      | { objects?: Array<{ storageKey: string }> }
-      | null;
+    const manifest = row?.manifest as {
+      objects?: Array<{ storageKey: string }>;
+    } | null;
     if (manifest?.objects?.length) {
       try {
         const backend = await this.storage.backendFor("r2");
@@ -485,9 +611,7 @@ export class BackupVercelExecutor {
     // 清掉 Redis 里的进度与 per-job 锁（同一 key）。
     const client = await this.redis.getClient().catch(() => null);
     if (client) {
-      await client
-        .del(`${JOB_LOCK_KEY_PREFIX}${jobId}`)
-        .catch(() => undefined);
+      await client.del(`${JOB_LOCK_KEY_PREFIX}${jobId}`).catch(() => undefined);
     }
     await this.prisma.backupJob
       .delete({ where: { id: jobId } })
@@ -501,7 +625,9 @@ export class BackupVercelExecutor {
     const apiKey = this.config.get<string>("NEON_API_KEY")?.trim();
     const projectId = this.config.get<string>("NEON_PROJECT_ID")?.trim();
     if (!apiKey || !projectId) {
-      throw new Error("缺少 NEON_API_KEY 或 NEON_PROJECT_ID，Vercel 备份不可用");
+      throw new Error(
+        "缺少 NEON_API_KEY 或 NEON_PROJECT_ID，Vercel 备份不可用",
+      );
     }
     return new NeonClient(apiKey, projectId);
   }
@@ -519,7 +645,10 @@ export class BackupVercelExecutor {
   }
 
   /** per-job Redis NX 锁：防止多个 serverless 实例同时推进同一任务。 */
-  private async withJobLock<T>(jobId: string, fn: () => Promise<T>): Promise<T | undefined> {
+  private async withJobLock<T>(
+    jobId: string,
+    fn: () => Promise<T>,
+  ): Promise<T | undefined> {
     const client = await this.redis.getClient().catch(() => null);
     if (client) {
       const acquired = await client.set(`${JOB_LOCK_KEY_PREFIX}${jobId}`, "1", {
@@ -530,27 +659,38 @@ export class BackupVercelExecutor {
       try {
         return await fn();
       } finally {
-        await client.del(`${JOB_LOCK_KEY_PREFIX}${jobId}`).catch(() => undefined);
+        await client
+          .del(`${JOB_LOCK_KEY_PREFIX}${jobId}`)
+          .catch(() => undefined);
       }
     }
     return fn();
   }
 
   /** 进度双写 Redis（回滚替换主库期间 UI 从 Redis 读，TTL 7 天）。 */
-  private async writeRedisState(jobId: string, progress: VercelJobProgress): Promise<void> {
+  private async writeRedisState(
+    jobId: string,
+    progress: VercelJobProgress,
+  ): Promise<void> {
     const client = await this.redis.getClient().catch(() => null);
     if (!client) return;
     await client
       .set(
         `liveboard:backup:job:${jobId}`,
-        JSON.stringify({ jobId, progress, updatedAt: new Date().toISOString() }),
+        JSON.stringify({
+          jobId,
+          progress,
+          updatedAt: new Date().toISOString(),
+        }),
         { EX: 7 * 24 * 60 * 60 },
       )
       .catch(() => undefined);
   }
 }
 
-async function collectTableCounts(prisma: PrismaService): Promise<Record<string, number>> {
+async function collectTableCounts(
+  prisma: PrismaService,
+): Promise<Record<string, number>> {
   const tables = (await prisma.$queryRaw<
     Array<{ table_name: string }>
   >`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`) as Array<{
@@ -558,12 +698,22 @@ async function collectTableCounts(prisma: PrismaService): Promise<Record<string,
   }>;
   const counts: Record<string, number> = {};
   for (const row of tables) {
-    if (["PendingUpload", "ServerMetricSample", "BackupJob", "BackupSettings", "_prisma_migrations"].includes(row.table_name)) {
+    if (
+      [
+        "PendingUpload",
+        "ServerMetricSample",
+        "BackupJob",
+        "BackupSettings",
+        "_prisma_migrations",
+      ].includes(row.table_name)
+    ) {
       continue;
     }
-    const result = (await prisma.$queryRawUnsafe(
-      `SELECT COUNT(*)::int AS count FROM "public"."${row.table_name}"`,
-    ).catch(() => null)) as Array<{ count: number }> | null;
+    const result = (await prisma
+      .$queryRawUnsafe(
+        `SELECT COUNT(*)::int AS count FROM "public"."${row.table_name}"`,
+      )
+      .catch(() => null)) as Array<{ count: number }> | null;
     counts[row.table_name] = Number(result?.[0]?.count ?? 0);
   }
   return counts;

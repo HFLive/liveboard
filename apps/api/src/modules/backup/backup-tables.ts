@@ -5,7 +5,10 @@
  * - `PendingUpload` 是短期的上传预留记录（超时被清理），`ServerMetricSample`
  *   是每分钟采样一次的宿主指标，两者无备份价值。
  */
-export const BACKUP_EXCLUDED_TABLES = ["PendingUpload", "ServerMetricSample"] as const;
+export const BACKUP_EXCLUDED_TABLES = [
+  "PendingUpload",
+  "ServerMetricSample",
+] as const;
 
 /**
  * pg_dump 的 --exclude-table-data 参数。混合大小写表名必须带引号（否则

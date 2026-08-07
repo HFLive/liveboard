@@ -136,7 +136,9 @@ export class NeonClient {
         );
       }
       if (Date.now() >= deadline) {
-        throw new Error(`Neon 操作超时（${timeoutMs / 1000}s）：${operationId}`);
+        throw new Error(
+          `Neon 操作超时（${timeoutMs / 1000}s）：${operationId}`,
+        );
       }
       await sleep(OPERATION_POLL_INTERVAL_MS);
     }
@@ -159,7 +161,9 @@ export class NeonClient {
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
     } catch (caught) {
-      this.logger.error(`Neon API 请求失败 ${method} ${path}: ${messageOfNeon(caught)}`);
+      this.logger.error(
+        `Neon API 请求失败 ${method} ${path}: ${messageOfNeon(caught)}`,
+      );
       throw new Error(`Neon API 请求失败（网络错误），请稍后重试`);
     }
     if (response.ok) {
@@ -175,7 +179,9 @@ export class NeonClient {
       );
     }
     if (response.status === 403) {
-      throw new Error(`Neon API 权限不足（403），请检查 NEON_API_KEY：${detail}`);
+      throw new Error(
+        `Neon API 权限不足（403），请检查 NEON_API_KEY：${detail}`,
+      );
     }
     // 附带 status（deleteBranch 幂等 404 依赖它），不改变消息结构。
     throw Object.assign(

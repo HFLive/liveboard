@@ -33,7 +33,10 @@ export interface BackupScheduleState {
  * 否则是本周该 weekday 的 HH:MM（可能在过去 = 本周期已到点，可能在未来）。
  */
 export function periodFireTime(
-  settings: Pick<BackupScheduleState, "scheduleHour" | "scheduleMinute" | "scheduleWeekday">,
+  settings: Pick<
+    BackupScheduleState,
+    "scheduleHour" | "scheduleMinute" | "scheduleWeekday"
+  >,
   now: Date,
 ): Date {
   const fire = new Date(now);
@@ -81,12 +84,16 @@ export function shouldRunAutoBackup(
  * 返回要写入的 lastAutoBackupAt（字符串 ISO）。
  */
 export function initialLastAutoBackupAt(
-  settings: Pick<BackupScheduleState, "scheduleHour" | "scheduleMinute" | "scheduleWeekday">,
+  settings: Pick<
+    BackupScheduleState,
+    "scheduleHour" | "scheduleMinute" | "scheduleWeekday"
+  >,
   now: Date,
 ): string {
   const fire = periodFireTime(settings, now);
   const periodMs = settings.scheduleWeekday == null ? DAY_MS : WEEK_MS;
-  const base = fire.getTime() > now.getTime() ? fire.getTime() - periodMs : fire.getTime();
+  const base =
+    fire.getTime() > now.getTime() ? fire.getTime() - periodMs : fire.getTime();
   return new Date(base).toISOString();
 }
 

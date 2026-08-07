@@ -217,7 +217,9 @@ describe("initialLastAutoBackupAt（首次启用置位）", () => {
 });
 
 describe("retentionCandidates", () => {
-  const row = (overrides: Partial<Parameters<typeof retentionCandidates>[0][number]>) => ({
+  const row = (
+    overrides: Partial<Parameters<typeof retentionCandidates>[0][number]>,
+  ) => ({
     id: `b-${Math.random().toString(36).slice(2, 8)}`,
     kind: "auto" as const,
     status: "succeeded",

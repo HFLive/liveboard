@@ -110,7 +110,11 @@ function isTableMissingError(caught: unknown): boolean {
 }
 
 function jobKindToFileKind(kind: BackupJobKind): BackupFileJobKind {
-  return kind === "auto" ? "auto_backup" : kind === "manual" ? "manual_backup" : "restore";
+  return kind === "auto"
+    ? "auto_backup"
+    : kind === "manual"
+      ? "manual_backup"
+      : "restore";
 }
 
 function fileKindToJobKind(kind: string | undefined): BackupJobKind {
@@ -175,9 +179,11 @@ export class BackupService {
     }
     if (this.isVercelDeployment()) {
       // Vercel 分块任务推进由 cron 驱动（backup-vercel-executor 状态机）。
-      await this.vercelExecutor.advance().catch((caught) =>
-        this.logger.warn(`Vercel 任务推进失败: ${messageOf(caught)}`),
-      );
+      await this.vercelExecutor
+        .advance()
+        .catch((caught) =>
+          this.logger.warn(`Vercel 任务推进失败: ${messageOf(caught)}`),
+        );
       return { ran: false, reason: "vercel-executor" };
     }
     const settings = await this.getSettingsRow().catch(() => null);
@@ -285,7 +291,11 @@ export class BackupService {
     const staleBefore = new Date(Date.now() - STALE_PENDING_MS);
     const rows = await this.prisma.backupJob
       .findMany({
-        where: { kind: "restore", status: "pending", createdAt: { lt: staleBefore } },
+        where: {
+          kind: "restore",
+          status: "pending",
+          createdAt: { lt: staleBefore },
+        },
       })
       .catch(() => null);
     if (!rows) return;
@@ -301,7 +311,9 @@ export class BackupService {
           },
         })
         .catch(() => undefined);
-      this.logger.warn(`回滚任务 ${row.id} 失去链（pending 且无状态文件），已落 failed`);
+      this.logger.warn(
+        `回滚任务 ${row.id} 失去链（pending 且无状态文件），已落 failed`,
+      );
     }
   }
 
@@ -474,8 +486,7 @@ export class BackupService {
 
   private confirmPhrase(): string {
     return (
-      process.env.BACKUP_RESTORE_CONFIRM_PHRASE?.trim() ||
-      "CONFIRM-RESTORE"
+      process.env.BACKUP_RESTORE_CONFIRM_PHRASE?.trim() || "CONFIRM-RESTORE"
     );
   }
 
@@ -510,7 +521,9 @@ export class BackupService {
       ...base,
       settings: await this.getSettings(),
       confirmPhrase: this.confirmPhrase(),
-      vercelLimits: vercel ? { maxBackupBranches: VERGEL_MAX_BACKUP_BRANCHES } : undefined,
+      vercelLimits: vercel
+        ? { maxBackupBranches: VERGEL_MAX_BACKUP_BRANCHES }
+        : undefined,
     };
   }
 
@@ -541,7 +554,11 @@ export class BackupService {
     const summaries: BackupJobSummary[] = [];
     for (const id of ids) {
       summaries.push(
-        await this.mergeJob(id, stateFiles.get(id) ?? null, byId.get(id) ?? null),
+        await this.mergeJob(
+          id,
+          stateFiles.get(id) ?? null,
+          byId.get(id) ?? null,
+        ),
       );
     }
     return summaries.sort((a, b) =>
@@ -551,7 +568,10 @@ export class BackupService {
     );
   }
 
-  async getJob(userId: string | null, jobId: string): Promise<BackupJobSummary> {
+  async getJob(
+    userId: string | null,
+    jobId: string,
+  ): Promise<BackupJobSummary> {
     const mode = await this.authorizeForStateRead(userId);
     if (mode === "degraded") {
       const state = await readJobState(this.paths.backupJobsDir, jobId);
@@ -560,7 +580,9 @@ export class BackupService {
     }
     const [state, row] = await Promise.all([
       readJobState(this.paths.backupJobsDir, jobId),
-      this.prisma.backupJob.findUnique({ where: { id: jobId } }).catch(() => null),
+      this.prisma.backupJob
+        .findUnique({ where: { id: jobId } })
+        .catch(() => null),
     ]);
     if (!state && !row) throw new NotFoundException("备份任务不存在");
     return this.mergeJob(jobId, state, row);
@@ -576,7 +598,9 @@ export class BackupService {
       readJobState(this.paths.backupJobsDir, jobId),
       mode === "degraded"
         ? Promise.resolve(null)
-        : this.prisma.backupJob.findUnique({ where: { id: jobId } }).catch(() => null),
+        : this.prisma.backupJob
+            .findUnique({ where: { id: jobId } })
+            .catch(() => null),
     ]);
     if (!state && !row) throw new NotFoundException("备份任务不存在");
     const status = state?.status ?? row?.status;
@@ -609,7 +633,9 @@ export class BackupService {
   async deleteBackup(jobId: string): Promise<{ deleted: true }> {
     const [state, row] = await Promise.all([
       readJobState(this.paths.backupJobsDir, jobId),
-      this.prisma.backupJob.findUnique({ where: { id: jobId } }).catch(() => null),
+      this.prisma.backupJob
+        .findUnique({ where: { id: jobId } })
+        .catch(() => null),
     ]);
     if (!state && !row) throw new NotFoundException("备份任务不存在");
     const kind = fileKindToJobKind(state?.kind) ?? (row?.kind as BackupJobKind);
@@ -632,7 +658,9 @@ export class BackupService {
       })
       .catch(() => null);
     if (referenced) {
-      throw new ConflictException("该备份正被回滚任务引用，删除会破坏回滚，已取消");
+      throw new ConflictException(
+        "该备份正被回滚任务引用，删除会破坏回滚，已取消",
+      );
     }
     if (this.isVercelDeployment()) {
       await this.vercelExecutor.deleteBackupNow(jobId);
@@ -673,10 +701,13 @@ export class BackupService {
       this.spawnScript(
         "backup-run",
         [
-          "--job-id", job.id,
-          "--kind", "manual",
+          "--job-id",
+          job.id,
+          "--kind",
+          "manual",
           includeObjects ? "--include-objects" : "--no-objects",
-          "--concurrency", "4",
+          "--concurrency",
+          "4",
         ],
         job.id,
       );
@@ -721,12 +752,15 @@ export class BackupService {
       if (!this.isVercelDeployment()) {
         // 自托管：备份内容必须完整存在（manifest + dump），否则回滚会在半途失败。
         if (!ensureBackupDirs(this.paths)) {
-          throw new ServiceUnavailableException("无法访问备份数据目录，请检查挂载");
+          throw new ServiceUnavailableException(
+            "无法访问备份数据目录，请检查挂载",
+          );
         }
-        await stat(path.join(this.paths.backupsDir, backupId, "manifest.json"))
-          .catch(() => {
-            throw new BadRequestException("备份文件缺失，无法回滚");
-          });
+        await stat(
+          path.join(this.paths.backupsDir, backupId, "manifest.json"),
+        ).catch(() => {
+          throw new BadRequestException("备份文件缺失，无法回滚");
+        });
         await this.assertNoRunningJobInFiles();
       }
       const settings = await this.getSettings();
@@ -795,11 +829,14 @@ export class BackupService {
     this.spawnScript(
       "backup-run",
       [
-        "--job-id", preBackupId,
-        "--kind", "manual",
+        "--job-id",
+        preBackupId,
+        "--kind",
+        "manual",
         "--protect",
         preInclude ? "--include-objects" : "--no-objects",
-        "--concurrency", "4",
+        "--concurrency",
+        "4",
       ],
       preBackupId,
       async (code) => {
@@ -810,16 +847,22 @@ export class BackupService {
           );
           return;
         }
-        this.logger.log(`保护备份 ${preBackupId} 成功，启动回滚 ${restoreJobId}`);
+        this.logger.log(
+          `保护备份 ${preBackupId} 成功，启动回滚 ${restoreJobId}`,
+        );
         this.runningJobId = restoreJobId;
         this.spawnScript(
           "backup-restore",
           [
-            "--job-id", restoreJobId,
-            "--backup", backupId,
-            "--confirm", confirm,
+            "--job-id",
+            restoreJobId,
+            "--backup",
+            backupId,
+            "--confirm",
+            confirm,
             restoreInclude ? "--include-objects" : "--no-objects",
-            "--concurrency", "4",
+            "--concurrency",
+            "4",
           ],
           restoreJobId,
         );
@@ -836,7 +879,11 @@ export class BackupService {
       if (userId) await requireSuperAdmin(this.prisma, userId);
       await this.assertNoRunningJobInFiles();
       const settings = await this.getSettings();
-      const job = await this.createJobRow(userId, "auto", settings.includeObjects);
+      const job = await this.createJobRow(
+        userId,
+        "auto",
+        settings.includeObjects,
+      );
       if (this.isVercelDeployment()) {
         // Vercel：不 spawn，由 executor 分块推进。
         spawned = true;
@@ -845,10 +892,13 @@ export class BackupService {
       this.spawnScript(
         "backup-run",
         [
-          "--job-id", job.id,
-          "--kind", "auto",
+          "--job-id",
+          job.id,
+          "--kind",
+          "auto",
           settings.includeObjects ? "--include-objects" : "--no-objects",
-          "--concurrency", "4",
+          "--concurrency",
+          "4",
         ],
         job.id,
       );
@@ -937,14 +987,18 @@ export class BackupService {
         ).catch(() => null);
         if (doneState && fileKindToJobKind(doneState.kind) === "restore") {
           await this.reconcileAllJobsFromState().catch((caught) =>
-            this.logger.warn(`回滚后任务记录全量重放失败: ${messageOf(caught)}`),
+            this.logger.warn(
+              `回滚后任务记录全量重放失败: ${messageOf(caught)}`,
+            ),
           );
         }
         await this.failStuckJobState(jobId, code).catch((caught) =>
           this.logger.warn(`处理异常退出状态失败: ${messageOf(caught)}`),
         );
         await this.onBackupFinished(jobId).catch((caught) =>
-          this.logger.warn(`备份收尾（保留策略/调度更新）失败: ${messageOf(caught)}`),
+          this.logger.warn(
+            `备份收尾（保留策略/调度更新）失败: ${messageOf(caught)}`,
+          ),
         );
         if (onExit) {
           // 回滚链：保护备份结束后由 onExit 决定是否启动回滚；
@@ -1057,7 +1111,9 @@ export class BackupService {
         },
       })
       .catch((caught) => {
-        this.logger.warn(`回写备份任务记录失败（可能为回滚腾空窗口）: ${messageOf(caught)}`);
+        this.logger.warn(
+          `回写备份任务记录失败（可能为回滚腾空窗口）: ${messageOf(caught)}`,
+        );
       });
   }
 
@@ -1070,7 +1126,9 @@ export class BackupService {
     const states = await this.readAllStateFiles();
     for (const jobId of states.keys()) {
       await this.reconcileJobFromState(jobId).catch((caught) =>
-        this.logger.warn(`重放备份任务记录失败 #${jobId}: ${messageOf(caught)}`),
+        this.logger.warn(
+          `重放备份任务记录失败 #${jobId}: ${messageOf(caught)}`,
+        ),
       );
     }
   }
@@ -1078,13 +1136,17 @@ export class BackupService {
   private async loadJob(jobId: string): Promise<BackupJobSummary> {
     const [state, row] = await Promise.all([
       readJobState(this.paths.backupJobsDir, jobId),
-      this.prisma.backupJob.findUnique({ where: { id: jobId } }).catch(() => null),
+      this.prisma.backupJob
+        .findUnique({ where: { id: jobId } })
+        .catch(() => null),
     ]);
     if (!state && !row) throw new NotFoundException("备份任务不存在");
     return this.mergeJob(jobId, state, row);
   }
 
-  private async readAllStateFiles(): Promise<Map<string, MigrationJobFileState>> {
+  private async readAllStateFiles(): Promise<
+    Map<string, MigrationJobFileState>
+  > {
     const map = new Map<string, MigrationJobFileState>();
     try {
       const entries = await readdir(this.paths.backupJobsDir, {

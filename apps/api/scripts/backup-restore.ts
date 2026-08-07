@@ -274,9 +274,9 @@ async function verifyTables(
   const mismatches: string[] = [];
   for (const [table, expected] of Object.entries(manifest.tables)) {
     if (table === "_prisma_migrations") continue;
-    const result = (await prisma.$queryRawUnsafe(
-      `SELECT COUNT(*)::int AS count FROM "public"."${table}"`,
-    ).catch(() => null)) as Array<{ count: number }> | null;
+    const result = (await prisma
+      .$queryRawUnsafe(`SELECT COUNT(*)::int AS count FROM "public"."${table}"`)
+      .catch(() => null)) as Array<{ count: number }> | null;
     const actual = Number(result?.[0]?.count ?? -1);
     if (actual !== expected) {
       mismatches.push(`${table} 期望=${expected} 实际=${actual}`);
@@ -305,8 +305,7 @@ async function main() {
 
   // 前置校验（fail-closed）：确认语、备份目录、manifest 完整性。
   const expectedConfirm =
-    process.env.BACKUP_RESTORE_CONFIRM_PHRASE?.trim() ||
-    DEFAULT_CONFIRM_PHRASE;
+    process.env.BACKUP_RESTORE_CONFIRM_PHRASE?.trim() || DEFAULT_CONFIRM_PHRASE;
   if (args.confirm.trim() !== expectedConfirm) {
     throw new Error(`确认语不正确：请输入 ${expectedConfirm}`);
   }
@@ -337,7 +336,9 @@ async function main() {
   });
 
   // 仅当任务开启维护时才记录 preExisting，finally 只关闭自己开的。
-  const preExistingMaintenance = (await readMaintenanceStateFile(maintenanceFile)).enabled;
+  const preExistingMaintenance = (
+    await readMaintenanceStateFile(maintenanceFile)
+  ).enabled;
   if (!preExistingMaintenance) {
     await writeMaintenanceStateFile(maintenanceFile, {
       enabled: true,
@@ -384,7 +385,9 @@ async function main() {
       throw new Error(`还原后行数对账失败：${mismatches.join("；")}`);
     }
     if (!superAdmin) {
-      throw new Error("还原后没有正常状态的最高管理员，拒绝完成（fail-closed）");
+      throw new Error(
+        "还原后没有正常状态的最高管理员，拒绝完成（fail-closed）",
+      );
     }
 
     await state("done", {
