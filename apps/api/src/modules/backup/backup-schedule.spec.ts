@@ -3,6 +3,7 @@ import {
   periodFireTime,
   retentionCandidates,
   shouldRunAutoBackup,
+  vercelFireWindowMs,
 } from "./backup-schedule";
 
 // 调度时刻按本地时区解释（用户设置的「3:00」即本地 3:00），测试全部用本地时间构造。
@@ -148,6 +149,88 @@ describe("shouldRunAutoBackup（固定时刻语义）", () => {
           lastAutoBackupAt: at(1, 20),
         },
         FRIDAY_1030,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("shouldRunAutoBackup（Vercel 周期宽窗口）", () => {
+  // 默认 10 分钟窗口在 3:00 后 23 分钟（cron 3:23 实际触发）会被判为错过，
+  // 周期宽窗口（每天 24h / 每周 7d）让每日一次 cron 的到点后任意 tick 都能触发。
+  const windowMs = vercelFireWindowMs({ scheduleWeekday: null });
+
+  it("vercelFireWindowMs：每天 → 24h，每周 → 7d", () => {
+    expect(vercelFireWindowMs({ scheduleWeekday: null })).toBe(
+      24 * 3600 * 1000,
+    );
+    expect(vercelFireWindowMs({ scheduleWeekday: 3 })).toBe(
+      7 * 24 * 3600 * 1000,
+    );
+  });
+
+  it("到点后 23 分钟（超过 10 分钟严格窗口）仍在宽窗口内 → 跑", () => {
+    expect(
+      shouldRunAutoBackup(
+        {
+          ...base,
+          lastAutoBackupAt: at(6, 3),
+        },
+        at(7, 3, 23),
+        windowMs,
+      ),
+    ).toBe(true);
+  });
+
+  it("本班已跑（今天 3:23 完成，上次晚于本周期调度点）→ 不跑", () => {
+    expect(
+      shouldRunAutoBackup(
+        {
+          ...base,
+          lastAutoBackupAt: at(7, 3, 23),
+        },
+        at(7, 3, 23),
+        windowMs,
+      ),
+    ).toBe(false);
+  });
+
+  it("错过当天班（cron 停机）后恢复，宽窗口内 → 补跑当天（上次 8 月 6 日，周五 10:30）", () => {
+    expect(
+      shouldRunAutoBackup(
+        {
+          ...base,
+          lastAutoBackupAt: at(6, 10),
+        },
+        FRIDAY_1030,
+        windowMs,
+      ),
+    ).toBe(true);
+  });
+
+  it("每周：本周三到点后任意一天仍在宽窗口内，未跑 → 跑（周五 10:30）", () => {
+    expect(
+      shouldRunAutoBackup(
+        {
+          ...base,
+          scheduleWeekday: 3,
+          lastAutoBackupAt: new Date(at(5, 3).getTime() - 7 * 24 * 3600 * 1000),
+        },
+        FRIDAY_1030,
+        vercelFireWindowMs({ scheduleWeekday: 3 }),
+      ),
+    ).toBe(true);
+  });
+
+  it("每周：本周已跑过（周三 9:00 完成）→ 周五 10:30 不重复跑", () => {
+    expect(
+      shouldRunAutoBackup(
+        {
+          ...base,
+          scheduleWeekday: 3,
+          lastAutoBackupAt: at(5, 9),
+        },
+        FRIDAY_1030,
+        vercelFireWindowMs({ scheduleWeekday: 3 }),
       ),
     ).toBe(false);
   });

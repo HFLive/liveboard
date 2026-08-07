@@ -42,6 +42,12 @@ dump 排除表：`PendingUpload`（短期上传预留）、`ServerMetricSample`�
 - vercel：`vercel.json` crons 打 `GET /internal/cron/backup`（Bearer
   `CRON_SECRET` + Redis NX 锁 `liveboard:cron:backup-tick`）→ 同一 `tick()`；
   由 executor 分块推进任务（每 tick ≤20 个对象，保证函数在 60s 内完成）。
+  手动备份/回滚链创建后立即在请求内推进到完成（每棒 ≤45s 预算，预算耗尽
+  自动接力续跑：函数自调用 `internal/cron/backup?jobId=<id>`（Bearer
+  `CRON_SECRET`），每棒一个新函数实例继续推进同一任务，直至完成；本轮
+  无进展不接力，接力缺 URL/密钥或断链时由每日 cron 兜底收尾）。自动备份
+  由 cron tick 用周期宽窗口判定并创建（cron 每日一次，到点后的任意 tick
+  都算窗口内，同周期只跑一次）。
   Vercel Hobby 计划 cron 最小每日一次，比用户设置频率粗时后台页面提示。
 
 ## 执行器

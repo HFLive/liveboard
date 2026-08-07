@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -95,6 +96,8 @@ const TICK_LOCK_TTL_MS = 5 * 60 * 1000;
  * Vercel 是 Serverless，禁用常驻定时器，由 vercel.json crons 打
  * internal/cron/backup 端点触发同一 tick()（应用层按 lastAutoBackupAt 判定
  * 是否该跑）；self_hosted 的 tick 由 BackupService 进程内 setInterval 驱动。
+ * 带 ?jobId=<id> 的请求是任务的接力续跑（self-invocation），只推进该任务，
+ * 不走 tick 锁；认证同为 CRON_SECRET。
  * - 认证：`Authorization: Bearer ${CRON_SECRET}`，恒定时间比较。
  * - Redis 分布式锁防止重复执行；调度判定幂等。
  * - 未授权一律 401，不返回任何业务信息。
@@ -185,9 +188,17 @@ export class BackupController {
   }
 
   @Get("internal/cron/backup")
-  async cronTick(@Headers("authorization") authorization?: string) {
+  async cronTick(
+    @Headers("authorization") authorization?: string,
+    @Query("jobId") jobId?: string,
+  ) {
     if (!this.isAuthorized(authorization)) {
       throw new UnauthorizedException();
+    }
+    // 接力续跑（self-invocation）：只推进指定任务，不走 tick 锁——
+    // 同一任务的并发由 per-job Redis 锁串行化，无进展的棒不会自续。
+    if (jobId) {
+      return { ok: true, ...(await this.backup.continueVercelJob(jobId)) };
     }
     const client = await this.redis.getClient().catch(() => null);
     let releaseLock: (() => Promise<void>) | null = null;

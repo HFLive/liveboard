@@ -55,6 +55,18 @@ export function periodFireTime(
 export const SCHEDULE_FIRE_WINDOW_MS = 10 * 60 * 1000;
 
 /**
+ * Vercel 的触发窗口 = 整个周期（每天 → 24h，每周 → 7d）：cron 最小每日一次，
+ * 到点后的任何一次 tick 都在窗口内执行。fire 永远取当前周期的调度点，
+ * 因此窗口内只受 lastAutoBackupAt < fire 约束：同周期只跑一次，
+ * cron 停机错过当天班时恢复后补跑当天。
+ */
+export function vercelFireWindowMs(
+  settings: Pick<BackupScheduleState, "scheduleWeekday">,
+): number {
+  return settings.scheduleWeekday == null ? DAY_MS : WEEK_MS;
+}
+
+/**
  * 自动备份调度判定（严格到点，错过跳过）：
  * - 未启用 → 不跑；
  * - 当前周期还没到调度时刻 → 不跑；
@@ -62,15 +74,18 @@ export const SCHEDULE_FIRE_WINDOW_MS = 10 * 60 * 1000;
  * - 从未跑过（lastAutoBackupAt 为空）→ 不跑。首次启用由 updateSettings
  *   把 lastAutoBackupAt 置为本周期调度点（视为本班已跑），从下一周期开始；
  * - 到点窗口内且上次备份早于本周期调度点 → 跑。
+ * windowMs 由调用方按平台传入：self_hosted 用 10 分钟严格窗口，
+ * Vercel 用 vercelFireWindowMs（周期宽窗口，配合每日一次 cron）。
  */
 export function shouldRunAutoBackup(
   settings: BackupScheduleState,
   now: Date,
+  windowMs: number = SCHEDULE_FIRE_WINDOW_MS,
 ): boolean {
   if (!settings.enabled) return false;
   const fire = periodFireTime(settings, now);
   const elapsed = now.getTime() - fire.getTime();
-  if (elapsed < 0 || elapsed > SCHEDULE_FIRE_WINDOW_MS) return false;
+  if (elapsed < 0 || elapsed > windowMs) return false;
   if (settings.lastAutoBackupAt == null) return false;
   const last = new Date(settings.lastAutoBackupAt).getTime();
   if (!Number.isFinite(last)) return false;

@@ -647,6 +647,23 @@ export function BackupClient() {
                             </button>
                           </div>
                         )}
+                      {running &&
+                        job.kind !== "restore" &&
+                        info?.deploymentTarget === "vercel" && (
+                          <div className="backup-job-actions">
+                            <button
+                              className="button danger small"
+                              onClick={() => {
+                                setError(null);
+                                setDeleteTarget(job);
+                              }}
+                              title="删除该备份任务（等待中/执行中，内容会被完整清理）"
+                            >
+                              <Trash2 size={14} />
+                              删除
+                            </button>
+                          </div>
+                        )}
                     </div>
                   );
                 })}

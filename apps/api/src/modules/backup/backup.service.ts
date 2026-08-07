@@ -25,7 +25,10 @@ import {
   ensureBackupDirs,
   type BackupDataPaths,
 } from "./backup-dirs";
-import { BackupVercelExecutor } from "./backup-vercel-executor";
+import {
+  BackupVercelExecutor,
+  VERCEL_ADVANCE_BUDGET_MS,
+} from "./backup-vercel-executor";
 import {
   initialLastAutoBackupAt,
   RETENTION_MAX,
@@ -38,6 +41,7 @@ import {
   SCHEDULE_WEEKDAY_MIN,
   retentionCandidates,
   shouldRunAutoBackup,
+  vercelFireWindowMs,
 } from "./backup-schedule";
 
 export type BackupJobKind = "auto" | "manual" | "restore";
@@ -178,7 +182,22 @@ export class BackupService {
       this.logger.warn(`tick 兜底失败: ${messageOf(caught)}`);
     }
     if (this.isVercelDeployment()) {
-      // Vercel 分块任务推进由 cron 驱动（backup-vercel-executor 状态机）。
+      // Vercel：自动备份创建与分块推进都由 cron 驱动。cron 最小每日一次，
+      // 判定用周期宽窗口（到点后的任何一次 tick 都算窗口内，同周期只跑
+      // 一次）；到点则先创建自动备份任务，随后与存量任务一起推进。
+      const settings = await this.getSettingsRow().catch(() => null);
+      if (
+        settings &&
+        shouldRunAutoBackup(settings, new Date(), vercelFireWindowMs(settings))
+      ) {
+        try {
+          await this.startAutoBackup(null);
+        } catch (caught) {
+          this.logger.warn(`Vercel 自动备份启动失败: ${messageOf(caught)}`);
+        }
+      }
+      // 分块推进（backup-vercel-executor 状态机）：新建任务与存量任务
+      // 各推进一块；请求内创建的任务已由 startAutoBackup 推进到完成。
       await this.vercelExecutor
         .advance()
         .catch((caught) =>
@@ -643,7 +662,13 @@ export class BackupService {
       throw new BadRequestException("回滚记录是操作日志，不能删除");
     }
     const status = state?.status ?? row?.status;
-    if (status === "pending" || status === "running") {
+    // Vercel：允许删除等待中/执行中的任务——pending 尚未产生任何资源，
+    // running 由 deleteBackupNow 全量清理（Neon 分支、R2 对象、Redis 锁）。
+    // 自托管有本地子进程与文件级互斥，维持原限制，等任务结束再删。
+    if (
+      !this.isVercelDeployment() &&
+      (status === "pending" || status === "running")
+    ) {
       throw new ConflictException("备份正在执行中，请等待其完成后删除");
     }
     // 引用保护：正在排队/执行的回滚不能丢失来源备份。
@@ -676,6 +701,17 @@ export class BackupService {
 
   // ---- 任务启动 -------------------------------------------------------------
 
+  /**
+   * 接力续跑入口：self-invocation 打 internal/cron/backup?jobId=<id> 时
+   * 只推进指定任务（不跑整轮 tick），让手动备份/回滚链逐棒推进到完成。
+   * 自托管任务由常驻 tick 驱动，不接受该入口。
+   */
+  async continueVercelJob(jobId: string): Promise<{ continued: boolean }> {
+    if (!this.isVercelDeployment()) return { continued: false };
+    await this.vercelExecutor.advanceUntilFinished(jobId);
+    return { continued: true };
+  }
+
   /** 手动备份：立即创建一个 manual 任务并 spawn 执行。 */
   async startManualBackup(
     userId: string | null,
@@ -694,8 +730,14 @@ export class BackupService {
           : settings.includeObjects;
       const job = await this.createJobRow(user.id, "manual", includeObjects);
       if (this.isVercelDeployment()) {
-        // Vercel：不 spawn，由 executor 分块推进（backup-vercel-executor）。
+        // Vercel：不 spawn，创建后立即在请求内分块推进到完成（预算内，
+        // 见 backup-vercel-executor.advanceUntilFinished），不再等每日 cron。
         spawned = true;
+        await this.vercelExecutor
+          .advanceUntilFinished(job.id)
+          .catch((caught) =>
+            this.logger.warn(`Vercel 手动备份推进失败: ${messageOf(caught)}`),
+          );
         return await this.loadJob(job.id);
       }
       this.spawnScript(
@@ -798,10 +840,24 @@ export class BackupService {
           options.confirm.trim(),
         );
       } else {
-        // Vercel：链由 executor 推进（保护备份完成后 wakePendingRestores 唤醒）。
+        // Vercel：链由 executor 推进（保护备份完成后 wakePendingRestores
+        // 唤醒回滚）。两条任务在请求内立即推进，共享同一预算（合计不超
+        // Vercel 函数 60s 上限）；预算耗尽自动接力续跑（self-invocation），
+        // 直至完成，断链时由每日 cron 兜底。
         this.logger.log(
           `Vercel 回滚链已建立：保护备份 ${preBackup.id} → 回滚 ${restoreRow.id}`,
         );
+        const chainDeadline = Date.now() + VERCEL_ADVANCE_BUDGET_MS;
+        await this.vercelExecutor
+          .advanceUntilFinished(preBackup.id, chainDeadline)
+          .catch((caught) =>
+            this.logger.warn(`Vercel 保护备份推进失败: ${messageOf(caught)}`),
+          );
+        await this.vercelExecutor
+          .advanceUntilFinished(restoreRow.id, chainDeadline)
+          .catch((caught) =>
+            this.logger.warn(`Vercel 回滚推进失败: ${messageOf(caught)}`),
+          );
       }
       return {
         preBackup: await this.loadJob(preBackup.id),
@@ -885,8 +941,13 @@ export class BackupService {
         settings.includeObjects,
       );
       if (this.isVercelDeployment()) {
-        // Vercel：不 spawn，由 executor 分块推进。
+        // Vercel：不 spawn，创建后立即在请求内分块推进到完成（预算内）。
         spawned = true;
+        await this.vercelExecutor
+          .advanceUntilFinished(job.id)
+          .catch((caught) =>
+            this.logger.warn(`Vercel 自动备份推进失败: ${messageOf(caught)}`),
+          );
         return;
       }
       this.spawnScript(
