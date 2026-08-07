@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from "@nestjs/common";
 import { Readable } from "node:stream";
+import sharp from "sharp";
 import type { PermissionsService } from "../permissions/permissions.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { StorageService } from "../storage/storage.service";
@@ -819,6 +820,8 @@ describe("AssetsService direct upload", () => {
   const backend = {
     name: "oss" as const,
     statObject: jest.fn(),
+    getObject: jest.fn(),
+    putObject: jest.fn(),
     removeObject: jest.fn(),
   };
   const storage = {
@@ -871,6 +874,8 @@ describe("AssetsService direct upload", () => {
     storage.verifyAndFinalizePendingObject.mockResolvedValue(undefined);
     storage.discardPendingUpload.mockResolvedValue(undefined);
     backend.statObject.mockResolvedValue({ size: 5 });
+    backend.getObject.mockResolvedValue(Readable.from([Buffer.from("x")]));
+    backend.putObject.mockResolvedValue(undefined);
     backend.removeObject.mockResolvedValue(undefined);
     permissions.getEffectiveLevelForFile.mockResolvedValue("editor");
     permissions.getEffectiveLevelForFolder.mockResolvedValue("editor");
@@ -915,6 +920,7 @@ describe("AssetsService direct upload", () => {
       "oss",
       expect.stringMatching(/^workspace-1\/\d{4}-\d{2}-\d{2}\/.+-notes\.txt$/),
       { sizeBytes: 5, mimeType: "text/plain" },
+      undefined, // opts（expirySeconds 可选，默认走后端常量）
     );
     expect(prisma.pendingUpload.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -1077,6 +1083,149 @@ describe("AssetsService direct upload", () => {
       service.abortAssetUpload("user-1", "upload-1"),
     ).resolves.toEqual({ ok: true });
     expect(storage.discardPendingUpload).not.toHaveBeenCalled();
+  });
+
+  it("compressed confirm keeps non-image files on the copy path", async () => {
+    const tx = {
+      user: { findUnique: jest.fn().mockResolvedValue({ storageQuotaBytes: 1024 }) },
+      workspace: { findUnique: jest.fn().mockResolvedValue(null) },
+      fileAsset: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { sizeBytes: 0 } }),
+        create: jest.fn().mockResolvedValue({ id: "asset-1" }),
+      },
+      pendingUpload: { delete: jest.fn().mockResolvedValue(pendingRow) },
+    };
+    prisma.$transaction.mockImplementation((callback) => callback(tx));
+
+    const result = await service.confirmAssetUploadCompressed(
+      "user-1",
+      "upload-1",
+    );
+
+    expect(result.url).toContain("/assets/asset-1");
+    expect(storage.verifyAndFinalizePendingObject).toHaveBeenCalledWith(
+      pendingRow,
+    );
+    expect(tx.fileAsset.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        storageKey: pendingRow.storageKey,
+        filename: "notes.txt",
+        mimeType: "text/plain",
+        sizeBytes: 5,
+      }),
+    });
+    expect(backend.getObject).not.toHaveBeenCalled();
+    expect(backend.putObject).not.toHaveBeenCalled();
+  });
+
+  it("compressed confirm compresses images to WebP and writes the final key", async () => {
+    const png = await sharp({
+      create: {
+        width: 2000,
+        height: 1000,
+        channels: 3,
+        background: { r: 120, g: 60, b: 30 },
+      },
+    })
+      .png()
+      .toBuffer();
+    prisma.pendingUpload.findUnique.mockResolvedValue({
+      ...pendingRow,
+      filename: "photo.png",
+      mimeType: "image/png",
+      sizeBytes: png.length,
+    });
+    backend.statObject.mockResolvedValue({ size: png.length });
+    backend.getObject.mockResolvedValue(Readable.from([png]));
+
+    const tx = {
+      user: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ storageQuotaBytes: 100 * 1024 * 1024 }),
+      },
+      workspace: { findUnique: jest.fn().mockResolvedValue(null) },
+      fileAsset: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { sizeBytes: 0 } }),
+        create: jest.fn().mockResolvedValue({ id: "asset-1" }),
+      },
+      pendingUpload: { delete: jest.fn().mockResolvedValue(pendingRow) },
+    };
+    prisma.$transaction.mockImplementation((callback) => callback(tx));
+
+    const result = await service.confirmAssetUploadCompressed(
+      "user-1",
+      "upload-1",
+    );
+
+    expect(result.url).toContain("/assets/asset-1");
+    expect(backend.getObject).toHaveBeenCalledWith(pendingRow.storageKey);
+    expect(storage.verifyAndFinalizePendingObject).not.toHaveBeenCalled();
+    expect(tx.fileAsset.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        kind: "embedded",
+        fileId: "file-1",
+        filename: "photo.webp",
+        mimeType: "image/webp",
+        sizeBytes: expect.any(Number),
+      }),
+    });
+    expect(tx.pendingUpload.delete).toHaveBeenCalledWith({
+      where: { id: "upload-1" },
+    });
+    expect(backend.putObject).toHaveBeenCalledTimes(1);
+    const [, data, mimeType] = backend.putObject.mock
+      .calls[0] as unknown as [string, Buffer, string];
+    expect(mimeType).toBe("image/webp");
+    expect(data.length).toBeLessThan(png.length);
+    expect(backend.removeObject).toHaveBeenCalledWith(pendingRow.storageKey);
+  });
+
+  it("compressed confirm falls back to the copy path when the image cannot be decoded", async () => {
+    const brokenRow = {
+      ...pendingRow,
+      filename: "broken.png",
+      mimeType: "image/png",
+    };
+    prisma.pendingUpload.findUnique.mockResolvedValue(brokenRow);
+    backend.getObject.mockResolvedValue(
+      Readable.from([Buffer.from("not-an-image")]),
+    );
+    const tx = {
+      user: { findUnique: jest.fn().mockResolvedValue({ storageQuotaBytes: 1024 }) },
+      workspace: { findUnique: jest.fn().mockResolvedValue(null) },
+      fileAsset: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { sizeBytes: 0 } }),
+        create: jest.fn().mockResolvedValue({ id: "asset-1" }),
+      },
+      pendingUpload: { delete: jest.fn().mockResolvedValue(pendingRow) },
+    };
+    prisma.$transaction.mockImplementation((callback) => callback(tx));
+
+    const result = await service.confirmAssetUploadCompressed(
+      "user-1",
+      "upload-1",
+    );
+
+    expect(result.url).toContain("/assets/asset-1");
+    expect(storage.verifyAndFinalizePendingObject).toHaveBeenCalledWith(
+      brokenRow,
+    );
+    expect(backend.putObject).not.toHaveBeenCalled();
+  });
+
+  it("compressed confirm discards the object on size mismatch", async () => {
+    backend.statObject.mockResolvedValue({ size: 4 });
+
+    await expect(
+      service.confirmAssetUploadCompressed("user-1", "upload-1"),
+    ).rejects.toThrow("上传内容不完整,请重新上传");
+    expect(storage.discardPendingUpload).toHaveBeenCalledWith(pendingRow);
+    expect(backend.getObject).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
 

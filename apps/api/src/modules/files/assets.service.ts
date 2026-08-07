@@ -24,6 +24,7 @@ import {
 import { DEFAULT_MEMBER_ATTACHMENT_QUOTA_BYTES } from "../../common/storage-quota";
 import { requireResourceName } from "../../common/resource-name";
 import { putObjectWithCompensation } from "../storage/upload-compensation";
+import { compressImageBuffer } from "./image-compress";
 
 export interface UploadedAssetFile {
   originalname: string;
@@ -156,7 +157,11 @@ export class AssetsService {
    * 上传指令(form_post | put 判别联合)。配额与重名的原子保证在 confirm
    * 时由 reserveAssetWithinQuota 完成,这里只做 UX 预检。
    */
-  async signAssetUpload(userId: string | null, input: SignAssetUploadInput) {
+  async signAssetUpload(
+    userId: string | null,
+    input: SignAssetUploadInput,
+    opts?: { expirySeconds?: number },
+  ) {
     if (!userId) {
       throw new UnauthorizedException("Missing session");
     }
@@ -184,10 +189,15 @@ export class AssetsService {
       backend.name,
       storageKey,
     );
-    const instruction = await this.storage.signUpload(backend.name, objectKey, {
-      sizeBytes: input.sizeBytes,
-      mimeType,
-    });
+    const instruction = await this.storage.signUpload(
+      backend.name,
+      objectKey,
+      {
+        sizeBytes: input.sizeBytes,
+        mimeType,
+      },
+      opts,
+    );
     if (!instruction) {
       throw new NotImplementedException(
         "当前存储配置不支持签名直入,请改用服务器中转上传",
@@ -258,6 +268,108 @@ export class AssetsService {
         },
         { pendingUploadId: pending.id },
       );
+      return {
+        ...asset,
+        url: this.getAssetUrl(asset.id),
+      };
+    } catch (caught) {
+      await this.discardPendingUpload(pending);
+      throw caught;
+    }
+  }
+
+  /**
+   * MCP 直传确认（压缩版）：下载临时对象 → 服务端压缩图片（WebP 1600px
+   * q0.82，与 Web 端 compressDocumentImages 一致）→ 写正式 Key。
+   * 非图片或解码失败走 verifyAndFinalizePendingObject 复制路径，完全复用
+   * confirmAssetUpload 的行为；任一失败由 discardPendingUpload 兜底清理。
+   */
+  async confirmAssetUploadCompressed(userId: string | null, uploadId: string) {
+    if (!userId) {
+      throw new UnauthorizedException("Missing session");
+    }
+    const pending = await this.requirePendingUpload(userId, uploadId, "asset");
+
+    try {
+      const backend = await this.storage.backendFor(pending.storageBackend);
+      const objectKey = this.storage.objectKeyForPendingUpload(
+        pending.storageBackend,
+        pending.storageKey,
+      );
+      const stat = await backend.statObject(objectKey).catch(() => null);
+      if (!stat) {
+        throw new BadRequestException(
+          "对象存储中未找到已上传的文件,请重新上传",
+        );
+      }
+      if (stat.size !== pending.sizeBytes) {
+        throw new BadRequestException("上传内容不完整,请重新上传");
+      }
+
+      const compressed = pending.mimeType.startsWith("image/")
+        ? await compressImageBuffer(
+            await streamToBuffer(await backend.getObject(objectKey)),
+            pending.mimeType,
+            pending.filename,
+          )
+        : null;
+
+      if (!compressed) {
+        await this.storage.verifyAndFinalizePendingObject(pending);
+        const asset = await this.reserveAssetWithinQuota(
+          userId,
+          pending.sizeBytes,
+          {
+            workspaceId: pending.workspaceId,
+            folderId: pending.folderId,
+            fileId: pending.fileId,
+            storageKey: pending.storageKey,
+            storageBackend: pending.storageBackend,
+            kind: pending.fileId ? "embedded" : "standalone",
+            filename: pending.filename,
+            mimeType: pending.mimeType,
+            sizeBytes: pending.sizeBytes,
+            uploadedBy: userId,
+          },
+          { pendingUploadId: pending.id },
+        );
+        return {
+          ...asset,
+          url: this.getAssetUrl(asset.id),
+        };
+      }
+
+      const storageKey = `${pending.workspaceId}/${new Date()
+        .toISOString()
+        .slice(0, 10)}/${randomUUID()}-${sanitizeStorageFilename(
+        compressed.filename,
+      )}`;
+      const asset = await this.reserveAssetWithinQuota(
+        userId,
+        compressed.buffer.length,
+        {
+          workspaceId: pending.workspaceId,
+          folderId: pending.folderId,
+          fileId: pending.fileId,
+          storageKey,
+          storageBackend: pending.storageBackend,
+          kind: pending.fileId ? "embedded" : "standalone",
+          filename: compressed.filename,
+          mimeType: compressed.mimeType,
+          sizeBytes: compressed.buffer.length,
+          uploadedBy: userId,
+        },
+        { pendingUploadId: pending.id },
+      );
+      await putObjectWithCompensation({
+        backend,
+        storageKey,
+        data: compressed.buffer,
+        mimeType: compressed.mimeType,
+        releaseReservation: () =>
+          this.prisma.fileAsset.delete({ where: { id: asset.id } }),
+      });
+      await backend.removeObject(objectKey).catch(() => undefined);
       return {
         ...asset,
         url: this.getAssetUrl(asset.id),
@@ -1427,6 +1539,15 @@ export class AssetsService {
     // 后图片即失效。前端渲染时再经 apiResourceUrl 解析到当前 API 入口。
     return `/assets/${assetId}`;
   }
+}
+
+/** \u628a\u5bf9\u8c61\u5b58\u50a8\u8fd4\u56de\u7684\u8bfb\u6d41\u6536\u96c6\u4e3a Buffer\uff08\u538b\u7f29\u786e\u8ba4\u8def\u5f84\u4e0b\u8f7d\u4e34\u65f6\u5bf9\u8c61\u7528\uff09\u3002 */
+async function streamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
 }
 
 function sanitizeStorageFilename(filename: string) {

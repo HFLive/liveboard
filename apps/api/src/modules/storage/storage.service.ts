@@ -560,6 +560,7 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     storageBackend: StorageBackendName,
     key: string,
     options: { sizeBytes: number; mimeType: string },
+    opts?: { expirySeconds?: number },
   ): Promise<ObjectUploadInstruction | null> {
     const configuredUploadMode = await this.activeUploadMode();
     const backend = await this.backendFor(storageBackend);
@@ -600,9 +601,10 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
 
     if (uploadMode !== "direct") return null;
     const expirySeconds =
-      storageBackend === "r2"
+      opts?.expirySeconds ??
+      (storageBackend === "r2"
         ? R2_PRESIGN_PUT_TTL_SECONDS
-        : PRESIGN_EXPIRY_SECONDS;
+        : PRESIGN_EXPIRY_SECONDS);
     const expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
     if (storageBackend === "r2") {
       const put = await backend.presignPut(key, {

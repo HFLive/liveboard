@@ -6,6 +6,9 @@ import {
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
+import type { ConfigService } from "@nestjs/config";
+import sharp from "sharp";
+import type { AssetsService } from "../files/assets.service";
 import type { FilesService } from "../files/files.service";
 import { McpToolsService } from "./mcp-tools.service";
 
@@ -27,7 +30,13 @@ describe("McpToolsService", () => {
     updateBlock: jest.fn(),
     deleteBlock: jest.fn(),
     reorderBlocks: jest.fn(),
+    // AssetsService 方法（同一 mock 对象兼作两个构造参数）
+    uploadAsset: jest.fn(),
+    signAssetUpload: jest.fn(),
+    confirmAssetUploadCompressed: jest.fn(),
+    abortAssetUpload: jest.fn(),
   };
+  const config = { get: jest.fn() };
 
   /** authProvider：extra.authInfo?.userId 透传，模拟 HTTP transport 行为。 */
   const getUserId = (extra: unknown) =>
@@ -73,9 +82,14 @@ describe("McpToolsService", () => {
     return promise;
   }
 
-  async function connect() {
+  async function connect(deploymentTarget = "self_hosted") {
+    config.get.mockImplementation((key: string) =>
+      key === "DEPLOYMENT_TARGET" ? deploymentTarget : undefined,
+    );
     const server = new McpToolsService(
       files as unknown as FilesService,
+      files as unknown as AssetsService,
+      config as unknown as ConfigService,
     ).createServer(getUserId);
     await server.connect(serverTransport);
     await rpc("initialize", {
@@ -86,7 +100,7 @@ describe("McpToolsService", () => {
     return server;
   }
 
-  it("registers all 12 document tools", async () => {
+  it("registers all 16 document tools", async () => {
     await connect();
     const result = await rpc("tools/list", {});
 
@@ -105,6 +119,10 @@ describe("McpToolsService", () => {
         "update_block",
         "delete_block",
         "reorder_blocks",
+        "upload_asset",
+        "upload_asset_abort",
+        "upload_asset_confirm",
+        "upload_asset_url",
       ].sort(),
     );
   });
@@ -248,5 +266,309 @@ describe("McpToolsService", () => {
     expect(files.reorderBlocks).toHaveBeenCalledWith("user-1", "file-1", {
       blockIds: ["b2", "b1"],
     });
+  });
+
+  it("decodes base64 and relays non-image files unchanged", async () => {
+    await connect();
+    files.uploadAsset.mockResolvedValue({
+      id: "asset-1",
+      url: "/assets/asset-1",
+    });
+
+    const result = await rpc(
+      "tools/call",
+      {
+        name: "upload_asset",
+        arguments: {
+          fileId: "file-1",
+          filename: "a.txt",
+          mimeType: "text/plain",
+          data: Buffer.from("hello").toString("base64"),
+        },
+      },
+      { userId: "user-1" },
+    );
+
+    expect(result.result).not.toHaveProperty("isError", true);
+    expect(files.uploadAsset).toHaveBeenCalledWith(
+      "user-1",
+      { fileId: "file-1", folderId: undefined },
+      {
+        originalname: "a.txt",
+        mimetype: "text/plain",
+        size: 5,
+        buffer: Buffer.from("hello"),
+      },
+    );
+  });
+
+  it("accepts data: URL prefixes and compresses images to WebP", async () => {
+    await connect();
+    files.uploadAsset.mockResolvedValue({
+      id: "asset-1",
+      url: "/assets/asset-1",
+    });
+    const png = await sharp({
+      create: {
+        width: 2000,
+        height: 1000,
+        channels: 3,
+        background: { r: 120, g: 60, b: 30 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    const result = await rpc(
+      "tools/call",
+      {
+        name: "upload_asset",
+        arguments: {
+          fileId: "file-1",
+          filename: "photo.png",
+          mimeType: "image/png",
+          data: `data:image/png;base64,${png.toString("base64")}`,
+        },
+      },
+      { userId: "user-1" },
+    );
+
+    expect(result.result).not.toHaveProperty("isError", true);
+    expect(files.uploadAsset).toHaveBeenCalledTimes(1);
+    const [, , file] = files.uploadAsset.mock
+      .calls[0] as unknown as [
+      string,
+      { fileId: string; folderId?: string },
+      { originalname: string; mimetype: string; size: number; buffer: Buffer },
+    ];
+    expect(file.originalname).toBe("photo.webp");
+    expect(file.mimetype).toBe("image/webp");
+    expect(file.size).toBe(file.buffer.length);
+    expect(file.buffer.length).toBeLessThan(png.length);
+  });
+
+  it("rejects invalid base64 without calling the service", async () => {
+    await connect();
+
+    const result = await rpc(
+      "tools/call",
+      {
+        name: "upload_asset",
+        arguments: {
+          fileId: "file-1",
+          filename: "a.png",
+          data: "!!not-base64!!",
+        },
+      },
+      { userId: "user-1" },
+    );
+
+    expect(result.result).toMatchObject({
+      isError: true,
+      content: [
+        { type: "text", text: "[BAD_REQUEST] 文件内容不是有效的 base64" },
+      ],
+    });
+    expect(files.uploadAsset).not.toHaveBeenCalled();
+  });
+
+  it("requires fileId or folderId for upload_asset", async () => {
+    await connect();
+
+    const result = await rpc(
+      "tools/call",
+      {
+        name: "upload_asset",
+        arguments: {
+          filename: "a.png",
+          data: Buffer.from("hi").toString("base64"),
+        },
+      },
+      { userId: "user-1" },
+    );
+
+    expect(result.result).toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "[BAD_REQUEST] fileId 与 folderId 至少提供一项（fileId=内嵌到文档，folderId=独立附件）",
+        },
+      ],
+    });
+    expect(files.uploadAsset).not.toHaveBeenCalled();
+  });
+
+  it("rejects upload_asset above the 7MB base64 cap", async () => {
+    await connect();
+
+    const result = await rpc(
+      "tools/call",
+      {
+        name: "upload_asset",
+        arguments: {
+          fileId: "file-1",
+          filename: "big.bin",
+          data: Buffer.alloc(7 * 1024 * 1024 + 1, 0x61).toString("base64"),
+        },
+      },
+      { userId: "user-1" },
+    );
+
+    expect(result.result).toMatchObject({
+      isError: true,
+      content: [
+        { type: "text", text: "[BAD_REQUEST] 文件超过 MCP 上传上限（7MB）" },
+      ],
+    });
+    expect(files.uploadAsset).not.toHaveBeenCalled();
+  });
+
+  it("redirects upload_asset to the direct flow on Vercel", async () => {
+    await connect("vercel");
+
+    const result = await rpc(
+      "tools/call",
+      {
+        name: "upload_asset",
+        arguments: {
+          fileId: "file-1",
+          filename: "a.png",
+          data: Buffer.from("hi").toString("base64"),
+        },
+      },
+      { userId: "user-1" },
+    );
+
+    expect(result.result).toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "[ERROR] 当前部署（Vercel）不支持 base64 中转上传，请改用 upload_asset_url → HTTP PUT → upload_asset_confirm",
+        },
+      ],
+    });
+    expect(files.uploadAsset).not.toHaveBeenCalled();
+  });
+
+  it("redirects upload_asset_url to base64 relay on self-hosted", async () => {
+    await connect();
+
+    const result = await rpc(
+      "tools/call",
+      {
+        name: "upload_asset_url",
+        arguments: {
+          fileId: "file-1",
+          filename: "a.png",
+          sizeBytes: 100,
+        },
+      },
+      { userId: "user-1" },
+    );
+
+    expect(result.result).toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "[ERROR] 当前部署（自托管）请使用 upload_asset（base64 中转上传）",
+        },
+      ],
+    });
+    expect(files.signAssetUpload).not.toHaveBeenCalled();
+  });
+
+  it("signs direct uploads on Vercel with a 300s presign TTL", async () => {
+    await connect("vercel");
+    files.signAssetUpload.mockResolvedValue({
+      uploadId: "upload-1",
+      instruction: { transport: "put", url: "https://r2.example/obj", headers: [] },
+      expiresAt: "2026-08-08T00:00:00Z",
+    });
+
+    const result = await rpc(
+      "tools/call",
+      {
+        name: "upload_asset_url",
+        arguments: {
+          fileId: "file-1",
+          filename: "a.png",
+          sizeBytes: 100,
+          mimeType: "image/png",
+        },
+      },
+      { userId: "user-1" },
+    );
+
+    expect(result.result).not.toHaveProperty("isError", true);
+    expect(files.signAssetUpload).toHaveBeenCalledWith(
+      "user-1",
+      {
+        folderId: undefined,
+        fileId: "file-1",
+        filename: "a.png",
+        sizeBytes: 100,
+        mimeType: "image/png",
+      },
+      { expirySeconds: 300 },
+    );
+  });
+
+  it("rejects direct uploads above the 8MB single-PUT cap", async () => {
+    await connect("vercel");
+
+    const result = await rpc(
+      "tools/call",
+      {
+        name: "upload_asset_url",
+        arguments: {
+          fileId: "file-1",
+          filename: "big.png",
+          sizeBytes: 9 * 1024 * 1024,
+        },
+      },
+      { userId: "user-1" },
+    );
+
+    expect(result.result).toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "[BAD_REQUEST] MCP 直传仅支持单请求 PUT，文件不能超过 8MB，请压缩后重试或改用 Web 端上传",
+        },
+      ],
+    });
+    expect(files.signAssetUpload).not.toHaveBeenCalled();
+  });
+
+  it("confirms and aborts direct uploads", async () => {
+    await connect("vercel");
+    files.confirmAssetUploadCompressed.mockResolvedValue({
+      id: "asset-1",
+      url: "/assets/asset-1",
+    });
+    files.abortAssetUpload.mockResolvedValue({ ok: true });
+
+    const confirmed = await rpc(
+      "tools/call",
+      { name: "upload_asset_confirm", arguments: { uploadId: "upload-1" } },
+      { userId: "user-1" },
+    );
+    const aborted = await rpc(
+      "tools/call",
+      { name: "upload_asset_abort", arguments: { uploadId: "upload-1" } },
+      { userId: "user-1" },
+    );
+
+    expect(confirmed.result).not.toHaveProperty("isError", true);
+    expect(files.confirmAssetUploadCompressed).toHaveBeenCalledWith(
+      "user-1",
+      "upload-1",
+    );
+    expect(aborted.result).not.toHaveProperty("isError", true);
+    expect(files.abortAssetUpload).toHaveBeenCalledWith("user-1", "upload-1");
   });
 });
