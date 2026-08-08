@@ -78,6 +78,14 @@ super_admin 存在 → 关维护。**DROP 之后失败保持维护模式**（不
 
 - 进度双写：`BackupJob.progress` + Redis `liveboard:backup:job:<id>`（TTL 7d），
   回滚替换主库期间 UI 从 Redis 读。
+- 换库重建：Neon restoreBranch 会把主库替换成备份点快照，备份点之后创建的
+  任务行（回滚行/保护备份行）会被快照抹掉。executor 每次推进把行元数据
+  （kind、restoreFromId、protectJobId、includeObjects、isProtection）随进度
+  写 Redis；行缺失时按 Redis 状态重建（`recoverJobRow`）再继续推进，写入
+  一律 upsert（`upsertJobRow`）；restore/objects 阶段先修复源备份行
+  （manifest 从 Redis 进度重建、分支 id 按 `backup-<id>` 命名从 Neon 找回），
+  收尾时重建保护备份行（`repairProtectionRow`）。每日 cron 的 `advance()`
+  兜底扫描 Redis 里的孤儿执行中任务并接力续跑。
 - per-job Redis NX 锁防多实例双推进；阶段幂等（对象大小一致跳过）。
 - 回滚链：`POST /admin/backup/:id/restore` 创建 manual 保护备份行 + restore
   行；保护备份 finalize 后 `wakePendingRestores` 唤醒 restore。

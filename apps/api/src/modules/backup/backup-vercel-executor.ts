@@ -38,6 +38,41 @@ interface VercelJobProgress {
   }>;
   /** 非阻断性错误汇总（如对象回拷失败），成功后并入 manifest 展示。 */
   errors?: string[];
+  /**
+   * 回滚链标记：startRestore 写入，每个阶段的进度都携带它（换库后重建
+   * restore 行/保护备份行靠它互相定位，见 recoverJobRow/repairProtectionRow）。
+   */
+  protectJobId?: string | null;
+}
+
+/** 任务行（advance 各状态机共用的最小视图；findUnique/recover 都返回它）。 */
+interface VercelJobRow {
+  id: string;
+  kind: "auto" | "manual" | "restore";
+  status: "pending" | "running" | "succeeded" | "failed";
+  neonBranchId: string | null;
+  restoreFromId: string | null;
+  includeObjects: boolean;
+  isProtection: boolean;
+  phase: string;
+  progress: unknown;
+  error: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  /** 修复源备份行时重建（manifest 从 Redis 进度恢复，见 repairSourceBackupRow）。 */
+  manifest?: unknown;
+  objectCount?: number | null;
+}
+
+/** Redis 里任务状态的落盘形态（writeRedisState 全量写入，重建行时读取）。 */
+interface VercelRedisJobState {
+  jobId: string;
+  kind?: "auto" | "manual" | "restore";
+  restoreFromId?: string | null;
+  includeObjects?: boolean;
+  isProtection?: boolean;
+  progress?: VercelJobProgress | null;
+  updatedAt?: string;
 }
 
 const OBJECTS_PER_TICK = 20;
@@ -78,9 +113,19 @@ export class BackupVercelExecutor {
         take: 10,
       })
       .catch(() => null);
-    if (!rows) return;
-    for (const row of rows) {
+    const dbIds = new Set((rows ?? []).map((row) => row.id));
+    for (const row of rows ?? []) {
       await this.withJobLock(row.id, () => this.advanceJob(row));
+    }
+    // 兜底：Neon 恢复换库会把备份点之后创建的行从 DB 抹掉（回滚行/保护
+    // 备份行），接力断链时它们不在 findMany 结果里，永远无人推进。从
+    // Redis 进度找回孤儿行，重建后推进一块并接力续跑（每日 cron 是
+    // 接力断裂时的最后防线）。
+    for (const jobId of await this.listOrphanedInFlightJobs(dbIds)) {
+      const row = await this.recoverJobRow(jobId);
+      if (!row) continue;
+      await this.withJobLock(row.id, () => this.advanceJob(row));
+      await this.scheduleContinuation(row.id);
     }
   }
 
@@ -102,10 +147,16 @@ export class BackupVercelExecutor {
     let progressed = false; // 本轮推进过（updatedAt 前进）才接力。
     let chainTarget: string | null = null; // 接力目标（链等待时指向保护备份）。
     for (;;) {
-      const row = await this.prisma.backupJob
+      let row = (await this.prisma.backupJob
         .findUnique({ where: { id: jobId } })
-        .catch(() => null);
-      if (!row) return;
+        .catch(() => null)) as unknown as VercelJobRow | null;
+      if (!row) {
+        // 换库后行被快照抹掉（回滚行不在备份点快照里）：从 Redis 进度
+        // 重建再继续推进，否则任务静默蒸发（曾线上表现为回滚行消失、
+        // UI 永远看不到完成）。
+        row = await this.recoverJobRow(jobId);
+        if (!row) return;
+      }
       if (row.status === "succeeded" || row.status === "failed") {
         // 任务终态：若有被它唤醒的回滚任务，接力给回滚续跑（防链跨请求断链）。
         if (row.status === "succeeded") {
@@ -202,18 +253,7 @@ export class BackupVercelExecutor {
   }
 
   /** 每任务一块；返回后任务行已更新（无论推进到哪一步）。 */
-  private async advanceJob(job: {
-    id: string;
-    kind: "auto" | "manual" | "restore";
-    status: "pending" | "running" | "succeeded" | "failed";
-    neonBranchId: string | null;
-    restoreFromId: string | null;
-    includeObjects: boolean;
-    phase: string;
-    progress: unknown;
-    error: string | null;
-    createdAt: Date;
-  }): Promise<void> {
+  private async advanceJob(job: VercelJobRow): Promise<void> {
     const progress = this.parseProgress(job.progress);
     try {
       if (job.kind === "restore") {
@@ -226,37 +266,68 @@ export class BackupVercelExecutor {
       this.logger.error(
         `Vercel 备份任务 ${job.id} 推进失败: ${messageOfVercel(caught)}`,
       );
-      await this.prisma.backupJob
-        .update({
-          where: { id: job.id },
-          data: {
-            status: "failed",
-            error: messageOfVercel(caught),
-            finishedAt: new Date(),
-            phase: job.phase || "failed",
-          },
-        })
-        .catch(() => undefined);
-      await this.writeRedisState(job.id, {
-        ...progress,
-        stage: "failed",
-        errors: [...(progress.errors ?? []), messageOfVercel(caught)],
-      }).catch(() => undefined);
+      // upsert：换库后行可能刚被重建（或尚未重建），update 会 P2025 打空。
+      await this.upsertJobRow(
+        job.id,
+        job.kind,
+        {
+          status: "failed",
+          error: messageOfVercel(caught),
+          finishedAt: new Date(),
+          phase: job.phase || "failed",
+        },
+        {
+          restoreFromId: job.restoreFromId ?? null,
+          includeObjects: job.includeObjects,
+          isProtection: job.isProtection,
+        },
+      );
+      await this.writeRedisState(
+        job.id,
+        {
+          ...progress,
+          stage: "failed",
+          errors: [...(progress.errors ?? []), messageOfVercel(caught)],
+        },
+        this.redisMetaFor(job),
+      ).catch(() => undefined);
     }
+  }
+
+  /** writeRedisState 的元数据参数（换库后重建行用，见 recoverJobRow）。 */
+  private redisMetaFor(job: {
+    kind: "auto" | "manual" | "restore";
+    restoreFromId?: string | null;
+    includeObjects: boolean;
+    isProtection: boolean;
+  }): {
+    kind: "auto" | "manual" | "restore";
+    restoreFromId: string | null;
+    includeObjects: boolean;
+    isProtection: boolean;
+  } {
+    return {
+      kind: job.kind,
+      restoreFromId: job.restoreFromId ?? null,
+      includeObjects: job.includeObjects,
+      isProtection: job.isProtection,
+    };
   }
 
   // ---- 备份状态机（auto / manual）------------------------------------------
 
   private async advanceBackup(
-    job: {
-      id: string;
-      kind: "auto" | "manual" | "restore";
-      phase: string;
-      progress: unknown;
-      error: string | null;
-      createdAt: Date;
-      includeObjects: boolean;
-    },
+    job: Pick<
+      VercelJobRow,
+      | "id"
+      | "kind"
+      | "phase"
+      | "progress"
+      | "error"
+      | "createdAt"
+      | "includeObjects"
+      | "isProtection"
+    >,
     progress: VercelJobProgress,
   ): Promise<void> {
     const stage = progress.stage || "";
@@ -282,12 +353,16 @@ export class BackupVercelExecutor {
           } as never,
         },
       });
-      await this.writeRedisState(job.id, {
-        stage: "branch",
-        done: 0,
-        total: 1,
-        operationId,
-      });
+      await this.writeRedisState(
+        job.id,
+        {
+          stage: "branch",
+          done: 0,
+          total: 1,
+          operationId,
+        },
+        this.redisMetaFor(job),
+      );
       return;
     }
 
@@ -322,12 +397,16 @@ export class BackupVercelExecutor {
           },
         },
       });
-      await this.writeRedisState(job.id, {
-        stage: "copy-objects",
-        done: 0,
-        total: objects.length,
-        objects,
-      });
+      await this.writeRedisState(
+        job.id,
+        {
+          stage: "copy-objects",
+          done: 0,
+          total: objects.length,
+          objects,
+        },
+        this.redisMetaFor(job),
+      );
       return;
     }
 
@@ -388,7 +467,7 @@ export class BackupVercelExecutor {
           progress: next as never,
         },
       });
-      await this.writeRedisState(job.id, next);
+      await this.writeRedisState(job.id, next, this.redisMetaFor(job));
       return;
     }
 
@@ -399,7 +478,10 @@ export class BackupVercelExecutor {
 
   /** 备份收尾：manifest + 调度标记 + 保留策略 + 回滚链唤醒。 */
   private async finalizeBackup(
-    job: { id: string; kind: "auto" | "manual" | "restore"; createdAt: Date },
+    job: Pick<
+      VercelJobRow,
+      "id" | "kind" | "createdAt" | "includeObjects" | "isProtection"
+    >,
     refs: ObjectRef[],
     objects: Array<{
       storageKey: string;
@@ -428,7 +510,11 @@ export class BackupVercelExecutor {
         progress: { ...progress, stage: "done" },
       },
     });
-    await this.writeRedisState(job.id, { ...progress, stage: "done" });
+    await this.writeRedisState(
+      job.id,
+      { ...progress, stage: "done" },
+      this.redisMetaFor(job),
+    );
     this.logger.log(`Vercel 备份 ${job.id} 完成（对象 ${objects.length}）`);
 
     if (job.kind === "auto") {
@@ -467,29 +553,32 @@ export class BackupVercelExecutor {
   // ---- 回滚状态机（restore）-------------------------------------------------
 
   private async advanceRestore(
-    job: {
-      id: string;
-      status: string;
-      phase: string;
-      progress: unknown;
-      error: string | null;
-      restoreFromId: string | null;
-      createdAt: Date;
-    },
+    job: Pick<
+      VercelJobRow,
+      | "id"
+      | "kind"
+      | "status"
+      | "phase"
+      | "progress"
+      | "error"
+      | "restoreFromId"
+      | "createdAt"
+      | "includeObjects"
+      | "isProtection"
+    >,
     progress: VercelJobProgress,
   ): Promise<void> {
     const stage = progress.stage || "";
     const neon = this.neon();
-    const row = this.prisma.backupJob;
 
     // 链等待：保护备份尚未成功（pending 停在 initial，由 wakePendingRestores 唤醒）。
     if (job.status === "pending") return;
 
     if (stage === "") {
       // 校验来源备份分支存在。
-      const source = await row.findUnique({
-        where: { id: job.restoreFromId ?? "" },
-      });
+      const source = await this.prisma.backupJob
+        .findUnique({ where: { id: job.restoreFromId ?? "" } })
+        .catch(() => null);
       if (!source?.neonBranchId || source.status !== "succeeded") {
         throw new Error("来源备份缺少 Neon 分支信息，无法回滚");
       }
@@ -505,27 +594,36 @@ export class BackupVercelExecutor {
         done: 0,
         total: 1,
         operationId,
+        protectJobId: progress.protectJobId ?? null,
       };
-      await row.update({
-        where: { id: job.id },
-        data: { phase: "restore/restore", progress: next as never },
-      });
-      await this.writeRedisState(job.id, next);
+      await this.upsertJobRow(
+        job.id,
+        "restore",
+        { phase: "restore/restore", progress: next as never },
+        this.rowCreateOverrides(job),
+      );
+      await this.writeRedisState(job.id, next, this.redisMetaFor(job));
       return;
     }
 
     if (stage === "restore/wait") {
+      // waitForOperation 返回时主库已被替换成备份分支快照：此后任务行在
+      // 旧库里被抹掉（快照里没有备份点之后创建的行），所有写入必须走
+      // upsert 重建（见 upsertJobRow），否则 restore 行静默蒸发。
       await neon.waitForOperation(progress.operationId ?? null);
       const next: VercelJobProgress = {
         stage: "restore/verify",
         done: 0,
         total: 1,
+        protectJobId: progress.protectJobId ?? null,
       };
-      await row.update({
-        where: { id: job.id },
-        data: { phase: "restore/verify", progress: next as never },
-      });
-      await this.writeRedisState(job.id, next);
+      await this.upsertJobRow(
+        job.id,
+        "restore",
+        { phase: "restore/verify", progress: next as never },
+        this.rowCreateOverrides(job),
+      );
+      await this.writeRedisState(job.id, next, this.redisMetaFor(job));
       return;
     }
 
@@ -548,20 +646,24 @@ export class BackupVercelExecutor {
         stage: "restore/objects",
         done: 0,
         total: 0,
+        protectJobId: progress.protectJobId ?? null,
       };
-      await row.update({
-        where: { id: job.id },
-        data: { phase: "restore/objects", progress: next as never },
-      });
-      await this.writeRedisState(job.id, next);
+      await this.upsertJobRow(
+        job.id,
+        "restore",
+        { phase: "restore/objects", progress: next as never },
+        this.rowCreateOverrides(job),
+      );
+      await this.writeRedisState(job.id, next, this.redisMetaFor(job));
       return;
     }
 
     if (stage === "restore/objects") {
       // 从备份 manifest 拿对象清单回拷（无对象任务直接进 cleanup）。
-      const source = await row.findUnique({
-        where: { id: job.restoreFromId ?? "" },
-      });
+      // 换库后源备份行回到快照时刻（执行中、无 manifest、可能无分支 id）：
+      // 先修复（manifest 从 Redis 进度重建、分支 id 按 backup-<id> 命名找回），
+      // 否则清单为空、源备份行永远卡在「执行中」。
+      const source = await this.repairSourceBackupRow(job.restoreFromId ?? "");
       const manifest = source?.manifest as {
         objects?: Array<{
           storageKey: string;
@@ -577,7 +679,12 @@ export class BackupVercelExecutor {
         const batch = objects.slice(done, done + OBJECTS_PER_TICK);
         for (const obj of batch) {
           try {
-            const sourceKey = backupObjectKey(job.id, obj.storageKey);
+            // 备份对象在 backup/<源备份 id>/ 前缀下（backup 阶段按备份行 id
+            // 复制）；不能用回滚行自己的 id，否则永远找不到对象。
+            const sourceKey = backupObjectKey(
+              job.restoreFromId ?? "",
+              obj.storageKey,
+            );
             const existing = await backend
               .statObject(sourceKey)
               .catch(() => null);
@@ -613,15 +720,18 @@ export class BackupVercelExecutor {
         done,
         total: objects.length,
         errors,
+        protectJobId: progress.protectJobId ?? null,
       };
-      await row.update({
-        where: { id: job.id },
-        data: {
+      await this.upsertJobRow(
+        job.id,
+        "restore",
+        {
           phase: finished ? "restore/cleanup" : "restore/objects",
           progress: next as never,
         },
-      });
-      await this.writeRedisState(job.id, next);
+        this.rowCreateOverrides(job),
+      );
+      await this.writeRedisState(job.id, next, this.redisMetaFor(job));
       return;
     }
 
@@ -644,19 +754,269 @@ export class BackupVercelExecutor {
         stage: "done",
         done: progress.total,
         total: progress.total,
+        protectJobId: progress.protectJobId ?? null,
       };
-      await row.update({
-        where: { id: job.id },
-        data: {
+      await this.upsertJobRow(
+        job.id,
+        "restore",
+        {
           status: "succeeded",
           phase: "done",
           finishedAt: new Date(),
           progress: next as never,
         },
-      });
-      await this.writeRedisState(job.id, next);
+        this.rowCreateOverrides(job),
+      );
+      await this.writeRedisState(job.id, next, this.redisMetaFor(job));
+      // 保护备份行同样在备份点快照之外，被换库抹掉：重建为成功，让
+      // 「回滚前自动备份」tab 保留这条记录。
+      const protectId = progress.protectJobId;
+      if (protectId) await this.repairProtectionRow(protectId);
       this.logger.log(`Vercel 回滚 ${job.id} 完成`);
     }
+  }
+
+  // ---- 换库后的行重建（Neon restoreBranch 会替换主库）----------------------
+
+  /**
+   * 回滚链建立时立即在 Redis 落下完整元数据：换库后 BackupJob 里备份点之后
+   * 创建的行（回滚行/保护备份行）会被快照抹掉，重建行必须靠这份状态。
+   * 在 startRestore 里调用，早于任何推进。
+   */
+  async armRestoreChain(
+    jobId: string,
+    restoreFromId: string,
+    protectJobId: string,
+    includeObjects: boolean,
+  ): Promise<void> {
+    await this.writeRedisState(
+      jobId,
+      { stage: "", done: 0, total: 0, protectJobId },
+      { kind: "restore", restoreFromId, includeObjects, isProtection: false },
+    );
+  }
+
+  /** 从 Redis 进度重建被换库抹掉的任务行；无状态/终态返回 null。 */
+  private async recoverJobRow(jobId: string): Promise<VercelJobRow | null> {
+    const state = await this.readRedisState(jobId);
+    if (!state?.kind || !state.progress) return null;
+    const stage = state.progress.stage ?? "";
+    if (stage === "done" || stage === "failed" || stage === "") return null;
+    const updatedAt = state.updatedAt ? new Date(state.updatedAt) : null;
+    const row: VercelJobRow = {
+      id: jobId,
+      kind: state.kind,
+      status: "running",
+      phase: stage,
+      neonBranchId: null,
+      restoreFromId: state.restoreFromId ?? null,
+      includeObjects: state.includeObjects ?? false,
+      isProtection: state.isProtection ?? false,
+      progress: state.progress,
+      error: null,
+      createdAt: updatedAt ?? new Date(),
+      updatedAt: updatedAt ?? new Date(),
+    };
+    try {
+      await this.prisma.backupJob.create({
+        data: {
+          id: jobId,
+          kind: state.kind,
+          status: "running",
+          phase: stage,
+          restoreFromId: state.restoreFromId ?? null,
+          includeObjects: state.includeObjects ?? false,
+          isProtection: state.isProtection ?? false,
+          startedAt: updatedAt ?? new Date(),
+          progress: state.progress as never,
+        } as never,
+      });
+    } catch {
+      // 竞争：另一实例已重建；取现有行，仍在执行中则继续推进。
+      const existing = await this.prisma.backupJob
+        .findUnique({ where: { id: jobId } })
+        .catch(() => null);
+      return existing as unknown as VercelJobRow | null;
+    }
+    return row;
+  }
+
+  /** 读 Redis 任务状态（进度 + 元数据），无值/解析失败返回 null。 */
+  private async readRedisState(
+    jobId: string,
+  ): Promise<VercelRedisJobState | null> {
+    const client = await this.redis.getClient().catch(() => null);
+    if (!client) return null;
+    const raw = await client
+      .get(`${JOB_LOCK_KEY_PREFIX}${jobId}`)
+      .catch(() => null);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as VercelRedisJobState;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 换库后行写入一律 upsert：update 会 P2025 打空（行已被快照抹掉/尚未重建），
+   * create 侧用调用方提供的行元数据补齐（kind/restoreFromId/includeObjects 等）。
+   */
+  private async upsertJobRow(
+    jobId: string,
+    kind: "auto" | "manual" | "restore",
+    updateData: Record<string, unknown>,
+    createData: Record<string, unknown>,
+  ): Promise<void> {
+    await this.prisma.backupJob
+      .upsert({
+        where: { id: jobId },
+        update: updateData as never,
+        create: {
+          id: jobId,
+          kind,
+          status: "running",
+          createdById: null,
+          ...createData,
+          ...updateData,
+        } as never,
+      })
+      .catch(() => undefined);
+  }
+
+  /** upsert 的 create 侧补齐：恢复/失败路径重试行时用。 */
+  private rowCreateOverrides(job: {
+    restoreFromId: string | null;
+    includeObjects: boolean;
+    isProtection: boolean;
+  }): Record<string, unknown> {
+    return {
+      restoreFromId: job.restoreFromId ?? null,
+      includeObjects: job.includeObjects,
+      isProtection: job.isProtection,
+    };
+  }
+
+  /**
+   * 修复源备份行（回滚来源）：换库后它回到快照时刻（执行中、无 manifest、
+   * 可能无分支 id）。manifest 从 Redis 进度重建（finalize 前的对象清单每块
+   * 都写 Redis），分支 id 按 `backup-<id>` 命名从 Neon 找回。恢复后源备份
+   * 以「成功」呈现，回拷清单与后续再回滚都可用。行完好（有 manifest 且
+   * 成功）时原样返回。
+   */
+  private async repairSourceBackupRow(
+    sourceId: string,
+  ): Promise<VercelJobRow | null> {
+    const row = await this.prisma.backupJob
+      .findUnique({ where: { id: sourceId } })
+      .catch(() => null);
+    if (!row) return null;
+    if (row.manifest && row.status === "succeeded") {
+      return row as unknown as VercelJobRow;
+    }
+    const state = await this.readRedisState(sourceId);
+    const objects = state?.progress?.objects ?? [];
+    const manifest = {
+      formatVersion: 1,
+      exportedAt: state?.updatedAt ?? new Date().toISOString(),
+      kind: row.kind,
+      objects,
+      tables: {},
+      errors: [],
+    };
+    let neonBranchId: string | null = row.neonBranchId;
+    if (!neonBranchId) {
+      try {
+        const { branches } = await this.neon().listBranches();
+        const found = branches.find((b) => b.name === `backup-${sourceId}`);
+        if (found) neonBranchId = found.id;
+      } catch {
+        // 分支 id 找回失败不阻塞：行仍标记成功，后续回滚会提示缺分支。
+      }
+    }
+    await this.upsertJobRow(
+      sourceId,
+      row.kind as "auto" | "manual",
+      {
+        status: "succeeded",
+        phase: "done",
+        finishedAt: new Date(),
+        objectCount: objects.length,
+        ...(neonBranchId ? { neonBranchId } : {}),
+        manifest: manifest as never,
+        progress: {
+          stage: "done",
+          done: objects.length,
+          total: objects.length,
+          objects,
+        } as never,
+      },
+      {
+        restoreFromId: null,
+        includeObjects: row.includeObjects,
+        isProtection: row.isProtection,
+      },
+    );
+    return this.prisma.backupJob
+      .findUnique({ where: { id: sourceId } })
+      .catch(() => null) as unknown as Promise<VercelJobRow | null>;
+  }
+
+  /** 保护备份行被换库抹掉后重建为成功（finalize 的 Redis 状态带对象清单）。 */
+  private async repairProtectionRow(protectId: string): Promise<void> {
+    const state = await this.readRedisState(protectId);
+    const objects = state?.progress?.objects ?? [];
+    const manifest = {
+      formatVersion: 1,
+      exportedAt: state?.updatedAt ?? new Date().toISOString(),
+      kind: "manual",
+      objects,
+      tables: {},
+      errors: [],
+    };
+    await this.upsertJobRow(
+      protectId,
+      "manual",
+      {
+        status: "succeeded",
+        phase: "done",
+        finishedAt: new Date(),
+        objectCount: objects.length,
+        manifest: manifest as never,
+        progress: {
+          stage: "done",
+          done: objects.length,
+          total: objects.length,
+          objects,
+        } as never,
+      },
+      {
+        restoreFromId: null,
+        includeObjects: state?.includeObjects ?? false,
+        isProtection: true,
+      },
+    );
+  }
+
+  /** Redis 里存在、但 DB 行已被换库抹掉的执行中任务（每日 cron 兜底用）。 */
+  private async listOrphanedInFlightJobs(
+    dbIds: Set<string>,
+  ): Promise<string[]> {
+    const client = await this.redis.getClient().catch(() => null);
+    if (!client) return [];
+    const keys = await client.keys(`${JOB_LOCK_KEY_PREFIX}*`).catch(() => null);
+    if (!keys?.length) return [];
+    const orphaned: string[] = [];
+    for (const key of keys) {
+      const jobId = key.slice(JOB_LOCK_KEY_PREFIX.length);
+      if (!jobId || dbIds.has(jobId)) continue;
+      const state = await this.readRedisState(jobId);
+      if (!state?.kind || !state.progress) continue;
+      const stage = state.progress.stage ?? "";
+      if (stage === "" || stage === "done" || stage === "failed") continue;
+      orphaned.push(jobId);
+    }
+    return orphaned;
   }
 
   // ---- 保留策略（Vercel：Neon 分支 + R2 前缀）--------------------------------
@@ -776,6 +1136,8 @@ export class BackupVercelExecutor {
       operationId: raw?.operationId ?? null,
       objects: raw?.objects ?? undefined,
       errors: raw?.errors ?? undefined,
+      // protectJobId 是回滚链标记：各阶段进度必须携带（换库后重建靠它）。
+      protectJobId: raw?.protectJobId ?? null,
     };
   }
 
@@ -802,10 +1164,19 @@ export class BackupVercelExecutor {
     return fn();
   }
 
-  /** 进度双写 Redis（回滚替换主库期间 UI 从 Redis 读，TTL 7 天）。 */
+  /**
+   * 进度双写 Redis（回滚替换主库期间 UI 从 Redis 读，TTL 7 天）。
+   * meta 里的行元数据供换库后重建行使用（recoverJobRow/repairProtectionRow）。
+   */
   private async writeRedisState(
     jobId: string,
     progress: VercelJobProgress,
+    meta?: {
+      kind?: "auto" | "manual" | "restore";
+      restoreFromId?: string | null;
+      includeObjects?: boolean;
+      isProtection?: boolean;
+    },
   ): Promise<void> {
     const client = await this.redis.getClient().catch(() => null);
     if (!client) return;
@@ -814,6 +1185,10 @@ export class BackupVercelExecutor {
         `liveboard:backup:job:${jobId}`,
         JSON.stringify({
           jobId,
+          kind: meta?.kind,
+          restoreFromId: meta?.restoreFromId ?? null,
+          includeObjects: meta?.includeObjects ?? false,
+          isProtection: meta?.isProtection ?? false,
           progress,
           updatedAt: new Date().toISOString(),
         }),

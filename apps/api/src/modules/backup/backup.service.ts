@@ -323,6 +323,21 @@ export class BackupService {
     for (const row of rows) {
       const state = await readJobState(this.paths.backupJobsDir, row.id);
       if (state) continue; // 有状态文件说明链正在执行或已被处理。
+      // Vercel 无状态文件：若保护备份仍在执行（链健康），不能误判为孤儿
+      // （保护备份对象多时可能超过 STALE_PENDING_MS 还没 finalize）。
+      const protectId = (row.progress as { protectJobId?: string } | null)
+        ?.protectJobId;
+      if (protectId) {
+        const protect = await this.prisma.backupJob
+          .findUnique({
+            where: { id: protectId },
+            select: { status: true },
+          })
+          .catch(() => null);
+        if (protect?.status === "pending" || protect?.status === "running") {
+          continue;
+        }
+      }
       await this.prisma.backupJob
         .update({
           where: { id: row.id },
@@ -839,6 +854,22 @@ export class BackupService {
         select: { id: true },
       });
       chainArmed = true;
+      if (this.isVercelDeployment()) {
+        // 换库后 BackupJob 里备份点之后创建的行会被快照抹掉（回滚行/保护
+        // 备份行），executor 靠 Redis 里的行元数据重建——链建立时立即写入。
+        await this.vercelExecutor
+          .armRestoreChain(
+            restoreRow.id,
+            backupId,
+            preBackup.id,
+            restoreInclude,
+          )
+          .catch((caught) =>
+            this.logger.warn(
+              `Vercel 回滚链 Redis 状态写入失败: ${messageOf(caught)}`,
+            ),
+          );
+      }
       if (!this.isVercelDeployment()) {
         this.spawnRestoreChain(
           preBackup.id,
