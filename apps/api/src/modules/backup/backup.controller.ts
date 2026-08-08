@@ -22,6 +22,7 @@ import {
   Min,
 } from "class-validator";
 import { CurrentUserId } from "../../common/current-user-id.decorator";
+import { Public } from "../../common/public.decorator";
 import { RedisService } from "../redis/redis.service";
 import {
   RETENTION_MAX,
@@ -187,6 +188,14 @@ export class BackupController {
     });
   }
 
+  /**
+   * @Public：ActiveUserGuard 是全局守卫，不带 @Public() 的端点必须先有会话
+   * cookie 才放行——cron/self-invocation 请求只有 Bearer CRON_SECRET，会被
+   * 守卫在 isAuthorized 之前以 401「Missing or invalid session」拦掉，导致
+   * Vercel 闹钟与接力续跑全部失效（曾线上排查数日）。真实认证在下方
+   * isAuthorized（恒定时间比较），放行后仍需密钥。
+   */
+  @Public()
   @Get("internal/cron/backup")
   async cronTick(
     @Headers("authorization") authorization?: string,
