@@ -835,7 +835,15 @@ export class BackupVercelExecutor {
           targetBranchId: primaryId,
         }));
       } catch (caught) {
-        if (!isUncertainNeonMutation(caught)) throw caught;
+        if (!isUncertainNeonMutation(caught)) {
+          // Neon 明确返回 4xx 时 restore 没有被接受，可以安全退出只读模式。
+          // 网络错误/超时以及 5xx 仍 fail closed：请求可能已在服务端生效，
+          // 必须保持维护状态并靠后续状态核对确认，不能贸然恢复写入。
+          if (isDefinitiveNeonRejection(caught)) {
+            await this.maintenance.setSystemEnabled(false);
+          }
+          throw caught;
+        }
         const message = messageOfVercel(caught);
         // 保持 running/requesting 与维护模式；下一棒只查询唯一分支标记，
         // 不重发 POST。错误同时写 DB，管理页能明确展示“结果待确认”。
@@ -1894,6 +1902,12 @@ function isUncertainNeonMutation(caught: unknown): boolean {
     (caught as { neonMutationUncertain?: unknown }).neonMutationUncertain ===
       true
   );
+}
+
+function isDefinitiveNeonRejection(caught: unknown): boolean {
+  if (typeof caught !== "object" || caught === null) return false;
+  const status = (caught as { status?: unknown }).status;
+  return typeof status === "number" && status >= 400 && status < 500;
 }
 
 function sleep(ms: number): Promise<void> {

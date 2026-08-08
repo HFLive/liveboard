@@ -325,13 +325,17 @@ export class NeonClient {
       .catch(() => null)) as NeonApiErrorBody | null;
     const detail = errorBody?.message ?? response.statusText;
     if (response.status === 429) {
-      throw new Error(
-        `Neon API 速率限制（429），请稍后重试或减少备份频率：${detail}`,
+      throw Object.assign(
+        new Error(
+          `Neon API 速率限制（429），请稍后重试或减少备份频率：${detail}`,
+        ),
+        { status: response.status },
       );
     }
     if (response.status === 403) {
-      throw new Error(
-        `Neon API 权限不足（403），请检查 NEON_API_KEY：${detail}`,
+      throw Object.assign(
+        new Error(`Neon API 权限不足（403），请检查 NEON_API_KEY：${detail}`),
+        { status: response.status },
       );
     }
     // 附带 status（deleteBranch 幂等 404 依赖它），不改变消息结构。
