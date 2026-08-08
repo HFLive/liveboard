@@ -90,6 +90,28 @@ LiveBoard 支持双目标部署，自托管能力保持不变：
 - Vercel 是 Serverless：禁用进程内 `setInterval` 关键清理（过期上传清理改由
   每日 Cron + 惰性清理 + R2 Lifecycle），Server Status 不采样不写表，
   HTTPS 由 Vercel 项目设置托管（写接口 409）。
+- Vercel 备份/回滚的自调用接力端点必须立即响应，并用
+  `@vercel/functions` 的 `waitUntil()` 托管本棒执行；不得让上游短超时 abort
+  一个仍同步等待的接力请求。请求结束后释放实例内哨兵，跨实例互斥以 DB 与
+  Redis 为准。
+- Neon Snapshot restore POST 非幂等：调用前必须把 requesting 意图写入
+  Redis；网络超时只能通过分支 `restored_from` / `restored_as` 元数据确认，
+  禁止自动重发 POST。
+- Vercel 备份/回滚必须同时配置 `NEON_API_KEY`、`NEON_PROJECT_ID`、
+  `REDIS_URL` 与 `CRON_SECRET`；任务进度 `liveboard:backup:job:*` 和互斥锁
+  `liveboard:backup:lock:*` 必须使用不同 Redis key，禁止锁释放误删恢复状态；
+  Neon 孤儿 Snapshot 清扫必须保留 Redis 活跃任务引用；旧版 `backup-*` 与
+  `pre-restore-*` 分支只做兼容清理，不得再创建。Neon Free 只允许一个手动
+  Snapshot：手动备份不得覆盖现有快照；自动备份只能轮换应用自己的上一份
+  成功自动 Snapshot；回滚预留一个瞬态分支空位，容量不足不得先创建失败行。
+  Vercel 启动新任务前的互斥检查必须同时读取 DB 与 Redis 活跃状态，不能依赖
+  Serverless 实例上不存在的持久状态文件。Redis 是 Neon 换库期间唯一不随
+  快照倒退的任务状态源，不可用或状态写入失败时必须 fail closed，禁止继续
+  回滚。Neon Snapshot 只能从默认根分支创建；默认分支非根时必须 fail closed
+  并先迁到新的 Neon 项目，不得继续旧式分支恢复。创建/恢复响应中的全部
+  operations 都必须完成后才能推进。Vercel 回滚的维护/只读状态存 Redis：
+  发出 Neon restore 前开启，数据库校验、对象回拷与清理全部成功后才关闭；读取失败按
+  已开启处理，禁止普通用户在换库窗口继续写入。
 - Redis 使用全局共享的 `RedisService`，惰性连接；本地开发/测试允许内存
   fallback，Vercel/生产禁止 fallback（Redis 不可用时登录和 AI 返回 503）。
 - AI 上游超时固定 110 秒（Web→API rewrite 上限 120 秒）；PDF 预览流式

@@ -35,6 +35,9 @@ const STALE_VERCEL_RUNNING_MS = 30 * 60 * 1000;
 
 import {
   BackupVercelExecutor,
+  NEON_FREE_BRANCH_LIMIT,
+  NEON_FREE_MANUAL_SNAPSHOT_LIMIT,
+  NEON_RESTORE_REQUIRED_FREE_BRANCHES,
   VERCEL_ADVANCE_BUDGET_MS,
   VERCEL_MANUAL_BUDGET_MS,
   VERCEL_RESTORE_CHAIN_BUDGET_MS,
@@ -109,9 +112,6 @@ export const DEFAULT_BACKUP_SETTINGS: BackupSettingsDto = {
   includeObjects: true,
   lastAutoBackupAt: null,
 };
-
-/** Vercel 下 Neon 分支数量保守上限（Free 计划 10 分支/项目，含主分支与瞬态）。 */
-export const VERGEL_MAX_BACKUP_BRANCHES = 8;
 
 /** Prisma P2021（表不存在）：回滚腾空窗口（DROP SCHEMA）期间 User/BackupJob 表被删。 */
 function isTableMissingError(caught: unknown): boolean {
@@ -268,6 +268,14 @@ export class BackupService {
         );
       }
     }
+    if (this.isVercelDeployment()) {
+      const jobId = await this.vercelExecutor.findInFlightJobId();
+      if (jobId) {
+        throw new ConflictException(
+          `已有任务 #${jobId} 正在执行或等待启动，请等待其完成后再启动新任务`,
+        );
+      }
+    }
   }
 
   /**
@@ -353,6 +361,26 @@ export class BackupService {
         if (protect?.status === "pending" || protect?.status === "running") {
           continue;
         }
+        if (this.isVercelDeployment() && protect?.status === "succeeded") {
+          // Vercel 没有持久状态文件。保护备份成功但唤醒请求断链时，旧逻辑
+          // 会把本可恢复的 pending 回滚误标 failed；这里重新唤醒，紧随其后
+          // 的 vercelExecutor.advance() 会接着推进。Redis 状态仍保留完整链
+          // 元数据，Neon restore 尚未开始，因此恢复执行是安全且幂等的。
+          await this.prisma.backupJob
+            .update({
+              where: { id: row.id },
+              data: {
+                status: "running",
+                phase: "restore/prepare",
+                startedAt: new Date(),
+              },
+            })
+            .catch(() => undefined);
+          this.logger.log(
+            `Vercel 回滚任务 ${row.id} 的保护备份已完成，重新唤醒断裂的回滚链`,
+          );
+          continue;
+        }
       }
       await this.prisma.backupJob
         .update({
@@ -409,11 +437,10 @@ export class BackupService {
 
   private assertBackupSupported(): void {
     if (this.isVercelDeployment()) {
-      const configured =
-        process.env.NEON_API_KEY?.trim() && process.env.NEON_PROJECT_ID?.trim();
-      if (!configured) {
+      const missing = this.missingVercelBackupConfig();
+      if (missing.length) {
         throw new ServiceUnavailableException(
-          "Vercel 备份需要配置 NEON_API_KEY 与 NEON_PROJECT_ID 环境变量",
+          `Vercel 备份需要配置 ${missing.join("、")} 环境变量`,
         );
       }
       return;
@@ -423,6 +450,16 @@ export class BackupService {
         "无法访问备份数据目录，请检查 MIGRATION_DATA_DIR 挂载",
       );
     }
+  }
+
+  /** Neon 快照、Redis 状态与跨函数接力缺一不可。 */
+  private missingVercelBackupConfig(): string[] {
+    return [
+      "NEON_API_KEY",
+      "NEON_PROJECT_ID",
+      "REDIS_URL",
+      "CRON_SECRET",
+    ].filter((name) => !process.env[name]?.trim());
   }
 
   /**
@@ -582,16 +619,15 @@ export class BackupService {
     // 回滚腾空窗口期间 DB 不可用，按降级只返回低敏感展示信息。
     const mode = await this.authorizeForStateRead(userId);
     const vercel = this.isVercelDeployment();
-    const neonConfigured = Boolean(
-      process.env.NEON_API_KEY?.trim() && process.env.NEON_PROJECT_ID?.trim(),
-    );
+    const missingVercelConfig = vercel ? this.missingVercelBackupConfig() : [];
+    const vercelConfigured = missingVercelConfig.length === 0;
     const base = {
       deploymentTarget: vercel ? "vercel" : "self_hosted",
-      supported: vercel ? neonConfigured : ensureBackupDirs(this.paths),
+      supported: vercel ? vercelConfigured : ensureBackupDirs(this.paths),
       unavailableReason: vercel
-        ? neonConfigured
+        ? vercelConfigured
           ? null
-          : "Vercel 备份需要配置 NEON_API_KEY 与 NEON_PROJECT_ID 环境变量"
+          : `Vercel 备份需要配置 ${missingVercelConfig.join("、")} 环境变量`
         : ensureBackupDirs(this.paths)
           ? null
           : "无法访问备份数据目录，请检查 MIGRATION_DATA_DIR 挂载",
@@ -610,7 +646,11 @@ export class BackupService {
       settings: await this.getSettings(),
       confirmPhrase: this.confirmPhrase(),
       vercelLimits: vercel
-        ? { maxBackupBranches: VERGEL_MAX_BACKUP_BRANCHES }
+        ? {
+            maxProjectBranches: NEON_FREE_BRANCH_LIMIT,
+            restoreRequiredFreeBranches: NEON_RESTORE_REQUIRED_FREE_BRANCHES,
+            maxManualSnapshots: NEON_FREE_MANUAL_SNAPSHOT_LIMIT,
+          }
         : undefined,
     };
   }
@@ -718,7 +758,11 @@ export class BackupService {
    * 回滚记录、执行中的任务、被排队/执行中回滚引用的备份不可删。
    * 自托管：rm 目录 + 状态文件 + DB 行；Vercel：executor 清理 Neon 分支与 R2 对象。
    */
-  async deleteBackup(jobId: string): Promise<{ deleted: true }> {
+  async deleteBackup(
+    userId: string | null,
+    jobId: string,
+  ): Promise<{ deleted: true }> {
+    await requireSuperAdmin(this.prisma, userId);
     const [state, row] = await Promise.all([
       readJobState(this.paths.backupJobsDir, jobId),
       this.prisma.backupJob
@@ -799,6 +843,9 @@ export class BackupService {
         options.includeObjects !== undefined
           ? options.includeObjects
           : settings.includeObjects;
+      if (this.isVercelDeployment()) {
+        await this.vercelExecutor.assertBranchCapacity("backup", "manual");
+      }
       const job = await this.createJobRow(user.id, "manual", includeObjects);
       if (this.isVercelDeployment()) {
         // Vercel：不 spawn，创建后立即在请求内分块推进（短预算让请求
@@ -830,19 +877,26 @@ export class BackupService {
     } catch (caught) {
       if (!spawned) this.releaseJobLock();
       throw caught;
+    } finally {
+      // Vercel 的 Nest 实例可能被后续请求复用。真正的跨实例互斥由
+      // BackupJob + Redis 保证；请求结束后必须释放进程内哨兵，否则同一个
+      // warm instance 会永远认为 runningJobId="starting"，拒绝所有新任务。
+      if (this.isVercelDeployment()) this.releaseJobLock();
     }
   }
 
   /**
-   * 从备份回滚。先自动创建一次 manual 级保护备份（回滚前的最后防线），
-   * 保护备份成功后由 spawnRestoreChain 链式启动 restore 任务。
-   * 互斥锁覆盖整条链（保护备份 → 回滚），期间拒绝任何新任务启动。
+   * 从备份回滚。自托管先创建 manual 保护备份；Vercel Free 直接执行
+   * finalized Snapshot restore，由 Neon 暂存被替换旧分支。互斥锁覆盖全程。
    */
   async startRestore(
     userId: string | null,
     backupId: string,
     options: { confirm: string; includeObjects?: boolean },
-  ): Promise<{ preBackup: BackupJobSummary; restore: BackupJobSummary }> {
+  ): Promise<{
+    preBackup: BackupJobSummary | null;
+    restore: BackupJobSummary;
+  }> {
     this.reserveJobLock();
     let chainArmed = false;
     try {
@@ -883,6 +937,60 @@ export class BackupService {
         options.includeObjects !== undefined
           ? options.includeObjects
           : backup.includeObjects;
+      if (this.isVercelDeployment()) {
+        await this.vercelExecutor.assertBranchCapacity("restore");
+      }
+      if (this.isVercelDeployment()) {
+        // Neon Free 只有一个手动 Snapshot：来源备份本身就是唯一恢复点，不能
+        // 再创建“回滚前保护 Snapshot”。finalized restore 会保留被替换的旧
+        // 默认分支，验证完成后才由 executor 删除，因此仍有平台级回退窗口。
+        const restoreRow = await this.prisma.backupJob.create({
+          data: {
+            kind: "restore",
+            status: "running",
+            phase: "restore/prepare",
+            restoreFromId: backupId,
+            includeObjects: restoreInclude,
+            createdById: user.id,
+            startedAt: new Date(),
+          },
+          select: { id: true },
+        });
+        try {
+          await this.vercelExecutor.armRestoreChain(
+            restoreRow.id,
+            backupId,
+            null,
+            restoreInclude,
+          );
+        } catch (caught) {
+          await this.prisma.backupJob
+            .update({
+              where: { id: restoreRow.id },
+              data: {
+                status: "failed",
+                phase: "failed",
+                error: `Redis 状态写入失败，回滚未开始：${messageOf(caught)}`,
+                finishedAt: new Date(),
+              },
+            })
+            .catch(() => undefined);
+          throw caught;
+        }
+        chainArmed = true;
+        await this.vercelExecutor
+          .advanceUntilFinished(
+            restoreRow.id,
+            Date.now() + VERCEL_RESTORE_CHAIN_BUDGET_MS,
+          )
+          .catch((caught) =>
+            this.logger.warn(`Vercel 回滚推进失败: ${messageOf(caught)}`),
+          );
+        return {
+          preBackup: null,
+          restore: await this.loadJob(restoreRow.id),
+        };
+      }
       // 保护备份任务（manual）先落库；restore 任务行同时落库（pending），
       // UI 可展示整条链；保护备份失败时由 reconcileOrphanedRestores 落 failed。
       const preBackup = await this.createJobRow(
@@ -906,53 +1014,14 @@ export class BackupService {
         select: { id: true },
       });
       chainArmed = true;
-      if (this.isVercelDeployment()) {
-        // 换库后 BackupJob 里备份点之后创建的行会被快照抹掉（回滚行/保护
-        // 备份行），executor 靠 Redis 里的行元数据重建——链建立时立即写入。
-        await this.vercelExecutor
-          .armRestoreChain(
-            restoreRow.id,
-            backupId,
-            preBackup.id,
-            restoreInclude,
-          )
-          .catch((caught) =>
-            this.logger.warn(
-              `Vercel 回滚链 Redis 状态写入失败: ${messageOf(caught)}`,
-            ),
-          );
-      }
-      if (!this.isVercelDeployment()) {
-        this.spawnRestoreChain(
-          preBackup.id,
-          backupId,
-          restoreRow.id,
-          preInclude,
-          restoreInclude,
-          options.confirm.trim(),
-        );
-      } else {
-        // Vercel：链由 executor 推进（保护备份完成后 wakePendingRestores
-        // 唤醒回滚）。两条任务在请求内立即推进，共享同一预算（合计不超
-        // Vercel 函数 60s 上限）；预算耗尽自动接力续跑（self-invocation），
-        // 直至完成，断链时由每日 cron 兜底。
-        this.logger.log(
-          `Vercel 回滚链已建立：保护备份 ${preBackup.id} → 回滚 ${restoreRow.id}`,
-        );
-        // 链请求预算同样取短值：回滚请求尽早返回，保护备份与回滚的推进
-        // 由接力续跑继续（Neon 恢复操作本身就要数分钟，请求内跑不完）。
-        const chainDeadline = Date.now() + VERCEL_RESTORE_CHAIN_BUDGET_MS;
-        await this.vercelExecutor
-          .advanceUntilFinished(preBackup.id, chainDeadline)
-          .catch((caught) =>
-            this.logger.warn(`Vercel 保护备份推进失败: ${messageOf(caught)}`),
-          );
-        await this.vercelExecutor
-          .advanceUntilFinished(restoreRow.id, chainDeadline)
-          .catch((caught) =>
-            this.logger.warn(`Vercel 回滚推进失败: ${messageOf(caught)}`),
-          );
-      }
+      this.spawnRestoreChain(
+        preBackup.id,
+        backupId,
+        restoreRow.id,
+        preInclude,
+        restoreInclude,
+        options.confirm.trim(),
+      );
       return {
         preBackup: await this.loadJob(preBackup.id),
         restore: await this.loadJob(restoreRow.id),
@@ -960,6 +1029,10 @@ export class BackupService {
     } catch (caught) {
       if (!chainArmed) this.releaseJobLock();
       throw caught;
+    } finally {
+      // 回滚链在 Vercel 中由 DB/Redis 状态跨函数持续，不应把当前函数实例的
+      // 内存哨兵带到下一次请求。自托管仍由子进程退出回调释放整条链的锁。
+      if (this.isVercelDeployment()) this.releaseJobLock();
     }
   }
 
@@ -1029,6 +1102,9 @@ export class BackupService {
       if (userId) await requireSuperAdmin(this.prisma, userId);
       await this.assertNoRunningJobInFiles();
       const settings = await this.getSettings();
+      if (this.isVercelDeployment()) {
+        await this.vercelExecutor.assertBranchCapacity("backup", "auto");
+      }
       const job = await this.createJobRow(
         userId,
         "auto",
@@ -1061,6 +1137,8 @@ export class BackupService {
     } catch (caught) {
       if (!spawned) this.releaseJobLock();
       throw caught;
+    } finally {
+      if (this.isVercelDeployment()) this.releaseJobLock();
     }
   }
 

@@ -37,12 +37,17 @@ const PHASE_LABELS: Record<string, string> = {
   prepare: "准备",
   dump: "导出数据库",
   objects: "复制对象",
+  "create-snapshot": "创建数据库快照",
+  finalize: "完成备份",
   "restore/prepare": "准备",
+  "restore/requesting": "提交回滚请求",
+  "restore/wait": "还原数据库",
   "restore/drop-schema": "清空数据库",
   "restore/restore": "还原数据库",
   "restore/migrate-deploy": "补齐迁移",
   "restore/objects": "回拷对象",
   "restore/verify": "校验",
+  "restore/cleanup": "清理旧分支",
   done: "完成",
 };
 
@@ -67,7 +72,8 @@ const LIST_TABS: Array<{ key: BackupListTab; label: string }> = [
 const LIST_EMPTY_HINTS: Record<BackupListTab, string> = {
   backups: "还没有备份记录。开启自动备份或点击「立即备份」。",
   restores: "暂无回滚记录。从备份执行回滚后，操作记录会出现在这里。",
-  protections: "暂无回滚前自动备份。每次回滚前都会自动创建一次保护备份。",
+  protections:
+    "暂无回滚前自动备份。自托管回滚会创建保护备份；Vercel Snapshot 回滚不会额外占用快照配额。",
 };
 
 function formatBytes(bytes: number): string {
@@ -234,7 +240,9 @@ export function BackupClient() {
         confirm: confirmInput.trim(),
       });
       setMessage(
-        "回滚已开始：先自动创建一次保护备份，随后从所选备份恢复。期间站点进入只读维护模式。",
+        info?.deploymentTarget === "vercel"
+          ? "回滚已开始：Neon 将从 Snapshot 恢复并保留被替换的旧分支，验证成功后再清理。期间站点进入只读维护模式。"
+          : "回滚已开始：先自动创建一次保护备份，随后从所选备份恢复。期间站点进入只读维护模式。",
       );
       setRestoreTarget(null);
       setConfirmInput("");
@@ -296,8 +304,9 @@ export function BackupClient() {
 
       {info && info.deploymentTarget === "vercel" && info.supported && (
         <p className="backup-platform-hint">
-          Vercel 环境：数据库备份使用 Neon 分支快照，文件备份复制到 R2
-          的备份前缀；自动备份频率受 Vercel 计划限制（Hobby 每日一次）。
+          Vercel 环境：数据库使用 Neon Snapshot（免费版最多保留 1 份），文件
+          复制到 R2 备份前缀；自动备份会轮换上一份自动 Snapshot，手动备份不会
+          覆盖现有快照。Cron 受 Vercel Hobby 每日一次限制。
         </p>
       )}
 
@@ -620,10 +629,9 @@ export function BackupClient() {
                           </button>
                         </div>
                       )}
-                      {!running &&
-                        job.status === "succeeded" &&
-                        job.kind !== "restore" && (
-                          <div className="backup-job-actions">
+                      {!running && job.kind !== "restore" && (
+                        <div className="backup-job-actions">
+                          {job.status === "succeeded" && (
                             <button
                               className="button secondary small"
                               disabled={anyRunning}
@@ -636,20 +644,21 @@ export function BackupClient() {
                               <RotateCcw size={14} />
                               从该备份回滚
                             </button>
-                            <button
-                              className="button danger small"
-                              disabled={anyRunning}
-                              onClick={() => {
-                                setError(null);
-                                setDeleteTarget(job);
-                              }}
-                              title="永久删除该备份"
-                            >
-                              <Trash2 size={14} />
-                              删除
-                            </button>
-                          </div>
-                        )}
+                          )}
+                          <button
+                            className="button danger small"
+                            disabled={anyRunning}
+                            onClick={() => {
+                              setError(null);
+                              setDeleteTarget(job);
+                            }}
+                            title="永久删除该备份"
+                          >
+                            <Trash2 size={14} />
+                            {job.status === "failed" ? "清理失败任务" : "删除"}
+                          </button>
+                        </div>
+                      )}
                       {running &&
                         job.kind !== "restore" &&
                         info?.deploymentTarget === "vercel" && (
@@ -745,7 +754,9 @@ export function BackupClient() {
                 {formatDateTime(restoreTarget.createdAt ?? "")}） 的数据库（
                 {restoreTarget.includeObjects ? "含" : "不含"}文件对象）
                 恢复到当前站点。<strong>当前全部数据将被该备份覆盖</strong>；
-                回滚前会自动创建一次保护备份。
+                {info?.deploymentTarget === "vercel"
+                  ? "Neon 会先保留被替换的旧分支，恢复校验成功后再清理。"
+                  : "回滚前会自动创建一次保护备份。"}
               </p>
               <label className="backup-confirm-field">
                 <span>

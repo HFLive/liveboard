@@ -9,7 +9,7 @@ import { resolveMigrationDataDir } from "../migration/migration-dirs";
  * - `backups/<jobId>/`：备份内容（database.dump + objects/ + manifest.json）
  * - `backup-jobs/<jobId>.json`：备份任务状态文件（独立于迁移的 jobs/，
  *   避免污染迁移任务列表；互斥扫描时两个目录都检查）。
- * Vercel 无持久盘，备份不落本地（走 Neon 分支 + R2），目录可用性仅影响自托管路径。
+ * Vercel 无持久盘，备份不落本地（走 Neon Snapshot + R2），目录可用性仅影响自托管路径。
  */
 export interface BackupDataPaths {
   dataDir: string;

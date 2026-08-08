@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { timingSafeEqual } from "node:crypto";
+import { waitUntil } from "@vercel/functions";
 import {
   IsBoolean,
   IsInt,
@@ -148,7 +149,7 @@ export class BackupController {
     @CurrentUserId() userId: string | null,
     @Param("id") id: string,
   ) {
-    return await this.backup.deleteBackup(id);
+    return await this.backup.deleteBackup(userId, id);
   }
 
   /** 清除失败任务的报错信息（已读），不再每次进入备份页重复弹出。 */
@@ -173,8 +174,8 @@ export class BackupController {
   }
 
   /**
-   * 从备份回滚：先自动创建一次保护备份，成功后链式启动恢复。
-   * 返回两条任务（保护备份 + 回滚），互斥锁覆盖整条链。
+   * 从备份回滚：自托管先创建保护备份；Vercel 使用 Neon finalized Snapshot
+   * restore（免费版不额外创建第二个 Snapshot）。
    */
   @Post("admin/backup/:id/restore")
   async startRestore(
@@ -207,6 +208,21 @@ export class BackupController {
     // 接力续跑（self-invocation）：只推进指定任务，不走 tick 锁——
     // 同一任务的并发由 per-job Redis 锁串行化，无进展的棒不会自续。
     if (jobId) {
+      if (process.env.VERCEL) {
+        // 内部接力请求必须立刻响应，让上游 scheduleContinuation 在冷启动
+        // 接收窗口内
+        // 确认“下一棒已接收”；实际推进交给 Vercel 官方 waitUntil 绑定到
+        // 本次函数生命周期。旧实现直接 await 20–45 秒，上游先 abort，接力
+        // 函数是否继续没有保证，正是线上链随机断裂的来源之一。
+        waitUntil(
+          this.backup.continueVercelJob(jobId).catch((caught) => {
+            this.logger.error(
+              `Vercel 备份接力 ${jobId} 执行失败: ${messageOfController(caught)}`,
+            );
+          }),
+        );
+        return { ok: true, continued: true, accepted: true };
+      }
       return { ok: true, ...(await this.backup.continueVercelJob(jobId)) };
     }
     const client = await this.redis.getClient().catch(() => null);
@@ -245,4 +261,8 @@ export class BackupController {
     if (expectedBuffer.length !== actualBuffer.length) return false;
     return timingSafeEqual(expectedBuffer, actualBuffer);
   }
+}
+
+function messageOfController(caught: unknown): string {
+  return caught instanceof Error ? caught.message : String(caught);
 }

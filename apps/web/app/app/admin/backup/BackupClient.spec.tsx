@@ -182,6 +182,32 @@ describe("BackupClient", () => {
     });
   });
 
+  it("失败的备份任务可清理，但不能作为回滚来源", async () => {
+    vi.mocked(listBackupJobs).mockResolvedValue({
+      jobs: [
+        {
+          ...succeededBackup,
+          id: "failed-1",
+          status: "failed",
+          phase: "failed",
+          error: "Neon API 请求失败",
+        },
+      ],
+    });
+    render(<BackupClient />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "清理失败任务" })).toBeTruthy();
+    });
+    expect(screen.queryByText("从该备份回滚")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "清理失败任务" }));
+    fireEvent.click(screen.getByRole("button", { name: "删除备份" }));
+    await waitFor(() => {
+      expect(deleteBackupJob).toHaveBeenCalledWith("failed-1");
+    });
+  });
+
   it("三个列表可切换：备份 / 回滚记录 / 回滚前自动备份", async () => {
     vi.mocked(listBackupJobs).mockResolvedValue({
       jobs: [
