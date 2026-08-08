@@ -125,6 +125,16 @@ describe("NeonClient", () => {
     await expect(client.createBranch("x")).rejects.toThrow("Neon API 速率限制");
   });
 
+  it("请求超时（AbortSignal.timeout）抛友好错误，不挂死吃锁", async () => {
+    fetchMock.mockRejectedValueOnce(
+      new DOMException(
+        "The operation was aborted due to timeout",
+        "TimeoutError",
+      ),
+    );
+    await expect(client.createBranch("x")).rejects.toThrow("Neon API 请求超时");
+  });
+
   it("deleteBranch 对 404 幂等成功", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ message: "not found" }, 404),

@@ -37,6 +37,13 @@ interface NeonApiErrorBody {
 const NEON_API_BASE = "https://console.neon.tech/api/v2";
 const OPERATION_POLL_INTERVAL_MS = 1500;
 const OPERATION_TIMEOUT_MS = 5 * 60 * 1000;
+/**
+ * 单次 Neon API 请求超时：fetch 无超时会挂到函数被杀（5 分钟）——曾导致
+ * restoreBranch 挂死后占着 tick 锁，手动 Run 全部 skipped、回滚行永远停
+ * 在「准备」（任务既不前进也不失败）。20s 足够服务端正常响应，超时即
+ * 快速失败，任务落 failed 可重新发起。
+ */
+const NEON_REQUEST_TIMEOUT_MS = 20_000;
 
 export class NeonClient {
   private readonly logger = new Logger(NeonClient.name);
@@ -163,12 +170,20 @@ export class NeonClient {
           ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+        // 必须带超时：无超时的 fetch 会挂到函数被杀，占用 tick/per-job 锁。
+        signal: AbortSignal.timeout(NEON_REQUEST_TIMEOUT_MS),
       });
     } catch (caught) {
+      const isTimeout =
+        caught instanceof DOMException && caught.name === "TimeoutError";
       this.logger.error(
-        `Neon API 请求失败 ${method} ${path}: ${messageOfNeon(caught)}`,
+        `Neon API 请求${isTimeout ? "超时" : "失败"} ${method} ${path}: ${messageOfNeon(caught)}`,
       );
-      throw new Error(`Neon API 请求失败（网络错误），请稍后重试`);
+      throw new Error(
+        isTimeout
+          ? `Neon API 请求超时（${NEON_REQUEST_TIMEOUT_MS / 1000}s），请稍后重试`
+          : `Neon API 请求失败（网络错误），请稍后重试`,
+      );
     }
     if (response.ok) {
       return (await response.json()) as T;
