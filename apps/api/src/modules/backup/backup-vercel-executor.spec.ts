@@ -10,7 +10,7 @@ import { BackupVercelExecutor } from "./backup-vercel-executor";
 
 /** Neon mock 共享的分支表：executor 每次 this.neon() 都 new 新实例，共享数据让测试可控。 */
 const mockBranches: {
-  branches: Array<{ id: string; name: string }>;
+  branches: Array<{ id: string; name: string; parent_id?: string | null }>;
   primaryId: string;
 } = {
   branches: [],
@@ -18,6 +18,10 @@ const mockBranches: {
 };
 /** 共享 waitForOperation mock：默认已完成；测试可改为 false 模拟长操作。 */
 const mockWaitForOperation = jest.fn().mockResolvedValue(true);
+/** 共享 deleteBranch mock：孤儿分支清扫断言用。 */
+const mockDeleteBranch = jest.fn().mockResolvedValue(undefined);
+/** 共享 restoreBranch mock：preserve 参数断言用。 */
+const mockRestoreBranch = jest.fn().mockResolvedValue("op-restore-1");
 
 jest.mock("./neon.client", () => ({
   NeonClient: jest.fn().mockImplementation(() => ({
@@ -25,9 +29,9 @@ jest.mock("./neon.client", () => ({
       .fn()
       .mockResolvedValue({ branchId: "br-1", operationId: "op-1" }),
     listBranches: jest.fn().mockResolvedValue(mockBranches),
-    restoreBranch: jest.fn().mockResolvedValue("op-restore-1"),
+    restoreBranch: mockRestoreBranch,
     waitForOperation: mockWaitForOperation,
-    deleteBranch: jest.fn().mockResolvedValue(undefined),
+    deleteBranch: mockDeleteBranch,
   })),
 }));
 
@@ -73,6 +77,8 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
     mockBranches.branches = [];
     mockBranches.primaryId = "primary-1";
     mockWaitForOperation.mockResolvedValue(true);
+    mockDeleteBranch.mockResolvedValue(undefined);
+    mockRestoreBranch.mockResolvedValue("op-restore-1");
     redis.getClient.mockResolvedValue(redisClient);
     redisClient.get.mockResolvedValue(null);
     redisClient.set.mockResolvedValue("OK");
@@ -423,6 +429,101 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
       expect(failedCalls).toHaveLength(0);
     });
 
+    describe("reconcileOrphanedBranches（孤儿分支清扫）", () => {
+      it("backup-<id> 无对应行 → 删；有行 → 保留", async () => {
+        mockBranches.branches = [
+          { id: "br-orphan", name: "backup-cmsjuxxx", parent_id: "br-root" },
+          { id: "br-keep", name: "backup-cmsjwgle", parent_id: "br-main" },
+        ];
+        prisma.backupJob.findMany.mockResolvedValue([
+          { id: "cmsjwgle", status: "succeeded" },
+        ]);
+
+        await (
+          executor as unknown as {
+            reconcileOrphanedBranches: () => Promise<void>;
+          }
+        ).reconcileOrphanedBranches();
+
+        expect(mockDeleteBranch).toHaveBeenCalledWith("br-orphan");
+        expect(mockDeleteBranch).not.toHaveBeenCalledWith("br-keep");
+      });
+
+      it("pre-restore-<id> 行缺失或已终态 → 删；仍执行中 → 保留", async () => {
+        mockBranches.branches = [
+          { id: "br-gone", name: "pre-restore-cmsjv12hq", parent_id: "br-r" },
+          { id: "br-failed", name: "pre-restore-cmsj9qfk", parent_id: "br-r" },
+          { id: "br-running", name: "pre-restore-cmsjwj74", parent_id: "br-r" },
+        ];
+        prisma.backupJob.findMany.mockResolvedValue([
+          { id: "cmsj9qfk", status: "failed" },
+          { id: "cmsjwj74", status: "running" },
+        ]);
+
+        await (
+          executor as unknown as {
+            reconcileOrphanedBranches: () => Promise<void>;
+          }
+        ).reconcileOrphanedBranches();
+
+        expect(mockDeleteBranch).toHaveBeenCalledWith("br-gone");
+        expect(mockDeleteBranch).toHaveBeenCalledWith("br-failed");
+        expect(mockDeleteBranch).not.toHaveBeenCalledWith("br-running");
+      });
+
+      it("根分支（parent_id 为空）跳过，即使名字匹配孤儿前缀", async () => {
+        mockBranches.branches = [
+          { id: "br-root", name: "pre-restore-cmsjv12hq", parent_id: null },
+          { id: "br-orphan", name: "backup-cmsjuxxx", parent_id: "br-root" },
+        ];
+        prisma.backupJob.findMany.mockResolvedValue([]);
+
+        await (
+          executor as unknown as {
+            reconcileOrphanedBranches: () => Promise<void>;
+          }
+        ).reconcileOrphanedBranches();
+
+        expect(mockDeleteBranch).toHaveBeenCalledWith("br-orphan");
+        expect(mockDeleteBranch).not.toHaveBeenCalledWith("br-root");
+      });
+
+      it("先删叶子（backup-*）再删父（pre-restore-*）", async () => {
+        mockBranches.branches = [
+          { id: "br-pre", name: "pre-restore-cmsjv12hq", parent_id: "br-r" },
+          { id: "br-backup", name: "backup-cmsjuxxx", parent_id: "br-pre" },
+        ];
+        prisma.backupJob.findMany.mockResolvedValue([]);
+
+        await (
+          executor as unknown as {
+            reconcileOrphanedBranches: () => Promise<void>;
+          }
+        ).reconcileOrphanedBranches();
+
+        const calls = (mockDeleteBranch as jest.Mock).mock.calls.map(
+          (c) => c[0] as string,
+        );
+        expect(calls).toEqual(["br-backup", "br-pre"]);
+      });
+
+      it("deleteBranch 失败不抛错（下轮 tick 重试）", async () => {
+        mockBranches.branches = [
+          { id: "br-orphan", name: "backup-cmsjuxxx", parent_id: "br-root" },
+        ];
+        prisma.backupJob.findMany.mockResolvedValue([]);
+        mockDeleteBranch.mockRejectedValue(new Error("neon down"));
+
+        await expect(
+          (
+            executor as unknown as {
+              reconcileOrphanedBranches: () => Promise<void>;
+            }
+          ).reconcileOrphanedBranches(),
+        ).resolves.toBeUndefined();
+      });
+    });
+
     it("Neon 操作完成：进入 verify", async () => {
       mockWaitForOperation.mockResolvedValue(true);
 
@@ -438,6 +539,79 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
             phase: "restore/verify",
             progress: expect.objectContaining({ stage: "restore/verify" }),
           }),
+        }),
+      );
+    });
+  });
+
+  describe('advanceRestore stage ""（换库 preserve 决策）', () => {
+    const stageZeroJob = {
+      id: "rest-1",
+      kind: "restore",
+      status: "running",
+      phase: "restore/prepare",
+      neonBranchId: null,
+      restoreFromId: "src-1",
+      includeObjects: true,
+      isProtection: false,
+      error: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      progress: { stage: "", done: 0, total: 0, protectJobId: "prot-1" },
+    };
+
+    beforeEach(() => {
+      prisma.backupJob.findUnique.mockResolvedValue({
+        id: "src-1",
+        kind: "manual",
+        status: "succeeded",
+        includeObjects: true,
+        isProtection: false,
+        manifest: null,
+        neonBranchId: "br-src-1",
+      });
+    });
+
+    it("旧主是普通分支：preserve 为 pre-restore-<id>（最后防线）", async () => {
+      mockBranches.primaryId = "primary-1";
+      mockBranches.branches = [
+        { id: "primary-1", name: "production", parent_id: "br-root" },
+      ];
+
+      await (
+        executor as unknown as {
+          advanceJob: (job: unknown) => Promise<void>;
+        }
+      ).advanceJob(stageZeroJob);
+
+      expect(mockRestoreBranch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          preserveUnderName: "pre-restore-rest-1",
+        }),
+      );
+    });
+
+    it("旧主是根分支（parent_id 为空）：跳过 preserve，不产生删不掉的根孤儿", async () => {
+      mockBranches.primaryId = "primary-1";
+      mockBranches.branches = [
+        { id: "primary-1", name: "main", parent_id: null },
+      ];
+
+      await (
+        executor as unknown as {
+          advanceJob: (job: unknown) => Promise<void>;
+        }
+      ).advanceJob(stageZeroJob);
+
+      const call = (mockRestoreBranch as jest.Mock).mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
+      expect(call.preserveUnderName).toBeUndefined();
+      expect(call).toEqual(
+        expect.objectContaining({
+          targetBranchId: "primary-1",
+          sourceBranchId: "br-src-1",
         }),
       );
     });
