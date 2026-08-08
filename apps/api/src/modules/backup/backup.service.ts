@@ -25,6 +25,14 @@ import {
   ensureBackupDirs,
   type BackupDataPaths,
 } from "./backup-dirs";
+/**
+ * Vercel running 任务的卡死兜底阈值：接力完好时每 ≤45s 就有进度心跳
+ * （updatedAt 前进），30 分钟毫无更新 = 接力断裂/调用挂死（曾线上表现为
+ * 回滚行冻结在「准备」，任何 Run 都推不动）。自托管有状态文件 TTL 兜底，
+ * Vercel 无持久盘，必须靠这个 DB 层兜底。
+ */
+const STALE_VERCEL_RUNNING_MS = 30 * 60 * 1000;
+
 import {
   BackupVercelExecutor,
   VERCEL_ADVANCE_BUDGET_MS,
@@ -180,6 +188,9 @@ export class BackupService {
     try {
       await this.reconcileStaleJobStates();
       await this.reconcileOrphanedRestores();
+      if (this.isVercelDeployment()) {
+        await this.reconcileStaleRunningJobs();
+      }
     } catch (caught) {
       this.logger.warn(`tick 兜底失败: ${messageOf(caught)}`);
     }
@@ -349,6 +360,42 @@ export class BackupService {
         .catch(() => undefined);
       this.logger.warn(
         `回滚任务 ${row.id} 失去链（pending 且无状态文件），已落 failed`,
+      );
+    }
+  }
+
+  /**
+   * Vercel 卡死兜底：running 任务超过阈值无任何进度更新（接力断裂、调用
+   * 挂死）→ 落 failed 可重新发起。曾线上表现为回滚行冻结在「准备」，任何
+   * Run/接力都推不动、UI 永远显示「进行中」；自托管靠状态文件 TTL 兜底
+   * （reconcileStaleJobStates），Vercel 无持久盘，必须由 DB 层兜底。
+   */
+  private async reconcileStaleRunningJobs(): Promise<void> {
+    const staleBefore = new Date(Date.now() - STALE_VERCEL_RUNNING_MS);
+    const rows = await this.prisma.backupJob
+      .findMany({
+        where: {
+          status: "running",
+          updatedAt: { lt: staleBefore },
+        },
+        select: { id: true, kind: true, phase: true },
+      })
+      .catch(() => null);
+    if (!rows?.length) return;
+    for (const row of rows) {
+      await this.prisma.backupJob
+        .update({
+          where: { id: row.id },
+          data: {
+            status: "failed",
+            error:
+              "任务超过 30 分钟无进度更新（接力可能断裂），已标记失败，可清除后重新发起",
+            finishedAt: new Date(),
+          },
+        })
+        .catch(() => undefined);
+      this.logger.warn(
+        `Vercel 任务 ${row.id}（${row.kind}/${row.phase}）超过 ${STALE_VERCEL_RUNNING_MS / 60_000} 分钟无进展，已落 failed`,
       );
     }
   }
