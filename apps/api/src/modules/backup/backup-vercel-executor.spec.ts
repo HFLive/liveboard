@@ -1049,6 +1049,40 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
         }),
       );
       expect(mockRestoreSnapshot).toHaveBeenCalledTimes(1);
+      expect(maintenance.setSystemEnabled).not.toHaveBeenCalledWith(false);
+    });
+
+    it("restore POST 被 Neon 明确拒绝时关闭维护模式并落 failed", async () => {
+      mockBranches.primaryId = "primary-1";
+      mockBranches.branches = [
+        { id: "primary-1", name: "main", parent_id: null },
+      ];
+      mockRestoreSnapshot.mockRejectedValueOnce(
+        Object.assign(new Error("Neon API 错误 409：branch name conflict"), {
+          status: 409,
+        }),
+      );
+
+      await (
+        executor as unknown as {
+          advanceJob: (job: unknown) => Promise<void>;
+        }
+      ).advanceJob(stageZeroJob);
+
+      expect(maintenance.setSystemEnabled).toHaveBeenNthCalledWith(
+        1,
+        true,
+        "正在从备份 #src-1 回滚",
+      );
+      expect(maintenance.setSystemEnabled).toHaveBeenNthCalledWith(2, false);
+      expect(prisma.backupJob.upsert).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            status: "failed",
+            error: expect.stringContaining("409"),
+          }),
+        }),
+      );
     });
 
     it("requesting 看到 restored_from/restored_as 后只读恢复到 verify", async () => {

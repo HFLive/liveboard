@@ -240,7 +240,25 @@ describe("NeonClient", () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ message: "rate limited" }, 429),
     );
-    await expect(client.createBranch("x")).rejects.toThrow("Neon API 速率限制");
+    await expect(client.createBranch("x")).rejects.toMatchObject({
+      status: 429,
+      message: expect.stringContaining("Neon API 速率限制"),
+    });
+  });
+
+  it("403 保留 HTTP 状态供回滚状态机识别明确拒绝", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ message: "forbidden" }, 403),
+    );
+    await expect(
+      client.restoreSnapshot({
+        snapshotId: "snap-1",
+        targetBranchId: "br-main",
+      }),
+    ).rejects.toMatchObject({
+      status: 403,
+      message: expect.stringContaining("Neon API 权限不足"),
+    });
   });
 
   it("POST 请求超时标记为结果未知，调用方不得盲目重试", async () => {
