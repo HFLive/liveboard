@@ -116,12 +116,16 @@ export class NeonClient {
     }
   }
 
-  /** 轮询操作到 finished；failed 或超时抛错。 */
+  /**
+   * 轮询操作到 finished。返回 true=已完成；false=timeoutMs 内未完成（调用方
+   * 自行决定：executor 用短窗口轮询 + 心跳保持接力链，超时不代表失败）。
+   * failed 状态抛错；timeoutMs 默认 5 分钟仅用于非预算调用方。
+   */
   async waitForOperation(
     operationId: string | null,
     timeoutMs: number = OPERATION_TIMEOUT_MS,
-  ): Promise<void> {
-    if (!operationId) return; // 部分响应无操作（如分支已是最新）。
+  ): Promise<boolean> {
+    if (!operationId) return true; // 部分响应无操作（如分支已是最新）。
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       // 操作查询是项目级接口：旧版顶层 /operations/{id} 路径在现网已不存在
@@ -131,16 +135,14 @@ export class NeonClient {
         `/projects/${this.projectId}/operations/${operationId}`,
       );
       const state = body.operation.state ?? body.operation.status;
-      if (state === "finished") return;
+      if (state === "finished") return true;
       if (state === "failed") {
         throw new Error(
           `Neon 操作失败：${body.operation.error?.message ?? operationId}`,
         );
       }
       if (Date.now() >= deadline) {
-        throw new Error(
-          `Neon 操作超时（${timeoutMs / 1000}s）：${operationId}`,
-        );
+        return false; // 未超时抛错：长操作由调用方分棒等待（预算感知）。
       }
       await sleep(OPERATION_POLL_INTERVAL_MS);
     }

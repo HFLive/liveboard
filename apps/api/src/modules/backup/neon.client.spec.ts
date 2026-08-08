@@ -88,9 +88,7 @@ describe("NeonClient", () => {
       .mockResolvedValueOnce(
         jsonResponse({ operation: { id: "op-1", state: "finished" } }),
       );
-    await expect(
-      client.waitForOperation("op-1", 10_000),
-    ).resolves.toBeUndefined();
+    await expect(client.waitForOperation("op-1", 10_000)).resolves.toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(3);
     // 操作查询是项目级接口，必须带 /projects/{project_id} 前缀。
     expect(fetchMock).toHaveBeenCalledWith(
@@ -110,16 +108,14 @@ describe("NeonClient", () => {
     );
   });
 
-  it("waitForOperation 超时抛错", async () => {
+  it("waitForOperation 超时返回 false（不抛错，调用方分棒等待）", async () => {
     // 每个请求都必须返回全新的 Response（Response body 只能读一次）。
     fetchMock.mockImplementation(() =>
       Promise.resolve(
         jsonResponse({ operation: { id: "op-1", state: "running" } }),
       ),
     );
-    await expect(client.waitForOperation("op-1", 50)).rejects.toThrow(
-      "Neon 操作超时",
-    );
+    await expect(client.waitForOperation("op-1", 50)).resolves.toBe(false);
   });
 
   it("429 抛出速率限制错误", async () => {

@@ -87,6 +87,12 @@ export const VERCEL_ADVANCE_BUDGET_MS = 45_000;
 export const VERCEL_MANUAL_BUDGET_MS = 20_000;
 /** 回滚链请求预算：保护备份 + 回滚共享，同样取短值让请求尽早返回。 */
 export const VERCEL_RESTORE_CHAIN_BUDGET_MS = 20_000;
+/**
+ * 单棒内 Neon 操作轮询窗口：函数 60s 上限内留余量，未完成则心跳退出本棒
+ * （updatedAt 前进触发接力），由下一棒继续轮询。Neon 恢复分支可数分钟，
+ * 旧实现按 5 分钟超时整棒死等，函数在轮询中被杀、无接力、链静默断。
+ */
+const VERCEL_OPERATION_POLL_MS = 25_000;
 
 /** R2 备份前缀（对象复制到 backup/<jobId>/<storageKey>）。 */
 function backupObjectKey(jobId: string, storageKey: string): string {
@@ -115,7 +121,20 @@ export class BackupVercelExecutor {
       .catch(() => null);
     const dbIds = new Set((rows ?? []).map((row) => row.id));
     for (const row of rows ?? []) {
+      const before = row.updatedAt.getTime();
       await this.withJobLock(row.id, () => this.advanceJob(row));
+      // 推进过且未终态的任务接力续跑：cron 才不会一次只推一块——长操作
+      // （Neon 恢复数分钟）断链后靠这条路径在几分钟内跑完，而非每天一块。
+      const after = await this.prisma.backupJob
+        .findUnique({ where: { id: row.id } })
+        .catch(() => null);
+      if (
+        after &&
+        (after.status === "pending" || after.status === "running") &&
+        after.updatedAt.getTime() > before
+      ) {
+        await this.scheduleContinuation(row.id);
+      }
     }
     // 兜底：Neon 恢复换库会把备份点之后创建的行从 DB 抹掉（回滚行/保护
     // 备份行），接力断链时它们不在 findMany 结果里，永远无人推进。从
@@ -367,8 +386,28 @@ export class BackupVercelExecutor {
     }
 
     if (stage === "branch") {
-      // 等待分支创建操作完成。
-      await neon.waitForOperation(progress.operationId ?? null);
+      // 预算感知等待分支创建操作：与回滚同理，未完成则心跳退出本棒
+      // （避免函数 60s 内死在长轮询里，接力链断裂）。
+      const finished = await neon.waitForOperation(
+        progress.operationId ?? null,
+        VERCEL_OPERATION_POLL_MS,
+      );
+      if (!finished) {
+        const heartbeat: VercelJobProgress = {
+          stage: "branch",
+          done: 0,
+          total: 1,
+          operationId: progress.operationId ?? null,
+        };
+        await this.prisma.backupJob
+          .update({
+            where: { id: job.id },
+            data: { phase: "create-branch", progress: heartbeat as never },
+          })
+          .catch(() => undefined);
+        await this.writeRedisState(job.id, heartbeat, this.redisMetaFor(job));
+        return;
+      }
       const refs = await collectObjectRefs(this.prisma);
       if (!job.includeObjects) {
         await this.finalizeBackup(job, refs, [], {
@@ -607,10 +646,34 @@ export class BackupVercelExecutor {
     }
 
     if (stage === "restore/wait") {
+      // 预算感知等待：Neon 恢复操作可数分钟，一棒 45s 内等不完。每棒轮询
+      // 一小段，未完成则心跳更新进度（updatedAt 前进触发接力），下一棒继续
+      // 轮询；完成才进入 verify。旧实现 5 分钟整棒死等，函数 60s 被杀、
+      // 无接力续跑，回滚行永久卡「还原数据库」。
+      const finished = await neon.waitForOperation(
+        progress.operationId ?? null,
+        VERCEL_OPERATION_POLL_MS,
+      );
+      if (!finished) {
+        const heartbeat: VercelJobProgress = {
+          stage: "restore/wait",
+          done: 0,
+          total: 1,
+          operationId: progress.operationId ?? null,
+          protectJobId: progress.protectJobId ?? null,
+        };
+        await this.upsertJobRow(
+          job.id,
+          "restore",
+          { phase: "restore/restore", progress: heartbeat as never },
+          this.rowCreateOverrides(job),
+        );
+        await this.writeRedisState(job.id, heartbeat, this.redisMetaFor(job));
+        return;
+      }
       // waitForOperation 返回时主库已被替换成备份分支快照：此后任务行在
       // 旧库里被抹掉（快照里没有备份点之后创建的行），所有写入必须走
       // upsert 重建（见 upsertJobRow），否则 restore 行静默蒸发。
-      await neon.waitForOperation(progress.operationId ?? null);
       const next: VercelJobProgress = {
         stage: "restore/verify",
         done: 0,

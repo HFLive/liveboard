@@ -16,6 +16,8 @@ const mockBranches: {
   branches: [],
   primaryId: "primary-1",
 };
+/** 共享 waitForOperation mock：默认已完成；测试可改为 false 模拟长操作。 */
+const mockWaitForOperation = jest.fn().mockResolvedValue(true);
 
 jest.mock("./neon.client", () => ({
   NeonClient: jest.fn().mockImplementation(() => ({
@@ -24,7 +26,7 @@ jest.mock("./neon.client", () => ({
       .mockResolvedValue({ branchId: "br-1", operationId: "op-1" }),
     listBranches: jest.fn().mockResolvedValue(mockBranches),
     restoreBranch: jest.fn().mockResolvedValue("op-restore-1"),
-    waitForOperation: jest.fn().mockResolvedValue(undefined),
+    waitForOperation: mockWaitForOperation,
     deleteBranch: jest.fn().mockResolvedValue(undefined),
   })),
 }));
@@ -70,6 +72,7 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
     jest.clearAllMocks();
     mockBranches.branches = [];
     mockBranches.primaryId = "primary-1";
+    mockWaitForOperation.mockResolvedValue(true);
     redis.getClient.mockResolvedValue(redisClient);
     redisClient.get.mockResolvedValue(null);
     redisClient.set.mockResolvedValue("OK");
@@ -361,6 +364,81 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
         "backup/src-1/a.txt",
         "a.txt",
         "text/plain",
+      );
+    });
+  });
+
+  describe("advanceRestore restore/wait 阶段（预算感知等待）", () => {
+    const restoreWaitJob = {
+      id: "rest-1",
+      kind: "restore",
+      status: "running",
+      phase: "restore/restore",
+      neonBranchId: null,
+      restoreFromId: "src-1",
+      includeObjects: true,
+      isProtection: false,
+      error: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      progress: {
+        stage: "restore/wait",
+        done: 0,
+        total: 1,
+        operationId: "op-9",
+        protectJobId: "prot-1",
+      },
+    };
+
+    it("Neon 操作未完成：心跳更新进度（stage 不变、protectJobId 保留），不落 failed", async () => {
+      mockWaitForOperation.mockResolvedValue(false);
+
+      await (
+        executor as unknown as {
+          advanceJob: (job: unknown) => Promise<void>;
+        }
+      ).advanceJob(restoreWaitJob);
+
+      expect(prisma.backupJob.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "rest-1" },
+          update: expect.objectContaining({
+            phase: "restore/restore",
+            progress: expect.objectContaining({
+              stage: "restore/wait",
+              operationId: "op-9",
+              protectJobId: "prot-1",
+            }),
+          }),
+        }),
+      );
+      // 心跳写入推进 updatedAt → 接力续跑继续轮询，绝不能落 failed。
+      const failedCalls = (
+        prisma.backupJob.upsert as jest.Mock
+      ).mock.calls.filter(
+        (call) =>
+          (call[0] as { update?: { status?: string } })?.update?.status ===
+          "failed",
+      );
+      expect(failedCalls).toHaveLength(0);
+    });
+
+    it("Neon 操作完成：进入 verify", async () => {
+      mockWaitForOperation.mockResolvedValue(true);
+
+      await (
+        executor as unknown as {
+          advanceJob: (job: unknown) => Promise<void>;
+        }
+      ).advanceJob(restoreWaitJob);
+
+      expect(prisma.backupJob.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            phase: "restore/verify",
+            progress: expect.objectContaining({ stage: "restore/verify" }),
+          }),
+        }),
       );
     });
   });
