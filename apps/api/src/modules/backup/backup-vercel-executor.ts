@@ -1398,10 +1398,20 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** 自身公开地址：Vercel 自动注入的生产域名优先，其次 API_HOST（去尾斜杠）。 */
+/**
+ * 自身公开地址：生产域名优先，其次部署域名（函数运行时必定注入），最后
+ * API_HOST。曾线上翻车：项目改名/重建后 VERCEL_PROJECT_PRODUCTION_URL
+ * 缺失 → selfBaseUrl 返回 null → 接力续跑静默跳过（scheduleContinuation
+ * 里 `if (!base || !secret) return`）→ 链条在请求内预算（20s）后断裂，
+ * 任务永久「进行中」。
+ */
 function selfBaseUrl(): string | null {
   const production = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
   if (production) return `https://${production}`;
+  // VERCEL_URL = 当前部署专属域名（liveboard-<hash>-*.vercel.app），
+  // 服务器函数运行时始终存在；自调用打到部署域名同样可达。
+  const deployment = process.env.VERCEL_URL?.trim();
+  if (deployment) return `https://${deployment}`;
   const host = process.env.API_HOST?.trim();
   if (host) return host.replace(/\/+$/, "");
   return null;
