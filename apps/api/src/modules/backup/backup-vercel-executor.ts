@@ -1532,7 +1532,10 @@ export class BackupVercelExecutor {
       const state = await this.readRedisState(jobId);
       if (!state?.kind || !state.progress) continue;
       const stage = state.progress.stage ?? "";
-      if (stage === "done" || stage === "failed") continue;
+      // armRestoreChain 会先写入 stage=""，真正推进前由数据库中的 running
+      // restore 行提供互斥。若该行已被回滚换库或管理员清理，空阶段没有任何
+      // 可恢复动作，不能再作为活跃任务永久阻塞后续备份。
+      if (stage === "" || stage === "done" || stage === "failed") continue;
       activeJobIds.add(jobId);
       if (state.kind === "restore") {
         const protectId = this.protectJobIdOf(state.progress);

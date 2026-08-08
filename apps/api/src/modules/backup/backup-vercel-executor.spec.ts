@@ -240,6 +240,27 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
       );
     });
 
+    it("DB 行不存在时忽略 Redis 空阶段残留，不阻塞新任务", async () => {
+      prisma.backupJob.findFirst.mockResolvedValue(null);
+      redisClient.keys.mockResolvedValue([
+        "liveboard:backup:job:empty-restore-1",
+      ]);
+      redisClient.get.mockResolvedValue(
+        JSON.stringify({
+          jobId: "empty-restore-1",
+          kind: "restore",
+          progress: {
+            stage: "",
+            done: 0,
+            total: 0,
+            protectJobId: "protect-1",
+          },
+        }),
+      );
+
+      await expect(executor.findInFlightJobId()).resolves.toBeNull();
+    });
+
     it("DB 已落 failed 时忽略 Redis 残留进度，不永久阻塞新任务", async () => {
       prisma.backupJob.findFirst.mockResolvedValue(null);
       prisma.backupJob.findMany.mockResolvedValue([{ id: "stale-restore-1" }]);
