@@ -2420,7 +2420,14 @@ export interface BackupInfo {
       weekday: number | null;
     };
   };
-  vercelLimits?: { maxBackupBranches: number };
+  vercelLimits?: {
+    /** Neon Free 的项目总分支上限（含默认分支与回滚瞬态分支）。 */
+    maxProjectBranches: number;
+    /** Snapshot 回滚需要同时空出的分支数。 */
+    restoreRequiredFreeBranches: number;
+    /** Neon Free 允许的手动 Snapshot 数。 */
+    maxManualSnapshots?: number;
+  };
 }
 
 export function getBackupInfo() {
@@ -2482,8 +2489,11 @@ export function startBackupRestore(
   backupId: string,
   input: { confirm: string; includeObjects?: boolean },
 ) {
-  return request<{ preBackup: BackupJobSummary; restore: BackupJobSummary }>(
-    `/admin/backup/${encodeURIComponent(backupId)}/restore`,
-    { method: "POST", body: JSON.stringify(input) },
-  );
+  return request<{
+    preBackup: BackupJobSummary | null;
+    restore: BackupJobSummary;
+  }>(`/admin/backup/${encodeURIComponent(backupId)}/restore`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }

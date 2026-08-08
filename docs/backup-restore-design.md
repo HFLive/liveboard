@@ -4,9 +4,9 @@
 
 - **自动备份**：按间隔调度（预设 6h/12h/每天/每周，或自定义 60–10080 分钟），
   超时自动补跑（tick 驱动，以 `lastAutoBackupAt` 为唯一依据）。
-- **手动备份**：一键立即备份；回滚前自动创建「保护备份」（manual 级）。
-- **回滚**：从某个备份恢复数据库（+可选文件对象），需输入确认语；回滚前
-  强制先做一次保护备份。
+- **手动备份**：一键立即备份。自托管回滚前另建保护备份；Vercel 免费版只
+  能保留一个手动 Snapshot，不额外创建第二份。
+- **回滚**：从某个备份恢复数据库（+可选文件对象），需输入确认语。
 - **保留份数**：自动 / 手动分别限额（默认 7 / 20），超限自动删除最旧备份；
   被运行中回滚引用的备份跳过。
 
@@ -15,7 +15,7 @@
 | 平台        | 数据库                                          | 文件对象（可配置开关）                          |
 | ----------- | ----------------------------------------------- | ----------------------------------------------- |
 | self_hosted | `pg_dump -Fc` → `backups/<jobId>/database.dump` | 按 DB 引用枚举对象 → `backups/<jobId>/objects/` |
-| vercel      | Neon 数据分支（无 compute endpoint）            | R2 copyObject → `backup/<jobId>/<storageKey>`   |
+| vercel      | Neon 手动 Snapshot                              | R2 copyObject → `backup/<jobId>/<storageKey>`   |
 
 dump 排除表：`PendingUpload`（短期上传预留）、`ServerMetricSample`（宿主指标）。
 **`_prisma_migrations` 必须保留**（同库回滚后迁移历史一致，migrate deploy 不会
@@ -71,50 +71,77 @@ super_admin 存在 → 关维护。**DROP 之后失败保持维护模式**（不
 ### vercel：`backup-vercel-executor.ts` 分块状态机
 
 ```
-备份：create-branch → wait operation → copy-objects（每 tick ≤20）→ finalize
-回滚：restore（主分支 ← 备份分支，preserve_under_name）→ wait → verify →
-      R2 回拷 → cleanup（删 Neon 保存的旧主分支）
+备份：create-snapshot → wait operation → copy-objects（每 tick ≤20）→ finalize
+回滚：snapshot restore（finalize_restore=true）→ wait → verify →
+      R2 回拷 → cleanup（只删 Neon 标记的被替换旧分支）
 ```
 
-- 进度双写：`BackupJob.progress` + Redis `liveboard:backup:job:<id>`（TTL 7d），
-  回滚替换主库期间 UI 从 Redis 读。
-- 换库重建：Neon restoreBranch 会把主库替换成备份点快照，备份点之后创建的
-  任务行（回滚行/保护备份行）会被快照抹掉。executor 每次推进把行元数据
-  （kind、restoreFromId、protectJobId、includeObjects、isProtection）随进度
+- 进度双写：`BackupJob.progress` + Redis `liveboard:backup:job:<id>`（TTL 7d）。
+  回滚替换主库期间 executor 从 Redis 重建被快照抹掉的任务行，管理页仍以
+  数据库任务行为展示来源。
+- 换库重建：Neon finalized Snapshot restore 会把 compute 切到恢复后的新分支，
+  备份点之后创建的回滚行会被快照抹掉。executor 每次推进把行元数据
+  （kind、restoreFromId、includeObjects、isProtection）随进度
   写 Redis；行缺失时按 Redis 状态重建（`recoverJobRow`）再继续推进，写入
   一律 upsert（`upsertJobRow`）；restore/objects 阶段先修复源备份行
-  （manifest 从 Redis 进度重建、分支 id 按 `backup-<id>` 命名从 Neon 找回），
-  收尾时重建保护备份行（`repairProtectionRow`）。每日 cron 的 `advance()`
+  （manifest 从 Redis 进度重建、Snapshot id 按 `backup-<id>` 名称找回）。
+  每日 cron 的 `advance()`
   兜底扫描 Redis 里的孤儿执行中任务并接力续跑。
-- per-job Redis NX 锁防多实例双推进；阶段幂等（对象大小一致跳过）。
-- 回滚链：`POST /admin/backup/:id/restore` 创建 manual 保护备份行 + restore
-  行；保护备份 finalize 后 `wakePendingRestores` 唤醒 restore。
-- 保留策略：`DELETE /projects/{id}/branches/{neonBranchId}` + R2 前缀对象
-  逐个 `removeObject`（后端接口无 listObjects，靠 manifest 记录）。
-- Neon 分支上限保守默认 auto 3 / manual 5（Free 计划 10 分支/项目），
-  `getInfo.vercelLimits` 返回给前端展示。
+- per-job Redis NX 锁 `liveboard:backup:lock:<id>` 防多实例双推进，与进度 key
+  严格分离；阶段幂等（对象大小一致时计入完成并跳过复制）。
+- Redis 是换库窗口中唯一不随 Neon 快照倒退的状态源：创建任务前确认连接，
+  状态或锁写入失败一律 fail closed，不允许在无锁/无恢复状态时继续回滚。
+- Vercel 的维护模式同样存 Redis（`liveboard:maintenance:state`），不再恒定
+  关闭：发出 Neon restore 前开启，校验、对象回拷和清理全部完成后才关闭；
+  读取失败按开启处理。关闭失败时任务保留 running/cleanup 并由下一棒重试。
+- Neon 的 Snapshot 创建与恢复响应可能包含多条异步 operations；进度同时保存首条
+  `operationId`（兼容旧任务）和完整 `operationIds`，全部 finished 后才进入
+  下一阶段。Snapshot 只能从默认根分支创建；检测到旧式非根默认分支时 fail
+  closed，要求先迁到新的 Neon 项目，绝不继续制造祖先依赖链。
+- Snapshot restore POST 是非幂等操作：调用前先把 `restore/requesting` 意图
+  写入 Redis。若网络错误或 20 秒内未返回，只读查询分支的
+  `restored_from`/`restored_as` 元数据确认结果，禁止自动重发 POST。
+- 启动新任务前同时检查 DB 与 Redis 中的 pending/running 链；Vercel 实例没有
+  持久状态文件，不能只依赖本地 `backup-jobs/` 目录做全局互斥。
+- 自调用接力端点在 Vercel 上立即返回 accepted，并用官方
+  `@vercel/functions` 的 `waitUntil()` 托管本棒推进。调用方 10 秒超时只用于
+  覆盖免费实例冷启动并确认端点已接收，不能 abort 一个仍同步等待 20–45 秒
+  的处理器；否则链是否
+  继续没有平台保证。每次 Vercel 请求结束还必须释放进程内 `runningJobId`
+  哨兵，跨实例互斥只由 DB 与 Redis 持续。
+- 孤儿 Snapshot 清扫同时核对 DB 行与 Redis 活跃任务；旧版 `backup-*` /
+  `pre-restore-*` 分支只保留兼容清理，不再创建。
+- Vercel 回滚只创建 restore 行；Neon 自身先保留被替换旧分支，校验成功后仅按
+  `restored_as` 返回值删除它。自托管仍创建 manual 保护备份。
+- 保留策略：新任务删除 Snapshot + R2 前缀对象；旧任务按 manifest/实际资源
+  自动兼容删除分支。对象逐个 `removeObject`（靠 manifest 记录）。
+- Neon Free 只允许一个手动 Snapshot：手动备份已有快照时返回 409；自动备份
+  只轮换应用自己的上一份成功自动 Snapshot，绝不覆盖手动或未知 Snapshot。
+  回滚另需一个瞬态分支空位；`getInfo.vercelLimits` 返回这些限制。
 
 ## 关键端点
 
-| 方法  | 路径                             | 说明                                           |
-| ----- | -------------------------------- | ---------------------------------------------- |
-| GET   | `/admin/backup/info`             | 平台能力、设置、确认语、预设、Vercel 分支上限  |
-| PATCH | `/admin/backup/settings`         | 保存设置（校验间隔 60–10080、保留 1–100）      |
-| GET   | `/admin/backup/jobs[/:id]`       | 任务列表/详情；回滚窗口降级为状态文件读取      |
-| POST  | `/admin/backup/run`              | 手动备份                                       |
-| POST  | `/admin/backup/:id/restore`      | 回滚（confirm 必填）→ `{ preBackup, restore }` |
-| POST  | `/admin/backup/jobs/:id/dismiss` | 清除失败报错                                   |
-| GET   | `/internal/cron/backup`          | Vercel 调度入口（CRON_SECRET）                 |
+| 方法  | 路径                             | 说明                                          |
+| ----- | -------------------------------- | --------------------------------------------- |
+| GET   | `/admin/backup/info`             | 平台能力、设置、确认语、预设、Vercel 免费限额 |
+| PATCH | `/admin/backup/settings`         | 保存设置（校验间隔 60–10080、保留 1–100）     |
+| GET   | `/admin/backup/jobs[/:id]`       | 任务列表/详情；回滚窗口降级为状态文件读取     |
+| POST  | `/admin/backup/run`              | 手动备份                                      |
+| POST  | `/admin/backup/:id/restore`      | 回滚；Vercel 返回 `preBackup: null`           |
+| POST  | `/admin/backup/jobs/:id/dismiss` | 清除失败报错                                  |
+| GET   | `/internal/cron/backup`          | Vercel 调度入口（CRON_SECRET）                |
 
-全部写端点 `requireSuperAdmin`；Vercel 未配 `NEON_API_KEY`/`NEON_PROJECT_ID`
-时 503。
+全部写端点（包括硬删除备份）都在服务层执行 `requireSuperAdmin`；Vercel 未配
+`NEON_API_KEY`、`NEON_PROJECT_ID`、`REDIS_URL` 或 `CRON_SECRET` 时 503，
+避免创建注定无法跨函数接力或在换库时丢失状态的任务。
 
 ## 安全与边界
 
-1. **回滚前保护备份**：restore 端点先建 manual 保护备份，成功后才启动回滚；
-   链由互斥锁覆盖全程，期间任何新任务 409。
-2. **链中断兜底**：restore 行 pending 超 2min 且无状态文件（服务重启）
-   → tick 落 failed「可重新发起」，不自动恢复（显式确认的稀有操作）。
+1. **回滚防线**：自托管先建 manual 保护备份；Vercel finalized Snapshot restore
+   保留被替换旧分支，校验成功后才清理。链由互斥锁覆盖，期间新任务 409。
+2. **链中断兜底**：self_hosted 的 restore 行 pending 超 2min 且无状态文件
+   （服务重启）→ tick 落 failed「可重新发起」；Vercel 由 Redis 进度与
+   executor 幂等续跑。
 3. **互斥**：备份 ↔ 回滚 ↔ 迁移导入/导出（双目录扫描，migration.service
    同步扩展）。
 4. **BigInt 序列化**：`dumpSizeBytes` 在 DTO 映射必须 `String()`。

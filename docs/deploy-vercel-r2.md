@@ -79,6 +79,7 @@ favicon 可在浏览器与 CDN 缓存一年 `immutable`，头像可在登录用�
 准备一个密码管理器。部署过程中会生成或取得以下敏感值：
 
 - Neon 数据库连接地址。
+- Neon API Key 与 Project ID（启用管理中心备份/回滚时）。
 - Upstash Redis 密码。
 - R2 Access Key ID 与 Secret Access Key。
 - `SESSION_SECRET`、`AI_ENCRYPTION_KEY`、`CRON_SECRET`。
@@ -280,6 +281,8 @@ DEPLOYMENT_TARGET=vercel
 DATABASE_URL=<Neon pooled URL>
 DIRECT_DATABASE_URL=<Neon direct URL>
 REDIS_URL=<Upstash rediss:// URL>
+NEON_API_KEY=<Neon API Key，仅用于管理中心备份与回滚>
+NEON_PROJECT_ID=<Neon Project ID，仅用于管理中心备份与回滚>
 R2_ACCOUNT_ID=<Cloudflare Account ID>
 R2_BUCKET=liveboard-production
 R2_ACCESS_KEY_ID=<R2 Access Key ID>
@@ -877,6 +880,7 @@ Ready 只代表构建和 Function 发布成功，不代表外部依赖全部可�
 
 - [ ] 个人 GitHub fork 已连接 Vercel，团队仓库仍是代码源。
 - [ ] Neon 使用 PostgreSQL 16、Singapore，已保存 pooled/direct 两条 URL。
+- [ ] 如需管理中心备份/回滚，API 已配置 `NEON_API_KEY` 与 `NEON_PROJECT_ID`；生产分支是默认根分支；Neon Free 只保留 1 个手动 Snapshot，回滚前至少保留 1 个分支空位。
 - [ ] Upstash 在 Singapore，Eviction 关闭，`REDIS_URL` 使用 `rediss://`。
 - [ ] R2 Bucket 私有，Token 只限目标 Bucket，CORS 是正式 Origin 数组格式且放行 `Range` 请求头。
 - [ ] API Root 是 `apps/api`，Web Root 是 `apps/web`，均允许读取 Root 外文件。

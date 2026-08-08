@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -23,16 +22,18 @@ import {
   type MaintenanceState,
 } from "../migration/maintenance-file";
 import { PrismaService } from "../prisma/prisma.service";
+import { RedisService } from "../redis/redis.service";
 
 export type { MaintenanceState };
 
 /**
- * "维护/只读模式"开关。状态存于迁移数据目录的 `maintenance.json`（而非数据库），
- * 因为导入期间目标库会被整体重建，开关必须在不依赖数据库的情况下仍可读取。
+ * "维护/只读模式"开关。状态不能存数据库，因为导入/Neon 回滚会整体替换
+ * 数据库：self_hosted 存迁移目录的 `maintenance.json`；Vercel 存 Redis。
  *
  * - 开启后由 `MaintenanceModeGuard` 拒绝普通用户的写操作；super_admin 与
  *   维护/迁移相关端点放行。
- * - Vercel 无持久化磁盘，该开关恒为关闭，相关端点返回明确错误。
+ * - Vercel 回滚期间由 BackupVercelExecutor 自动开关；Redis 不可读时
+ *   `isEnabled` fail closed，按维护已开启阻断普通写操作。
  */
 @Injectable()
 export class MaintenanceService {
@@ -45,14 +46,14 @@ export class MaintenanceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly redis: RedisService,
   ) {
     this.deploymentTarget = getDeploymentTarget(config);
     this.paths = migrationDataPaths(config);
   }
 
-  /** Vercel 恒为关闭；自托管读取状态文件，缺失视为关闭、读错误 fail-closed（按开启处理）。 */
+  /** 缺失视为关闭；读错误由 isEnabled fail closed（按开启处理）。 */
   async isEnabled(): Promise<boolean> {
-    if (this.deploymentTarget === "vercel") return false;
     try {
       return (await this.getState()).enabled;
     } catch (caught) {
@@ -68,7 +69,15 @@ export class MaintenanceService {
   }
 
   async getState(): Promise<MaintenanceState> {
-    if (this.deploymentTarget === "vercel") return MAINTENANCE_OFF;
+    if (this.deploymentTarget === "vercel") {
+      const client = await this.redis.getClient();
+      if (!client) {
+        throw new ServiceUnavailableException("Redis 服务暂不可用");
+      }
+      const raw = await client.get(VERCEL_MAINTENANCE_KEY);
+      if (!raw) return MAINTENANCE_OFF;
+      return parseMaintenanceState(raw);
+    }
     return readMaintenanceStateFile(this.paths.maintenanceFile);
   }
 
@@ -84,12 +93,10 @@ export class MaintenanceService {
     enabled: boolean,
     reason?: string,
   ): Promise<MaintenanceState> {
-    if (this.deploymentTarget === "vercel") {
-      throw new ConflictException(
-        "Vercel 环境没有持久化磁盘，不支持维护模式开关",
-      );
-    }
-    if (!ensureMigrationDirs(this.paths)) {
+    if (
+      this.deploymentTarget !== "vercel" &&
+      !ensureMigrationDirs(this.paths)
+    ) {
       throw new ServiceUnavailableException(
         "无法访问迁移数据目录，请检查 MIGRATION_DATA_DIR 是否已正确挂载",
       );
@@ -103,7 +110,7 @@ export class MaintenanceService {
         updatedAt: new Date().toISOString(),
         updatedBy: userId,
       };
-      await writeMaintenanceStateFile(this.paths.maintenanceFile, next);
+      await this.writeState(next);
       this.logger.log(
         `维护模式已${enabled ? "开启" : "关闭"}${reason ? `（${reason}）` : ""}`,
       );
@@ -117,6 +124,47 @@ export class MaintenanceService {
     return scheduled;
   }
 
+  /**
+   * 供备份/迁移状态机调用的系统开关，不依赖会在换库期间消失的用户行。
+   * 仅通过 Nest 依赖注入在服务端内部使用，不暴露为未鉴权端点。
+   */
+  async setSystemEnabled(
+    enabled: boolean,
+    reason?: string,
+  ): Promise<MaintenanceState> {
+    const run = async (): Promise<MaintenanceState> => {
+      const next: MaintenanceState = {
+        enabled,
+        reason: enabled ? reason?.trim() || null : null,
+        updatedAt: new Date().toISOString(),
+        updatedBy: null,
+      };
+      await this.writeState(next);
+      this.logger.log(
+        `系统自动将维护模式${enabled ? "开启" : "关闭"}${reason ? `（${reason}）` : ""}`,
+      );
+      return next;
+    };
+    const scheduled = this.writeChain.then(run, run);
+    this.writeChain = scheduled.then(
+      () => undefined,
+      () => undefined,
+    );
+    return scheduled;
+  }
+
+  private async writeState(state: MaintenanceState): Promise<void> {
+    if (this.deploymentTarget === "vercel") {
+      const client = await this.redis.getClient();
+      if (!client) {
+        throw new ServiceUnavailableException("Redis 服务暂不可用");
+      }
+      await client.set(VERCEL_MAINTENANCE_KEY, JSON.stringify(state));
+      return;
+    }
+    await writeMaintenanceStateFile(this.paths.maintenanceFile, state);
+  }
+
   private async requireSuperAdmin(userId: string | null) {
     if (!userId) throw new ForbiddenException("缺少登录会话");
     const user = await this.prisma.user.findUnique({
@@ -128,4 +176,16 @@ export class MaintenanceService {
     }
     return user;
   }
+}
+
+const VERCEL_MAINTENANCE_KEY = "liveboard:maintenance:state";
+
+function parseMaintenanceState(raw: string): MaintenanceState {
+  const parsed = JSON.parse(raw) as Partial<MaintenanceState>;
+  return {
+    enabled: parsed.enabled === true,
+    reason: typeof parsed.reason === "string" ? parsed.reason : null,
+    updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : null,
+    updatedBy: typeof parsed.updatedBy === "string" ? parsed.updatedBy : null,
+  };
 }

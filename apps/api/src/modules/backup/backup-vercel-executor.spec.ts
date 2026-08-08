@@ -1,16 +1,22 @@
 import { BackupVercelExecutor } from "./backup-vercel-executor";
 
 /**
- * 回归测试：Neon restoreBranch 换库会把备份点之后创建的任务行从 BackupJob
- * 抹掉（回滚行/保护备份行），旧代码 post-swap 的 row.update 全部 P2025 打空，
+ * 回归测试：Neon Snapshot restore 换库会把备份点之后创建的任务行从 BackupJob
+ * 抹掉，旧代码 post-swap 的 row.update 全部 P2025 打空，
  * 最终状态只写进 Redis 而 listJobs 从不读它——回滚行静默蒸发、源备份行
  * 永远卡在「执行中」。修复：Redis 状态带行元数据，换库后从 Redis 重建行、
- * 回拷前缀改用源备份 id、收尾重建保护备份行。
+ * 回拷前缀改用源备份 id，并只清理 Neon 明确标记的被替换分支。
  */
 
 /** Neon mock 共享的分支表：executor 每次 this.neon() 都 new 新实例，共享数据让测试可控。 */
 const mockBranches: {
-  branches: Array<{ id: string; name: string; parent_id?: string | null }>;
+  branches: Array<{
+    id: string;
+    name: string;
+    parent_id?: string | null;
+    restored_from?: string | null;
+    restored_as?: string | null;
+  }>;
   primaryId: string;
 } = {
   branches: [],
@@ -20,16 +26,34 @@ const mockBranches: {
 const mockWaitForOperation = jest.fn().mockResolvedValue(true);
 /** 共享 deleteBranch mock：孤儿分支清扫断言用。 */
 const mockDeleteBranch = jest.fn().mockResolvedValue(undefined);
-/** 共享 restoreBranch mock：preserve 参数断言用。 */
-const mockRestoreBranch = jest.fn().mockResolvedValue("op-restore-1");
+const mockSnapshots: Array<{ id: string; name: string; created_at: string }> =
+  [];
+const mockDeleteSnapshot = jest.fn().mockResolvedValue({ operationIds: [] });
+const mockCreateSnapshot = jest.fn().mockResolvedValue({
+  snapshotId: "snap-1",
+  operationId: "op-snapshot-1",
+  operationIds: ["op-snapshot-1"],
+});
+const mockRestoreSnapshot = jest.fn().mockResolvedValue({
+  branchId: "br-restored-1",
+  replacedBranchId: "primary-1",
+  operationId: "op-restore-1",
+  operationIds: ["op-restore-1"],
+});
 
 jest.mock("./neon.client", () => ({
   NeonClient: jest.fn().mockImplementation(() => ({
-    createBranch: jest
-      .fn()
-      .mockResolvedValue({ branchId: "br-1", operationId: "op-1" }),
+    createBranch: jest.fn().mockResolvedValue({
+      branchId: "br-1",
+      operationId: "op-1",
+      operationIds: ["op-1"],
+    }),
+    createSnapshot: mockCreateSnapshot,
+    listSnapshots: jest.fn().mockImplementation(async () => mockSnapshots),
+    deleteSnapshot: mockDeleteSnapshot,
     listBranches: jest.fn().mockResolvedValue(mockBranches),
-    restoreBranch: mockRestoreBranch,
+    restoreSnapshot: mockRestoreSnapshot,
+    restoreBranch: jest.fn(),
     waitForOperation: mockWaitForOperation,
     deleteBranch: mockDeleteBranch,
   })),
@@ -38,6 +62,7 @@ jest.mock("./neon.client", () => ({
 describe("BackupVercelExecutor 换库后的行重建", () => {
   const prisma = {
     backupJob: {
+      findFirst: jest.fn(),
       findUnique: jest.fn(),
       findMany: jest.fn(),
       create: jest.fn(),
@@ -69,6 +94,9 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
         : null,
     ),
   };
+  const maintenance = {
+    setSystemEnabled: jest.fn(),
+  };
 
   let executor: BackupVercelExecutor;
 
@@ -76,17 +104,27 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
     jest.clearAllMocks();
     mockBranches.branches = [];
     mockBranches.primaryId = "primary-1";
+    mockSnapshots.splice(0, mockSnapshots.length);
     mockWaitForOperation.mockResolvedValue(true);
     mockDeleteBranch.mockResolvedValue(undefined);
-    mockRestoreBranch.mockResolvedValue("op-restore-1");
+    mockRestoreSnapshot.mockResolvedValue({
+      branchId: "br-restored-1",
+      replacedBranchId: "primary-1",
+      operationId: "op-restore-1",
+      operationIds: ["op-restore-1"],
+    });
     redis.getClient.mockResolvedValue(redisClient);
     redisClient.get.mockResolvedValue(null);
     redisClient.set.mockResolvedValue("OK");
+    redisClient.del.mockResolvedValue(1);
     redisClient.keys.mockResolvedValue([]);
     storage.backendFor.mockResolvedValue(storageBackend);
     storageBackend.statObject.mockResolvedValue(null);
     storageBackend.copyObject.mockResolvedValue(undefined);
+    maintenance.setSystemEnabled.mockResolvedValue({ enabled: false });
     prisma.backupJob.create.mockResolvedValue({ id: "row-1" });
+    prisma.backupJob.delete.mockResolvedValue({ id: "row-1" });
+    prisma.backupJob.findFirst.mockResolvedValue(null);
     prisma.backupJob.upsert.mockResolvedValue({ id: "row-1" });
     prisma.backupJob.findMany.mockResolvedValue([]);
     executor = new BackupVercelExecutor(
@@ -94,12 +132,162 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
       storage as never,
       redis as never,
       config as never,
+      maintenance as never,
     );
   });
 
   afterEach(() => {
     delete process.env.CRON_SECRET;
     delete process.env.API_PUBLIC_URL;
+  });
+
+  describe("Neon Free 分支容量预检", () => {
+    function branches(count: number) {
+      mockBranches.primaryId = "branch-0";
+      return Array.from({ length: count }, (_, index) => ({
+        id: `branch-${index}`,
+        name: index === 0 ? "main" : `user-branch-${index}`,
+        parent_id: index === 0 ? null : "branch-0",
+      }));
+    }
+
+    it("手动备份在免费版已有一个 Snapshot 时于创建任务前拒绝", async () => {
+      mockBranches.branches = branches(1);
+      mockSnapshots.push({
+        id: "snap-existing",
+        name: "backup-existing",
+        created_at: new Date().toISOString(),
+      });
+
+      await expect(
+        executor.assertBranchCapacity("backup", "manual"),
+      ).rejects.toThrow("Neon 免费版只允许 1 个手动 Snapshot");
+    });
+
+    it("Redis 不可用时在创建任务前 fail closed", async () => {
+      redis.getClient.mockRejectedValue(new Error("redis down"));
+
+      await expect(executor.assertBranchCapacity("backup")).rejects.toThrow(
+        "redis down",
+      );
+      expect(prisma.backupJob.create).not.toHaveBeenCalled();
+    });
+
+    it("Snapshot 回滚预留一个瞬态分支空位", async () => {
+      mockBranches.branches = branches(10);
+      await expect(executor.assertBranchCapacity("restore")).rejects.toThrow(
+        "回滚至少需要 1 个空位",
+      );
+
+      mockBranches.branches = branches(9);
+      await expect(
+        executor.assertBranchCapacity("restore"),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  describe("失败备份清理", () => {
+    it("任务行缺少 Snapshot id 时按 backup-<jobId> 名称删除 Snapshot", async () => {
+      prisma.backupJob.findUnique.mockResolvedValue({
+        id: "failed-1",
+        status: "failed",
+        neonBranchId: null,
+        manifest: null,
+      });
+      mockSnapshots.push({
+        id: "snap-timeout-created",
+        name: "backup-failed-1",
+        created_at: new Date().toISOString(),
+      });
+
+      await executor.deleteBackupNow("failed-1");
+
+      expect(mockDeleteSnapshot).toHaveBeenCalledWith("snap-timeout-created");
+      expect(prisma.backupJob.delete).toHaveBeenCalledWith({
+        where: { id: "failed-1" },
+      });
+    });
+  });
+
+  describe("Vercel 跨实例任务互斥", () => {
+    it("优先识别数据库里的活跃任务", async () => {
+      prisma.backupJob.findFirst.mockResolvedValue({ id: "db-running-1" });
+
+      await expect(executor.findInFlightJobId()).resolves.toBe("db-running-1");
+      expect(redisClient.keys).not.toHaveBeenCalled();
+    });
+
+    it("换库后 DB 行消失时仍识别 Redis 里的活跃回滚", async () => {
+      prisma.backupJob.findFirst.mockResolvedValue(null);
+      redisClient.keys.mockResolvedValue([
+        "liveboard:backup:job:redis-restore-1",
+      ]);
+      redisClient.get.mockResolvedValue(
+        JSON.stringify({
+          jobId: "redis-restore-1",
+          kind: "restore",
+          progress: {
+            stage: "restore/wait",
+            done: 0,
+            total: 1,
+            protectJobId: "protect-1",
+          },
+        }),
+      );
+
+      await expect(executor.findInFlightJobId()).resolves.toBe(
+        "redis-restore-1",
+      );
+    });
+
+    it("DB 已落 failed 时忽略 Redis 残留进度，不永久阻塞新任务", async () => {
+      prisma.backupJob.findFirst.mockResolvedValue(null);
+      prisma.backupJob.findMany.mockResolvedValue([{ id: "stale-restore-1" }]);
+      redisClient.keys.mockResolvedValue([
+        "liveboard:backup:job:stale-restore-1",
+      ]);
+      redisClient.get.mockResolvedValue(
+        JSON.stringify({
+          jobId: "stale-restore-1",
+          kind: "restore",
+          progress: {
+            stage: "restore/wait",
+            done: 0,
+            total: 1,
+            protectJobId: "protect-1",
+          },
+        }),
+      );
+
+      await expect(executor.findInFlightJobId()).resolves.toBeNull();
+    });
+
+    it("每日兜底不会从 Redis 复活 DB 已失败的回滚", async () => {
+      redisClient.keys.mockResolvedValue([
+        "liveboard:backup:job:failed-restore-1",
+      ]);
+      redisClient.get.mockResolvedValue(
+        JSON.stringify({
+          jobId: "failed-restore-1",
+          kind: "restore",
+          progress: {
+            stage: "restore/wait",
+            done: 0,
+            total: 1,
+            operationId: "op-old",
+          },
+        }),
+      );
+      prisma.backupJob.findUnique.mockResolvedValue({ status: "failed" });
+
+      const orphaned = await (
+        executor as unknown as {
+          listOrphanedInFlightJobs: (dbIds: Set<string>) => Promise<string[]>;
+        }
+      ).listOrphanedInFlightJobs(new Set());
+
+      expect(orphaned).toEqual([]);
+    });
   });
 
   describe("recoverJobRow（换库后从 Redis 重建行）", () => {
@@ -186,9 +374,65 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
     });
   });
 
+  describe("Redis 任务状态与互斥锁隔离", () => {
+    it("armRestoreChain 写入状态后仍能抢锁推进，解锁不会删除状态", async () => {
+      const values = new Map<string, string>();
+      redisClient.set.mockImplementation(
+        async (key: string, value: string, options?: { NX?: boolean }) => {
+          if (options?.NX && values.has(key)) return null;
+          values.set(key, value);
+          return "OK";
+        },
+      );
+      redisClient.get.mockImplementation(async (key: string) => {
+        return values.get(key) ?? null;
+      });
+      redisClient.del.mockImplementation(async (key: string) => {
+        return values.delete(key) ? 1 : 0;
+      });
+
+      await executor.armRestoreChain("rest-1", "src-1", "prot-1", true);
+
+      let advanced = false;
+      await (
+        executor as unknown as {
+          withJobLock: (
+            jobId: string,
+            fn: () => Promise<void>,
+          ) => Promise<void | undefined>;
+        }
+      ).withJobLock("rest-1", async () => {
+        advanced = true;
+      });
+
+      expect(advanced).toBe(true);
+      expect(values.has("liveboard:backup:lock:rest-1")).toBe(false);
+      expect(values.get("liveboard:backup:job:rest-1")).toContain(
+        '"protectJobId":"prot-1"',
+      );
+      expect(redisClient.set).toHaveBeenCalledWith(
+        "liveboard:backup:lock:rest-1",
+        "1",
+        { NX: true, PX: 60_000 },
+      );
+      expect(redisClient.del).not.toHaveBeenCalledWith(
+        "liveboard:backup:job:rest-1",
+      );
+    });
+
+    it("armRestoreChain 写 Redis 失败时抛错，不允许继续 Neon 回滚", async () => {
+      redisClient.set.mockRejectedValue(new Error("redis write failed"));
+
+      await expect(
+        executor.armRestoreChain("rest-1", "src-1", "prot-1", true),
+      ).rejects.toThrow("redis write failed");
+      expect(mockRestoreSnapshot).not.toHaveBeenCalled();
+    });
+  });
+
   describe("repairSourceBackupRow（源备份行回到快照时刻后的修复）", () => {
-    it("重建 manifest、找回分支 id、标成功", async () => {
-      // 首次读取是快照行（执行中、无 manifest、无分支 id）；upsert 落库后
+    it("重建 manifest、找回 Snapshot id、标成功", async () => {
+      // 首次读取是旧数据库中的执行中行；upsert 落库后
       // 再读返回修复后的行（与真实 upsert 行为一致）。
       prisma.backupJob.findUnique
         .mockResolvedValueOnce({
@@ -210,7 +454,7 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
             formatVersion: 1,
             objects: [{ storageKey: "a.txt", sizeBytes: 10, mimeType: null }],
           },
-          neonBranchId: "br-src-1",
+          neonBranchId: "snap-src-1",
         });
       redisClient.get.mockResolvedValue(
         JSON.stringify({
@@ -223,7 +467,11 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
           updatedAt: "2026-08-08T03:10:00Z",
         }),
       );
-      mockBranches.branches = [{ id: "br-src-1", name: "backup-src-1" }];
+      mockSnapshots.push({
+        id: "snap-src-1",
+        name: "backup-src-1",
+        created_at: new Date().toISOString(),
+      });
       const source = (await (
         executor as unknown as {
           repairSourceBackupRow: (sourceId: string) => Promise<unknown>;
@@ -238,7 +486,7 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
           update: expect.objectContaining({
             status: "succeeded",
             phase: "done",
-            neonBranchId: "br-src-1",
+            neonBranchId: "snap-src-1",
             manifest: expect.objectContaining({
               objects: [{ storageKey: "a.txt", sizeBytes: 10, mimeType: null }],
             }),
@@ -266,6 +514,44 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
 
       expect(prisma.backupJob.upsert).not.toHaveBeenCalled();
       expect(source?.manifest).toEqual({ formatVersion: 1, objects: [] });
+    });
+  });
+
+  describe("advanceBackup（Neon Snapshot）", () => {
+    it("从默认根分支创建命名 Snapshot，并把 Snapshot id 写回任务", async () => {
+      mockBranches.primaryId = "primary-1";
+      mockBranches.branches = [
+        { id: "primary-1", name: "production", parent_id: null },
+      ];
+      const job = {
+        id: "job-1",
+        kind: "manual",
+        status: "pending",
+        phase: "",
+        neonBranchId: null,
+        restoreFromId: null,
+        includeObjects: true,
+        isProtection: false,
+        error: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        progress: null,
+      };
+
+      await (
+        executor as unknown as {
+          advanceJob: (row: unknown) => Promise<void>;
+        }
+      ).advanceJob(job);
+
+      expect(mockCreateSnapshot).toHaveBeenCalledWith(
+        "primary-1",
+        "backup-job-1",
+      );
+      expect(prisma.backupJob.update).toHaveBeenLastCalledWith({
+        where: { id: "job-1" },
+        data: expect.objectContaining({ neonBranchId: "snap-1" }),
+      });
     });
   });
 
@@ -372,6 +658,65 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
         "text/plain",
       );
     });
+
+    it("目标对象已一致时计入完成，避免永远重复同一批对象", async () => {
+      prisma.backupJob.findUnique.mockResolvedValue({
+        id: "src-1",
+        kind: "manual",
+        status: "succeeded",
+        includeObjects: true,
+        isProtection: false,
+        manifest: {
+          formatVersion: 1,
+          objects: [
+            { storageKey: "same.txt", sizeBytes: 10, mimeType: "text/plain" },
+          ],
+        },
+        neonBranchId: "br-src-1",
+      });
+      storageBackend.statObject.mockImplementation((key: string) =>
+        key === "backup/src-1/same.txt" || key === "same.txt"
+          ? Promise.resolve({ size: 10 })
+          : Promise.resolve(null),
+      );
+
+      await (
+        executor as unknown as {
+          advanceJob: (job: unknown) => Promise<void>;
+        }
+      ).advanceJob({
+        id: "rest-1",
+        kind: "restore",
+        status: "running",
+        phase: "restore/objects",
+        neonBranchId: null,
+        restoreFromId: "src-1",
+        includeObjects: true,
+        isProtection: false,
+        error: null,
+        createdAt: new Date(),
+        progress: {
+          stage: "restore/objects",
+          done: 0,
+          total: 1,
+          protectJobId: "prot-1",
+        },
+      });
+
+      expect(storageBackend.copyObject).not.toHaveBeenCalled();
+      expect(prisma.backupJob.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            phase: "restore/cleanup",
+            progress: expect.objectContaining({
+              stage: "restore/cleanup",
+              done: 1,
+              total: 1,
+            }),
+          }),
+        }),
+      );
+    });
   });
 
   describe("advanceRestore restore/wait 阶段（预算感知等待）", () => {
@@ -392,11 +737,13 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
         done: 0,
         total: 1,
         operationId: "op-9",
-        protectJobId: "prot-1",
+        targetBranchId: "br-old",
+        restoredBranchId: "br-new",
+        replacedBranchId: "br-old",
       },
     };
 
-    it("Neon 操作未完成：心跳更新进度（stage 不变、protectJobId 保留），不落 failed", async () => {
+    it("Neon 操作未完成：心跳更新进度与新旧分支 id，不落 failed", async () => {
       mockWaitForOperation.mockResolvedValue(false);
 
       await (
@@ -413,7 +760,8 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
             progress: expect.objectContaining({
               stage: "restore/wait",
               operationId: "op-9",
-              protectJobId: "prot-1",
+              restoredBranchId: "br-new",
+              replacedBranchId: "br-old",
             }),
           }),
         }),
@@ -430,12 +778,14 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
     });
 
     describe("reconcileOrphanedBranches（孤儿分支清扫）", () => {
-      it("backup-<id> 无对应行 → 删；有行 → 保留", async () => {
+      it("backup-<id> 无对应行或任务失败 → 删；成功行 → 保留", async () => {
         mockBranches.branches = [
           { id: "br-orphan", name: "backup-cmsjuxxx", parent_id: "br-root" },
+          { id: "br-failed", name: "backup-cmsjfail", parent_id: "br-root" },
           { id: "br-keep", name: "backup-cmsjwgle", parent_id: "br-main" },
         ];
         prisma.backupJob.findMany.mockResolvedValue([
+          { id: "cmsjfail", status: "failed" },
           { id: "cmsjwgle", status: "succeeded" },
         ]);
 
@@ -446,6 +796,7 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
         ).reconcileOrphanedBranches();
 
         expect(mockDeleteBranch).toHaveBeenCalledWith("br-orphan");
+        expect(mockDeleteBranch).toHaveBeenCalledWith("br-failed");
         expect(mockDeleteBranch).not.toHaveBeenCalledWith("br-keep");
       });
 
@@ -507,6 +858,58 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
         expect(calls).toEqual(["br-backup", "br-pre"]);
       });
 
+      it("换库后 DB 行暂时消失时，保留 Redis 活跃回滚及其保护分支", async () => {
+        mockBranches.branches = [
+          {
+            id: "br-protect",
+            name: "backup-protect-1",
+            parent_id: "br-pre",
+          },
+          {
+            id: "br-pre",
+            name: "pre-restore-rest-1",
+            parent_id: "br-root",
+          },
+        ];
+        prisma.backupJob.findMany.mockResolvedValue([]);
+        redisClient.keys.mockResolvedValue([
+          "liveboard:backup:job:rest-1",
+          "liveboard:backup:job:protect-1",
+        ]);
+        redisClient.get.mockImplementation(async (key: string) => {
+          if (key === "liveboard:backup:job:rest-1") {
+            return JSON.stringify({
+              jobId: "rest-1",
+              kind: "restore",
+              progress: {
+                stage: "restore/verify",
+                done: 0,
+                total: 1,
+                protectJobId: "protect-1",
+              },
+            });
+          }
+          if (key === "liveboard:backup:job:protect-1") {
+            return JSON.stringify({
+              jobId: "protect-1",
+              kind: "manual",
+              isProtection: true,
+              progress: { stage: "done", done: 1, total: 1 },
+            });
+          }
+          return null;
+        });
+
+        await (
+          executor as unknown as {
+            reconcileOrphanedBranches: () => Promise<void>;
+          }
+        ).reconcileOrphanedBranches();
+
+        expect(mockDeleteBranch).not.toHaveBeenCalledWith("br-protect");
+        expect(mockDeleteBranch).not.toHaveBeenCalledWith("br-pre");
+      });
+
       it("deleteBranch 失败不抛错（下轮 tick 重试）", async () => {
         mockBranches.branches = [
           { id: "br-orphan", name: "backup-cmsjuxxx", parent_id: "br-root" },
@@ -544,7 +947,7 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
     });
   });
 
-  describe('advanceRestore stage ""（换库 preserve 决策）', () => {
+  describe('advanceRestore stage ""（Snapshot finalized restore）', () => {
     const stageZeroJob = {
       id: "rest-1",
       kind: "restore",
@@ -557,7 +960,7 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
       error: null,
       createdAt: new Date(),
       updatedAt: new Date(),
-      progress: { stage: "", done: 0, total: 0, protectJobId: "prot-1" },
+      progress: { stage: "", done: 0, total: 0 },
     };
 
     beforeEach(() => {
@@ -568,11 +971,11 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
         includeObjects: true,
         isProtection: false,
         manifest: null,
-        neonBranchId: "br-src-1",
+        neonBranchId: "snap-src-1",
       });
     });
 
-    it("旧主是普通分支：preserve 为 pre-restore-<id>（最后防线）", async () => {
+    it("默认分支不是根时拒绝，避免继续制造祖先依赖链", async () => {
       mockBranches.primaryId = "primary-1";
       mockBranches.branches = [
         { id: "primary-1", name: "production", parent_id: "br-root" },
@@ -584,17 +987,18 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
         }
       ).advanceJob(stageZeroJob);
 
-      expect(mockRestoreBranch).toHaveBeenCalledWith(
+      expect(mockRestoreSnapshot).not.toHaveBeenCalled();
+      expect(prisma.backupJob.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
-          preserveUnderName: "pre-restore-rest-1",
+          update: expect.objectContaining({ status: "failed" }),
         }),
       );
     });
 
-    it("旧主是根分支（parent_id 为空）：跳过 preserve，不产生删不掉的根孤儿", async () => {
+    it("从 Snapshot 恢复根分支并立即 finalize", async () => {
       mockBranches.primaryId = "primary-1";
       mockBranches.branches = [
-        { id: "primary-1", name: "main", parent_id: null },
+        { id: "primary-1", name: "production", parent_id: null },
       ];
 
       await (
@@ -603,15 +1007,157 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
         }
       ).advanceJob(stageZeroJob);
 
-      const call = (mockRestoreBranch as jest.Mock).mock.calls[0][0] as Record<
-        string,
-        unknown
-      >;
-      expect(call.preserveUnderName).toBeUndefined();
-      expect(call).toEqual(
+      expect(mockRestoreSnapshot).toHaveBeenCalledWith({
+        snapshotId: "snap-src-1",
+        targetBranchId: "primary-1",
+        name: "production",
+      });
+      expect(maintenance.setSystemEnabled).toHaveBeenCalledWith(
+        true,
+        "正在从备份 #src-1 回滚",
+      );
+    });
+
+    it("restore POST 超时结果未知时保留 requesting，禁止落 failed 或重发", async () => {
+      mockBranches.primaryId = "primary-1";
+      mockBranches.branches = [
+        { id: "primary-1", name: "main", parent_id: null },
+      ];
+      mockRestoreSnapshot.mockRejectedValueOnce(
+        Object.assign(new Error("请求可能已被接受，禁止自动重试"), {
+          neonMutationUncertain: true,
+        }),
+      );
+
+      await (
+        executor as unknown as {
+          advanceJob: (job: unknown) => Promise<void>;
+        }
+      ).advanceJob(stageZeroJob);
+
+      expect(prisma.backupJob.upsert).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          targetBranchId: "primary-1",
-          sourceBranchId: "br-src-1",
+          update: expect.objectContaining({
+            status: "running",
+            phase: "restore/requesting",
+            error: expect.stringContaining("禁止自动重试"),
+          }),
+        }),
+      );
+      expect(prisma.backupJob.upsert).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({ status: "failed" }),
+        }),
+      );
+      expect(mockRestoreSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it("requesting 看到 restored_from/restored_as 后只读恢复到 verify", async () => {
+      mockBranches.branches = [
+        {
+          id: "br-restored",
+          name: "production",
+          parent_id: null,
+          restored_from: "snap-src-1",
+          restored_as: "br-old-main",
+        },
+      ];
+      const requestingJob = {
+        ...stageZeroJob,
+        phase: "restore/requesting",
+        progress: {
+          stage: "restore/requesting",
+          done: 0,
+          total: 1,
+          targetBranchId: "br-old-main",
+          restoreRequestStartedAt: new Date().toISOString(),
+        },
+      };
+
+      await (
+        executor as unknown as {
+          advanceJob: (job: unknown) => Promise<void>;
+        }
+      ).advanceJob(requestingJob);
+
+      expect(mockRestoreSnapshot).not.toHaveBeenCalled();
+      expect(prisma.backupJob.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            phase: "restore/verify",
+            error: null,
+            progress: expect.objectContaining({ stage: "restore/verify" }),
+          }),
+        }),
+      );
+    });
+  });
+
+  describe("advanceRestore restore/cleanup（Vercel 维护模式）", () => {
+    const cleanupJob = {
+      id: "rest-cleanup-1",
+      kind: "restore",
+      status: "running",
+      phase: "restore/cleanup",
+      neonBranchId: null,
+      restoreFromId: "src-1",
+      includeObjects: true,
+      isProtection: false,
+      error: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      progress: {
+        stage: "restore/cleanup",
+        done: 1,
+        total: 1,
+        protectJobId: null,
+      },
+    };
+
+    it("全部恢复步骤完成后先关闭维护模式，再把任务标成功", async () => {
+      mockBranches.branches = [];
+
+      await (
+        executor as unknown as {
+          advanceJob: (job: unknown) => Promise<void>;
+        }
+      ).advanceJob(cleanupJob);
+
+      expect(maintenance.setSystemEnabled).toHaveBeenCalledWith(false);
+      expect(prisma.backupJob.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            status: "succeeded",
+            phase: "done",
+            error: null,
+          }),
+        }),
+      );
+    });
+
+    it("关闭维护模式失败时保留 running/cleanup，供下一棒重试", async () => {
+      maintenance.setSystemEnabled.mockRejectedValueOnce(
+        new Error("redis unavailable"),
+      );
+
+      await (
+        executor as unknown as {
+          advanceJob: (job: unknown) => Promise<void>;
+        }
+      ).advanceJob(cleanupJob);
+
+      expect(prisma.backupJob.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            status: "running",
+            phase: "restore/cleanup",
+            error: expect.stringContaining("等待关闭维护模式"),
+          }),
+        }),
+      );
+      expect(prisma.backupJob.upsert).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({ status: "succeeded" }),
         }),
       );
     });

@@ -1,15 +1,15 @@
 import { Logger } from "@nestjs/common";
 
 /**
- * Neon Branching API 客户端（Vercel 部署的数据库备份/回滚）。
+ * Neon Snapshot API 客户端（Vercel 部署的数据库备份/回滚）。
  *
  * 语义（api.neon.tech）：
- * - 备份 = 创建数据分支（不创建 compute endpoint，不产生计算小时，只占分支配额）。
- * - 回滚 = POST /projects/{project_id}/branches/{main}/restore，
- *   body `{ source_branch_id, preserve_under_name }`：把目标（主）分支整体替换
- *   为源分支 head；主分支旧状态保存为 preserve_under_name 分支（主分支有
- *   子分支时该字段必填，子分支会被移入新保存的分支）。
- * - 分支创建/恢复都是异步操作，需轮询 GET /operations/{id} 至 finished/failed。
+ * - 备份 = 从默认根分支创建手动 Snapshot。
+ * - 回滚 = 从 Snapshot 创建恢复分支并立即 finalize：compute/连接地址迁到新
+ *   分支，旧默认分支保留为可删除的被替换分支，避免 branch restore 把备份
+ *   分支变成祖先、形成免费版中无法清理的依赖链。
+ * - Snapshot 创建/恢复都是异步操作，一次响应可能返回多条 operations；必须逐条轮询
+ *   GET /operations/{id} 至全部 finished，任一 failed 都中止。
  *
  * 凭据：NEON_API_KEY（Bearer）+ NEON_PROJECT_ID（路径参数），由调用方注入，
  * 缺失时构造抛错（Vercel 写端点已先行 503）。
@@ -19,14 +19,27 @@ interface NeonBranch {
   id: string;
   name: string;
   primary?: boolean;
+  default?: boolean;
   parent_id?: string | null;
+  restored_from?: string | null;
+  restored_as?: string | null;
+  restore_status?: string | null;
+}
+
+export interface NeonSnapshot {
+  id: string;
+  name: string;
+  source_branch_id?: string;
+  created_at: string;
+  expires_at?: string | null;
+  manual?: boolean;
 }
 
 interface NeonOperation {
   id: string;
   status?: string;
   state?: string;
-  error?: { message?: string } | null;
+  error?: string | { message?: string } | null;
 }
 
 interface NeonApiErrorBody {
@@ -45,6 +58,19 @@ const OPERATION_TIMEOUT_MS = 5 * 60 * 1000;
  */
 const NEON_REQUEST_TIMEOUT_MS = 20_000;
 
+/**
+ * POST 发生网络错误或客户端超时时，Neon 可能已经接受了非幂等变更。调用方
+ * 必须先查询资源状态，不能直接重放请求。
+ */
+export class NeonMutationUncertainError extends Error {
+  readonly neonMutationUncertain = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "NeonMutationUncertainError";
+  }
+}
+
 export class NeonClient {
   private readonly logger = new Logger(NeonClient.name);
   private readonly baseUrl: string;
@@ -56,10 +82,11 @@ export class NeonClient {
     this.baseUrl = process.env.NEON_API_BASE?.trim() || NEON_API_BASE;
   }
 
-  /** 创建数据分支（无 compute endpoint）。返回分支 id 与首个操作 id。 */
+  /** 兼容旧分支备份的清理与迁移；新备份不得再调用。 */
   async createBranch(name: string): Promise<{
     branchId: string;
     operationId: string | null;
+    operationIds: string[];
   }> {
     const body = await this.request<{
       branch: NeonBranch;
@@ -67,10 +94,45 @@ export class NeonClient {
     }>("POST", `/projects/${this.projectId}/branches`, {
       branch: { name },
     });
+    const operationIds = (body.operations ?? []).map((item) => item.id);
     return {
       branchId: body.branch.id,
-      operationId: body.operations?.[0]?.id ?? null,
+      operationId: operationIds[0] ?? null,
+      operationIds,
     };
+  }
+
+  /** 从默认根分支创建 Snapshot。 */
+  async createSnapshot(
+    branchId: string,
+    name: string,
+  ): Promise<{
+    snapshotId: string;
+    operationId: string | null;
+    operationIds: string[];
+  }> {
+    const query = new URLSearchParams({ name }).toString();
+    const body = await this.request<{
+      snapshot: NeonSnapshot;
+      operations?: NeonOperation[];
+    }>(
+      "POST",
+      `/projects/${this.projectId}/branches/${branchId}/snapshot?${query}`,
+    );
+    const operationIds = (body.operations ?? []).map((item) => item.id);
+    return {
+      snapshotId: body.snapshot.id,
+      operationId: operationIds[0] ?? null,
+      operationIds,
+    };
+  }
+
+  async listSnapshots(): Promise<NeonSnapshot[]> {
+    const body = await this.request<{ snapshots: NeonSnapshot[] }>(
+      "GET",
+      `/projects/${this.projectId}/snapshots`,
+    );
+    return body.snapshots;
   }
 
   /** 列出项目全部分支，返回 { branches, primaryId }。 */
@@ -82,11 +144,66 @@ export class NeonClient {
       "GET",
       `/projects/${this.projectId}/branches`,
     );
-    const primary = body.branches.find((b) => b.primary) ?? null;
+    const primary =
+      body.branches.find((branch) => branch.default) ??
+      body.branches.find((branch) => branch.primary) ??
+      null;
     return {
       branches: body.branches,
       primaryId: primary?.id ?? null,
     };
+  }
+
+  /**
+   * 从 Snapshot 恢复并立即 finalize。返回的新分支会承接原默认分支的 compute；
+   * replacedBranchId 是 Neon 明确标记为被替换的旧分支，验证后才允许删除。
+   */
+  async restoreSnapshot(options: {
+    snapshotId: string;
+    targetBranchId: string;
+    name: string;
+  }): Promise<{
+    branchId: string;
+    replacedBranchId: string | null;
+    operationId: string | null;
+    operationIds: string[];
+  }> {
+    const body = await this.request<{
+      branch: NeonBranch;
+      operations?: NeonOperation[];
+    }>(
+      "POST",
+      `/projects/${this.projectId}/snapshots/${options.snapshotId}/restore`,
+      {
+        name: options.name,
+        target_branch_id: options.targetBranchId,
+        finalize_restore: true,
+      },
+    );
+    const operationIds = (body.operations ?? []).map((item) => item.id);
+    return {
+      branchId: body.branch.id,
+      replacedBranchId: body.branch.restored_as ?? options.targetBranchId,
+      operationId: operationIds[0] ?? null,
+      operationIds,
+    };
+  }
+
+  /** 删除 Snapshot。404 视为幂等成功。 */
+  async deleteSnapshot(snapshotId: string): Promise<{
+    operationIds: string[];
+  }> {
+    try {
+      const body = await this.request<{ operations?: NeonOperation[] }>(
+        "DELETE",
+        `/projects/${this.projectId}/snapshots/${snapshotId}`,
+      );
+      return { operationIds: (body.operations ?? []).map((item) => item.id) };
+    } catch (caught) {
+      const status = (caught as { status?: number }).status;
+      if (status === 404) return { operationIds: [] };
+      throw caught;
+    }
   }
 
   /**
@@ -98,7 +215,7 @@ export class NeonClient {
     targetBranchId: string;
     sourceBranchId: string;
     preserveUnderName?: string;
-  }): Promise<string | null> {
+  }): Promise<{ operationId: string | null; operationIds: string[] }> {
     const body = await this.request<{ operations?: NeonOperation[] }>(
       "POST",
       `/projects/${this.projectId}/branches/${options.targetBranchId}/restore`,
@@ -109,7 +226,8 @@ export class NeonClient {
           : {}),
       },
     );
-    return body.operations?.[0]?.id ?? null;
+    const operationIds = (body.operations ?? []).map((item) => item.id);
+    return { operationId: operationIds[0] ?? null, operationIds };
   }
 
   /** 删除分支（备份保留策略清理）。404（已被删）视为幂等成功。 */
@@ -132,25 +250,34 @@ export class NeonClient {
    * failed 状态抛错；timeoutMs 默认 5 分钟仅用于非预算调用方。
    */
   async waitForOperation(
-    operationId: string | null,
+    operationId: string | string[] | null,
     timeoutMs: number = OPERATION_TIMEOUT_MS,
   ): Promise<boolean> {
-    if (!operationId) return true; // 部分响应无操作（如分支已是最新）。
+    const pending = new Set(
+      (Array.isArray(operationId) ? operationId : [operationId]).filter(
+        (id): id is string => Boolean(id),
+      ),
+    );
+    if (!pending.size) return true; // 部分响应无操作（如分支已是最新）。
     const deadline = Date.now() + timeoutMs;
     for (;;) {
-      // 操作查询是项目级接口：旧版顶层 /operations/{id} 路径在现网已不存在
-      // （404 Not Found），必须带项目前缀（OpenAPI: GET /projects/{project_id}/operations/{operation_id}）。
-      const body = await this.request<{ operation: NeonOperation }>(
-        "GET",
-        `/projects/${this.projectId}/operations/${operationId}`,
-      );
-      const state = body.operation.state ?? body.operation.status;
-      if (state === "finished") return true;
-      if (state === "failed") {
-        throw new Error(
-          `Neon 操作失败：${body.operation.error?.message ?? operationId}`,
+      for (const id of [...pending]) {
+        // 操作查询是项目级接口：旧版顶层 /operations/{id} 路径在现网已不存在
+        // （404 Not Found），必须带项目前缀（OpenAPI: GET /projects/{project_id}/operations/{operation_id}）。
+        const body = await this.request<{ operation: NeonOperation }>(
+          "GET",
+          `/projects/${this.projectId}/operations/${id}`,
         );
+        const state = body.operation.state ?? body.operation.status;
+        if (state === "finished") pending.delete(id);
+        if (state === "failed") {
+          const detail = body.operation.error;
+          throw new Error(
+            `Neon 操作失败：${typeof detail === "string" ? detail : (detail?.message ?? id)}`,
+          );
+        }
       }
+      if (!pending.size) return true;
       if (Date.now() >= deadline) {
         return false; // 未超时抛错：长操作由调用方分棒等待（预算感知）。
       }
@@ -182,11 +309,15 @@ export class NeonClient {
       this.logger.error(
         `Neon API 请求${isTimeout ? "超时" : "失败"} ${method} ${path}: ${messageOfNeon(caught)}`,
       );
-      throw new Error(
-        isTimeout
-          ? `Neon API 请求超时（${NEON_REQUEST_TIMEOUT_MS / 1000}s），请稍后重试`
-          : `Neon API 请求失败（网络错误），请稍后重试`,
-      );
+      const message = isTimeout
+        ? `Neon API 请求超时（${NEON_REQUEST_TIMEOUT_MS / 1000}s）`
+        : "Neon API 请求失败（网络错误）";
+      if (method === "POST") {
+        throw new NeonMutationUncertainError(
+          `${message}；请求可能已被接受，必须先查询 Neon 状态，禁止自动重试`,
+        );
+      }
+      throw new Error(`${message}，请稍后重试`);
     }
     if (response.ok) {
       return (await response.json()) as T;
