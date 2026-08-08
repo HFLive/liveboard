@@ -138,7 +138,6 @@ describe("NeonClient", () => {
       client.restoreSnapshot({
         snapshotId: "snap-1",
         targetBranchId: "br-old",
-        name: "production",
       }),
     ).resolves.toEqual({
       branchId: "br-restored",
@@ -149,7 +148,6 @@ describe("NeonClient", () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(init.body).toBe(
       JSON.stringify({
-        name: "production",
         target_branch_id: "br-old",
         finalize_restore: true,
       }),

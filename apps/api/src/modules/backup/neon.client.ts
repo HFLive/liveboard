@@ -161,7 +161,6 @@ export class NeonClient {
   async restoreSnapshot(options: {
     snapshotId: string;
     targetBranchId: string;
-    name: string;
   }): Promise<{
     branchId: string;
     replacedBranchId: string | null;
@@ -175,7 +174,6 @@ export class NeonClient {
       "POST",
       `/projects/${this.projectId}/snapshots/${options.snapshotId}/restore`,
       {
-        name: options.name,
         target_branch_id: options.targetBranchId,
         finalize_restore: true,
       },

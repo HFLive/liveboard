@@ -1010,7 +1010,6 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
       expect(mockRestoreSnapshot).toHaveBeenCalledWith({
         snapshotId: "snap-src-1",
         targetBranchId: "primary-1",
-        name: "production",
       });
       expect(maintenance.setSystemEnabled).toHaveBeenCalledWith(
         true,
