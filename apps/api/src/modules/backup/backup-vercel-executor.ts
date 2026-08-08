@@ -1089,10 +1089,17 @@ export class BackupVercelExecutor {
    * - `backup-<jobId>`：对应行不存在 → 孤儿，删
    * - `pre-restore-<restoreId>`：对应行不存在或已终态（成功/失败）→ 孤儿，删；
    *   行仍在执行（pending/running）→ 保留（由回滚收尾阶段自行清理）
+   * - 根分支（parent_id 为空，恢复时被保留的最早默认分支）不可删，跳过；
+   *   先删叶子（backup-*）再删父（pre-restore-*）——Neon 不允许删除仍有
+   *   子分支的分支
    * deleteBranch 幂等（404 视为成功），失败只记日志、下轮 tick 重试。
    */
   async reconcileOrphanedBranches(): Promise<void> {
-    let branches: Array<{ id: string; name: string }>;
+    let branches: Array<{
+      id: string;
+      name: string;
+      parent_id?: string | null;
+    }>;
     try {
       ({ branches } = await this.neon().listBranches());
     } catch (caught) {
@@ -1128,8 +1135,9 @@ export class BackupVercelExecutor {
         .catch(() => null);
       for (const row of rows ?? []) restoreStatuses.set(row.id, row.status);
     }
-    const deleted: string[] = [];
+    const orphans: Array<{ id: string; name: string }> = [];
     for (const branch of branches) {
+      if (!branch.parent_id) continue; // 根分支不可删（Neon 平台规则）。
       let orphan = false;
       if (branch.name.startsWith("backup-")) {
         orphan = !existingRows.has(branch.name.slice("backup-".length));
@@ -1140,7 +1148,16 @@ export class BackupVercelExecutor {
         orphan =
           status === undefined || status === "succeeded" || status === "failed";
       }
-      if (!orphan) continue;
+      if (orphan) orphans.push({ id: branch.id, name: branch.name });
+    }
+    // 先删叶子（backup-*）再删父（pre-restore-*），否则父分支删除被拒。
+    orphans.sort((a, b) => {
+      const aIsBackup = a.name.startsWith("backup-") ? 0 : 1;
+      const bIsBackup = b.name.startsWith("backup-") ? 0 : 1;
+      return aIsBackup - bIsBackup;
+    });
+    const deleted: string[] = [];
+    for (const branch of orphans) {
       await this.neon()
         .deleteBranch(branch.id)
         .catch((caught) =>
