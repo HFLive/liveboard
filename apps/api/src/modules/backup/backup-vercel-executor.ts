@@ -833,7 +833,6 @@ export class BackupVercelExecutor {
         } = await neon.restoreSnapshot({
           snapshotId: source.neonBranchId,
           targetBranchId: primaryId,
-          name: primary.name,
         }));
       } catch (caught) {
         if (!isUncertainNeonMutation(caught)) throw caught;
