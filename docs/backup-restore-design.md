@@ -41,6 +41,8 @@ dump 排除表：`PendingUpload`（短期上传预留）、`ServerMetricSample`�
   `shouldRunAutoBackup(settings, now)`。
 - vercel：`vercel.json` crons 打 `GET /internal/cron/backup`（Bearer
   `CRON_SECRET` + Redis NX 锁 `liveboard:cron:backup-tick`）→ 同一 `tick()`；
+  cron 端点必须带 `@Public()`（ActiveUserGuard 是全局守卫，只认会话 cookie，
+  不带标记会在密钥校验前 401 拦截 cron 请求；曾导致线上 tick 从不执行）。
   由 executor 分块推进任务（每 tick ≤20 个对象，保证函数在 60s 内完成）。
   手动备份/回滚链创建后立即在请求内推进到完成（每棒 ≤45s 预算，预算耗尽
   自动接力续跑：函数自调用 `internal/cron/backup?jobId=<id>`（Bearer

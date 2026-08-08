@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { timingSafeEqual } from "node:crypto";
+import { Public } from "../../common/public.decorator";
 import { RedisService } from "../redis/redis.service";
 import { StorageService } from "./storage.service";
 
@@ -35,6 +36,13 @@ export class StorageCronController {
     this.expectedSecret = config.get<string>("CRON_SECRET", "") ?? "";
   }
 
+  /**
+   * @Public：ActiveUserGuard 是全局守卫，不带 @Public() 的端点必须先有会话
+   * cookie 才放行——cron 请求只有 Bearer CRON_SECRET，会被守卫在 isAuthorized
+   * 之前以 401 拦掉（曾导致 Vercel 上每日清理从不执行）。真实认证在下方
+   * isAuthorized（恒定时间比较），放行后仍需密钥。
+   */
+  @Public()
   @Get("storage-cleanup")
   async cleanup(@Headers("authorization") authorization?: string) {
     if (!this.isAuthorized(authorization)) {
