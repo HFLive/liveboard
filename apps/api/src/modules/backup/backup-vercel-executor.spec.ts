@@ -18,6 +18,8 @@ const mockBranches: {
 };
 /** 共享 waitForOperation mock：默认已完成；测试可改为 false 模拟长操作。 */
 const mockWaitForOperation = jest.fn().mockResolvedValue(true);
+/** 共享 deleteBranch mock：孤儿分支清扫断言用。 */
+const mockDeleteBranch = jest.fn().mockResolvedValue(undefined);
 
 jest.mock("./neon.client", () => ({
   NeonClient: jest.fn().mockImplementation(() => ({
@@ -27,7 +29,7 @@ jest.mock("./neon.client", () => ({
     listBranches: jest.fn().mockResolvedValue(mockBranches),
     restoreBranch: jest.fn().mockResolvedValue("op-restore-1"),
     waitForOperation: mockWaitForOperation,
-    deleteBranch: jest.fn().mockResolvedValue(undefined),
+    deleteBranch: mockDeleteBranch,
   })),
 }));
 
@@ -73,6 +75,7 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
     mockBranches.branches = [];
     mockBranches.primaryId = "primary-1";
     mockWaitForOperation.mockResolvedValue(true);
+    mockDeleteBranch.mockResolvedValue(undefined);
     redis.getClient.mockResolvedValue(redisClient);
     redisClient.get.mockResolvedValue(null);
     redisClient.set.mockResolvedValue("OK");
@@ -421,6 +424,63 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
           "failed",
       );
       expect(failedCalls).toHaveLength(0);
+    });
+
+    describe("reconcileOrphanedBranches（孤儿分支清扫）", () => {
+      it("backup-<id> 无对应行 → 删；有行 → 保留", async () => {
+        mockBranches.branches = [
+          { id: "br-orphan", name: "backup-cmsjuxxx" },
+          { id: "br-keep", name: "backup-cmsjwgle" },
+        ];
+        prisma.backupJob.findMany.mockResolvedValue([
+          { id: "cmsjwgle", status: "succeeded" },
+        ]);
+
+        await (
+          executor as unknown as {
+            reconcileOrphanedBranches: () => Promise<void>;
+          }
+        ).reconcileOrphanedBranches();
+
+        expect(mockDeleteBranch).toHaveBeenCalledWith("br-orphan");
+        expect(mockDeleteBranch).not.toHaveBeenCalledWith("br-keep");
+      });
+
+      it("pre-restore-<id> 行缺失或已终态 → 删；仍执行中 → 保留", async () => {
+        mockBranches.branches = [
+          { id: "br-gone", name: "pre-restore-cmsjv12hq" },
+          { id: "br-failed", name: "pre-restore-cmsj9qfk" },
+          { id: "br-running", name: "pre-restore-cmsjwj74" },
+        ];
+        prisma.backupJob.findMany.mockResolvedValue([
+          { id: "cmsj9qfk", status: "failed" },
+          { id: "cmsjwj74", status: "running" },
+        ]);
+
+        await (
+          executor as unknown as {
+            reconcileOrphanedBranches: () => Promise<void>;
+          }
+        ).reconcileOrphanedBranches();
+
+        expect(mockDeleteBranch).toHaveBeenCalledWith("br-gone");
+        expect(mockDeleteBranch).toHaveBeenCalledWith("br-failed");
+        expect(mockDeleteBranch).not.toHaveBeenCalledWith("br-running");
+      });
+
+      it("deleteBranch 失败不抛错（下轮 tick 重试）", async () => {
+        mockBranches.branches = [{ id: "br-orphan", name: "backup-cmsjuxxx" }];
+        prisma.backupJob.findMany.mockResolvedValue([]);
+        mockDeleteBranch.mockRejectedValue(new Error("neon down"));
+
+        await expect(
+          (
+            executor as unknown as {
+              reconcileOrphanedBranches: () => Promise<void>;
+            }
+          ).reconcileOrphanedBranches(),
+        ).resolves.toBeUndefined();
+      });
     });
 
     it("Neon 操作完成：进入 verify", async () => {

@@ -190,6 +190,11 @@ export class BackupService {
       await this.reconcileOrphanedRestores();
       if (this.isVercelDeployment()) {
         await this.reconcileStaleRunningJobs();
+        await this.vercelExecutor
+          .reconcileOrphanedBranches()
+          .catch((caught) =>
+            this.logger.warn(`孤儿分支清扫失败: ${messageOf(caught)}`),
+          );
       }
     } catch (caught) {
       this.logger.warn(`tick 兜底失败: ${messageOf(caught)}`);

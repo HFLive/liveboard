@@ -1082,6 +1082,79 @@ export class BackupVercelExecutor {
     return orphaned;
   }
 
+  /**
+   * 孤儿分支清扫：deleteBackupNow/pruneRetention 删除分支失败时只记日志、
+   * 行照样删（无重试路径），失败回滚也会遗留 pre-restore-* 保留分支——这些
+   * 分支在 Neon 上永久残留（占分支配额）。每天 cron/Run 触发：
+   * - `backup-<jobId>`：对应行不存在 → 孤儿，删
+   * - `pre-restore-<restoreId>`：对应行不存在或已终态（成功/失败）→ 孤儿，删；
+   *   行仍在执行（pending/running）→ 保留（由回滚收尾阶段自行清理）
+   * deleteBranch 幂等（404 视为成功），失败只记日志、下轮 tick 重试。
+   */
+  async reconcileOrphanedBranches(): Promise<void> {
+    let branches: Array<{ id: string; name: string }>;
+    try {
+      ({ branches } = await this.neon().listBranches());
+    } catch (caught) {
+      this.logger.warn(`孤儿分支清扫：列出分支失败 ${messageOfVercel(caught)}`);
+      return;
+    }
+    const backupIds = new Set<string>();
+    const restoreIds = new Set<string>();
+    for (const branch of branches) {
+      if (branch.name.startsWith("backup-")) {
+        backupIds.add(branch.name.slice("backup-".length));
+      } else if (branch.name.startsWith("pre-restore-")) {
+        restoreIds.add(branch.name.slice("pre-restore-".length));
+      }
+    }
+    const existingRows = new Set<string>();
+    const restoreStatuses = new Map<string, string>();
+    if (backupIds.size) {
+      const rows = await this.prisma.backupJob
+        .findMany({
+          where: { id: { in: [...backupIds] } },
+          select: { id: true },
+        })
+        .catch(() => null);
+      for (const row of rows ?? []) existingRows.add(row.id);
+    }
+    if (restoreIds.size) {
+      const rows = await this.prisma.backupJob
+        .findMany({
+          where: { id: { in: [...restoreIds] } },
+          select: { id: true, status: true },
+        })
+        .catch(() => null);
+      for (const row of rows ?? []) restoreStatuses.set(row.id, row.status);
+    }
+    const deleted: string[] = [];
+    for (const branch of branches) {
+      let orphan = false;
+      if (branch.name.startsWith("backup-")) {
+        orphan = !existingRows.has(branch.name.slice("backup-".length));
+      } else if (branch.name.startsWith("pre-restore-")) {
+        const status = restoreStatuses.get(
+          branch.name.slice("pre-restore-".length),
+        );
+        orphan =
+          status === undefined || status === "succeeded" || status === "failed";
+      }
+      if (!orphan) continue;
+      await this.neon()
+        .deleteBranch(branch.id)
+        .catch((caught) =>
+          this.logger.warn(
+            `孤儿分支删除失败 ${branch.name}: ${messageOfVercel(caught)}`,
+          ),
+        );
+      deleted.push(branch.name);
+    }
+    if (deleted.length) {
+      this.logger.log(`孤儿分支清扫：删除 ${deleted.join(", ")}`);
+    }
+  }
+
   // ---- 保留策略（Vercel：Neon 分支 + R2 前缀）--------------------------------
 
   private async pruneRetention(): Promise<void> {
