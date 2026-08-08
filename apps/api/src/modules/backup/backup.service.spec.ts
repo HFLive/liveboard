@@ -87,6 +87,43 @@ describe("BackupService reconcileStaleRunningJobs", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("Vercel 无状态文件时从 BackupJob.progress 返回对象复制进度", async () => {
+    const now = new Date();
+    const summary = await (
+      service as unknown as {
+        mergeJob: (
+          jobId: string,
+          state: null,
+          row: Record<string, unknown>,
+        ) => Promise<{ progress: unknown }>;
+      }
+    ).mergeJob("backup-1", null, {
+      id: "backup-1",
+      kind: "manual",
+      status: "running",
+      phase: "objects",
+      progress: { stage: "copy-objects", done: 40, total: 143 },
+      backupPath: null,
+      restoreFromId: null,
+      neonBranchId: "snapshot-1",
+      dumpSizeBytes: null,
+      objectCount: null,
+      includeObjects: true,
+      isProtection: false,
+      manifest: null,
+      error: null,
+      createdById: "admin-1",
+      createdAt: now,
+      startedAt: now,
+      finishedAt: null,
+      updatedAt: now,
+    });
+
+    expect(summary.progress).toEqual(
+      expect.objectContaining({ done: 40, total: 143 }),
+    );
+  });
+
   it("Vercel pending 回滚的保护备份已成功时重新唤醒，不误标失败", async () => {
     config.get.mockImplementation((key?: string) =>
       key === "DEPLOYMENT_TARGET" ? "vercel" : undefined,
@@ -237,7 +274,7 @@ describe("BackupService Vercel warm instance 进程内锁", () => {
       service.startManualBackup("admin-1", { includeObjects: false }),
     ).resolves.toMatchObject({ id: "job-2", status: "succeeded" });
 
-    expect(vercelExecutor.advanceUntilFinished).toHaveBeenCalledTimes(2);
+    expect(vercelExecutor.advanceUntilFinished).not.toHaveBeenCalled();
   });
 
   it("Vercel 回滚不创建第二个保护 Snapshot，直接建立 restore 任务", async () => {
@@ -320,5 +357,6 @@ describe("BackupService Vercel warm instance 进程内锁", () => {
       null,
       true,
     );
+    expect(vercelExecutor.advanceUntilFinished).not.toHaveBeenCalled();
   });
 });

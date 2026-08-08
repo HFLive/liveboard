@@ -26,8 +26,8 @@ import {
   type BackupDataPaths,
 } from "./backup-dirs";
 /**
- * Vercel running 任务的卡死兜底阈值：接力完好时每 ≤45s 就有进度心跳
- * （updatedAt 前进），30 分钟毫无更新 = 接力断裂/调用挂死（曾线上表现为
+ * Vercel running 任务的卡死兜底阈值：正常后台推进会持续写进度心跳
+ * （updatedAt 前进），30 分钟毫无更新 = 后台调用中断/挂死（曾线上表现为
  * 回滚行冻结在「准备」，任何 Run 都推不动）。自托管有状态文件 TTL 兜底，
  * Vercel 无持久盘，必须靠这个 DB 层兜底。
  */
@@ -38,9 +38,6 @@ import {
   NEON_FREE_BRANCH_LIMIT,
   NEON_FREE_MANUAL_SNAPSHOT_LIMIT,
   NEON_RESTORE_REQUIRED_FREE_BRANCHES,
-  VERCEL_ADVANCE_BUDGET_MS,
-  VERCEL_MANUAL_BUDGET_MS,
-  VERCEL_RESTORE_CHAIN_BUDGET_MS,
 } from "./backup-vercel-executor";
 import {
   initialLastAutoBackupAt,
@@ -452,7 +449,7 @@ export class BackupService {
     }
   }
 
-  /** Neon 快照、Redis 状态与跨函数接力缺一不可。 */
+  /** Neon 快照、Redis 状态与每日 Cron 认证缺一不可。 */
   private missingVercelBackupConfig(): string[] {
     return [
       "NEON_API_KEY",
@@ -817,8 +814,8 @@ export class BackupService {
   // ---- 任务启动 -------------------------------------------------------------
 
   /**
-   * 接力续跑入口：self-invocation 打 internal/cron/backup?jobId=<id> 时
-   * 只推进指定任务（不跑整轮 tick），让手动备份/回滚链逐棒推进到完成。
+   * 指定任务恢复入口：由 waitUntil 或带 jobId 的内部 Cron 请求调用，
+   * 只推进指定任务（不跑整轮 tick），在单次函数预算内尽量完成。
    * 自托管任务由常驻 tick 驱动，不接受该入口。
    */
   async continueVercelJob(jobId: string): Promise<{ continued: boolean }> {
@@ -848,15 +845,9 @@ export class BackupService {
       }
       const job = await this.createJobRow(user.id, "manual", includeObjects);
       if (this.isVercelDeployment()) {
-        // Vercel：不 spawn，创建后立即在请求内分块推进（短预算让请求
-        // 尽快返回，页面按钮不长时间转圈；未完成部分由接力续跑继续，
-        // 见 backup-vercel-executor.advanceUntilFinished），不再等每日 cron。
+        // Controller 在 HTTP 响应返回前用 waitUntil 托管完整推进；服务层只
+        // 创建任务，避免浏览器请求等待数分钟或触发 Vercel 自调用递归保护。
         spawned = true;
-        await this.vercelExecutor
-          .advanceUntilFinished(job.id, Date.now() + VERCEL_MANUAL_BUDGET_MS)
-          .catch((caught) =>
-            this.logger.warn(`Vercel 手动备份推进失败: ${messageOf(caught)}`),
-          );
         return await this.loadJob(job.id);
       }
       this.spawnScript(
@@ -978,14 +969,7 @@ export class BackupService {
           throw caught;
         }
         chainArmed = true;
-        await this.vercelExecutor
-          .advanceUntilFinished(
-            restoreRow.id,
-            Date.now() + VERCEL_RESTORE_CHAIN_BUDGET_MS,
-          )
-          .catch((caught) =>
-            this.logger.warn(`Vercel 回滚推进失败: ${messageOf(caught)}`),
-          );
+        // Controller 用 waitUntil 在响应后推进，不让回滚请求阻塞浏览器。
         return {
           preBackup: null,
           restore: await this.loadJob(restoreRow.id),
@@ -1414,6 +1398,7 @@ export class BackupService {
       objectCount: number | null;
       includeObjects: boolean;
       isProtection: boolean;
+      progress: unknown;
       manifest: unknown;
       error: string | null;
       createdById: string | null;
@@ -1428,7 +1413,10 @@ export class BackupService {
       kind: fileKindToJobKind(state?.kind ?? row?.kind) as BackupJobKind,
       status: (state?.status ?? row?.status ?? "pending") as BackupJobStatus,
       phase: state?.phase ?? row?.phase ?? "",
-      progress: state?.progress ?? null,
+      // Vercel 没有持久状态文件，进度保存在 BackupJob.progress；旧实现只读
+      // state 文件，导致线上明明在复制对象却不显示 done/total。
+      progress:
+        state?.progress ?? (row?.progress as BackupJobProgress | null) ?? null,
       backupPath: row?.backupPath ?? null,
       restoreFromId: state?.restoreFromId ?? row?.restoreFromId ?? null,
       neonBranchId: row?.neonBranchId ?? null,

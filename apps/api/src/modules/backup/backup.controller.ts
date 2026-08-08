@@ -98,8 +98,8 @@ const TICK_LOCK_TTL_MS = 5 * 60 * 1000;
  * Vercel 是 Serverless，禁用常驻定时器，由 vercel.json crons 打
  * internal/cron/backup 端点触发同一 tick()（应用层按 lastAutoBackupAt 判定
  * 是否该跑）；self_hosted 的 tick 由 BackupService 进程内 setInterval 驱动。
- * 带 ?jobId=<id> 的请求是任务的接力续跑（self-invocation），只推进该任务，
- * 不走 tick 锁；认证同为 CRON_SECRET。
+ * 带 ?jobId=<id> 的请求用于显式恢复中断任务，只推进该任务、不走 tick 锁；
+ * 应用内部不再自调用该入口，认证仍为 CRON_SECRET。
  * - 认证：`Authorization: Bearer ${CRON_SECRET}`，恒定时间比较。
  * - Redis 分布式锁防止重复执行；调度判定幂等。
  * - 未授权一律 401，不返回任何业务信息。
@@ -166,11 +166,11 @@ export class BackupController {
     @CurrentUserId() userId: string | null,
     @Body() body: StartBackupDto,
   ) {
-    return {
-      job: await this.backup.startManualBackup(userId, {
-        includeObjects: body.includeObjects,
-      }),
-    };
+    const job = await this.backup.startManualBackup(userId, {
+      includeObjects: body.includeObjects,
+    });
+    this.continueVercelJobInBackground(job.id, "手动备份");
+    return { job };
   }
 
   /**
@@ -183,17 +183,19 @@ export class BackupController {
     @Param("id") id: string,
     @Body() body: StartRestoreDto,
   ) {
-    return await this.backup.startRestore(userId, id, {
+    const result = await this.backup.startRestore(userId, id, {
       confirm: body.confirm,
       includeObjects: body.includeObjects,
     });
+    this.continueVercelJobInBackground(result.restore.id, "回滚");
+    return result;
   }
 
   /**
    * @Public：ActiveUserGuard 是全局守卫，不带 @Public() 的端点必须先有会话
-   * cookie 才放行——cron/self-invocation 请求只有 Bearer CRON_SECRET，会被
+   * cookie 才放行——cron/任务恢复请求只有 Bearer CRON_SECRET，会被
    * 守卫在 isAuthorized 之前以 401「Missing or invalid session」拦掉，导致
-   * Vercel 闹钟与接力续跑全部失效（曾线上排查数日）。真实认证在下方
+   * Vercel 闹钟与任务恢复全部失效。真实认证在下方
    * isAuthorized（恒定时间比较），放行后仍需密钥。
    */
   @Public()
@@ -205,22 +207,12 @@ export class BackupController {
     if (!this.isAuthorized(authorization)) {
       throw new UnauthorizedException();
     }
-    // 接力续跑（self-invocation）：只推进指定任务，不走 tick 锁——
-    // 同一任务的并发由 per-job Redis 锁串行化，无进展的棒不会自续。
+    // 显式恢复指定任务：只推进该任务，不走 tick 锁；同一任务的并发由
+    // per-job Redis 锁串行化。保留这个入口供 Cron/运维恢复中断任务，
+    // 应用本身不再递归自调用它（Vercel 会返回 508）。
     if (jobId) {
       if (process.env.VERCEL) {
-        // 内部接力请求必须立刻响应，让上游 scheduleContinuation 在冷启动
-        // 接收窗口内
-        // 确认“下一棒已接收”；实际推进交给 Vercel 官方 waitUntil 绑定到
-        // 本次函数生命周期。旧实现直接 await 20–45 秒，上游先 abort，接力
-        // 函数是否继续没有保证，正是线上链随机断裂的来源之一。
-        waitUntil(
-          this.backup.continueVercelJob(jobId).catch((caught) => {
-            this.logger.error(
-              `Vercel 备份接力 ${jobId} 执行失败: ${messageOfController(caught)}`,
-            );
-          }),
-        );
+        this.continueVercelJobInBackground(jobId, "备份恢复");
         return { ok: true, continued: true, accepted: true };
       }
       return { ok: true, ...(await this.backup.continueVercelJob(jobId)) };
@@ -250,6 +242,18 @@ export class BackupController {
     } finally {
       await releaseLock?.();
     }
+  }
+
+  /** 响应立即返回，剩余函数生命周期由 Vercel 官方 waitUntil 托管。 */
+  private continueVercelJobInBackground(jobId: string, label: string): void {
+    if (!process.env.VERCEL) return;
+    waitUntil(
+      this.backup.continueVercelJob(jobId).catch((caught) => {
+        this.logger.error(
+          `Vercel ${label} ${jobId} 后台推进失败: ${messageOfController(caught)}`,
+        );
+      }),
+    );
   }
 
   private isAuthorized(authorization: string | undefined) {

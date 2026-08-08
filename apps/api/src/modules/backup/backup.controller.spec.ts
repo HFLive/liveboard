@@ -8,7 +8,7 @@ jest.mock("@vercel/functions", () => ({ waitUntil: jest.fn() }));
  * 回归测试：ActiveUserGuard 是全局守卫（app.module APP_GUARD），cron 请求
  * 只有 Bearer CRON_SECRET、没有会话 cookie。cronTick 必须带 @Public()，
  * 否则守卫会在 isAuthorized 之前以 401「Missing or invalid session」拦截，
- * Vercel 闹钟与接力续跑（self-invocation）全部静默失效（线上曾因此排障数日）。
+ * Vercel 闹钟与显式任务恢复全部静默失效（线上曾因此排障数日）。
  */
 describe("BackupController cron 端点", () => {
   afterEach(() => {
@@ -49,7 +49,58 @@ describe("BackupController cron 端点", () => {
     expect(isPublic).toBeFalsy();
   });
 
-  it("Vercel 接力立即响应，并用 waitUntil 托管实际推进", async () => {
+  it("Vercel 手动备份创建后立即响应，并用 waitUntil 托管完整推进", async () => {
+    process.env.VERCEL = "1";
+    const continuation = new Promise<{ continued: boolean }>(() => undefined);
+    const backup = {
+      startManualBackup: jest.fn().mockResolvedValue({
+        id: "backup-1",
+        status: "pending",
+      }),
+      continueVercelJob: jest.fn().mockReturnValue(continuation),
+    };
+    const controller = new BackupController(
+      { get: jest.fn().mockReturnValue("secret") } as never,
+      {} as never,
+      backup as never,
+    );
+
+    await expect(
+      controller.startManualBackup("super-admin-1", {}),
+    ).resolves.toEqual({
+      job: { id: "backup-1", status: "pending" },
+    });
+    expect(waitUntil).toHaveBeenCalledWith(expect.any(Promise));
+    expect(backup.continueVercelJob).toHaveBeenCalledWith("backup-1");
+  });
+
+  it("Vercel 回滚创建后用 waitUntil 托管完整推进", async () => {
+    process.env.VERCEL = "1";
+    const continuation = new Promise<{ continued: boolean }>(() => undefined);
+    const result = {
+      preBackup: null,
+      restore: { id: "restore-1", status: "running" },
+    };
+    const backup = {
+      startRestore: jest.fn().mockResolvedValue(result),
+      continueVercelJob: jest.fn().mockReturnValue(continuation),
+    };
+    const controller = new BackupController(
+      { get: jest.fn().mockReturnValue("secret") } as never,
+      {} as never,
+      backup as never,
+    );
+
+    await expect(
+      controller.startRestore("super-admin-1", "backup-1", {
+        confirm: "CONFIRM-RESTORE",
+      }),
+    ).resolves.toEqual(result);
+    expect(waitUntil).toHaveBeenCalledWith(expect.any(Promise));
+    expect(backup.continueVercelJob).toHaveBeenCalledWith("restore-1");
+  });
+
+  it("Vercel 显式任务恢复立即响应，并用 waitUntil 托管实际推进", async () => {
     process.env.VERCEL = "1";
     const continuation = new Promise<{ continued: boolean }>(() => undefined);
     const backup = {

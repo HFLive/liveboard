@@ -18,7 +18,7 @@ import { NeonClient } from "./neon.client";
 import { StorageService } from "../storage/storage.service";
 
 /**
- * Vercel 备份/回滚的分块执行器（Serverless 无持久盘、函数 60s 超时）：
+ * Vercel 备份/回滚的分块执行器（Serverless 无持久盘、Hobby 函数最长 300s）：
  * 备份 = Neon Snapshot + R2 对象复制到 backup/ 前缀；
  * 回滚 = Neon Snapshot finalized restore + R2 回拷。
  *
@@ -106,24 +106,17 @@ const JOB_LOCK_TTL_MS = 60_000;
  */
 const JOB_STATE_KEY_PREFIX = "liveboard:backup:job:";
 const JOB_LOCK_KEY_PREFIX = "liveboard:backup:lock:";
-/** 请求内推进预算：Vercel 函数最长 60s，预留请求与执行开销余量。 */
-export const VERCEL_ADVANCE_BUDGET_MS = 45_000;
 /**
- * 手动备份请求的推进预算：比续跑棒更短，让「立即备份」请求尽早返回
- * （页面按钮不长时间转圈），未完成的部分由接力续跑继续。
+ * 单次后台推进预算。Vercel Hobby + Fluid Compute 的函数上限是 300 秒，
+ * 这里预留 30 秒给冷启动、响应收尾与平台开销。任务由 waitUntil 托管，
+ * 不再通过 HTTP 自调用续棒（Vercel 会把递归自调用拦成 508）。
  */
-export const VERCEL_MANUAL_BUDGET_MS = 20_000;
-/** 回滚链请求预算：保护备份 + 回滚共享，同样取短值让请求尽早返回。 */
-export const VERCEL_RESTORE_CHAIN_BUDGET_MS = 20_000;
+export const VERCEL_ADVANCE_BUDGET_MS = 270_000;
 /**
- * 单棒内 Neon 操作轮询窗口：函数 60s 上限内留余量，未完成则心跳退出本棒
- * （updatedAt 前进触发接力），由下一棒继续轮询。Neon 恢复分支可数分钟，
- * 旧实现按 5 分钟超时整棒死等，函数在轮询中被杀、无接力、链静默断。
+ * 单次 Neon 操作轮询窗口。未完成就写心跳并回到状态机主循环，避免一次
+ * waitForOperation 长时间占满整段 270 秒后台预算。
  */
 const VERCEL_OPERATION_POLL_MS = 25_000;
-/** 给 Nest 冷启动留足时间；目标端点一进入控制器就会立即 accepted。 */
-const CONTINUATION_ACCEPT_TIMEOUT_MS = 10_000;
-
 /** R2 备份前缀（对象复制到 backup/<jobId>/<storageKey>）。 */
 function backupObjectKey(jobId: string, storageKey: string): string {
   return `backup/${jobId}/${storageKey}`;
@@ -224,8 +217,9 @@ export class BackupVercelExecutor {
     return activeJobIds.values().next().value ?? null;
   }
 
-  /** tick 推进：所有运行中的备份/回滚任务各推进一块。 */
+  /** tick 推进：在本次函数生命周期内尽量跑完所有运行中的任务。 */
   async advance(): Promise<void> {
+    const deadline = Date.now() + VERCEL_ADVANCE_BUDGET_MS;
     const rows = await this.prisma.backupJob
       .findMany({
         where: { status: { in: ["pending", "running"] } },
@@ -235,50 +229,29 @@ export class BackupVercelExecutor {
       .catch(() => null);
     const dbIds = new Set((rows ?? []).map((row) => row.id));
     for (const row of rows ?? []) {
-      const before = row.updatedAt.getTime();
-      await this.withJobLock(row.id, () => this.advanceJob(row));
-      // 推进过且未终态的任务接力续跑：cron 才不会一次只推一块——长操作
-      // （Neon 恢复数分钟）断链后靠这条路径在几分钟内跑完，而非每天一块。
-      const after = await this.prisma.backupJob
-        .findUnique({ where: { id: row.id } })
-        .catch(() => null);
-      if (
-        after &&
-        (after.status === "pending" || after.status === "running") &&
-        after.updatedAt.getTime() > before
-      ) {
-        await this.scheduleContinuation(row.id);
-      }
+      if (Date.now() >= deadline) break;
+      await this.advanceUntilFinished(row.id, deadline);
     }
     // 兜底：Neon 恢复换库会把备份点之后创建的行从 DB 抹掉（回滚行/保护
-    // 备份行），接力断链时它们不在 findMany 结果里，永远无人推进。从
-    // Redis 进度找回孤儿行，重建后推进一块并接力续跑（每日 cron 是
-    // 接力断裂时的最后防线）。
+    // 备份行），中断时它们不在 findMany 结果里，永远无人推进。从
+    // Redis 进度找回孤儿行，并在同一函数预算内继续推进。
     for (const jobId of await this.listOrphanedInFlightJobs(dbIds)) {
-      const row = await this.recoverJobRow(jobId);
-      if (!row) continue;
-      await this.withJobLock(row.id, () => this.advanceJob(row));
-      await this.scheduleContinuation(row.id);
+      if (Date.now() >= deadline) break;
+      await this.advanceUntilFinished(jobId, deadline);
     }
   }
 
   /**
-   * 请求内立即把单个任务推进到完成或预算耗尽：手动备份/回滚链在创建任务的
-   * 请求里驱动，不再等每日 cron 才动第一块。每轮读取最新行推进一块；
-   * 预算耗尽且任务未终态时自动接力续跑（自己叫自己，见
-   * scheduleContinuation），每棒一个函数实例（≤预算），直至完成；
-   * 本轮无进展不接力（防止失控循环），交由每日 cron 兜底。restore 行在
-   * 链等待（pending，等保护备份 finalize 唤醒）时每 1s 重试一次，并接力
-   * 推进仍在进行中的保护备份。deadlineMs 由调用方共享（回滚链两条任务
-   * 合计不超预算）。
+   * 在一个 Vercel 函数生命周期内把单个任务推进到完成或预算耗尽。
+   * 管理端与内部入口用 waitUntil 托管这段工作，HTTP 响应可以立即返回；
+   * 禁止再向同一个 Vercel Project 自调用，否则平台递归保护会返回 508。
+   * deadlineMs 由调用方共享，保护备份与回滚链合计不超预算。
    */
   async advanceUntilFinished(
     jobId: string,
     deadlineMs?: number,
   ): Promise<void> {
     const deadline = deadlineMs ?? Date.now() + VERCEL_ADVANCE_BUDGET_MS;
-    let progressed = false; // 本轮推进过（updatedAt 前进）才接力。
-    let chainTarget: string | null = null; // 接力目标（链等待时指向保护备份）。
     for (;;) {
       let row = (await this.prisma.backupJob
         .findUnique({ where: { id: jobId } })
@@ -291,17 +264,17 @@ export class BackupVercelExecutor {
         if (!row) return;
       }
       if (row.status === "succeeded" || row.status === "failed") {
-        // 任务终态：若有被它唤醒的回滚任务，接力给回滚续跑（防链跨请求断链）。
+        // 任务终态：若有被它唤醒的回滚任务，在同一函数预算内继续。
         if (row.status === "succeeded") {
-          await this.continueDependentRestores(jobId);
+          await this.continueDependentRestores(jobId, deadline);
         }
         return;
       }
       if (row.kind === "restore" && row.status === "pending") {
         // 链等待：回滚必须等它的保护备份成功。保护备份 id 记在 restore
         // 行的 progress.protectJobId（startRestore 写入；restoreFromId
-        // 是「源备份」，两者不同）。保护备份成功后自唤醒，还在跑则接力
-        // 推进它，失败/缺失则不再接力（reconcileOrphanedRestores 兜底）。
+        // 是「源备份」，两者不同）。保护备份成功后自唤醒；还在运行就先
+        // 在本次函数预算内推进它，失败/缺失则由兜底逻辑处理。
         const protectId = this.protectJobIdOf(row.progress);
         const protect = protectId
           ? await this.prisma.backupJob
@@ -321,32 +294,25 @@ export class BackupVercelExecutor {
             .catch(() => undefined);
           continue; // 下一轮以 running 进入 restore 状态机。
         }
-        if (protect && protect.status !== "failed") {
-          chainTarget = protect.id;
-        } else {
-          chainTarget = null;
-        }
-        if (Date.now() >= deadline) break;
-        await sleep(1000);
+        if (!protect || protect.status === "failed") return;
+        await this.advanceUntilFinished(protect.id, deadline);
+        if (Date.now() >= deadline) return;
         continue;
       }
-      chainTarget = null;
       if (Date.now() >= deadline) break;
-      const before = row.updatedAt.getTime();
-      await this.withJobLock(jobId, () => this.advanceJob(row));
-      const after = await this.prisma.backupJob
-        .findUnique({ where: { id: jobId } })
-        .catch(() => null);
-      if (after && after.updatedAt.getTime() > before) progressed = true;
-    }
-    // 预算耗尽：接力续跑（自己叫自己）。无进展不接力，交给每日 cron 兜底。
-    if (progressed || chainTarget) {
-      await this.scheduleContinuation(chainTarget ?? jobId);
+      const advanced = await this.withJobLock(jobId, () =>
+        this.advanceJob(row).then(() => true),
+      );
+      // 另一实例已持锁时不在本函数内空转；持锁实例会继续推进。
+      if (!advanced) return;
     }
   }
 
-  /** 保护备份成功收尾后，唤醒依赖它的回滚任务接力续跑（防链跨请求断链）。 */
-  private async continueDependentRestores(backupId: string): Promise<void> {
+  /** 保护备份成功收尾后，在同一函数预算内继续依赖它的回滚任务。 */
+  private async continueDependentRestores(
+    backupId: string,
+    deadline: number,
+  ): Promise<void> {
     const restores = await this.prisma.backupJob
       .findMany({
         where: { kind: "restore", status: { in: ["pending", "running"] } },
@@ -355,7 +321,7 @@ export class BackupVercelExecutor {
       .catch(() => null);
     for (const restore of restores ?? []) {
       if (this.protectJobIdOf(restore.progress) === backupId) {
-        await this.scheduleContinuation(restore.id);
+        await this.advanceUntilFinished(restore.id, deadline);
       }
     }
   }
@@ -364,42 +330,6 @@ export class BackupVercelExecutor {
   private protectJobIdOf(progress: unknown): string | null {
     const raw = progress as { protectJobId?: string } | null;
     return typeof raw?.protectJobId === "string" ? raw.protectJobId : null;
-  }
-
-  /**
-   * 接力续跑：向自身公开端点发 GET /internal/cron/backup?jobId=<id>
-   * （Bearer CRON_SECRET），由下一个函数实例继续推进同一任务（每棒 ≤预算）。
-   * 最多等 10s（覆盖免费实例冷启动）确认下一棒 accepted，不等待其完成；URL 或密钥缺失时
-   * 记录错误并由每日 cron 兜底。同一任务的并发由 per-job Redis 锁串行化。
-   */
-  private async scheduleContinuation(jobId: string): Promise<void> {
-    const base = selfBaseUrl();
-    const secret = process.env.CRON_SECRET?.trim();
-    if (!base || !secret) {
-      this.logger.error(
-        `Vercel 任务 ${jobId} 无法接力：${!base ? "缺少自身公开地址" : "缺少 CRON_SECRET"}`,
-      );
-      return;
-    }
-    await fetch(
-      `${base}/internal/cron/backup?jobId=${encodeURIComponent(jobId)}`,
-      {
-        headers: { Authorization: `Bearer ${secret}` },
-        signal: AbortSignal.timeout(CONTINUATION_ACCEPT_TIMEOUT_MS),
-      },
-    )
-      .then((response) => {
-        if (!response.ok) {
-          this.logger.error(
-            `Vercel 任务 ${jobId} 接力端点返回 HTTP ${response.status}`,
-          );
-        }
-      })
-      .catch((caught) =>
-        this.logger.error(
-          `Vercel 任务 ${jobId} 接力请求失败: ${messageOfVercel(caught)}`,
-        ),
-      );
   }
 
   /** 每任务一块；返回后任务行已更新（无论推进到哪一步）。 */
@@ -924,18 +854,16 @@ export class BackupVercelExecutor {
         return;
       }
 
-      // 标记尚未出现时维持只读并短暂轮询；不更新状态可避免无限自调用。
-      // 当前请求预算耗尽后停止接力，交由每日 cron 再确认，管理员也能从
+      // 标记尚未出现时维持只读并短暂轮询；不更新状态可避免无效忙等。
+      // 当前后台预算耗尽后由每日 cron 再确认，管理员也能从
       // 明确错误得知不能直接重新发起回滚。
       await sleep(1500);
       return;
     }
 
     if (stage === "restore/wait") {
-      // 预算感知等待：Neon 恢复操作可数分钟，一棒 45s 内等不完。每棒轮询
-      // 一小段，未完成则心跳更新进度（updatedAt 前进触发接力），下一棒继续
-      // 轮询；完成才进入 verify。旧实现 5 分钟整棒死等，函数 60s 被杀、
-      // 无接力续跑，回滚行永久卡「还原数据库」。
+      // 预算感知等待：每次短轮询，未完成就写心跳并回到状态机主循环；
+      // 完成才进入 verify，避免单次 waitForOperation 吞掉整段函数时长。
       const finished = await neon.waitForOperation(
         progress.operationIds ?? progress.operationId ?? null,
         VERCEL_OPERATION_POLL_MS,
@@ -1912,23 +1840,4 @@ function isDefinitiveNeonRejection(caught: unknown): boolean {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * 自身公开地址：生产域名优先，其次部署域名（函数运行时必定注入），最后
- * API_HOST。曾线上翻车：项目改名/重建后 VERCEL_PROJECT_PRODUCTION_URL
- * 缺失 → selfBaseUrl 返回 null → 接力续跑静默跳过（scheduleContinuation
- * 里 `if (!base || !secret) return`）→ 链条在请求内预算（20s）后断裂，
- * 任务永久「进行中」。
- */
-function selfBaseUrl(): string | null {
-  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
-  if (production) return `https://${production}`;
-  // VERCEL_URL = 当前部署专属域名（liveboard-<hash>-*.vercel.app），
-  // 服务器函数运行时始终存在；自调用打到部署域名同样可达。
-  const deployment = process.env.VERCEL_URL?.trim();
-  if (deployment) return `https://${deployment}`;
-  const host = process.env.API_HOST?.trim();
-  if (host) return host.replace(/\/+$/, "");
-  return null;
 }

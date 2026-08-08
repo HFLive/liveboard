@@ -290,6 +290,39 @@ describe("BackupVercelExecutor 换库后的行重建", () => {
     });
   });
 
+  describe("单函数后台推进", () => {
+    it("连续推进到终态且不再 HTTP 自调用", async () => {
+      const now = new Date();
+      const running = {
+        id: "backup-1",
+        kind: "manual",
+        status: "running",
+        phase: "objects",
+        progress: { stage: "copy-objects", done: 20, total: 40 },
+        neonBranchId: "snapshot-1",
+        restoreFromId: null,
+        includeObjects: true,
+        isProtection: false,
+        error: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      prisma.backupJob.findUnique
+        .mockResolvedValueOnce(running)
+        .mockResolvedValueOnce({ ...running, status: "succeeded" });
+      const advanceJob = jest
+        .spyOn(executor as never, "advanceJob" as never)
+        .mockResolvedValue(undefined as never);
+      const fetchSpy = jest.spyOn(global, "fetch");
+
+      await executor.advanceUntilFinished("backup-1", Date.now() + 10_000);
+
+      expect(advanceJob).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+  });
+
   describe("recoverJobRow（换库后从 Redis 重建行）", () => {
     it("按 Redis 状态重建 restore 行（kind/restoreFromId/includeObjects/protectJobId）", async () => {
       redisClient.get.mockResolvedValue(
