@@ -90,20 +90,23 @@ export class NeonClient {
   }
 
   /**
-   * 把目标分支整体替换为源分支 head。preserveUnderName 必传（主分支有
-   * 子分支——备份分支是它的子分支，restore 时会被移入新保存的分支）。
+   * 把目标分支整体替换为源分支 head。preserveUnderName 可选：不传则旧主
+   * 分支数据被直接覆盖（用于旧主是根分支时——根分支不可删除，改名保留会
+   * 产生永久占位的 pre-restore-* 孤儿）。
    */
   async restoreBranch(options: {
     targetBranchId: string;
     sourceBranchId: string;
-    preserveUnderName: string;
+    preserveUnderName?: string;
   }): Promise<string | null> {
     const body = await this.request<{ operations?: NeonOperation[] }>(
       "POST",
       `/projects/${this.projectId}/branches/${options.targetBranchId}/restore`,
       {
         source_branch_id: options.sourceBranchId,
-        preserve_under_name: options.preserveUnderName,
+        ...(options.preserveUnderName !== undefined
+          ? { preserve_under_name: options.preserveUnderName }
+          : {}),
       },
     );
     return body.operations?.[0]?.id ?? null;

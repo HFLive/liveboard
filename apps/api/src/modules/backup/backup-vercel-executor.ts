@@ -621,12 +621,19 @@ export class BackupVercelExecutor {
       if (!source?.neonBranchId || source.status !== "succeeded") {
         throw new Error("来源备份缺少 Neon 分支信息，无法回滚");
       }
-      const { primaryId } = await neon.listBranches();
+      const { branches, primaryId } = await neon.listBranches();
       if (!primaryId) throw new Error("Neon 项目中未找到主分支");
+      // 根分支（parent_id 为空）不可删除：若旧主分支是根（项目第一次恢复），
+      // 跳过 preserve——否则根分支被改名成 pre-restore-* 永久占位（平台规则
+      // 不允许删根分支，曾线上留下删不掉的根孤儿）。非根主分支照常保留
+      // （回滚的最后防线，收尾时删除）。
+      const primary = branches.find((branch) => branch.id === primaryId);
+      const preserveUnderName =
+        primary?.parent_id != null ? `pre-restore-${job.id}` : undefined;
       const operationId = await neon.restoreBranch({
         targetBranchId: primaryId,
         sourceBranchId: source.neonBranchId,
-        preserveUnderName: `pre-restore-${job.id}`,
+        ...(preserveUnderName !== undefined ? { preserveUnderName } : {}),
       });
       const next: VercelJobProgress = {
         stage: "restore/wait",
