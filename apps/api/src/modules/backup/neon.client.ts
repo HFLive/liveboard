@@ -318,6 +318,10 @@ export class NeonClient {
       throw new Error(`${message}，请稍后重试`);
     }
     if (response.ok) {
+      // DELETE /branches 在现网成功时返回 204 No Content。不能无条件调用
+      // response.json()，否则资源已经删掉却因解析空响应抛错，阻断后续 R2
+      // 与 BackupJob 清理。
+      if (response.status === 204) return undefined as T;
       return (await response.json()) as T;
     }
     const errorBody = (await response

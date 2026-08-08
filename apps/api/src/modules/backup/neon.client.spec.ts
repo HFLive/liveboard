@@ -281,4 +281,9 @@ describe("NeonClient", () => {
     );
     await expect(client.deleteBranch("br-gone")).resolves.toBeUndefined();
   });
+
+  it("deleteBranch 接受成功的 204 空响应", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await expect(client.deleteBranch("br-old")).resolves.toBeUndefined();
+  });
 });
