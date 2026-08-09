@@ -270,6 +270,18 @@ export class ExercisesService {
     });
   }
 
+  async deleteExerciseSet(userId: string | null, exerciseSetId: string) {
+    const user = await this.requireUser(userId);
+    const existing = await this.prisma.exerciseSet.findUnique({
+      where: { id: exerciseSetId },
+      select: { classroomId: true },
+    });
+    if (!existing) throw new NotFoundException("Exercise set not found");
+    await this.classrooms.requireTeacher(user, existing.classroomId);
+    await this.prisma.exerciseSet.delete({ where: { id: exerciseSetId } });
+    return { ok: true };
+  }
+
   async getExerciseSet(userId: string | null, exerciseSetId: string) {
     const user = await this.requireUser(userId);
 

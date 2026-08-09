@@ -36,6 +36,7 @@ import {
   deleteClassroom,
   deleteClassroomAnnouncement,
   deleteClassroomFile,
+  deleteExerciseSet,
   deleteTeachingDeck,
   ExerciseSetSummary,
   getClassroom,
@@ -289,6 +290,25 @@ export function ClassroomDetailClient({
       setMessage("课件已删除");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "删除课件失败");
+    }
+  }
+
+  async function onDeleteExercise(exercise: ExerciseSetSummary) {
+    if (
+      !window.confirm(
+        `确定删除练习“${exercise.title}”吗？练习、题目与全部提交记录将被永久删除，此操作无法撤销。`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteExerciseSet(exercise.id);
+      setExercises((current) =>
+        current.filter((item) => item.id !== exercise.id),
+      );
+      setMessage("练习已删除");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "删除练习失败");
     }
   }
 
@@ -771,6 +791,14 @@ export function ClassroomDetailClient({
                   >
                     批改
                   </Link>
+                  <button
+                    className="icon-button danger"
+                    onClick={() => void onDeleteExercise(exercise)}
+                    title="删除练习"
+                    type="button"
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </button>
                 </span>
               ) : null}
             </article>

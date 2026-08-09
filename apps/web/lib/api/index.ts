@@ -2106,6 +2106,12 @@ export function updateExerciseSet(
   );
 }
 
+export function deleteExerciseSet(id: string) {
+  return request<{ ok: true }>(`/exercise-sets/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export interface ExerciseQuestion {
   id: string;
   exerciseSetId: string;

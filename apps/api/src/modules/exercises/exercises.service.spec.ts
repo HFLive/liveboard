@@ -11,6 +11,7 @@ describe("ExercisesService", () => {
       create: jest.fn(),
       findMany: jest.fn(),
       findUnique: jest.fn(),
+      delete: jest.fn(),
     },
     classroom: { findUnique: jest.fn() },
     teachingDeckItem: { count: jest.fn() },
@@ -196,6 +197,36 @@ describe("ExercisesService", () => {
       }),
     ).rejects.toThrow("已有学生提交，不能再修改练习题目");
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("hard deletes the exercise set for a classroom teacher", async () => {
+    prisma.exerciseSet.findUnique.mockResolvedValue({
+      classroomId: "classroom-1",
+    });
+
+    const result = await service.deleteExerciseSet("teacher-1", "exercise-1");
+
+    expect(result).toEqual({ ok: true });
+    expect(prisma.exerciseSet.delete).toHaveBeenCalledWith({
+      where: { id: "exercise-1" },
+    });
+  });
+
+  it("refuses to delete an exercise without teacher permission", async () => {
+    prisma.exerciseSet.findUnique.mockResolvedValue({
+      classroomId: "classroom-1",
+    });
+    const classrooms = (
+      service as unknown as { classrooms: { requireTeacher: jest.Mock } }
+    ).classrooms;
+    classrooms.requireTeacher.mockRejectedValueOnce(
+      new Error("只有课堂教师可以执行此操作"),
+    );
+
+    await expect(
+      service.deleteExerciseSet("learner-1", "exercise-1"),
+    ).rejects.toThrow("只有课堂教师可以执行此操作");
+    expect(prisma.exerciseSet.delete).not.toHaveBeenCalled();
   });
 
   it("reveals correct answers after a learner has submitted when enabled", async () => {

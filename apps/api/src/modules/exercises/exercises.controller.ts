@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -48,6 +49,14 @@ export class ExercisesController {
     return {
       exerciseSet: await this.exercisesService.getExerciseSet(userId, id),
     };
+  }
+
+  @Delete("exercise-sets/:id")
+  async delete(
+    @CurrentUserId() userId: string | null,
+    @Param("id") id: string,
+  ) {
+    return this.exercisesService.deleteExerciseSet(userId, id);
   }
 
   @Patch("exercise-sets/:id")
