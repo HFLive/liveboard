@@ -182,6 +182,15 @@ export class AuthController {
     return this.authService.getUserPublicActivity(userId, targetUserId);
   }
 
+  @Get("profile/:id/contributions")
+  async getProfileContributions(
+    @CurrentUserId() userId: string | null,
+    @Param("id") targetUserId: string,
+    @Query("year") year?: string,
+  ) {
+    return this.authService.getUserContributions(userId, targetUserId, year);
+  }
+
   @Get("avatar/:id")
   async getAvatar(
     @CurrentUserId() userId: string | null,

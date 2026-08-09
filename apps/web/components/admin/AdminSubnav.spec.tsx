@@ -21,6 +21,7 @@ const baseUser = {
   bannerUrl: null,
   avatarUrl: null,
   openContentInCurrentTab: false,
+  showContributionGraph: true,
 };
 
 describe("AdminSubnav", () => {

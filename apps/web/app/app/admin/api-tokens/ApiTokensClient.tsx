@@ -38,6 +38,7 @@ export function ApiTokensClient() {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [created, setCreated] = useState<CreatedToken | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState(false);
@@ -207,9 +208,31 @@ export function ApiTokensClient() {
     return user ? user.displayName : "";
   }, [created, users]);
 
+  function closeCreateDialog() {
+    if (creating) return;
+    setCreateOpen(false);
+    setCreated(null);
+    setCopied(false);
+    setCopiedCommand(false);
+  }
+
   return (
     <div className="workspace admin-workspace admin-page admin-page--wide api-tokens-page">
       <AdminPageHeader
+        actions={
+          <button
+            className="button"
+            onClick={() => {
+              setCreated(null);
+              setCopied(false);
+              setCopiedCommand(false);
+              setCreateOpen(true);
+            }}
+            type="button"
+          >
+            创建令牌
+          </button>
+        }
         category="系统与服务"
         description="供 MCP 等外部客户端以用户身份调用 API 的个人访问令牌。"
         title="访问令牌"
@@ -218,131 +241,12 @@ export function ApiTokensClient() {
       {error ? <p className="error-text">{error}</p> : null}
       {message ? <p className="success-text">{message}</p> : null}
 
-      {created ? (
-        <section className="token-created" aria-live="polite">
-          <div className="token-created-head">
-            <strong>令牌已创建</strong>
-            <span>
-              明文只在这一次显示，请立即保存到客户端配置；数据库只存哈希。
-            </span>
-            <button
-              aria-label="关闭"
-              className="token-created-close"
-              onClick={() => setCreated(null)}
-              type="button"
-            >
-              <X aria-hidden="true" />
-            </button>
-          </div>
-          <code className="token-plaintext">{created.token}</code>
-          <div className="token-created-meta">
-            <span>
-              <strong>名称</strong>
-              {created.name}
-            </span>
-            <span>
-              <strong>用户</strong>
-              {selectedUserName}
-            </span>
-          </div>
-          <div className="token-usage-command">
-            <span className="token-usage-command-label">
-              在 MCP 客户端中使用（已填入令牌）：
-            </span>
-            <code className="token-plaintext token-plaintext--multiline">
-              {mcpAddCommand(created.token)}
-            </code>
-          </div>
-          <div className="button-row">
-            <button className="button secondary" onClick={onCopy} type="button">
-              {copied ? (
-                <Check aria-hidden="true" />
-              ) : (
-                <Copy aria-hidden="true" />
-              )}
-              {copied ? "已复制" : "复制令牌"}
-            </button>
-            <button
-              className="button secondary"
-              onClick={onCopyCommand}
-              type="button"
-            >
-              {copiedCommand ? (
-                <Check aria-hidden="true" />
-              ) : (
-                <Copy aria-hidden="true" />
-              )}
-              {copiedCommand ? "已复制" : "复制命令"}
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      <section className="token-create">
-        <form className="token-create-form" onSubmit={onCreate}>
-          {isSuperAdmin ? (
-            <div className="token-create-field">
-              <label htmlFor="token-user">归属用户</label>
-              <select
-                className="select"
-                id="token-user"
-                onChange={(event) => setUserId(event.target.value)}
-                value={userId}
-              >
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.displayName}（{user.username}）
-                  </option>
-                ))}
-              </select>
-              <span className="token-create-hint">
-                令牌将以此用户的身份操作文档
-              </span>
-            </div>
-          ) : null}
-          <div className="token-create-field">
-            <label htmlFor="token-name">名称</label>
-            <input
-              className="input"
-              id="token-name"
-              maxLength={120}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="如 claude-code"
-              required
-              value={name}
-            />
-          </div>
-          <div className="token-create-field">
-            <label htmlFor="token-expires">过期时间（可选）</label>
-            <input
-              className="input"
-              id="token-expires"
-              onChange={(event) => setExpiresAt(event.target.value)}
-              type="datetime-local"
-              value={expiresAt}
-            />
-          </div>
-          <button
-            className="button"
-            disabled={creating || !userId}
-            type="submit"
-          >
-            {creating ? "创建中…" : "创建令牌"}
-          </button>
-        </form>
-      </section>
-
-      <section className="token-usage">
-        <h2>在 MCP 客户端中使用</h2>
-        <p>把下面命令里的令牌换成你的访问令牌，即可把本站接入 Claude Code：</p>
-        <code className="token-plaintext token-plaintext--multiline">
-          {mcpAddCommand("lbt_xxxxxxxx")}
-        </code>
-      </section>
-
       <section className="token-list">
         <div className="token-list-head">
-          <h2>已创建的令牌</h2>
+          <div>
+            <h2>已创建的令牌</h2>
+            <p>令牌明文只在创建后显示一次，之后只能停用或删除。</p>
+          </div>
           {isSuperAdmin ? (
             <label className="token-list-filter">
               <span>按用户筛选</span>
@@ -442,6 +346,185 @@ export function ApiTokensClient() {
           </ul>
         )}
       </section>
+
+      {createOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="token-dialog-title"
+            aria-modal="true"
+            className="modal-panel token-create-dialog"
+            role="dialog"
+          >
+            <div className="modal-head token-dialog-head">
+              <div>
+                <h2 id="token-dialog-title">
+                  {created ? "保存访问令牌" : "创建访问令牌"}
+                </h2>
+                <p>
+                  {created
+                    ? "请立即复制并安全保存，关闭后无法再次查看完整令牌。"
+                    : "为外部客户端创建一份可单独停用的用户凭据。"}
+                </p>
+              </div>
+              <button
+                aria-label="关闭"
+                className="icon-button subtle"
+                disabled={creating}
+                onClick={closeCreateDialog}
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+
+            {created ? (
+              <>
+                <div
+                  className="modal-body token-created-body"
+                  aria-live="polite"
+                >
+                  <div className="token-created-meta">
+                    <span>
+                      <strong>名称</strong>
+                      {created.name}
+                    </span>
+                    <span>
+                      <strong>用户</strong>
+                      {selectedUserName}
+                    </span>
+                  </div>
+                  <div className="token-secret-block">
+                    <span>访问令牌</span>
+                    <div className="token-secret-row">
+                      <code>{created.token}</code>
+                      <button
+                        aria-label={copied ? "令牌已复制" : "复制令牌"}
+                        className="token-copy-button"
+                        onClick={onCopy}
+                        title={copied ? "已复制" : "复制令牌"}
+                        type="button"
+                      >
+                        {copied ? (
+                          <Check aria-hidden="true" />
+                        ) : (
+                          <Copy aria-hidden="true" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="token-command-block">
+                    <div>
+                      <strong>MCP 配置命令</strong>
+                      <span>已自动填入该令牌，可直接粘贴到终端。</span>
+                    </div>
+                    <div className="token-command-code-wrap">
+                      <code className="token-command-code">
+                        {mcpAddCommand(created.token)}
+                      </code>
+                      <button
+                        aria-label={
+                          copiedCommand ? "命令已复制" : "复制 MCP 配置命令"
+                        }
+                        className="token-copy-button"
+                        onClick={onCopyCommand}
+                        title={copiedCommand ? "已复制" : "复制命令"}
+                        type="button"
+                      >
+                        {copiedCommand ? (
+                          <Check aria-hidden="true" />
+                        ) : (
+                          <Copy aria-hidden="true" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-foot">
+                  <div className="button-row">
+                    <button
+                      className="button"
+                      onClick={closeCreateDialog}
+                      type="button"
+                    >
+                      完成
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <form onSubmit={onCreate}>
+                <div className="modal-body token-create-form">
+                  {isSuperAdmin ? (
+                    <div className="token-create-field">
+                      <label htmlFor="token-user">归属用户</label>
+                      <select
+                        className="select"
+                        id="token-user"
+                        onChange={(event) => setUserId(event.target.value)}
+                        value={userId}
+                      >
+                        {users.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.displayName}（{user.username}）
+                          </option>
+                        ))}
+                      </select>
+                      <span className="token-create-hint">
+                        令牌将以此用户身份访问当前允许的内容。
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="token-create-field">
+                    <label htmlFor="token-name">名称</label>
+                    <input
+                      autoFocus
+                      className="input"
+                      id="token-name"
+                      maxLength={120}
+                      onChange={(event) => setName(event.target.value)}
+                      placeholder="例如 Claude Code"
+                      required
+                      value={name}
+                    />
+                    <span className="token-create-hint">
+                      使用设备或用途命名，便于之后识别和停用。
+                    </span>
+                  </div>
+                  <div className="token-create-field">
+                    <label htmlFor="token-expires">过期时间（可选）</label>
+                    <input
+                      className="input"
+                      id="token-expires"
+                      onChange={(event) => setExpiresAt(event.target.value)}
+                      type="datetime-local"
+                      value={expiresAt}
+                    />
+                  </div>
+                </div>
+                <div className="modal-foot">
+                  <div className="button-row">
+                    <button
+                      className="button secondary"
+                      disabled={creating}
+                      onClick={closeCreateDialog}
+                      type="button"
+                    >
+                      取消
+                    </button>
+                    <button
+                      className="button"
+                      disabled={creating || !userId || !name.trim()}
+                      type="submit"
+                    >
+                      {creating ? "创建中…" : "创建令牌"}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

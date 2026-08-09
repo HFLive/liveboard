@@ -355,6 +355,7 @@ export function MigrationClient() {
                     <label className="maintenance-reason-field">
                       <span>原因（可选）</span>
                       <input
+                        className="input"
                         disabled={maintenanceOn || togglingMaintenance}
                         onChange={(event) => setReasonInput(event.target.value)}
                         placeholder="例如：升级服务器"
@@ -523,6 +524,7 @@ export function MigrationClient() {
                 </span>
                 <input
                   autoComplete="off"
+                  className="input"
                   disabled={starting !== null || unavailable || isVercel}
                   onChange={(event) => setConfirmInput(event.target.value)}
                   placeholder={info?.confirmPhrase ?? "CONFIRM-IMPORT"}

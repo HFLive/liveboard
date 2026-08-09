@@ -8,6 +8,15 @@ import { AuthService } from "./auth.service";
 describe("AuthService", () => {
   const prisma = {
     user: { findUnique: jest.fn(), update: jest.fn() },
+    workspace: { findFirst: jest.fn() },
+    forumPost: { findMany: jest.fn() },
+    submission: { findMany: jest.fn() },
+    file: { findMany: jest.fn() },
+    exerciseSet: { findMany: jest.fn() },
+    teachingDeck: { findMany: jest.fn() },
+    classroomAnnouncement: { findMany: jest.fn() },
+    classroomFile: { findMany: jest.fn() },
+    fileAsset: { findMany: jest.fn() },
   };
   const limiter = {
     isBlocked: jest.fn(),
@@ -153,5 +162,69 @@ describe("AuthService", () => {
         bio: "负责线路基础课程",
       },
     });
+  });
+
+  it("aggregates contribution days by category and excludes anonymous forum posts", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: "viewer-1", status: "active" })
+      .mockResolvedValueOnce({
+        id: "user-1",
+        status: "active",
+        createdAt: new Date("2025-01-01T00:00:00.000Z"),
+        showContributionGraph: true,
+      });
+    prisma.workspace.findFirst.mockResolvedValue({ timeZone: "Asia/Shanghai" });
+    prisma.forumPost.findMany.mockResolvedValue([
+      { createdAt: new Date("2026-08-09T01:00:00.000Z") },
+    ]);
+    prisma.submission.findMany
+      .mockResolvedValueOnce([
+        { submittedAt: new Date("2026-08-09T03:00:00.000Z") },
+      ])
+      .mockResolvedValueOnce([
+        { gradedAt: new Date("2026-08-09T05:00:00.000Z") },
+      ]);
+    prisma.file.findMany.mockResolvedValue([]);
+    prisma.exerciseSet.findMany.mockResolvedValue([]);
+    prisma.teachingDeck.findMany.mockResolvedValue([]);
+    prisma.classroomAnnouncement.findMany.mockResolvedValue([]);
+    prisma.classroomFile.findMany.mockResolvedValue([]);
+    prisma.fileAsset.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.getUserContributions("viewer-1", "user-1", "2026"),
+    ).resolves.toMatchObject({
+      visible: true,
+      total: 3,
+      days: [{ date: "2026-08-09", count: 3 }],
+      categories: [
+        { category: "learning", count: 1 },
+        { category: "teaching", count: 1 },
+        { category: "community", count: 1 },
+        { category: "resources", count: 0 },
+      ],
+    });
+    expect(prisma.forumPost.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ isAnonymous: false }),
+      }),
+    );
+  });
+
+  it("does not query activity rows when the contribution graph is private", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: "viewer-1", status: "active" })
+      .mockResolvedValueOnce({
+        id: "user-1",
+        status: "active",
+        createdAt: new Date("2025-01-01T00:00:00.000Z"),
+        showContributionGraph: false,
+      });
+    prisma.workspace.findFirst.mockResolvedValue({ timeZone: "UTC" });
+
+    await expect(
+      service.getUserContributions("viewer-1", "user-1", "2026"),
+    ).resolves.toMatchObject({ visible: false, total: 0, days: [] });
+    expect(prisma.forumPost.findMany).not.toHaveBeenCalled();
   });
 });

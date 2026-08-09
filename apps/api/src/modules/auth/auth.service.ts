@@ -8,6 +8,8 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import type {
+  UserContributionCategory,
+  UserContributionSummary,
   UserProfile,
   UserPublicActivity,
   UserSummary,
@@ -16,6 +18,7 @@ import argon2 from "argon2";
 import type { PendingUpload } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
+import { formatDateKey } from "../../common/date-key";
 import { PrismaService } from "../prisma/prisma.service";
 import type { StorageBackendName } from "../storage/storage-backend";
 import { StorageService } from "../storage/storage.service";
@@ -170,6 +173,194 @@ export class AuthService {
     };
   }
 
+  async getUserContributions(
+    userId: string | null,
+    targetUserId: string,
+    year?: string,
+  ): Promise<UserContributionSummary> {
+    const viewer = await this.requireActiveUser(userId);
+    const [target, workspace] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+          showContributionGraph: true,
+        },
+      }),
+      this.prisma.workspace.findFirst({ select: { timeZone: true } }),
+    ]);
+
+    if (!target || target.status !== "active") {
+      throw new NotFoundException("User not found");
+    }
+
+    const timeZone = workspace?.timeZone ?? "Asia/Shanghai";
+    const range = resolveContributionRange(year, timeZone);
+    const availableYears = contributionYears(target.createdAt, timeZone);
+    const visible = viewer.id === target.id || target.showContributionGraph;
+
+    if (!visible) {
+      return {
+        visible: false,
+        range,
+        total: 0,
+        days: [],
+        categories: [],
+        availableYears,
+        timeZone,
+      };
+    }
+
+    // Query one extra UTC day on either side, then apply the workspace time
+    // zone below. This keeps day boundaries correct for every IANA time zone.
+    const queryStart = dateKeyToUtc(range.from, -1);
+    const queryEnd = dateKeyToUtc(range.to, 2);
+    const withinRange = { gte: queryStart, lt: queryEnd };
+
+    const [
+      forumPosts,
+      submissions,
+      gradedSubmissions,
+      publishedFiles,
+      exerciseSets,
+      teachingDecks,
+      announcements,
+      classroomFiles,
+      standaloneAssets,
+    ] = await Promise.all([
+      this.prisma.forumPost.findMany({
+        where: {
+          authorId: target.id,
+          isAnonymous: false,
+          createdAt: withinRange,
+        },
+        select: { createdAt: true },
+      }),
+      this.prisma.submission.findMany({
+        where: { userId: target.id, submittedAt: withinRange },
+        select: { submittedAt: true },
+      }),
+      this.prisma.submission.findMany({
+        where: { gradedById: target.id, gradedAt: withinRange },
+        select: { gradedAt: true },
+      }),
+      this.prisma.file.findMany({
+        where: {
+          updatedById: target.id,
+          publishedAt: withinRange,
+          status: "published",
+        },
+        select: { publishedAt: true },
+      }),
+      this.prisma.exerciseSet.findMany({
+        where: { createdById: target.id, createdAt: withinRange },
+        select: { createdAt: true },
+      }),
+      this.prisma.teachingDeck.findMany({
+        where: { createdById: target.id, createdAt: withinRange },
+        select: { createdAt: true },
+      }),
+      this.prisma.classroomAnnouncement.findMany({
+        where: { authorId: target.id, createdAt: withinRange },
+        select: { createdAt: true },
+      }),
+      this.prisma.classroomFile.findMany({
+        where: { uploadedBy: target.id, createdAt: withinRange },
+        select: { createdAt: true },
+      }),
+      this.prisma.fileAsset.findMany({
+        where: {
+          uploadedBy: target.id,
+          kind: "standalone",
+          createdAt: withinRange,
+        },
+        select: { createdAt: true },
+      }),
+    ]);
+
+    const events: Array<{
+      category: UserContributionCategory;
+      occurredAt: Date;
+    }> = [
+      ...forumPosts.map(({ createdAt }) => ({
+        category: "community" as const,
+        occurredAt: createdAt,
+      })),
+      ...submissions.flatMap(({ submittedAt }) =>
+        submittedAt
+          ? [{ category: "learning" as const, occurredAt: submittedAt }]
+          : [],
+      ),
+      ...gradedSubmissions.flatMap(({ gradedAt }) =>
+        gradedAt
+          ? [{ category: "teaching" as const, occurredAt: gradedAt }]
+          : [],
+      ),
+      ...publishedFiles.flatMap(({ publishedAt }) =>
+        publishedAt
+          ? [{ category: "teaching" as const, occurredAt: publishedAt }]
+          : [],
+      ),
+      ...exerciseSets.map(({ createdAt }) => ({
+        category: "teaching" as const,
+        occurredAt: createdAt,
+      })),
+      ...teachingDecks.map(({ createdAt }) => ({
+        category: "teaching" as const,
+        occurredAt: createdAt,
+      })),
+      ...announcements.map(({ createdAt }) => ({
+        category: "teaching" as const,
+        occurredAt: createdAt,
+      })),
+      ...classroomFiles.map(({ createdAt }) => ({
+        category: "resources" as const,
+        occurredAt: createdAt,
+      })),
+      ...standaloneAssets.map(({ createdAt }) => ({
+        category: "resources" as const,
+        occurredAt: createdAt,
+      })),
+    ];
+
+    const dayCounts = new Map<string, number>();
+    const categoryCounts = new Map<UserContributionCategory, number>();
+    for (const event of events) {
+      const date = formatDateKey(event.occurredAt, timeZone);
+      if (date < range.from || date > range.to) continue;
+      dayCounts.set(date, (dayCounts.get(date) ?? 0) + 1);
+      categoryCounts.set(
+        event.category,
+        (categoryCounts.get(event.category) ?? 0) + 1,
+      );
+    }
+
+    const days = [...dayCounts.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([date, count]) => ({ date, count }));
+    const categoryOrder: UserContributionCategory[] = [
+      "learning",
+      "teaching",
+      "community",
+      "resources",
+    ];
+
+    return {
+      visible: true,
+      range,
+      total: days.reduce((sum, day) => sum + day.count, 0),
+      days,
+      categories: categoryOrder.map((category) => ({
+        category,
+        count: categoryCounts.get(category) ?? 0,
+      })),
+      availableYears,
+      timeZone,
+    };
+  }
+
   async updateProfile(
     userId: string | null,
     input: UpdateProfileDto,
@@ -179,6 +370,7 @@ export class AuthService {
       displayName?: string;
       bio?: string | null;
       openContentInCurrentTab?: boolean;
+      showContributionGraph?: boolean;
     } = {};
 
     if (typeof input.displayName === "string") {
@@ -195,6 +387,10 @@ export class AuthService {
 
     if (typeof input.openContentInCurrentTab === "boolean") {
       data.openContentInCurrentTab = input.openContentInCurrentTab;
+    }
+
+    if (typeof input.showContributionGraph === "boolean") {
+      data.showContributionGraph = input.showContributionGraph;
     }
 
     const updated = await this.prisma.user.update({
@@ -613,6 +809,7 @@ export class AuthService {
     bio?: string | null;
     bannerUpdatedAt?: Date | null;
     openContentInCurrentTab: boolean;
+    showContributionGraph: boolean;
     systemRole: UserSummary["systemRole"];
     status: UserSummary["status"];
     badgeAssignments?: Array<{
@@ -632,8 +829,56 @@ export class AuthService {
         ? `/auth/banner/${user.id}?v=${user.bannerUpdatedAt.getTime()}`
         : null,
       openContentInCurrentTab: user.openContentInCurrentTab,
+      showContributionGraph: user.showContributionGraph,
     };
   }
+}
+
+function resolveContributionRange(
+  requestedYear: string | undefined,
+  timeZone: string,
+): UserContributionSummary["range"] {
+  if (requestedYear && requestedYear !== "last_year") {
+    const year = Number(requestedYear);
+    const today = formatDateKey(new Date(), timeZone);
+    const currentYear = Number(today.slice(0, 4));
+    if (!Number.isInteger(year) || year < 2000 || year > currentYear) {
+      throw new BadRequestException("无效的贡献年份");
+    }
+    return {
+      mode: "year",
+      year,
+      from: `${year}-01-01`,
+      to: year === currentYear ? today : `${year}-12-31`,
+    };
+  }
+
+  const to = formatDateKey(new Date(), timeZone);
+  return {
+    mode: "last_year",
+    year: null,
+    from: addDaysToDateKey(to, -364),
+    to,
+  };
+}
+
+function contributionYears(createdAt: Date, timeZone: string) {
+  const firstYear = Number(formatDateKey(createdAt, timeZone).slice(0, 4));
+  const currentYear = Number(formatDateKey(new Date(), timeZone).slice(0, 4));
+  return Array.from(
+    { length: currentYear - firstYear + 1 },
+    (_, index) => currentYear - index,
+  );
+}
+
+function addDaysToDateKey(dateKey: string, days: number) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function dateKeyToUtc(dateKey: string, dayOffset: number) {
+  return new Date(`${addDaysToDateKey(dateKey, dayOffset)}T00:00:00.000Z`);
 }
 
 function normalizeBadgeColor(value: string) {

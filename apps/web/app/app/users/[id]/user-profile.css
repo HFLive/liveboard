@@ -1,8 +1,380 @@
 .user-profile-page .user-profile-content,
+.user-profile-page .user-profile-contributions,
 .user-profile-page .user-profile-activity {
   width: min(1040px, 100%);
   max-width: none;
   margin-inline: auto;
+}
+
+.user-profile-contributions {
+  padding: 0 var(--page-gutter) 30px;
+}
+
+.user-contributions {
+  min-width: 0;
+}
+
+.contribution-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.contribution-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.contribution-year-picker {
+  position: relative;
+  flex: none;
+}
+
+.contribution-year-picker > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 130px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--fill-subtle);
+  color: var(--text);
+  padding: 0 9px 0 11px;
+  font-size: 11px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.contribution-year-picker > summary::-webkit-details-marker {
+  display: none;
+}
+
+.contribution-year-picker > summary:hover {
+  background: var(--fill-hover);
+}
+
+.contribution-year-picker > summary:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.contribution-year-picker > summary[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.contribution-year-picker > summary svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 140ms ease;
+}
+
+.contribution-year-picker[open] > summary svg {
+  transform: rotate(180deg);
+}
+
+.contribution-year-options {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  gap: 2px;
+  width: max-content;
+  min-width: 150px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-popover);
+  padding: 4px;
+}
+
+.contribution-year-options button {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 7px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-soft);
+  padding: 6px 9px;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.contribution-year-options button:hover,
+.contribution-year-options button:focus-visible {
+  background: var(--fill-hover);
+  color: var(--text);
+  outline: 0;
+}
+
+.contribution-year-options button.active {
+  background: var(--fill-active);
+  color: var(--text);
+}
+
+.contribution-year-options button svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+}
+
+.contribution-year-options button.active svg {
+  opacity: 1;
+}
+
+.contribution-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: 2px 0 8px;
+  scrollbar-width: thin;
+  transition: opacity 150ms ease;
+}
+
+.contribution-scroll.is-loading {
+  opacity: 0.55;
+}
+
+.contribution-calendar {
+  --contribution-cell: 11px;
+  --contribution-gap: 3px;
+  width: max-content;
+  min-width: 100%;
+}
+
+.contribution-months,
+.contribution-grid-row {
+  display: grid;
+  grid-template-columns: 24px max-content;
+  column-gap: 8px;
+}
+
+.contribution-months {
+  min-height: 20px;
+}
+
+.contribution-months > div {
+  display: grid;
+  grid-template-columns: repeat(
+    var(--contribution-weeks),
+    var(--contribution-cell)
+  );
+  column-gap: var(--contribution-gap);
+}
+
+.contribution-months > div > span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.contribution-weekdays,
+.contribution-week {
+  display: grid;
+  grid-template-rows: repeat(7, var(--contribution-cell));
+  row-gap: var(--contribution-gap);
+}
+
+.contribution-weekdays span {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: var(--contribution-cell);
+}
+
+.contribution-weeks {
+  display: flex;
+  gap: var(--contribution-gap);
+}
+
+.contribution-day {
+  display: block;
+  box-sizing: border-box;
+  width: var(--contribution-cell);
+  height: var(--contribution-cell);
+  border: 0;
+  border-radius: 3px;
+  background: var(--fill-subtle);
+}
+
+.contribution-day.level-1 {
+  background: color-mix(in srgb, var(--accent-soft) 76%, var(--fill-subtle));
+}
+
+.contribution-day.level-2 {
+  background: color-mix(in srgb, var(--accent) 48%, var(--accent-soft));
+}
+
+.contribution-day.level-3 {
+  background: var(--accent);
+}
+
+.contribution-day.level-4 {
+  background: var(--accent-dark);
+}
+
+.contribution-day.outside {
+  visibility: hidden;
+}
+
+.contribution-day[tabindex="0"] {
+  cursor: help;
+}
+
+.contribution-day[tabindex="0"]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.contribution-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 24px;
+  margin-top: 4px;
+}
+
+.contribution-categories,
+.contribution-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.contribution-categories span + span::before {
+  margin-right: 8px;
+  content: "·";
+}
+
+.contribution-legend {
+  flex-wrap: nowrap;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.contribution-legend .contribution-day {
+  --contribution-cell: 10px;
+}
+
+.contribution-skeleton {
+  width: min(1040px, calc(100% - (2 * var(--page-gutter))));
+  height: 150px;
+  margin: 0 auto 30px;
+}
+
+.contribution-message {
+  width: min(1040px, 100%);
+  margin: 0 auto 30px;
+  padding-inline: var(--page-gutter);
+  font-size: 11px;
+}
+
+.user-profile-activity-skeleton {
+  height: 92px;
+  margin-top: 2px;
+  border-radius: 8px;
+}
+
+.user-profile-page .user-profile-activity {
+  padding-bottom: 32px;
+}
+
+.user-profile-page .user-profile-section-head {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  margin-bottom: 6px;
+}
+
+.user-profile-page .user-profile-section-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.user-profile-page .user-profile-activity-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.user-profile-page .user-profile-activity-list a {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 20px minmax(0, 1fr);
+  column-gap: 10px;
+  min-width: 0;
+  margin-inline: -8px;
+  border-radius: 8px;
+  color: var(--text);
+  padding: 9px 8px;
+  text-decoration: none;
+}
+
+.user-profile-page .user-profile-activity-list a:hover {
+  background: var(--fill-hover);
+}
+
+.user-profile-page .user-profile-activity-list a:focus-visible {
+  background: var(--fill-hover);
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.user-profile-page .user-profile-activity-list a > svg {
+  grid-row: 1 / 3;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+.user-profile-page .user-profile-activity-list strong {
+  grid-column: 2;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-profile-page .user-profile-activity-list span {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-profile-page .user-profile-empty {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 10px 0;
+  text-align: left;
 }
 
 .user-profile-page .user-profile-avatar {
@@ -14,5 +386,32 @@
 @media (max-width: 700px) {
   .user-profile-page .user-profile-avatar {
     box-shadow: 0 7px 20px color-mix(in srgb, var(--text) 16%, transparent);
+  }
+
+  .user-profile-contributions {
+    padding-bottom: 24px;
+  }
+
+  .user-profile-page .user-profile-activity {
+    padding-bottom: 24px;
+  }
+
+  .contribution-head {
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+
+  .contribution-calendar {
+    --contribution-cell: 10px;
+  }
+
+  .contribution-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .contribution-legend {
+    align-self: flex-end;
   }
 }

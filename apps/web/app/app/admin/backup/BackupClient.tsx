@@ -451,7 +451,7 @@ export function BackupClient() {
                       onChange={(e) =>
                         setField("autoRetention", Number(e.target.value))
                       }
-                      className="backup-retention-input"
+                      className="input backup-retention-input"
                     />
                   </div>
 
@@ -503,7 +503,7 @@ export function BackupClient() {
                   </h2>
                 </div>
                 <button
-                  className="button secondary small"
+                  className="button small"
                   disabled={starting || anyRunning}
                   onClick={() => void onStartBackup()}
                 >

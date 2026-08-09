@@ -31,6 +31,7 @@ function makeUser(openContentInCurrentTab = false) {
     systemRole: "member" as const,
     status: "active" as const,
     openContentInCurrentTab,
+    showContributionGraph: true,
   };
 }
 
@@ -61,6 +62,7 @@ vi.mock("@/lib/api", () => ({
       systemRole: "member",
       status: "active",
       openContentInCurrentTab: false,
+      showContributionGraph: true,
     },
   }),
   importMarkdown: vi.fn(),

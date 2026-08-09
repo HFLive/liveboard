@@ -516,6 +516,9 @@
   .admin-context-nav {
     position: static;
     display: flex;
+    align-self: auto;
+    width: auto;
+    height: auto;
     min-height: 0;
     max-height: none;
     align-items: center;

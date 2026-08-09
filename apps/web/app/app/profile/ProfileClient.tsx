@@ -266,6 +266,33 @@ export function ProfileClient() {
     }
   }
 
+  async function onChangeContributionVisibility(
+    showContributionGraph: boolean,
+  ) {
+    setError(null);
+    setPreferenceMessage(null);
+    if (!user) return;
+    setSavingPreference(true);
+    try {
+      const result = await updateProfile({
+        displayName: user.displayName,
+        bio: user.bio ?? "",
+        showContributionGraph,
+      });
+      setUser(result.user);
+      window.dispatchEvent(new Event("liveboard:profile-updated"));
+      setPreferenceMessage(
+        showContributionGraph
+          ? "贡献图已对工作区成员显示"
+          : "贡献图已设为仅自己可见",
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "保存偏好设置失败");
+    } finally {
+      setSavingPreference(false);
+    }
+  }
+
   async function onChangePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -544,6 +571,22 @@ export function ProfileClient() {
                 当前标签页
               </button>
             </div>
+            <label className="switch-row profile-contribution-visibility">
+              <input
+                checked={user?.showContributionGraph ?? true}
+                disabled={savingPreference || !user}
+                onChange={(event) =>
+                  void onChangeContributionVisibility(event.target.checked)
+                }
+                type="checkbox"
+              />
+              <span>
+                <strong>展示个人贡献图</strong>
+                <small>
+                  关闭后只有你自己能看到贡献日期和数量，匿名内容始终不计入。
+                </small>
+              </span>
+            </label>
             {preferenceMessage ? (
               <p className="success-text">{preferenceMessage}</p>
             ) : null}

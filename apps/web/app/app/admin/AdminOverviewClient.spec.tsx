@@ -22,6 +22,7 @@ const user = {
   bannerUrl: null,
   avatarUrl: null,
   openContentInCurrentTab: false,
+  showContributionGraph: true,
 };
 
 describe("AdminOverviewClient", () => {

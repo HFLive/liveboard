@@ -129,29 +129,30 @@ enum FileAssetKind {
 }
 
 model User {
-  id                   String         @id @default(cuid())
-  username             String         @unique
-  displayName          String
-  passwordHash         String
-  avatarStorageKey     String?
-  avatarMimeType       String?
-  avatarUpdatedAt      DateTime?
-  avatarStorageBackend StorageBackend @default(minio)
-  bio                  String?
-  bannerStorageKey     String?
-  bannerMimeType       String?
-  bannerUpdatedAt      DateTime?
-  bannerStorageBackend StorageBackend @default(minio)
-  openContentInCurrentTab Boolean      @default(false)
-  sessionVersion       Int            @default(0)
-  systemRole           SystemRole
-  status               UserStatus     @default(active)
-  storageQuotaBytes    Int?
-  aiCallCount          Int            @default(0)
-  aiCallLimit          Int?
-  aiCallDateKey        String?
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  id                      String         @id @default(cuid())
+  username                String         @unique
+  displayName             String
+  passwordHash            String
+  avatarStorageKey        String?
+  avatarMimeType          String?
+  avatarUpdatedAt         DateTime?
+  avatarStorageBackend    StorageBackend @default(minio)
+  bio                     String?
+  bannerStorageKey        String?
+  bannerMimeType          String?
+  bannerUpdatedAt         DateTime?
+  bannerStorageBackend    StorageBackend @default(minio)
+  openContentInCurrentTab Boolean        @default(false)
+  showContributionGraph   Boolean        @default(true)
+  sessionVersion          Int            @default(0)
+  systemRole              SystemRole
+  status                  UserStatus     @default(active)
+  storageQuotaBytes       Int?
+  aiCallCount             Int            @default(0)
+  aiCallLimit             Int?
+  aiCallDateKey           String?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
 
   createdFolders          Folder[]                @relation("FolderCreatedBy")
   createdFiles            File[]                  @relation("FileCreatedBy")
@@ -184,15 +185,15 @@ model User {
 /// 个人访问令牌（PAT）：MCP 等外部客户端以用户身份调用 API。
 /// 只存 SHA-256 哈希，明文仅在创建时返回一次。
 model ApiToken {
-  id          String     @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
   name        String
-  tokenHash   String     @unique // SHA-256 hex
+  tokenHash   String    @unique // SHA-256 hex
   tokenPrefix String // 明文前 10 位，管理端展示识别
   lastUsedAt  DateTime?
   expiresAt   DateTime?
   revokedAt   DateTime?
-  createdAt   DateTime   @default(now())
+  createdAt   DateTime  @default(now())
 
   user User @relation("UserApiTokens", fields: [userId], references: [id], onDelete: Cascade)
 
@@ -262,7 +263,7 @@ model MigrationJob {
   packageName String?
   appVersion  String?
   manifest    Json?
-  phase       String          @default("")
+  phase       String             @default("")
   progress    Json?
   error       String?
   createdById String?
@@ -282,18 +283,18 @@ model MigrationJob {
  * vercel 用 Neon 分支快照 + R2 对象复制。设置行惰性创建，不存在时按默认值。
  */
 model BackupSettings {
-  id              String    @id @default(cuid())
-  workspaceId     String    @unique
-  enabled         Boolean   @default(false)
-  scheduleHour    Int       @default(3) // 固定时刻：时 0-23
-  scheduleMinute  Int       @default(0) // 固定时刻：分 0-59
-  scheduleWeekday Int?      // null=每天；0-6=周日..周六（与 JS getDay 一致）
-  autoRetention   Int       @default(7) // 自动备份保留份数（手动备份无上限）
-  includeObjects  Boolean   @default(true) // 是否同时备份对象存储引用文件
+  id               String    @id @default(cuid())
+  workspaceId      String    @unique
+  enabled          Boolean   @default(false)
+  scheduleHour     Int       @default(3) // 固定时刻：时 0-23
+  scheduleMinute   Int       @default(0) // 固定时刻：分 0-59
+  scheduleWeekday  Int? // null=每天；0-6=周日..周六（与 JS getDay 一致）
+  autoRetention    Int       @default(7) // 自动备份保留份数（手动备份无上限）
+  includeObjects   Boolean   @default(true) // 是否同时备份对象存储引用文件
   lastAutoBackupAt DateTime? // 调度判定的唯一依据（tick 只比较它与当前时间）
-  updatedById     String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  updatedById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
@@ -304,7 +305,7 @@ model BackupSettings {
  * upsert 回本表；Vercel 无持久盘，进度写本表 + Redis 双份。
  */
 model BackupJob {
-  id             String         @id @default(cuid())
+  id             String          @id @default(cuid())
   kind           BackupJobKind
   status         BackupJobStatus @default(pending)
   backupPath     String? // 自托管：相对数据目录的 backups/<id>
@@ -312,17 +313,17 @@ model BackupJob {
   neonBranchId   String? // Vercel：对应 Neon 分支 id（供恢复/删除用）
   dumpSizeBytes  BigInt? // database.dump 字节数
   objectCount    Int?
-  includeObjects Boolean        @default(false) // 任务实际范围（启动时从设置快照）
-  isProtection   Boolean        @default(false) // 回滚前自动创建的保护备份
+  includeObjects Boolean         @default(false) // 任务实际范围（启动时从设置快照）
+  isProtection   Boolean         @default(false) // 回滚前自动创建的保护备份
   manifest       Json?
-  phase          String         @default("")
+  phase          String          @default("")
   progress       Json?
   error          String?
   createdById    String?
-  createdAt      DateTime       @default(now())
+  createdAt      DateTime        @default(now())
   startedAt      DateTime?
   finishedAt     DateTime?
-  updatedAt      DateTime       @updatedAt
+  updatedAt      DateTime        @updatedAt
 
   createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
@@ -501,6 +502,7 @@ model File {
 
   @@index([folderId, status, updatedAt])
   @@index([workspaceId, pinnedOrder])
+  @@index([updatedById, publishedAt])
 }
 
 model UserTag {
@@ -779,6 +781,7 @@ model Submission {
   answers     SubmissionAnswer[]
 
   @@index([exerciseSetId, userId, submittedAt])
+  @@index([gradedById, gradedAt])
 }
 
 model SubmissionAnswer {
@@ -869,7 +872,7 @@ model PendingUpload {
   expiresAt      DateTime
 
   workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  forumPost  ForumPost? @relation("PendingUploadForumPost", fields: [forumPostId], references: [id], onDelete: Cascade)
+  forumPost ForumPost? @relation("PendingUploadForumPost", fields: [forumPostId], references: [id], onDelete: Cascade)
 
   @@index([uploadedBy, expiresAt])
   @@index([forumPostId])
