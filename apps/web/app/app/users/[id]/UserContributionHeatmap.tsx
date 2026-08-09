@@ -75,7 +75,7 @@ export function UserContributionHeatmap({ userId }: { userId: string }) {
   }, [selection, userId]);
 
   const calendar = useMemo(
-    () => (summary?.visible ? buildContributionCalendar(summary) : null),
+    () => (summary ? buildContributionCalendar(summary) : null),
     [summary],
   );
 
@@ -92,7 +92,7 @@ export function UserContributionHeatmap({ userId }: { userId: string }) {
     return <p className="muted contribution-message">贡献记录暂时无法加载。</p>;
   }
 
-  if (!summary?.visible || !calendar) return null;
+  if (!summary || !calendar) return null;
 
   const title =
     summary.range.mode === "last_year"

@@ -143,7 +143,6 @@ model User {
   bannerUpdatedAt         DateTime?
   bannerStorageBackend    StorageBackend @default(minio)
   openContentInCurrentTab Boolean        @default(false)
-  showContributionGraph   Boolean        @default(true)
   sessionVersion          Int            @default(0)
   systemRole              SystemRole
   status                  UserStatus     @default(active)

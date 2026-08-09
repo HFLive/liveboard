@@ -127,15 +127,12 @@ export interface UserProfile extends UserSummary {
   bannerUrl: string | null;
   /** 打开文档时是否始终使用当前标签页（而非新标签页）。 */
   openContentInCurrentTab: boolean;
-  /** 是否向同一工作区成员展示个人贡献图。 */
-  showContributionGraph: boolean;
 }
 
 export type UserContributionCategory =
   "learning" | "teaching" | "community" | "resources";
 
 export interface UserContributionSummary {
-  visible: boolean;
   range: {
     mode: "last_year" | "year";
     year: number | null;

@@ -171,7 +171,6 @@ describe("AuthService", () => {
         id: "user-1",
         status: "active",
         createdAt: new Date("2025-01-01T00:00:00.000Z"),
-        showContributionGraph: true,
       });
     prisma.workspace.findFirst.mockResolvedValue({ timeZone: "Asia/Shanghai" });
     prisma.forumPost.findMany.mockResolvedValue([
@@ -194,7 +193,6 @@ describe("AuthService", () => {
     await expect(
       service.getUserContributions("viewer-1", "user-1", "2026"),
     ).resolves.toMatchObject({
-      visible: true,
       total: 3,
       days: [{ date: "2026-08-09", count: 3 }],
       categories: [
@@ -209,22 +207,5 @@ describe("AuthService", () => {
         where: expect.objectContaining({ isAnonymous: false }),
       }),
     );
-  });
-
-  it("does not query activity rows when the contribution graph is private", async () => {
-    prisma.user.findUnique
-      .mockResolvedValueOnce({ id: "viewer-1", status: "active" })
-      .mockResolvedValueOnce({
-        id: "user-1",
-        status: "active",
-        createdAt: new Date("2025-01-01T00:00:00.000Z"),
-        showContributionGraph: false,
-      });
-    prisma.workspace.findFirst.mockResolvedValue({ timeZone: "UTC" });
-
-    await expect(
-      service.getUserContributions("viewer-1", "user-1", "2026"),
-    ).resolves.toMatchObject({ visible: false, total: 0, days: [] });
-    expect(prisma.forumPost.findMany).not.toHaveBeenCalled();
   });
 });

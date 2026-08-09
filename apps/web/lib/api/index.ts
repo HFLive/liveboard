@@ -232,7 +232,6 @@ export function updateProfile(input: {
   displayName: string;
   bio?: string;
   openContentInCurrentTab?: boolean;
-  showContributionGraph?: boolean;
 }) {
   clearCurrentUserCache();
   return request<{ user: UserProfile }>("/auth/me", {

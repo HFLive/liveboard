@@ -9,7 +9,6 @@ vi.mock("@/lib/api", () => ({
 }));
 
 const summary: UserContributionSummary = {
-  visible: true,
   range: {
     mode: "last_year",
     year: null,

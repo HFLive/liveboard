@@ -26,7 +26,6 @@ const baseUser = {
   bio: null,
   systemRole: "member" as const,
   status: "active" as const,
-  showContributionGraph: true,
 };
 
 describe("UserPreferencesProvider", () => {

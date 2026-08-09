@@ -178,7 +178,7 @@ export class AuthService {
     targetUserId: string,
     year?: string,
   ): Promise<UserContributionSummary> {
-    const viewer = await this.requireActiveUser(userId);
+    await this.requireActiveUser(userId);
     const [target, workspace] = await Promise.all([
       this.prisma.user.findUnique({
         where: { id: targetUserId },
@@ -186,7 +186,6 @@ export class AuthService {
           id: true,
           status: true,
           createdAt: true,
-          showContributionGraph: true,
         },
       }),
       this.prisma.workspace.findFirst({ select: { timeZone: true } }),
@@ -199,19 +198,6 @@ export class AuthService {
     const timeZone = workspace?.timeZone ?? "Asia/Shanghai";
     const range = resolveContributionRange(year, timeZone);
     const availableYears = contributionYears(target.createdAt, timeZone);
-    const visible = viewer.id === target.id || target.showContributionGraph;
-
-    if (!visible) {
-      return {
-        visible: false,
-        range,
-        total: 0,
-        days: [],
-        categories: [],
-        availableYears,
-        timeZone,
-      };
-    }
 
     // Query one extra UTC day on either side, then apply the workspace time
     // zone below. This keeps day boundaries correct for every IANA time zone.
@@ -348,7 +334,6 @@ export class AuthService {
     ];
 
     return {
-      visible: true,
       range,
       total: days.reduce((sum, day) => sum + day.count, 0),
       days,
@@ -370,7 +355,6 @@ export class AuthService {
       displayName?: string;
       bio?: string | null;
       openContentInCurrentTab?: boolean;
-      showContributionGraph?: boolean;
     } = {};
 
     if (typeof input.displayName === "string") {
@@ -387,10 +371,6 @@ export class AuthService {
 
     if (typeof input.openContentInCurrentTab === "boolean") {
       data.openContentInCurrentTab = input.openContentInCurrentTab;
-    }
-
-    if (typeof input.showContributionGraph === "boolean") {
-      data.showContributionGraph = input.showContributionGraph;
     }
 
     const updated = await this.prisma.user.update({
@@ -809,7 +789,6 @@ export class AuthService {
     bio?: string | null;
     bannerUpdatedAt?: Date | null;
     openContentInCurrentTab: boolean;
-    showContributionGraph: boolean;
     systemRole: UserSummary["systemRole"];
     status: UserSummary["status"];
     badgeAssignments?: Array<{
@@ -829,7 +808,6 @@ export class AuthService {
         ? `/auth/banner/${user.id}?v=${user.bannerUpdatedAt.getTime()}`
         : null,
       openContentInCurrentTab: user.openContentInCurrentTab,
-      showContributionGraph: user.showContributionGraph,
     };
   }
 }

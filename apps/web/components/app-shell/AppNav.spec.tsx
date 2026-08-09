@@ -46,7 +46,6 @@ describe("AppNav", () => {
         systemRole: "admin",
         status: "active",
         openContentInCurrentTab: false,
-        showContributionGraph: true,
       },
     });
     vi.mocked(listNotifications).mockResolvedValue({
@@ -105,7 +104,6 @@ describe("AppNav", () => {
         systemRole: "admin",
         status: "active",
         openContentInCurrentTab: false,
-        showContributionGraph: true,
       },
     });
 

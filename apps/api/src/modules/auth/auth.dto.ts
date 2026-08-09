@@ -36,10 +36,6 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsBoolean()
   openContentInCurrentTab?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  showContributionGraph?: boolean;
 }
 
 export class ChangePasswordDto {
