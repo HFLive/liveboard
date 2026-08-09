@@ -24,6 +24,14 @@
   padding-bottom: 8px;
 }
 
+/* 管理员工具栏右侧：课堂范围切换 + 新建课堂。 */
+.classrooms-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .classroom-resource-list,
 .classroom-member-list {
   display: flex;
@@ -569,6 +577,17 @@
   font-size: 12px;
 }
 
+/* 创建者未把自己设为教师时的提醒：创建后只能查看，无法再编辑。 */
+.classroom-create-owner-warning {
+  border: 1px solid color-mix(in srgb, var(--warning) 26%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+
 .classroom-member-assignment-count {
   color: var(--accent-dark);
   flex: 0 0 auto;
@@ -658,9 +677,11 @@
     width: 100%;
   }
 
-  .classrooms-toolbar > .mobile-icon-action {
-    grid-column: 2;
-    grid-row: 1;
+  /* 手机端把课堂范围切换与新建课堂放在搜索框下一行。 */
+  .classrooms-toolbar-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
   }
 
   .classroom-list {

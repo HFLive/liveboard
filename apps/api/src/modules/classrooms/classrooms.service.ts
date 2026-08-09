@@ -172,8 +172,8 @@ export class ClassroomsService {
       throw new ForbiddenException("你不在这个课堂中");
     }
 
-    const canManageMembers =
-      isSystemAdmin(user.systemRole) || membership?.role === "teacher";
+    // 课堂创建后由教师管理；管理员仅可查看，不再拥有成员与课堂信息的管理权。
+    const canManageMembers = membership?.role === "teacher";
     return {
       id: classroom.id,
       name: classroom.name,
@@ -181,7 +181,7 @@ export class ClassroomsService {
       role: membership?.role ?? "administrator",
       canManageMembers,
       canEditContent: membership?.role === "teacher",
-      canEditClassroom: isSystemAdmin(user.systemRole),
+      canEditClassroom: membership?.role === "teacher",
       teacherCount: classroom.members.filter(
         (member) => member.role === "teacher",
       ).length,
@@ -365,7 +365,7 @@ export class ClassroomsService {
     classroomId: string,
     input: UpdateClassroomDto,
   ) {
-    const user = await this.requireSystemAdmin(userId);
+    const user = await this.requireUser(userId);
     if (
       input.name === undefined &&
       input.description === undefined &&
@@ -373,11 +373,18 @@ export class ClassroomsService {
     ) {
       throw new BadRequestException("没有需要更新的内容");
     }
-    await this.requireClassroom(classroomId);
+    if (input.name !== undefined || input.description !== undefined) {
+      // 名称与说明始终属于课堂教师的管理范围，不能通过同时提交容量字段
+      // 绕过教师身份校验。
+      await this.requireTeacher(user, classroomId);
+    }
     if (input.storageQuotaBytes !== undefined) {
+      // 容量上限属于平台级资源控制，仍由系统管理员在容量管理页调整，
+      // 不受课堂管理权归属教师的影响。
       if (!isSuperAdmin(user.systemRole)) {
         throw new ForbiddenException("只有最高管理员可以调整容量上限");
       }
+      await this.requireClassroom(classroomId);
       if (
         input.storageQuotaBytes !== null &&
         (!Number.isInteger(input.storageQuotaBytes) ||
@@ -422,7 +429,8 @@ export class ClassroomsService {
   }
 
   async delete(userId: string | null, classroomId: string) {
-    await this.requireSystemAdmin(userId);
+    const user = await this.requireUser(userId);
+    await this.requireTeacher(user, classroomId);
     const classroom = await this.prisma.classroom.findUnique({
       where: { id: classroomId },
       include: {
@@ -447,7 +455,7 @@ export class ClassroomsService {
     role: ClassroomMemberRole,
   ) {
     const actor = await this.requireUser(userId);
-    await this.requireMemberManager(actor, classroomId);
+    await this.requireTeacher(actor, classroomId);
     await this.assertActiveUsers([memberUserId]);
     const existing = await this.prisma.classroomMember.findUnique({
       where: { classroomId_userId: { classroomId, userId: memberUserId } },
@@ -499,7 +507,7 @@ export class ClassroomsService {
     memberUserId: string,
   ) {
     const actor = await this.requireUser(userId);
-    await this.requireMemberManager(actor, classroomId);
+    await this.requireTeacher(actor, classroomId);
     const membership = await this.prisma.classroomMember.findUnique({
       where: { classroomId_userId: { classroomId, userId: memberUserId } },
     });
@@ -1005,17 +1013,6 @@ export class ClassroomsService {
       throw new ForbiddenException("只有管理员可以管理课堂");
     }
     return user;
-  }
-
-  private async requireMemberManager(
-    user: Awaited<ReturnType<ClassroomsService["requireUser"]>>,
-    classroomId: string,
-  ) {
-    if (isSystemAdmin(user.systemRole)) {
-      await this.requireClassroom(classroomId);
-      return;
-    }
-    await this.requireTeacher(user, classroomId);
   }
 
   private requireClassroom(classroomId: string) {

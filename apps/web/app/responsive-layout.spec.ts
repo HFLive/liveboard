@@ -210,7 +210,7 @@ describe("responsive workspace contracts", () => {
     );
   });
 
-  it("places classroom search and its primary action on the same mobile row", () => {
+  it("keeps classroom search on the first mobile row and actions below it", () => {
     expect(classroomsCss).toMatch(/\.classrooms-workspace\s*{[\s\S]*?gap: 0/);
     expect(classroomsCss).toMatch(
       /\.workspace \.classrooms-toolbar\s*{[\s\S]*?padding-bottom: 8px/,
@@ -219,7 +219,7 @@ describe("responsive workspace contracts", () => {
       /\.classrooms-toolbar \.search-field\s*{[\s\S]*?grid-column: 1;[\s\S]*?grid-row: 1/,
     );
     expect(classroomsCss).toMatch(
-      /\.classrooms-toolbar > \.mobile-icon-action\s*{[\s\S]*?grid-column: 2;[\s\S]*?grid-row: 1/,
+      /\.classrooms-toolbar-actions\s*{[\s\S]*?grid-column: 1 \/ -1;[\s\S]*?grid-row: 2/,
     );
     expect(classroomsCss).toMatch(
       /\.classroom-content-toolbar > \.mobile-icon-action\s*{[\s\S]*?grid-column: 2;[\s\S]*?grid-row: 1/,

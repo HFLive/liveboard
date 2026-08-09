@@ -19,6 +19,9 @@ import { classroomDetail } from "@/lib/routes";
 
 type DraftRole = ClassroomMemberRole | "none";
 
+/** 管理员可查看的课堂范围：实际参与（课堂成员）或全部可见课堂。 */
+type ClassroomListView = "joined" | "all";
+
 function ClassroomCardSkeletons() {
   return (
     <>
@@ -54,20 +57,28 @@ export function ClassroomsClient() {
   const [description, setDescription] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [canCreate, setCanCreate] = useState(false);
+  const [meId, setMeId] = useState<string | null>(null);
+  const [view, setView] = useState<ClassroomListView>("joined");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
+    // 管理员可查看的课堂包含未参与的（role 为 administrator），
+    // 「我参与的」只保留具有教师/学生身份的课堂。
+    const items =
+      view === "joined"
+        ? classrooms.filter((classroom) => classroom.role !== "administrator")
+        : classrooms;
     const value = query.trim().toLowerCase();
     return value
-      ? classrooms.filter((classroom) =>
+      ? items.filter((classroom) =>
           `${classroom.name} ${classroom.description ?? ""}`
             .toLowerCase()
             .includes(value),
         )
-      : classrooms;
-  }, [classrooms, query]);
+      : items;
+  }, [classrooms, query, view]);
 
   const filteredUsers = useMemo(() => {
     const value = memberQuery.trim().toLowerCase();
@@ -101,6 +112,7 @@ export function ClassroomsClient() {
         const isAdmin = ["super_admin", "admin"].includes(
           meResult.user.systemRole,
         );
+        setMeId(meResult.user.id);
         setCanCreate(isAdmin);
         // 课堂列表已可用时就结束主区域的加载状态。成员目录只供新建弹窗使用，
         // 不应让列表骨架与真实课堂卡片同时存在。
@@ -116,6 +128,15 @@ export function ClassroomsClient() {
       )
       .finally(() => setLoading(false));
   }, []);
+
+  function openCreate() {
+    // 默认把创建者设为教师：管理员创建课堂后只有教师能继续管理，
+    // 不把自己设为教师就会在创建后失去编辑权限。
+    setRoles((current) =>
+      meId && !(meId in current) ? { ...current, [meId]: "teacher" } : current,
+    );
+    setShowCreate(true);
+  }
 
   async function onCreate(event: FormEvent) {
     event.preventDefault();
@@ -173,16 +194,40 @@ export function ClassroomsClient() {
           />
         </label>
         {canCreate ? (
-          <button
-            aria-label="新建课堂"
-            className="button mobile-icon-action"
-            onClick={() => setShowCreate(true)}
-            title="新建课堂"
-            type="button"
-          >
-            <Plus aria-hidden="true" className="button-icon" />
-            新建课堂
-          </button>
+          <div className="classrooms-toolbar-actions">
+            <div
+              aria-label="课堂范围"
+              className="segmented-control classrooms-view-switch"
+              role="group"
+            >
+              <button
+                aria-pressed={view === "joined"}
+                className={view === "joined" ? "active" : ""}
+                onClick={() => setView("joined")}
+                type="button"
+              >
+                我参与的
+              </button>
+              <button
+                aria-pressed={view === "all"}
+                className={view === "all" ? "active" : ""}
+                onClick={() => setView("all")}
+                type="button"
+              >
+                全部
+              </button>
+            </div>
+            <button
+              aria-label="新建课堂"
+              className="button mobile-icon-action"
+              onClick={openCreate}
+              title="新建课堂"
+              type="button"
+            >
+              <Plus aria-hidden="true" className="button-icon" />
+              新建课堂
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -284,6 +329,11 @@ export function ClassroomsClient() {
                     </span>
                   ) : null}
                 </div>
+                {meId && roles[meId] !== "teacher" ? (
+                  <p className="classroom-create-owner-warning">
+                    你是创建者，如果没把自己设为教师，创建后就只能查看这个课堂，无法再编辑课堂内容。
+                  </p>
+                ) : null}
                 <div className="classroom-member-filters">
                   <label className="search-field">
                     <Search aria-hidden="true" />

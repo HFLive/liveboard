@@ -7,7 +7,7 @@ import { ClassroomsService } from "./classrooms.service";
 describe("ClassroomsService", () => {
   const prisma = {
     user: { findUnique: jest.fn() },
-    classroom: { findUnique: jest.fn(), delete: jest.fn() },
+    classroom: { findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
     classroomMember: {
       findUnique: jest.fn(),
       count: jest.fn(),
@@ -56,9 +56,9 @@ describe("ClassroomsService", () => {
 
   it("keeps at least one teacher in every classroom", async () => {
     prisma.user.findUnique.mockResolvedValue({
-      id: "admin-1",
+      id: "teacher-1",
       status: "active",
-      systemRole: "admin",
+      systemRole: "member",
     });
     prisma.classroom.findUnique.mockResolvedValue({ id: "classroom-1" });
     prisma.classroomMember.findUnique.mockResolvedValue({
@@ -69,7 +69,7 @@ describe("ClassroomsService", () => {
     prisma.classroomMember.count.mockResolvedValue(1);
 
     await expect(
-      service.removeMember("admin-1", "classroom-1", "teacher-1"),
+      service.removeMember("teacher-1", "classroom-1", "teacher-1"),
     ).rejects.toThrow("课堂必须至少保留一名教师");
     expect(prisma.classroomMember.delete).not.toHaveBeenCalled();
   });
@@ -85,6 +85,24 @@ describe("ClassroomsService", () => {
     await expect(
       service.update("admin-1", "classroom-1", { storageQuotaBytes: 1024 }),
     ).rejects.toThrow("只有最高管理员可以调整容量上限");
+  });
+
+  it("does not let a super administrator bypass teacher checks with a quota update", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "super-admin-1",
+      status: "active",
+      systemRole: "super_admin",
+    });
+    prisma.classroomMember.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.update("super-admin-1", "classroom-1", {
+        name: "越权改名",
+        storageQuotaBytes: 1024,
+      }),
+    ).rejects.toThrow("只有课堂教师可以执行此操作");
+    expect(prisma.classroom.update).not.toHaveBeenCalled();
+    expect(prisma.classroomFile.aggregate).not.toHaveBeenCalled();
   });
 
   it("allows a classroom teacher to publish an announcement", async () => {
@@ -157,9 +175,14 @@ describe("ClassroomsService", () => {
 
   it("hard deletes a classroom and removes its stored files", async () => {
     prisma.user.findUnique.mockResolvedValue({
-      id: "admin-1",
+      id: "teacher-1",
       status: "active",
-      systemRole: "admin",
+      systemRole: "member",
+    });
+    prisma.classroomMember.findUnique.mockResolvedValue({
+      classroomId: "classroom-1",
+      userId: "teacher-1",
+      role: "teacher",
     });
     prisma.classroom.findUnique.mockResolvedValue({
       id: "classroom-1",
@@ -176,7 +199,7 @@ describe("ClassroomsService", () => {
     });
     prisma.classroom.delete.mockResolvedValue({ id: "classroom-1" });
 
-    await expect(service.delete("admin-1", "classroom-1")).resolves.toEqual({
+    await expect(service.delete("teacher-1", "classroom-1")).resolves.toEqual({
       ok: true,
     });
     expect(storage.backendFor).toHaveBeenCalledWith("minio");
@@ -192,18 +215,116 @@ describe("ClassroomsService", () => {
     });
   });
 
-  it("rejects classroom deletion from a non-admin member", async () => {
+  it("rejects classroom deletion from a non-teacher member", async () => {
     prisma.user.findUnique.mockResolvedValue({
-      id: "member-1",
+      id: "student-1",
       status: "active",
       systemRole: "member",
     });
+    prisma.classroomMember.findUnique.mockResolvedValue({
+      classroomId: "classroom-1",
+      userId: "student-1",
+      role: "student",
+    });
 
-    await expect(service.delete("member-1", "classroom-1")).rejects.toThrow(
-      "只有管理员可以管理课堂",
+    await expect(service.delete("student-1", "classroom-1")).rejects.toThrow(
+      "只有课堂教师可以执行此操作",
     );
     expect(backend.removeObject).not.toHaveBeenCalled();
     expect(prisma.classroom.delete).not.toHaveBeenCalled();
+  });
+
+  it("rejects classroom deletion from an administrator who is not a teacher", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "admin-1",
+      status: "active",
+      systemRole: "admin",
+    });
+    prisma.classroomMember.findUnique.mockResolvedValue(null);
+
+    await expect(service.delete("admin-1", "classroom-1")).rejects.toThrow(
+      "只有课堂教师可以执行此操作",
+    );
+    expect(backend.removeObject).not.toHaveBeenCalled();
+    expect(prisma.classroom.delete).not.toHaveBeenCalled();
+  });
+
+  it("rejects member management from an administrator who is not a teacher", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "admin-1",
+      status: "active",
+      systemRole: "admin",
+    });
+    prisma.classroomMember.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.upsertMember("admin-1", "classroom-1", "student-1", "student"),
+    ).rejects.toThrow("只有课堂教师可以执行此操作");
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("allows a classroom teacher to update classroom information", async () => {
+    const teacher = {
+      id: "teacher-1",
+      username: "teacher",
+      displayName: "Teacher",
+      avatarUpdatedAt: null,
+      systemRole: "member" as const,
+      status: "active" as const,
+    };
+    const classroomRow = {
+      id: "classroom-1",
+      name: "新名称",
+      description: "第一学期",
+      workspaceId: "ws-1",
+      storageQuotaBytes: null,
+      createdAt: new Date("2026-08-01T00:00:00Z"),
+      updatedAt: new Date("2026-08-01T00:00:00Z"),
+      members: [
+        {
+          userId: teacher.id,
+          role: "teacher" as const,
+          createdAt: new Date("2026-08-01T00:00:00Z"),
+          user: { ...teacher, badgeAssignments: [] },
+        },
+      ],
+      announcements: [],
+      _count: { decks: 0, exercises: 0, files: 0 },
+    };
+    prisma.user.findUnique.mockResolvedValue(teacher);
+    prisma.classroomMember.findUnique.mockResolvedValue({
+      classroomId: "classroom-1",
+      userId: teacher.id,
+      role: "teacher",
+    });
+    prisma.classroom.findUnique.mockResolvedValue(classroomRow);
+    prisma.classroom.update.mockResolvedValue(classroomRow);
+    prisma.classroomFile.aggregate.mockResolvedValue({
+      _sum: { sizeBytes: 0 },
+    });
+    prisma.workspace.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.update("teacher-1", "classroom-1", { name: "新名称" }),
+    ).resolves.toMatchObject({ id: "classroom-1", name: "新名称" });
+    expect(prisma.classroom.update).toHaveBeenCalledWith({
+      where: { id: "classroom-1" },
+      data: { name: "新名称" },
+    });
+  });
+
+  it("rejects classroom information changes from an administrator", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: "admin-1",
+      status: "active",
+      systemRole: "admin",
+    });
+    prisma.classroomMember.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.update("admin-1", "classroom-1", { name: "改名" }),
+    ).rejects.toThrow("只有课堂教师可以执行此操作");
+    expect(prisma.classroom.update).not.toHaveBeenCalled();
   });
 
   function mockTeacherUpload() {
