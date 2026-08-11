@@ -8,6 +8,7 @@ import { Reflector } from "@nestjs/core";
 import type { Request, Response } from "express";
 import { PrismaService } from "../modules/prisma/prisma.service";
 import { MaintenanceService } from "../modules/maintenance/maintenance.service";
+import { HfliveAuthService } from "../modules/hflive-auth/hflive-auth.service";
 import { IS_PUBLIC_KEY } from "./public.decorator";
 import {
   getSessionCookieName,
@@ -53,6 +54,7 @@ export class ActiveUserGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
     private readonly maintenance: MaintenanceService,
+    private readonly hfliveAuth: HfliveAuthService,
   ) {}
 
   async canActivate(context: ExecutionContext) {
@@ -109,6 +111,12 @@ export class ActiveUserGuard implements CanActivate {
       user.status !== "active" ||
       user.sessionVersion !== session.sessionVersion
     ) {
+      clearSessionCookies(response);
+      throw new UnauthorizedException("Session is no longer valid");
+    }
+
+    const external = await this.hfliveAuth.checkExternalSession(user.id);
+    if (!external.allowed) {
       clearSessionCookies(response);
       throw new UnauthorizedException("Session is no longer valid");
     }

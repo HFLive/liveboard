@@ -563,8 +563,8 @@ export class UsersService {
       throw new BadRequestException("显示名不能为空");
     }
 
-    const existing = await this.prisma.user.findUnique({
-      where: { username },
+    const existing = await this.prisma.user.findFirst({
+      where: { username: { equals: username, mode: "insensitive" } },
     });
 
     if (existing) {
@@ -609,11 +609,11 @@ export class UsersService {
       .map((row) => row.username)
       .filter((username) => username.length > 0);
     const existingUsers = await this.prisma.user.findMany({
-      where: { username: { in: usernames } },
+      where: { username: { in: usernames, mode: "insensitive" } },
       select: { username: true },
     });
     const existingUsernames = new Set(
-      existingUsers.map((user) => user.username),
+      existingUsers.map((user) => user.username.toLowerCase()),
     );
     const seenUsernames = new Set<string>();
     const result: ImportUsersResult = {
@@ -668,7 +668,8 @@ export class UsersService {
         continue;
       }
 
-      if (seenUsernames.has(row.username)) {
+      const normalizedUsername = row.username.toLowerCase();
+      if (seenUsernames.has(normalizedUsername)) {
         result.skipped.push({
           rowNumber: row.rowNumber,
           username: row.username,
@@ -677,9 +678,9 @@ export class UsersService {
         continue;
       }
 
-      seenUsernames.add(row.username);
+      seenUsernames.add(normalizedUsername);
 
-      if (existingUsernames.has(row.username)) {
+      if (existingUsernames.has(normalizedUsername)) {
         result.skipped.push({
           rowNumber: row.rowNumber,
           username: row.username,
@@ -698,7 +699,7 @@ export class UsersService {
       });
 
       result.created.push(this.toSummary(user));
-      existingUsernames.add(row.username);
+      existingUsernames.add(normalizedUsername);
     }
 
     return result;
@@ -727,6 +728,7 @@ export class UsersService {
       systemRole?: SystemRole;
       status?: UserSummary["status"];
       passwordHash?: string;
+      localPasswordEnabled?: boolean;
       storageQuotaBytes?: number | null;
       aiCallLimit?: number | null;
       sessionVersion?: { increment: number };
@@ -759,6 +761,7 @@ export class UsersService {
 
     if (input.password) {
       data.passwordHash = await argon2.hash(input.password);
+      data.localPasswordEnabled = true;
     }
 
     if (

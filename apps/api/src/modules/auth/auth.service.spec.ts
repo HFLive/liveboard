@@ -4,10 +4,12 @@ import type { PrismaService } from "../prisma/prisma.service";
 import type { StorageService } from "../storage/storage.service";
 import type { LoginRateLimitService } from "./login-rate-limit.service";
 import { AuthService } from "./auth.service";
+import type { HfliveAuthConfig } from "../hflive-auth/hflive-auth.config";
 
 describe("AuthService", () => {
   const prisma = {
-    user: { findUnique: jest.fn(), update: jest.fn() },
+    user: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
+    externalIdentity: { findUnique: jest.fn() },
     workspace: { findFirst: jest.fn() },
     forumPost: { findMany: jest.fn() },
     submission: { findMany: jest.fn() },
@@ -34,6 +36,7 @@ describe("AuthService", () => {
     getObject: jest.fn(),
   };
   let service: AuthService;
+  const hfliveConfig = { mode: "local", breakglassEnabled: false };
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -41,6 +44,7 @@ describe("AuthService", () => {
       prisma as unknown as PrismaService,
       limiter as unknown as LoginRateLimitService,
       storage as unknown as StorageService,
+      hfliveConfig as unknown as HfliveAuthConfig,
     );
     limiter.isBlocked.mockResolvedValue(false);
     storage.backendFor.mockResolvedValue(backend);
@@ -48,7 +52,7 @@ describe("AuthService", () => {
 
   it("returns the session version and clears failures after a valid login", async () => {
     const passwordHash = await argon2.hash("correct-password");
-    prisma.user.findUnique.mockResolvedValue({
+    prisma.user.findFirst.mockResolvedValue({
       id: "user-1",
       username: "teacher",
       displayName: "Teacher",
@@ -56,6 +60,7 @@ describe("AuthService", () => {
       status: "active",
       sessionVersion: 4,
       passwordHash,
+      localPasswordEnabled: true,
     });
 
     await expect(
@@ -65,7 +70,7 @@ describe("AuthService", () => {
   });
 
   it("records a failed login without disclosing whether the user exists", async () => {
-    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.findFirst.mockResolvedValue(null);
 
     await expect(
       service.validateLogin("missing", "wrong", "127.0.0.1"),
@@ -79,7 +84,16 @@ describe("AuthService", () => {
     await expect(
       service.validateLogin("teacher", "password", "127.0.0.1"),
     ).rejects.toBeInstanceOf(HttpException);
-    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("rejects ordinary local login before a user lookup in hflive_oidc mode", async () => {
+    hfliveConfig.mode = "hflive_oidc";
+    await expect(
+      service.validateLogin("teacher", "password", "127.0.0.1"),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    hfliveConfig.mode = "local";
   });
 
   it("streams an R2 avatar through the server instead of issuing a signed redirect", async () => {
@@ -155,12 +169,78 @@ describe("AuthService", () => {
       bio: "负责线路基础课程",
       bannerUrl: null,
     });
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: "user-1" },
-      data: {
-        displayName: "张老师",
-        bio: "负责线路基础课程",
-      },
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "user-1" },
+        data: {
+          displayName: "张老师",
+          bio: "负责线路基础课程",
+        },
+      }),
+    );
+  });
+
+  it("keeps HFLive-owned display names read-only while allowing local biography edits", async () => {
+    hfliveConfig.mode = "hybrid";
+    Object.defineProperty(hfliveConfig, "enabled", {
+      configurable: true,
+      value: true,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      username: "teacher",
+      displayName: "统一姓名",
+      bio: null,
+      bannerUpdatedAt: null,
+      avatarUpdatedAt: null,
+      systemRole: "member",
+      status: "active",
+    });
+    prisma.externalIdentity.findUnique.mockResolvedValue({ id: "identity-1" });
+
+    await expect(
+      service.updateProfile("user-1", {
+        displayName: "本地改名",
+        bio: "本地简介",
+      }),
+    ).rejects.toThrow("统一身份资料请前往 HFLive Auth 修改");
+    expect(prisma.user.update).not.toHaveBeenCalled();
+
+    Object.defineProperty(hfliveConfig, "enabled", {
+      configurable: true,
+      value: false,
+    });
+    hfliveConfig.mode = "local";
+  });
+
+  it("prefers the HFLive picture for a linked profile while external auth is enabled", async () => {
+    Object.defineProperty(hfliveConfig, "enabled", {
+      configurable: true,
+      value: true,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      username: "teacher",
+      displayName: "统一姓名",
+      bio: null,
+      bannerUpdatedAt: null,
+      avatarUpdatedAt: new Date("2026-08-10T00:00:00.000Z"),
+      openContentInCurrentTab: false,
+      systemRole: "member",
+      status: "active",
+      externalIdentities: [
+        { picture: "https://auth.hsfz.live/api/profile/avatar/id?v=2" },
+      ],
+      badgeAssignments: [],
+    });
+
+    await expect(service.getCurrentUser("user-1")).resolves.toMatchObject({
+      avatarUrl: "https://auth.hsfz.live/api/profile/avatar/id?v=2",
+    });
+
+    Object.defineProperty(hfliveConfig, "enabled", {
+      configurable: true,
+      value: false,
     });
   });
 

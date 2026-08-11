@@ -35,6 +35,7 @@ import {
   MAX_BANNER_SIZE_BYTES,
   type UploadedProfileImageFile,
 } from "./auth.service";
+import { HfliveAuthService } from "../hflive-auth/hflive-auth.service";
 import {
   ChangePasswordDto,
   ConfirmProfileImageUploadDto,
@@ -45,7 +46,10 @@ import {
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly hfliveAuth: HfliveAuthService,
+  ) {}
 
   @Post("login")
   @Public()
@@ -72,6 +76,41 @@ export class AuthController {
       },
     );
 
+    return { user };
+  }
+
+  @Post("breakglass/login")
+  @Public()
+  async breakglassLogin(
+    @Body() body: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    let result: Awaited<ReturnType<AuthService["validateBreakglassLogin"]>>;
+    try {
+      result = await this.authService.validateBreakglassLogin(
+        body.username,
+        body.password,
+        req.ip || req.socket.remoteAddress || "unknown",
+      );
+    } catch (caught) {
+      await this.hfliveAuth.recordBreakglass("FAILURE");
+      throw caught;
+    }
+    const { user, sessionVersion } = result;
+    await this.hfliveAuth.recordBreakglass("SUCCESS", user.id);
+    const secure = shouldUseSecureSessionCookie();
+    res.cookie(
+      getSessionCookieName(secure),
+      createSessionCookieValue(user.id, sessionVersion),
+      {
+        httpOnly: true,
+        maxAge: SESSION_TTL_MS,
+        path: "/",
+        sameSite: "lax",
+        secure,
+      },
+    );
     return { user };
   }
 

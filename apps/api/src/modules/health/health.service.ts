@@ -2,6 +2,7 @@ import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { RedisService } from "../redis/redis.service";
 import { StorageService } from "../storage/storage.service";
+import { HfliveAuthService } from "../hflive-auth/hflive-auth.service";
 
 @Injectable()
 export class HealthService {
@@ -9,6 +10,7 @@ export class HealthService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly storage: StorageService,
+    private readonly hfliveAuth: HfliveAuthService,
   ) {}
 
   async check() {
@@ -16,8 +18,11 @@ export class HealthService {
       withTimeout(this.prisma.$queryRaw`SELECT 1`, 2_000),
       withTimeout(requireHealthyRedis(this.redis.ping()), 2_000),
       withTimeout(this.storage.healthCheckActive(), 2_000),
+      Promise.resolve().then(() =>
+        requireHfliveReady(this.hfliveAuth.readinessErrors),
+      ),
     ]);
-    const names = ["postgres", "redis", "storage"];
+    const names = ["postgres", "redis", "storage", "hfliveAuth"];
     const dependencies = Object.fromEntries(
       checks.map((result, index) => [
         names[index],
@@ -38,6 +43,13 @@ export class HealthService {
       timestamp: new Date().toISOString(),
     };
   }
+}
+
+function requireHfliveReady(errors: string[]) {
+  if (errors.length) {
+    throw new Error(`HFLive configuration invalid: ${errors.join(",")}`);
+  }
+  return true;
 }
 
 async function requireHealthyRedis(check: Promise<boolean>) {

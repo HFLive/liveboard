@@ -1763,6 +1763,55 @@ button:disabled {
   gap: 10px;
 }
 
+.profile-identity-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.profile-identity-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.profile-identity-panel > p,
+.identity-link-form > p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.profile-identity-panel .identity-state {
+  font-weight: 650;
+}
+
+.profile-identity-panel .identity-warning {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 9px 10px;
+  color: var(--text-soft);
+}
+
+.profile-identity-panel .button {
+  width: 100%;
+}
+
+.identity-link-form {
+  gap: 10px;
+}
+
+.identity-link-form .input {
+  min-width: 0;
+  font-size: 16px;
+}
+
+.profile-form input[readonly] {
+  border-color: transparent;
+  background: var(--fill-subtle);
+  color: var(--text-soft);
+  cursor: default;
+}
+
 .profile-badge-panel h2 {
   display: flex;
   align-items: center;

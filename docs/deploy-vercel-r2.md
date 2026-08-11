@@ -294,7 +294,13 @@ TRUST_PROXY_HOPS=1
 WEB_ORIGIN=https://placeholder.invalid
 CRON_SECRET=<独立随机值，至少 32 字节>
 NODE_ENV=production
+AUTH_MODE=local
 ```
+
+默认先保持 `AUTH_MODE=local`。需要为官方实例启用 HFLive Auth 时，再按
+[HFLive Auth 后端接入](./hflive-auth.md)把 OIDC、Directory 和 webhook 变量只配置到
+API Production 环境；Preview 必须使用独立 client/redirect/数据库/Redis，或继续保持
+`local`，不得读取 Production client secret。
 
 因为 Web 域名尚未产生，首次可暂时使用
 `WEB_ORIGIN=https://placeholder.invalid`。API 部署后不要用这个占位值正式登录；

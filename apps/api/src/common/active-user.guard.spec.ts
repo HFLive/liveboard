@@ -3,6 +3,7 @@ import type { ExecutionContext } from "@nestjs/common";
 import type { Reflector } from "@nestjs/core";
 import type { PrismaService } from "../modules/prisma/prisma.service";
 import type { MaintenanceService } from "../modules/maintenance/maintenance.service";
+import type { HfliveAuthService } from "../modules/hflive-auth/hflive-auth.service";
 import {
   ActiveUserGuard,
   type AuthenticatedRequest,
@@ -13,6 +14,7 @@ describe("ActiveUserGuard", () => {
   const reflector = { getAllAndOverride: jest.fn() };
   const prisma = { user: { findUnique: jest.fn() } };
   const maintenance = { isEnabled: jest.fn() };
+  const hfliveAuth = { checkExternalSession: jest.fn() };
   const request: Partial<AuthenticatedRequest> = { cookies: {}, method: "GET" };
   const response = { clearCookie: jest.fn() };
   const context = {
@@ -34,10 +36,12 @@ describe("ActiveUserGuard", () => {
     delete request.currentUserId;
     delete request.degradedSession;
     maintenance.isEnabled.mockResolvedValue(false);
+    hfliveAuth.checkExternalSession.mockResolvedValue({ allowed: true });
     guard = new ActiveUserGuard(
       reflector as unknown as Reflector,
       prisma as unknown as PrismaService,
       maintenance as unknown as MaintenanceService,
+      hfliveAuth as unknown as HfliveAuthService,
     );
   });
 
@@ -116,6 +120,25 @@ describe("ActiveUserGuard", () => {
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(request.currentUserId).toBe("user-1");
+  });
+
+  it("clears the local cookie when the linked HFLive identity is disabled", async () => {
+    reflector.getAllAndOverride.mockReturnValue(false);
+    request.cookies = {
+      liveboard_session: createSessionCookieValue("user-1", 4),
+    };
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      status: "active",
+      sessionVersion: 4,
+    });
+    hfliveAuth.checkExternalSession.mockResolvedValue({ allowed: false });
+
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(response.clearCookie).toHaveBeenCalled();
+    expect(request.currentUserId).toBeUndefined();
   });
 
   it("accepts the separate HTTP cookie in HTTP mode", async () => {

@@ -37,6 +37,8 @@ import type {
   BadgeColor,
   UserTagSummary,
   UserSummary,
+  AuthCapabilities,
+  HfliveAccountContext,
 } from "@liveboard/shared";
 import {
   ALLOW_RELAY_FALLBACK,
@@ -145,6 +147,50 @@ export function login(username: string, password: string) {
   });
 }
 
+export function breakglassLogin(username: string, password: string) {
+  clearCurrentUserCache();
+  return request<{ user: UserSummary }>("/auth/breakglass/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export function getAuthCapabilities() {
+  return request<AuthCapabilities>("/auth/config");
+}
+
+export function hfliveLoginUrl(returnTo = "/app/classrooms") {
+  return apiResourceUrl(
+    `/auth/hflive/start?returnTo=${encodeURIComponent(returnTo)}`,
+  );
+}
+
+export function getHfliveAccountContext() {
+  return request<HfliveAccountContext>("/auth/hflive/account");
+}
+
+export function linkHfliveWithPassword(input: {
+  ticket: string;
+  username: string;
+  password: string;
+}) {
+  clearCurrentUserCache();
+  return request<{ user: UserSummary }>("/auth/hflive/link/password", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function startHfliveAccountLink(password: string) {
+  return request<{ authorizationUrl: string }>("/auth/hflive/link/start", {
+    method: "POST",
+    body: JSON.stringify({
+      password,
+      returnTo: "/app/profile?identity=linked",
+    }),
+  });
+}
+
 export function logout() {
   clearCurrentUserCache();
   return request<{ ok: boolean }>("/auth/logout", {
@@ -229,7 +275,7 @@ export function archiveNotification(notificationId: string) {
 }
 
 export function updateProfile(input: {
-  displayName: string;
+  displayName?: string;
   bio?: string;
   openContentInCurrentTab?: boolean;
 }) {

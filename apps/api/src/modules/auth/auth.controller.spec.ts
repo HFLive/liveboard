@@ -6,6 +6,7 @@ import {
 } from "../../common/cache-control";
 import type { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
+import type { HfliveAuthService } from "../hflive-auth/hflive-auth.service";
 
 describe("AuthController session cookies", () => {
   const originalSecureSetting = process.env.SESSION_COOKIE_SECURE;
@@ -15,6 +16,7 @@ describe("AuthController session cookies", () => {
     getBanner: jest.fn(),
     validateLogin: jest.fn(),
   };
+  const hfliveAuth = { recordBreakglass: jest.fn() };
   const request = {
     ip: "127.0.0.1",
     socket: { remoteAddress: "127.0.0.1" },
@@ -34,7 +36,10 @@ describe("AuthController session cookies", () => {
       sessionVersion: 3,
       user: { id: "user-1" },
     });
-    controller = new AuthController(authService as unknown as AuthService);
+    controller = new AuthController(
+      authService as unknown as AuthService,
+      hfliveAuth as unknown as HfliveAuthService,
+    );
   });
 
   afterEach(() => {

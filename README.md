@@ -241,27 +241,32 @@ liveboard/
 
 复制 `.env.example` 后按环境修改。常用变量：
 
-| 变量                             | 说明                             |
-| -------------------------------- | -------------------------------- |
-| `WEB_ORIGIN`                     | 允许携带凭据访问 API 的前端来源  |
-| `NEXT_PUBLIC_API_URL`            | 浏览器访问 API 的公开地址        |
-| `DATABASE_URL`                   | PostgreSQL 连接地址              |
-| `POSTGRES_DB`                    | PostgreSQL 数据库名              |
-| `POSTGRES_USER`                  | PostgreSQL 用户名                |
-| `POSTGRES_PASSWORD`              | PostgreSQL 密码                  |
-| `REDIS_URL`                      | Redis 连接地址                   |
-| `TRUST_PROXY_HOPS`               | API 前可信反向代理层数           |
-| `SESSION_SECRET`                 | 会话签名密钥                     |
-| `AI_ENCRYPTION_KEY`              | 数据库内 AI API Key 加密密钥     |
-| `AI_RATE_LIMIT_MAX_REQUESTS`     | 单用户 AI 限流窗口内最大请求数   |
-| `AI_RATE_LIMIT_WINDOW_SECONDS`   | AI 限流窗口秒数                  |
-| `AI_MAX_CONCURRENT_PER_USER`     | 单用户 AI 最大并发请求数         |
-| `BACKUP_RETENTION_COUNT`         | 保留的 PostgreSQL 部署备份数量   |
-| `SESSION_COOKIE_SECURE`          | 是否只通过 HTTPS 发送会话 Cookie |
-| `MINIO_*`                        | MinIO 地址、凭据和 bucket        |
-| `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS` | 是否在登录页显示演示账号         |
+| 变量                             | 说明                                                      |
+| -------------------------------- | --------------------------------------------------------- |
+| `WEB_ORIGIN`                     | 允许携带凭据访问 API 的前端来源                           |
+| `NEXT_PUBLIC_API_URL`            | 浏览器访问 API 的公开地址                                 |
+| `DATABASE_URL`                   | PostgreSQL 连接地址                                       |
+| `POSTGRES_DB`                    | PostgreSQL 数据库名                                       |
+| `POSTGRES_USER`                  | PostgreSQL 用户名                                         |
+| `POSTGRES_PASSWORD`              | PostgreSQL 密码                                           |
+| `REDIS_URL`                      | Redis 连接地址                                            |
+| `TRUST_PROXY_HOPS`               | API 前可信反向代理层数                                    |
+| `SESSION_SECRET`                 | 会话签名密钥                                              |
+| `AI_ENCRYPTION_KEY`              | 数据库内 AI API Key 加密密钥                              |
+| `AI_RATE_LIMIT_MAX_REQUESTS`     | 单用户 AI 限流窗口内最大请求数                            |
+| `AI_RATE_LIMIT_WINDOW_SECONDS`   | AI 限流窗口秒数                                           |
+| `AI_MAX_CONCURRENT_PER_USER`     | 单用户 AI 最大并发请求数                                  |
+| `BACKUP_RETENTION_COUNT`         | 保留的 PostgreSQL 部署备份数量                            |
+| `SESSION_COOKIE_SECURE`          | 是否只通过 HTTPS 发送会话 Cookie                          |
+| `AUTH_MODE`                      | `local`、`hybrid` 或 `hflive_oidc`                        |
+| `HFLIVE_*`                       | HFLive OIDC、Directory、webhook 与 break-glass 服务端配置 |
+| `MINIO_*`                        | MinIO 地址、凭据和 bucket                                 |
+| `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS` | 是否在登录页显示演示账号                                  |
 
 不要提交 `.env`、真实密码、API Key、数据库备份或用户上传内容。
+
+HFLive Auth 的模式、端点、发布顺序和回滚边界见
+[HFLive Auth 后端接入](./docs/hflive-auth.md)。
 
 ## 生产部署检查
 

@@ -7,7 +7,12 @@ import { SiteBrandMark } from "@/components/app-shell/SiteBrandMark";
 
 export const metadata: Metadata = { title: "登录" };
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reason?: string }>;
+}) {
+  const { reason } = await searchParams;
   return (
     <main className="login-wrap">
       <aside className="login-aside">
@@ -38,9 +43,9 @@ export default function LoginPage() {
         <div className="login-column">
           <div className="login-card-head">
             <h1>登录</h1>
-            <p>使用课程团队分配的账号。</p>
+            <p>根据当前实例配置选择登录方式。</p>
           </div>
-          <LoginForm />
+          <LoginForm reason={reason} />
           <p className="login-support">账号问题请联系管理员。</p>
         </div>
       </section>

@@ -19,6 +19,10 @@ async function bootstrap() {
     .filter(Boolean);
 
   app.use(cookieParser());
+  app.use(
+    "/internal/hflive/events",
+    express.raw({ limit: "64kb", type: "application/json" }),
+  );
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true, limit: "10mb" }));
   app

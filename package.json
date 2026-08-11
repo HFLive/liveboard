@@ -15,6 +15,7 @@
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test && sh scripts/deploy-bundle.spec.sh && sh scripts/liveboard-https-agent.spec.sh && sh scripts/legacy-baseline-transition.spec.sh",
+    "test:phase6": "pnpm --filter @liveboard/api test:phase6",
     "typecheck": "pnpm --filter @liveboard/shared build && pnpm -r typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

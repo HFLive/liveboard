@@ -71,6 +71,9 @@ importers:
       minio:
         specifier: ^8.0.7
         version: 8.0.7
+      openid-client:
+        specifier: ^6.8.4
+        version: 6.8.4
       prisma:
         specifier: ^6.1.0
         version: 6.19.3(typescript@5.9.3)
@@ -307,7 +310,6 @@ packages:
         integrity: sha512-CEkcQlMOQJCvul60U7wdAOACjtdgFWDsfJI+6wUOGdhGNV2lGbuJpi/R50QLpFG3Tp+sQxa/RmzC3X7KHbhuTA==,
       }
     engines: { node: ">=20.0.0" }
-
   "@aws-sdk/credential-provider-env@3.972.65":
     resolution:
       {
@@ -7559,6 +7561,12 @@ packages:
     engines: { node: ">=18" }
     hasBin: true
 
+  oauth4webapi@3.8.6:
+    resolution:
+      {
+        integrity: sha512-iwemM91xz8nryHti2yTmg5fhyEMVOkOXwHNqbvcATjyajb5oQxCQzrNOA6uElRHuMhQQTKUyFKV9y/CNyg25BQ==,
+      }
+
   object-assign@4.1.1:
     resolution:
       {
@@ -7647,6 +7655,12 @@ packages:
         integrity: sha512-kbpaSSGJTWdAY5KPVeMOKXSrPtr8C8C7wodJbcsd51jRnmD+GZu8Y0VoU6Dm5Z4vWr0Ig/1NKuWRKf7j5aaYSg==,
       }
     engines: { node: ">=6" }
+
+  openid-client@6.8.4:
+    resolution:
+      {
+        integrity: sha512-QSw0BA08piujetEwfZsHoTrDpMEha7GDZDicQqVwX4u0ChCjefvjDB++TZ8BTg76UpwhzIQgdvvfgfl3HpCSAw==,
+      }
 
   optionator@0.9.4:
     resolution:
@@ -14653,6 +14667,8 @@ snapshots:
       pathe: 2.0.3
       tinyexec: 1.2.4
 
+  oauth4webapi@3.8.6: {}
+
   object-assign@4.1.1: {}
 
   object-inspect@1.13.4: {}
@@ -14710,6 +14726,11 @@ snapshots:
   onetime@5.1.2:
     dependencies:
       mimic-fn: 2.1.0
+
+  openid-client@6.8.4:
+    dependencies:
+      jose: 6.2.8
+      oauth4webapi: 3.8.6
 
   optionator@0.9.4:
     dependencies:

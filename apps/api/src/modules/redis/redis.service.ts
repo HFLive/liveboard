@@ -1,6 +1,7 @@
 import {
   Injectable,
   Logger,
+  OnModuleDestroy,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -20,7 +21,7 @@ import {
  *   生产环境禁止 fallback，Redis 不可用时抛出 503。
  */
 @Injectable()
-export class RedisService {
+export class RedisService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
   private readonly url: string;
   private readonly deploymentTarget: DeploymentTarget;
@@ -69,6 +70,11 @@ export class RedisService {
     } catch {
       return false;
     }
+  }
+
+  async onModuleDestroy() {
+    if (this.client?.isOpen) await this.client.quit();
+    this.client = null;
   }
 
   private connect() {

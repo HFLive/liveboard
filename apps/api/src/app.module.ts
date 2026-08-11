@@ -25,6 +25,7 @@ import { MigrationModule } from "./modules/migration/migration.module";
 import { BackupModule } from "./modules/backup/backup.module";
 import { ApiTokensModule } from "./modules/api-tokens/api-tokens.module";
 import { McpModule } from "./modules/mcp/mcp.module";
+import { HfliveAuthModule } from "./modules/hflive-auth/hflive-auth.module";
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { McpModule } from "./modules/mcp/mcp.module";
     PrismaModule,
     RedisModule,
     HealthModule,
+    HfliveAuthModule,
     AuthModule,
     UsersModule,
     PermissionsModule,

@@ -125,6 +125,8 @@ describe("API request client", () => {
   it.each([
     [401, "/files", true],
     [401, "/auth/login", false],
+    [401, "/auth/breakglass/login", false],
+    [401, "/auth/hflive/link/password", false],
     [403, "/files", false],
   ])(
     "decides whether authentication failures require login",

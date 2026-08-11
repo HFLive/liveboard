@@ -61,6 +61,9 @@ sudo sh /opt/liveboard-v0.3.0-linux-amd64.run install
 - 按需安装 Ubuntu 基础依赖；
 - 生成 PostgreSQL、MinIO 和会话密钥；
 - 将配置写入权限为 `600` 的 `/opt/liveboard/.env`；
+- 为既有和新实例保留 `AUTH_MODE=local` 默认值；只有按
+  [HFLive Auth 后端接入](./hflive-auth.md)完成 client、回调、Directory 和 webhook
+  配置后才切换 `hybrid` 或 `hflive_oidc`；
 - 导入离线镜像；
 - 启动 PostgreSQL、Redis 和 MinIO；
 - 备份 PostgreSQL；

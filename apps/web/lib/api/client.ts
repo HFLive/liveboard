@@ -29,7 +29,14 @@ export class ApiError extends Error {
 }
 
 export function shouldRedirectToLogin(status: number, path: string) {
-  return status === 401 && path !== "/auth/login";
+  return (
+    status === 401 &&
+    ![
+      "/auth/login",
+      "/auth/breakglass/login",
+      "/auth/hflive/link/password",
+    ].includes(path)
+  );
 }
 
 export function redirectToLoginOnUnauthorized(status: number, path: string) {

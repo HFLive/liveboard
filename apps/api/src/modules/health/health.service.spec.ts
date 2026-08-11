@@ -8,19 +8,26 @@ describe("HealthService", () => {
       prisma: { $queryRaw: jest.Mock };
       redis: { ping: jest.Mock };
       storage: { healthCheckActive: jest.Mock };
+      hfliveAuth: { readinessErrors: string[] };
     };
     service.prisma = { $queryRaw: jest.fn().mockResolvedValue([{ one: 1 }]) };
     service.redis = { ping: jest.fn().mockResolvedValue(true) };
     service.storage = {
       healthCheckActive: jest.fn().mockResolvedValue(undefined),
     };
+    service.hfliveAuth = { readinessErrors: [] };
     return service;
   }
 
   it("reports all required dependencies", async () => {
     await expect(createService().check()).resolves.toMatchObject({
       ok: true,
-      dependencies: { postgres: "ok", redis: "ok", storage: "ok" },
+      dependencies: {
+        postgres: "ok",
+        redis: "ok",
+        storage: "ok",
+        hfliveAuth: "ok",
+      },
     });
   });
 

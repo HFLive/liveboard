@@ -279,6 +279,9 @@ ensure_generated_secret POSTGRES_PASSWORD 24
 ensure_generated_secret MINIO_ROOT_PASSWORD 24
 ensure_generated_secret SESSION_SECRET 32
 ensure_generated_secret AI_ENCRYPTION_KEY 32
+if [ -z "$(read_env_value AUTH_MODE)" ]; then
+  write_env_value AUTH_MODE local
+fi
 
 POSTGRES_PASSWORD=$(read_env_value POSTGRES_PASSWORD)
 POSTGRES_USER=$(read_env_value POSTGRES_USER)

@@ -3,6 +3,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  ForbiddenException,
   NotImplementedException,
   NotFoundException,
   UnauthorizedException,
@@ -24,6 +25,7 @@ import type { StorageBackendName } from "../storage/storage-backend";
 import { StorageService } from "../storage/storage.service";
 import type { ChangePasswordDto, UpdateProfileDto } from "./auth.dto";
 import { LoginRateLimitService } from "./login-rate-limit.service";
+import { HfliveAuthConfig } from "../hflive-auth/hflive-auth.config";
 
 export interface UploadedProfileImageFile {
   originalname: string;
@@ -36,6 +38,13 @@ export const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024;
 export const MAX_BANNER_SIZE_BYTES = 5 * 1024 * 1024;
 const PENDING_UPLOAD_TTL_MS = 60 * 60 * 1000;
 const PROFILE_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const externalPictureInclude = {
+  externalIdentities: {
+    where: { issuer: "https://auth.hsfz.live" },
+    select: { picture: true },
+    take: 1,
+  },
+} as const;
 
 @Injectable()
 export class AuthService {
@@ -45,12 +54,39 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly loginRateLimit: LoginRateLimitService,
     private readonly storage: StorageService,
+    private readonly hfliveConfig: HfliveAuthConfig,
   ) {}
 
   async validateLogin(
     username: string,
     password: string,
     clientAddress = "unknown",
+  ): Promise<{ user: UserSummary; sessionVersion: number }> {
+    if (this.hfliveConfig.mode === "hflive_oidc") {
+      throw new UnauthorizedException("Invalid credentials");
+    }
+    return this.validatePasswordLogin(username, password, clientAddress, false);
+  }
+
+  async validateBreakglassLogin(
+    username: string,
+    password: string,
+    clientAddress = "unknown",
+  ): Promise<{ user: UserSummary; sessionVersion: number }> {
+    if (
+      this.hfliveConfig.mode !== "hflive_oidc" ||
+      !this.hfliveConfig.breakglassEnabled
+    ) {
+      throw new ForbiddenException("Emergency login is disabled");
+    }
+    return this.validatePasswordLogin(username, password, clientAddress, true);
+  }
+
+  private async validatePasswordLogin(
+    username: string,
+    password: string,
+    clientAddress: string,
+    requireSuperAdmin: boolean,
   ): Promise<{ user: UserSummary; sessionVersion: number }> {
     const normalizedUsername = username.trim();
     if (
@@ -62,9 +98,14 @@ export class AuthService {
       );
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { username: normalizedUsername },
+    const user = await this.prisma.user.findFirst({
+      where: { username: { equals: normalizedUsername, mode: "insensitive" } },
       include: {
+        externalIdentities: {
+          where: { issuer: "https://auth.hsfz.live" },
+          select: { picture: true },
+          take: 1,
+        },
         badgeAssignments: {
           where: { equippedOrder: { not: null } },
           include: { badge: true },
@@ -78,7 +119,13 @@ export class AuthService {
       password,
     );
 
-    if (!user || user.status !== "active" || !passwordMatches) {
+    if (
+      !user ||
+      user.status !== "active" ||
+      !user.localPasswordEnabled ||
+      !passwordMatches ||
+      (requireSuperAdmin && user.systemRole !== "super_admin")
+    ) {
       await this.loginRateLimit.recordFailure(
         clientAddress,
         normalizedUsername,
@@ -98,6 +145,11 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
+        externalIdentities: {
+          where: { issuer: "https://auth.hsfz.live" },
+          select: { picture: true },
+          take: 1,
+        },
         badgeAssignments: {
           where: { equippedOrder: { not: null } },
           include: { badge: true },
@@ -362,6 +414,12 @@ export class AuthService {
       if (!displayName) {
         throw new BadRequestException("显示名不能为空");
       }
+      if (
+        displayName !== user.displayName &&
+        (await this.hasAuthoritativeExternalProfile(user.id))
+      ) {
+        throw new BadRequestException("统一身份资料请前往 HFLive Auth 修改");
+      }
       data.displayName = displayName;
     }
 
@@ -376,6 +434,7 @@ export class AuthService {
     const updated = await this.prisma.user.update({
       where: { id: user.id },
       data,
+      include: externalPictureInclude,
     });
 
     return this.toProfile(updated);
@@ -386,6 +445,10 @@ export class AuthService {
     file: UploadedProfileImageFile | undefined,
   ): Promise<UserProfile> {
     const user = await this.requireActiveUser(userId);
+
+    if (await this.hasAuthoritativeExternalProfile(user.id)) {
+      throw new BadRequestException("统一身份头像请前往 HFLive Auth 修改");
+    }
 
     if (!file) {
       throw new BadRequestException("请选择头像图片");
@@ -411,6 +474,7 @@ export class AuthService {
           avatarUpdatedAt: new Date(),
           avatarStorageBackend: backend.name,
         },
+        include: externalPictureInclude,
       });
     } catch (caught) {
       await backend.removeObject(storageKey).catch(() => undefined);
@@ -455,6 +519,7 @@ export class AuthService {
           bannerUpdatedAt: new Date(),
           bannerStorageBackend: backend.name,
         },
+        include: externalPictureInclude,
       });
     } catch (caught) {
       await backend.removeObject(storageKey).catch(() => undefined);
@@ -558,6 +623,7 @@ export class AuthService {
             bannerUpdatedAt: new Date(),
             bannerStorageBackend: pending.storageBackend,
           },
+          include: externalPictureInclude,
         });
         await transaction.pendingUpload.delete({
           where: { id: pending.id },
@@ -722,6 +788,7 @@ export class AuthService {
       where: { id: user.id },
       data: {
         passwordHash: await argon2.hash(input.newPassword),
+        localPasswordEnabled: true,
         sessionVersion: { increment: 1 },
       },
       select: { id: true, sessionVersion: true },
@@ -746,6 +813,17 @@ export class AuthService {
     return user;
   }
 
+  private async hasAuthoritativeExternalProfile(userId: string) {
+    if (!this.hfliveConfig.enabled) return false;
+    const identity = await this.prisma.externalIdentity.findUnique({
+      where: {
+        userId_issuer: { userId, issuer: "https://auth.hsfz.live" },
+      },
+      select: { id: true },
+    });
+    return Boolean(identity);
+  }
+
   private toSummary(user: {
     id: string;
     username: string;
@@ -762,14 +840,20 @@ export class AuthService {
         color: string;
       };
     }>;
+    externalIdentities?: Array<{ picture: string | null }>;
   }): UserSummary {
+    const externalPicture = this.hfliveConfig.enabled
+      ? user.externalIdentities?.[0]?.picture
+      : null;
     return {
       id: user.id,
       username: user.username,
       displayName: user.displayName,
-      avatarUrl: user.avatarUpdatedAt
-        ? `/auth/avatar/${user.id}?v=${user.avatarUpdatedAt.getTime()}`
-        : null,
+      avatarUrl:
+        externalPicture ??
+        (user.avatarUpdatedAt
+          ? `/auth/avatar/${user.id}?v=${user.avatarUpdatedAt.getTime()}`
+          : null),
       systemRole: user.systemRole,
       status: user.status,
       badges: user.badgeAssignments?.map(({ badge }) => ({
@@ -800,6 +884,7 @@ export class AuthService {
         color: string;
       };
     }>;
+    externalIdentities?: Array<{ picture: string | null }>;
   }): UserProfile {
     return {
       ...this.toSummary(user),

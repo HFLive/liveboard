@@ -4,17 +4,26 @@ import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import {
   BadgeCheck,
   Camera,
+  ExternalLink,
   ImagePlus,
   KeyRound,
+  Link2,
+  ShieldCheck,
   UserRound,
 } from "lucide-react";
-import type { UserBadgeSummary, UserProfile } from "@liveboard/shared";
+import type {
+  HfliveAccountContext,
+  UserBadgeSummary,
+  UserProfile,
+} from "@liveboard/shared";
 import {
   apiResourceUrl,
   changePassword,
+  getHfliveAccountContext,
   getMe,
   listMyBadges,
   setEquippedBadges,
+  startHfliveAccountLink,
   updateProfile,
   uploadAvatar,
   uploadProfileBannerDirect,
@@ -23,6 +32,7 @@ import { roleLabel, userStatusLabel } from "@/lib/labels";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
 import { AutoTextarea } from "@/components/AutoTextarea";
 import { UserBadges } from "@/components/UserBadges";
+import { RouteContentSkeleton } from "@/components/system/ProgressiveLoading";
 
 const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
 const MAX_BANNER_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -63,6 +73,8 @@ const CROP_CONFIG: Record<
 
 export function ProfileClient() {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [account, setAccount] = useState<HfliveAccountContext | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -78,6 +90,8 @@ export function ProfileClient() {
   const [equippedBadgeIds, setEquippedBadgeIds] = useState<string[]>([]);
   const [savingBadges, setSavingBadges] = useState(false);
   const [savingPreference, setSavingPreference] = useState(false);
+  const [linkPassword, setLinkPassword] = useState("");
+  const [startingLink, setStartingLink] = useState(false);
   const [preferenceMessage, setPreferenceMessage] = useState<string | null>(
     null,
   );
@@ -88,9 +102,10 @@ export function ProfileClient() {
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    Promise.all([getMe(), listMyBadges()])
-      .then(([result, badgeResult]) => {
+    Promise.all([getMe(), listMyBadges(), getHfliveAccountContext()])
+      .then(([result, badgeResult, accountResult]) => {
         setUser(result.user);
+        setAccount(accountResult);
         setDisplayName(result.user.displayName);
         setBio(result.user.bio ?? "");
         setAwardedBadges(badgeResult.badges);
@@ -106,7 +121,8 @@ export function ProfileClient() {
       })
       .catch((caught) => {
         setError(caught instanceof Error ? caught.message : "加载个人信息失败");
-      });
+      })
+      .finally(() => setLoadingProfile(false));
   }, []);
 
   useEffect(() => {
@@ -119,7 +135,7 @@ export function ProfileClient() {
 
   const profileDirty = Boolean(
     user &&
-    (displayName.trim() !== user.displayName ||
+    ((!account?.authoritative && displayName.trim() !== user.displayName) ||
       bio.trim() !== (user.bio ?? "")),
   );
 
@@ -147,7 +163,7 @@ export function ProfileClient() {
 
     try {
       const result = await updateProfile({
-        displayName: displayName.trim(),
+        ...(!account?.authoritative ? { displayName: displayName.trim() } : {}),
         bio,
       });
       setUser(result.user);
@@ -248,7 +264,6 @@ export function ProfileClient() {
     setSavingPreference(true);
     try {
       const result = await updateProfile({
-        displayName: user.displayName,
         bio: user.bio ?? "",
         openContentInCurrentTab,
       });
@@ -296,6 +311,19 @@ export function ProfileClient() {
     }
   }
 
+  async function onStartAccountLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setStartingLink(true);
+    try {
+      const result = await startHfliveAccountLink(linkPassword);
+      window.location.assign(result.authorizationUrl);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "无法开始账号关联");
+      setStartingLink(false);
+    }
+  }
+
   function toggleEquippedBadge(badgeId: string) {
     setProfileMessage(null);
     setError(null);
@@ -335,6 +363,18 @@ export function ProfileClient() {
     } finally {
       setSavingBadges(false);
     }
+  }
+
+  if (loadingProfile) {
+    return <RouteContentSkeleton />;
+  }
+
+  if (!user || !account) {
+    return (
+      <div className="workspace">
+        <p className="error-text">{error ?? "无法加载个人信息"}</p>
+      </div>
+    );
   }
 
   return (
@@ -396,15 +436,26 @@ export function ProfileClient() {
             </div>
             <div className="profile-avatar-row">
               <div className="profile-avatar-preview" aria-hidden="true">
-                {user?.avatarUrl ? (
-                  <img alt="" src={apiResourceUrl(user.avatarUrl)} />
+                {(account?.authoritative && account.identity?.picture) ||
+                user?.avatarUrl ? (
+                  <img
+                    alt=""
+                    src={apiResourceUrl(
+                      (account?.authoritative && account.identity?.picture) ||
+                        user!.avatarUrl!,
+                    )}
+                  />
                 ) : (
                   displayName.trim().slice(0, 1).toUpperCase() || "L"
                 )}
               </div>
               <div>
                 <strong>头像</strong>
-                <p className="muted">支持 PNG、JPEG、WebP，原图不超过 2MB。</p>
+                <p className="muted">
+                  {account?.authoritative
+                    ? "头像由 HFLive 统一身份管理。"
+                    : "支持 PNG、JPEG、WebP，原图不超过 2MB。"}
+                </p>
                 <input
                   accept="image/png,image/jpeg,image/webp"
                   className="sr-only"
@@ -412,28 +463,46 @@ export function ProfileClient() {
                   ref={avatarInputRef}
                   type="file"
                 />
-                <button
-                  className="button secondary"
-                  onClick={() => avatarInputRef.current?.click()}
-                  type="button"
-                >
-                  <Camera aria-hidden="true" className="button-icon" />
-                  上传头像
-                </button>
+                {account?.authoritative ? (
+                  <a
+                    className="button secondary"
+                    href={account.profileUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <ExternalLink aria-hidden="true" className="button-icon" />
+                    前往 HFLive 修改
+                  </a>
+                ) : (
+                  <button
+                    className="button secondary"
+                    onClick={() => avatarInputRef.current?.click()}
+                    type="button"
+                  >
+                    <Camera aria-hidden="true" className="button-icon" />
+                    上传头像
+                  </button>
+                )}
               </div>
             </div>
-            <label className="label">
+            <label className="label" htmlFor="profile-display-name">
               显示名
               <input
                 className="input"
+                id="profile-display-name"
                 onChange={(event) => setDisplayName(event.target.value)}
+                readOnly={Boolean(account?.authoritative)}
                 value={displayName}
               />
+              {account?.authoritative ? (
+                <small className="muted">显示名由 HFLive 统一身份管理。</small>
+              ) : null}
             </label>
-            <label className="label">
+            <label className="label" htmlFor="profile-bio">
               个人简介
               <AutoTextarea
                 className="textarea profile-bio-input"
+                id="profile-bio"
                 maxLength={500}
                 onChange={(event) => setBio(event.target.value)}
                 placeholder="介绍一下自己"
@@ -467,6 +536,74 @@ export function ProfileClient() {
         </div>
 
         <aside className="workbench-side">
+          <section className="action-panel profile-identity-panel">
+            <h2>
+              <ShieldCheck aria-hidden="true" className="heading-icon" />
+              统一身份
+            </h2>
+            {account?.linked ? (
+              <>
+                <p className="identity-state success-text">已关联 HFLive</p>
+                <div className="profile-readonly-grid">
+                  <div>
+                    <span>统一账号</span>
+                    <strong>
+                      {account.identity?.preferredUsername ?? "-"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>统一邮箱</span>
+                    <strong>{account.identity?.email ?? "-"}</strong>
+                  </div>
+                </div>
+                {account.identity?.syncState === "PROFILE_CONFLICT" ? (
+                  <p className="identity-warning" role="status">
+                    统一资料存在命名冲突，身份关联保持有效；请联系管理员处理。
+                  </p>
+                ) : null}
+                <a
+                  className="button secondary"
+                  href={account.profileUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <ExternalLink aria-hidden="true" className="button-icon" />
+                  管理统一资料
+                </a>
+              </>
+            ) : account?.hfliveOidc && account.localPasswordEnabled ? (
+              <form
+                className="form identity-link-form"
+                onSubmit={onStartAccountLink}
+              >
+                <p className="muted">
+                  关联后可使用 HFLive 登录；LiveBoard 权限与业务资料不会改变。
+                </p>
+                <label className="label">
+                  当前 LiveBoard 密码
+                  <input
+                    autoComplete="current-password"
+                    className="input"
+                    minLength={8}
+                    onChange={(event) => setLinkPassword(event.target.value)}
+                    required
+                    type="password"
+                    value={linkPassword}
+                  />
+                </label>
+                <button className="button secondary" disabled={startingLink}>
+                  <Link2 aria-hidden="true" className="button-icon" />
+                  {startingLink ? "正在跳转…" : "关联 HFLive 身份"}
+                </button>
+              </form>
+            ) : (
+              <p className="muted">
+                {account?.hfliveOidc
+                  ? "此账号暂不支持自助关联，请联系管理员。"
+                  : "当前实例使用本地身份。"}
+              </p>
+            )}
+          </section>
           <section className="action-panel profile-badge-panel">
             <h2>
               <BadgeCheck aria-hidden="true" className="heading-icon" />
@@ -548,56 +685,61 @@ export function ProfileClient() {
               <p className="success-text">{preferenceMessage}</p>
             ) : null}
           </section>
-          <details className="password-disclosure">
-            <summary>
-              <span>
-                <KeyRound aria-hidden="true" className="heading-icon" />
-                修改密码
-              </span>
-            </summary>
-            <form className="form disclosure-body" onSubmit={onChangePassword}>
-              <label className="label">
-                当前密码
-                <input
-                  autoComplete="current-password"
-                  className="input"
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                  type="password"
-                  value={currentPassword}
-                />
-              </label>
-              <label className="label">
-                新密码
-                <input
-                  autoComplete="new-password"
-                  className="input"
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  type="password"
-                  value={newPassword}
-                />
-              </label>
-              <label className="label">
-                确认新密码
-                <input
-                  autoComplete="new-password"
-                  className="input"
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  type="password"
-                  value={confirmPassword}
-                />
-              </label>
-              {passwordMessage ? (
-                <p className="success-text">{passwordMessage}</p>
-              ) : null}
-              <button
-                className="button"
-                disabled={savingPassword}
-                type="submit"
+          {account?.localPasswordEnabled ? (
+            <details className="password-disclosure">
+              <summary>
+                <span>
+                  <KeyRound aria-hidden="true" className="heading-icon" />
+                  修改密码
+                </span>
+              </summary>
+              <form
+                className="form disclosure-body"
+                onSubmit={onChangePassword}
               >
-                {savingPassword ? "修改中" : "修改密码"}
-              </button>
-            </form>
-          </details>
+                <label className="label">
+                  当前密码
+                  <input
+                    autoComplete="current-password"
+                    className="input"
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    type="password"
+                    value={currentPassword}
+                  />
+                </label>
+                <label className="label">
+                  新密码
+                  <input
+                    autoComplete="new-password"
+                    className="input"
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    type="password"
+                    value={newPassword}
+                  />
+                </label>
+                <label className="label">
+                  确认新密码
+                  <input
+                    autoComplete="new-password"
+                    className="input"
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    type="password"
+                    value={confirmPassword}
+                  />
+                </label>
+                {passwordMessage ? (
+                  <p className="success-text">{passwordMessage}</p>
+                ) : null}
+                <button
+                  className="button"
+                  disabled={savingPassword}
+                  type="submit"
+                >
+                  {savingPassword ? "修改中" : "修改密码"}
+                </button>
+              </form>
+            </details>
+          ) : null}
         </aside>
       </section>
 

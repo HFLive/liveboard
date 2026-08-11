@@ -129,6 +129,33 @@ export interface UserProfile extends UserSummary {
   openContentInCurrentTab: boolean;
 }
 
+export type AuthMode = "local" | "hybrid" | "hflive_oidc";
+
+export interface AuthCapabilities {
+  mode: AuthMode;
+  localLogin: boolean;
+  hfliveOidc: boolean;
+  breakglass: boolean;
+  issuer: string;
+  profileUrl: string;
+}
+
+export interface HfliveAccountContext extends AuthCapabilities {
+  linked: boolean;
+  authoritative: boolean;
+  localPasswordEnabled: boolean;
+  identity: {
+    preferredUsername: string | null;
+    email: string | null;
+    displayName: string | null;
+    picture: string | null;
+    externalStatus: "UNKNOWN" | "ACTIVE" | "DISABLED";
+    syncState: "CURRENT" | "PROFILE_CONFLICT" | "ERROR";
+    syncErrorCode: string | null;
+    lastProfileSyncedAt: string | null;
+  } | null;
+}
+
 export type UserContributionCategory =
   "learning" | "teaching" | "community" | "resources";
 
