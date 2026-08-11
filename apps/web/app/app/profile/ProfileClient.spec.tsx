@@ -62,7 +62,7 @@ describe("ProfileClient HFLive ownership", () => {
 
     const { container } = render(<ProfileClient />);
 
-    expect(await screen.findByText("已关联 HFLive")).toBeInTheDocument();
+    expect(await screen.findByText("已关联 HFLive Auth")).toBeInTheDocument();
     expect(screen.getByLabelText(/^显示名/)).toHaveAttribute("readonly");
     expect(screen.getByLabelText(/^个人简介/)).not.toHaveAttribute("readonly");
     expect(

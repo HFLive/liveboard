@@ -200,13 +200,13 @@ export function LoginForm({ reason }: { reason?: string }) {
     <div className="login-methods">
       {reason === "hflive-failed" ? (
         <p className="error-text login-error" role="alert">
-          HFLive 统一身份登录未完成，请重新尝试。
+          HFLive Auth 登录未完成，请重新尝试。
         </p>
       ) : null}
       {capabilities.hfliveOidc ? (
         <a className="button login-hflive" href={hfliveLoginUrl()}>
           <LogIn aria-hidden="true" />
-          使用 HFLive 统一身份登录
+          使用 HFLive Auth 登录
         </a>
       ) : null}
       {capabilities.hfliveOidc && capabilities.localLogin ? (

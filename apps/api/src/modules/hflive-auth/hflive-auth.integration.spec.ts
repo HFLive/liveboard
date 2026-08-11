@@ -133,7 +133,7 @@ suite("Phase 6 HFLive Auth persistence", () => {
         method: "ADMIN",
         linkedByUserId: localUser.id,
       }),
-    ).rejects.toThrow("LiveBoard 用户名必须与 HFLive 用户名一致");
+    ).rejects.toThrow("LiveBoard 用户名必须与 HFLive Auth 用户名一致");
     await expect(
       database.externalIdentity.count({ where: { userId: localUser.id } }),
     ).resolves.toBe(0);

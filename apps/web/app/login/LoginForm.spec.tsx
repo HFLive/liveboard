@@ -85,7 +85,7 @@ describe("LoginForm", () => {
     expect(toggle).toHaveAccessibleName("隐藏密码");
   });
 
-  it("uses HFLive as the only ordinary entry in hflive_oidc mode", async () => {
+  it("uses HFLive Auth as the only ordinary entry in hflive_oidc mode", async () => {
     vi.mocked(getAuthCapabilities).mockResolvedValue({
       mode: "hflive_oidc",
       localLogin: false,
@@ -98,7 +98,7 @@ describe("LoginForm", () => {
     render(<LoginForm />);
 
     const entry = await screen.findByRole("link", {
-      name: "使用 HFLive 统一身份登录",
+      name: "使用 HFLive Auth 登录",
     });
     expect(entry).toHaveAttribute(
       "href",

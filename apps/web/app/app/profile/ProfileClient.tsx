@@ -453,7 +453,7 @@ export function ProfileClient() {
                 <strong>头像</strong>
                 <p className="muted">
                   {account?.authoritative
-                    ? "头像由 HFLive 统一身份管理。"
+                    ? "头像由 HFLive Auth 管理。"
                     : "支持 PNG、JPEG、WebP，原图不超过 2MB。"}
                 </p>
                 <input
@@ -466,7 +466,7 @@ export function ProfileClient() {
                 {account?.authoritative ? (
                   <a className="button secondary" href={account.profileUrl}>
                     <ExternalLink aria-hidden="true" className="button-icon" />
-                    前往 HFLive 修改
+                    前往 HFLive Auth 修改
                   </a>
                 ) : (
                   <button
@@ -490,7 +490,7 @@ export function ProfileClient() {
                 value={displayName}
               />
               {account?.authoritative ? (
-                <small className="muted">显示名由 HFLive 统一身份管理。</small>
+                <small className="muted">显示名由 HFLive Auth 管理。</small>
               ) : null}
             </label>
             <label className="label" htmlFor="profile-bio">
@@ -538,7 +538,9 @@ export function ProfileClient() {
             </h2>
             {account?.linked ? (
               <>
-                <p className="identity-state success-text">已关联 HFLive</p>
+                <p className="identity-state success-text">
+                  已关联 HFLive Auth
+                </p>
                 <div className="profile-readonly-grid">
                   <div>
                     <span>统一账号</span>
@@ -567,7 +569,8 @@ export function ProfileClient() {
                 onSubmit={onStartAccountLink}
               >
                 <p className="muted">
-                  关联后可使用 HFLive 登录；LiveBoard 权限与业务资料不会改变。
+                  关联后可使用 HFLive Auth 登录；LiveBoard
+                  权限与业务资料不会改变。
                 </p>
                 <label className="label">
                   当前 LiveBoard 密码
@@ -583,7 +586,7 @@ export function ProfileClient() {
                 </label>
                 <button className="button secondary" disabled={startingLink}>
                   <Link2 aria-hidden="true" className="button-icon" />
-                  {startingLink ? "正在跳转…" : "关联 HFLive 身份"}
+                  {startingLink ? "正在跳转…" : "关联 HFLive Auth"}
                 </button>
               </form>
             ) : (

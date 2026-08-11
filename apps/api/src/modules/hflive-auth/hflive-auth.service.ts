@@ -362,9 +362,7 @@ export class HfliveAuthService {
       ) {
         return { allowed: true as const, degraded: true as const };
       }
-      throw new ServiceUnavailableException(
-        "HFLive account status refresh is in progress",
-      );
+      throw new ServiceUnavailableException("HFLive Auth 账号状态正在刷新");
     }
     try {
       const status = await this.directory.getStatus(identity.subject);
@@ -413,9 +411,7 @@ export class HfliveAuthService {
         });
         return { allowed: true as const, degraded: true as const };
       }
-      throw new ServiceUnavailableException(
-        "HFLive account status is unavailable",
-      );
+      throw new ServiceUnavailableException("HFLive Auth 账号状态暂时不可用");
     }
   }
 
@@ -809,7 +805,9 @@ export class HfliveAuthService {
           profile,
           metadata: { method: input.method },
         });
-        throw new ConflictException("LiveBoard 用户名必须与 HFLive 用户名一致");
+        throw new ConflictException(
+          "LiveBoard 用户名必须与 HFLive Auth 用户名一致",
+        );
       }
       if (
         caught instanceof Prisma.PrismaClientKnownRequestError &&
@@ -826,7 +824,7 @@ export class HfliveAuthService {
     try {
       profile = await this.directory.getProfile(subject);
     } catch {
-      throw new ServiceUnavailableException("HFLive Directory is unavailable");
+      throw new ServiceUnavailableException("HFLive Auth 用户资料暂时不可用");
     }
     if (
       profile.subject !== subject ||
@@ -835,7 +833,7 @@ export class HfliveAuthService {
       !profile.name?.trim() ||
       Number.isNaN(new Date(profile.updatedAt).getTime())
     ) {
-      throw new UnauthorizedException("HFLive account is unavailable");
+      throw new UnauthorizedException("HFLive Auth 账号不可用");
     }
     return {
       issuer: HFLIVE_ISSUER,
@@ -874,7 +872,7 @@ export class HfliveAuthService {
 
   private requireEnabled() {
     if (!this.config.enabled)
-      throw new BadRequestException("HFLive login is disabled");
+      throw new BadRequestException("HFLive Auth 登录未启用");
     this.requireConfigured();
   }
 

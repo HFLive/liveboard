@@ -51,7 +51,7 @@ Deployment URL。Directory client 至少需要 `directory:user:status` 和
 - `POST /internal/hflive/events`：对原始 JSON body 验证时间窗和 HMAC，按事件 ID
   持久化幂等。
 
-OIDC 成功后仍只签发 LiveBoard 自己的 7 天 HMAC Cookie。HFLive token、授权码、
+OIDC 成功后仍只签发 LiveBoard 自己的 7 天 HMAC Cookie。HFLive Auth token、授权码、
 PKCE verifier、Cookie 和完整 claims 不写入数据库、审计 metadata 或日志。
 
 ## Phase 7 前端行为
@@ -60,22 +60,22 @@ PKCE verifier、Cookie 和完整 claims 不写入数据库、审计 metadata 或
 `NEXT_PUBLIC_*` 推测认证能力：
 
 - `local`：只显示本地账号密码；
-- `hybrid`：HFLive 统一身份为主入口，同时保留本地账号密码；
-- `hflive_oidc`：普通入口只显示 HFLive；只有服务端明确返回 `breakglass=true`
+- `hybrid`：HFLive Auth 为主入口，同时保留本地账号密码；
+- `hflive_oidc`：普通入口只显示 HFLive Auth；只有服务端明确返回 `breakglass=true`
   时，才在折叠区域显示最高管理员紧急入口。
 
 OIDC 回调遇到用户名或邮箱冲突时，API 将浏览器重定向到 `/login/link`。单次
 冲突票据只放在 URL fragment，页面读入内存后立即从地址栏移除；用户必须输入旧
-LiveBoard 普通成员账号和密码证明归属，且旧 LiveBoard 用户名规范化后必须与 HFLive
+LiveBoard 普通成员账号和密码证明归属，且旧 LiveBoard 用户名规范化后必须与 HFLive Auth
 `preferred_username` 一致。该约束同时应用于旧密码自助绑定、已有本地会话绑定和管理员
 受控绑定，不能从 API 绕过。密码错误或票据过期后不能重放，必须重新
-发起 OIDC。管理员账号不允许走自助合并，系统角色也不会由 HFLive 自动授予。其他
+发起 OIDC。管理员账号不允许走自助合并，系统角色也不会由 HFLive Auth 自动授予。其他
 OIDC 回调失败统一返回登录页的可重试错误状态，不向浏览器展示协议内部错误。
 
 个人设置通过 `GET /auth/hflive/account` 获取当前用户自己的安全身份摘要；响应不含
 `sub`、token 或 client secret，并使用 `private, no-store`。已关联且外部认证启用时：
 
-- 用户名、邮箱、显示名和头像由 HFLive 管理；显示名与头像在 LiveBoard 只读，入口
+- 用户名、邮箱、显示名和头像由 HFLive Auth 管理；显示名与头像在 LiveBoard 只读，入口
   跳转到带受控 `returnTo` 的 `https://auth.hsfz.live/profile`；头像保存成功后在同一标签页返回 LiveBoard 资料页；
 - 当前用户和公开个人主页查询都加载并优先使用 `ExternalIdentity.picture`；头像变更事件经 Directory 刷新后，`/app/users/:id` 不会回退到旧本地头像；
 - bio、Banner、徽章、打开方式、课堂角色、权限和配额继续由 LiveBoard 管理；
@@ -118,8 +118,8 @@ JIT 用户仍有有效的随机 Argon2 哈希，但 `localPasswordEnabled=false`
 
 ## 状态语义
 
-本地 `User.status` 与 HFLive 全局状态做 AND 判断。已关联会话每 15 分钟刷新一次
+本地 `User.status` 与 HFLive Auth 全局状态做 AND 判断。已关联会话每 15 分钟刷新一次
 Directory 状态；短租约合并并发刷新。最近一次明确 ACTIVE 不超过 60 分钟时，暂时的
 网络/5xx/服务凭据故障可宽限，之后返回 503。DISABLED、Directory 404 或签名
-DISABLED webhook 会递增 `sessionVersion` 并撤销旧 Cookie；HFLive 恢复 ACTIVE
+DISABLED webhook 会递增 `sessionVersion` 并撤销旧 Cookie；HFLive Auth 恢复 ACTIVE
 永远不会覆盖 LiveBoard 管理员设置的本地 disabled。

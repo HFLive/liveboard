@@ -58,7 +58,7 @@ export function AccountLinkForm() {
       <div className="login-link-notice">
         <strong>需要旧 LiveBoard 账号密码</strong>
         <p>
-          只有普通成员可以自助关联，且旧 LiveBoard 用户名必须与 HFLive
+          只有普通成员可以自助关联，且旧 LiveBoard 用户名必须与 HFLive Auth
           用户名一致。管理员账号请联系最高管理员处理，系统权限不会由统一身份自动授予。
         </p>
       </div>
