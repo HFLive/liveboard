@@ -5,7 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "dotenv -e ../../.env -e ../../.env.local -- nest start --watch",
-    "build": "nest build",
+    "build": "nest build && node scripts/verify-hflive-oidc-bundle.cjs",
     "start": "node dist/main.js",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "jest --coverage",

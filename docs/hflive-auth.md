@@ -95,6 +95,11 @@ Phase 7 还必须运行 Web/API 定向测试、仓库级 `pnpm typecheck`、`pnp
 浏览器最低覆盖 1280×720 与 390×844、键盘焦点、错误/过期状态、16px 移动输入字号
 和页面横向溢出。
 
+API 构建必须在产物中保留字面量 `import("openid-client")`。该包仅提供 ESM，
+因此 API 使用 Node16 module emit，在继续输出 CommonJS 的同时保留原生动态导入，
+让 Vercel 的依赖追踪把它收进 Serverless 函数。`pnpm --filter @liveboard/api build`
+会执行产物检查；不得改回 `new Function`、`eval` 或编译为 `require()`。
+
 ## 发布、迁移与回滚
 
 1. 先备份 PostgreSQL，并检查 `lower(trim(username))` 是否重复。

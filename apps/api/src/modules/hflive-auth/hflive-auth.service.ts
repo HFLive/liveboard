@@ -34,9 +34,11 @@ import {
 const STATUS_FRESH_MS = 15 * 60_000;
 const STATUS_GRACE_MS = 60 * 60_000;
 const AUDIT_RETENTION_MS = 180 * 24 * 60 * 60_000;
-const dynamicImport = new Function("specifier", "return import(specifier)") as (
-  specifier: string,
-) => Promise<typeof import("openid-client")>;
+
+// Keep this as a literal native import. openid-client is ESM-only, while the
+// API emits CommonJS; Node16 module emit preserves import() and Vercel can then
+// trace the package into the Serverless function bundle.
+const importOpenidClient = () => import("openid-client");
 
 type VerifiedProfile = ConflictTicket;
 
@@ -44,7 +46,9 @@ type VerifiedProfile = ConflictTicket;
 export class HfliveAuthService {
   private readonly logger = new Logger(HfliveAuthService.name);
   private oidcConfigurationPromise?: Promise<
-    import("openid-client").Configuration
+    import("openid-client", {
+      with: { "resolution-mode": "import" },
+    }).Configuration
   >;
 
   constructor(
@@ -126,7 +130,7 @@ export class HfliveAuthService {
     userId?: string;
   }) {
     this.requireEnabled();
-    const oidc = await dynamicImport("openid-client");
+    const oidc = await importOpenidClient();
     const configuration = await this.getOidcConfiguration();
     const state = oidc.randomState();
     const nonce = oidc.randomNonce();
@@ -162,7 +166,7 @@ export class HfliveAuthService {
   async complete(currentUrl: URL, state: string) {
     this.requireEnabled();
     const transaction = await this.transactions.consumeOidc(state);
-    const oidc = await dynamicImport("openid-client");
+    const oidc = await importOpenidClient();
     const configuration = await this.getOidcConfiguration();
     let tokens: Awaited<ReturnType<typeof oidc.authorizationCodeGrant>>;
     try {
@@ -823,7 +827,7 @@ export class HfliveAuthService {
 
   private async getOidcConfiguration() {
     this.requireConfigured();
-    this.oidcConfigurationPromise ??= dynamicImport("openid-client").then(
+    this.oidcConfigurationPromise ??= importOpenidClient().then(
       async (oidc) => {
         const configuration = await oidc.discovery(
           new URL(HFLIVE_ISSUER),
