@@ -43,7 +43,8 @@ describe("ProfileClient HFLive ownership", () => {
       hfliveOidc: true,
       breakglass: false,
       issuer: "https://auth.hsfz.live",
-      profileUrl: "https://auth.hsfz.live/profile",
+      profileUrl:
+        "https://auth.hsfz.live/profile?returnTo=https%3A%2F%2Fboard.hsfz.live%2Fapp%2Fprofile",
       linked: true,
       authoritative: true,
       localPasswordEnabled: true,
@@ -69,7 +70,10 @@ describe("ProfileClient HFLive ownership", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getAllByRole("link", { name: /HFLive|统一资料/ })[0],
-    ).toHaveAttribute("href", "https://auth.hsfz.live/profile");
+    ).toHaveAttribute(
+      "href",
+      "https://auth.hsfz.live/profile?returnTo=https%3A%2F%2Fboard.hsfz.live%2Fapp%2Fprofile",
+    );
     expect(
       container.querySelector(
         'img[src="https://auth.hsfz.live/api/profile/avatar/id?v=2"]',

@@ -66,7 +66,9 @@ PKCE verifier、Cookie 和完整 claims 不写入数据库、审计 metadata 或
 
 OIDC 回调遇到用户名或邮箱冲突时，API 将浏览器重定向到 `/login/link`。单次
 冲突票据只放在 URL fragment，页面读入内存后立即从地址栏移除；用户必须输入旧
-LiveBoard 普通成员账号和密码证明归属。密码错误或票据过期后不能重放，必须重新
+LiveBoard 普通成员账号和密码证明归属，且旧 LiveBoard 用户名规范化后必须与 HFLive
+`preferred_username` 一致。该约束同时应用于旧密码自助绑定、已有本地会话绑定和管理员
+受控绑定，不能从 API 绕过。密码错误或票据过期后不能重放，必须重新
 发起 OIDC。管理员账号不允许走自助合并，系统角色也不会由 HFLive 自动授予。其他
 OIDC 回调失败统一返回登录页的可重试错误状态，不向浏览器展示协议内部错误。
 
@@ -74,8 +76,8 @@ OIDC 回调失败统一返回登录页的可重试错误状态，不向浏览器
 `sub`、token 或 client secret，并使用 `private, no-store`。已关联且外部认证启用时：
 
 - 用户名、邮箱、显示名和头像由 HFLive 管理；显示名与头像在 LiveBoard 只读，入口
-  跳转到 `https://auth.hsfz.live/profile`；
-- 当前用户和公开个人主页优先使用 `ExternalIdentity.picture`；
+  跳转到带受控 `returnTo` 的 `https://auth.hsfz.live/profile`；头像保存成功后在同一标签页返回 LiveBoard 资料页；
+- 当前用户和公开个人主页查询都加载并优先使用 `ExternalIdentity.picture`；头像变更事件经 Directory 刷新后，`/app/users/:id` 不会回退到旧本地头像；
 - bio、Banner、徽章、打开方式、课堂角色、权限和配额继续由 LiveBoard 管理；
 - 服务端同时拒绝绕过界面修改统一显示名或上传本地头像；
 - 本地旧账号可从个人设置输入当前密码，发起一次带 `LOCAL_SESSION` intent 的显式

@@ -59,6 +59,18 @@ export class HfliveAuthConfig {
     return this.mode !== "local";
   }
 
+  get profileUrl() {
+    if (!this.enabled || !this.redirectUri) return HFLIVE_PROFILE_URL;
+    try {
+      const applicationOrigin = new URL(this.redirectUri).origin;
+      const target = new URL(HFLIVE_PROFILE_URL);
+      target.searchParams.set("returnTo", `${applicationOrigin}/app/profile`);
+      return target.toString();
+    } catch {
+      return HFLIVE_PROFILE_URL;
+    }
+  }
+
   publicCapabilities() {
     return {
       mode: this.mode,
@@ -66,7 +78,7 @@ export class HfliveAuthConfig {
       hfliveOidc: this.enabled,
       breakglass: this.mode === "hflive_oidc" && this.breakglassEnabled,
       issuer: HFLIVE_ISSUER,
-      profileUrl: HFLIVE_PROFILE_URL,
+      profileUrl: this.profileUrl,
     };
   }
 

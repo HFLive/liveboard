@@ -174,6 +174,11 @@ export class AuthService {
     const target = await this.prisma.user.findUnique({
       where: { id: targetUserId },
       include: {
+        externalIdentities: {
+          where: { issuer: "https://auth.hsfz.live" },
+          select: { picture: true },
+          take: 1,
+        },
         badgeAssignments: {
           where: { equippedOrder: { not: null } },
           include: { badge: true },

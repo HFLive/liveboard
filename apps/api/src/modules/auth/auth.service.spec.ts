@@ -244,6 +244,52 @@ describe("AuthService", () => {
     });
   });
 
+  it("uses the refreshed HFLive picture on another user's public profile", async () => {
+    Object.defineProperty(hfliveConfig, "enabled", {
+      configurable: true,
+      value: true,
+    });
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: "viewer-1", status: "active" })
+      .mockResolvedValueOnce({
+        id: "user-1",
+        username: "teacher",
+        displayName: "统一姓名",
+        bio: null,
+        bannerUpdatedAt: null,
+        avatarUpdatedAt: null,
+        openContentInCurrentTab: false,
+        systemRole: "member",
+        status: "active",
+        externalIdentities: [
+          { picture: "https://auth.hsfz.live/api/profile/avatar/id?v=3" },
+        ],
+        badgeAssignments: [],
+      });
+
+    await expect(
+      service.getUserProfile("viewer-1", "user-1"),
+    ).resolves.toMatchObject({
+      avatarUrl: "https://auth.hsfz.live/api/profile/avatar/id?v=3",
+    });
+    expect(prisma.user.findUnique).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          externalIdentities: {
+            where: { issuer: "https://auth.hsfz.live" },
+            select: { picture: true },
+            take: 1,
+          },
+        }),
+      }),
+    );
+
+    Object.defineProperty(hfliveConfig, "enabled", {
+      configurable: true,
+      value: false,
+    });
+  });
+
   it("aggregates contribution days by category and excludes anonymous forum posts", async () => {
     prisma.user.findUnique
       .mockResolvedValueOnce({ id: "viewer-1", status: "active" })

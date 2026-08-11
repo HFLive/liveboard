@@ -35,6 +35,17 @@ const STATUS_FRESH_MS = 15 * 60_000;
 const STATUS_GRACE_MS = 60 * 60_000;
 const AUDIT_RETENTION_MS = 180 * 24 * 60 * 60_000;
 
+class LinkUsernameMismatchError extends Error {}
+
+export function usernamesMatchForLink(
+  localUsername: string,
+  hfliveUsername: string,
+) {
+  return (
+    localUsername.trim().toLowerCase() === hfliveUsername.trim().toLowerCase()
+  );
+}
+
 // Keep this as a literal native import. openid-client is ESM-only, while the
 // API emits CommonJS; Node16 module emit preserves import() and Vercel can then
 // trace the package into the Serverless function bundle.
@@ -739,6 +750,9 @@ export class HfliveAuthService {
         const user = await tx.user.findUnique({ where: { id: userId } });
         if (!user || user.status !== "active")
           throw new UnauthorizedException("Account unavailable");
+        if (!usernamesMatchForLink(user.username, profile.preferredUsername)) {
+          throw new LinkUsernameMismatchError();
+        }
         const existing = await tx.externalIdentity.findFirst({
           where: {
             OR: [
@@ -787,6 +801,16 @@ export class HfliveAuthService {
         return { user: synced, sessionVersion: user.sessionVersion };
       });
     } catch (caught) {
+      if (caught instanceof LinkUsernameMismatchError) {
+        await this.audit("oidc.link", "FAILURE", {
+          actorUserId: input.linkedByUserId,
+          subjectUserId: userId,
+          errorCode: "USERNAME_MISMATCH",
+          profile,
+          metadata: { method: input.method },
+        });
+        throw new ConflictException("LiveBoard 用户名必须与 HFLive 用户名一致");
+      }
       if (
         caught instanceof Prisma.PrismaClientKnownRequestError &&
         caught.code === "P2002"

@@ -464,12 +464,7 @@ export function ProfileClient() {
                   type="file"
                 />
                 {account?.authoritative ? (
-                  <a
-                    className="button secondary"
-                    href={account.profileUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
+                  <a className="button secondary" href={account.profileUrl}>
                     <ExternalLink aria-hidden="true" className="button-icon" />
                     前往 HFLive 修改
                   </a>
@@ -561,12 +556,7 @@ export function ProfileClient() {
                     统一资料存在命名冲突，身份关联保持有效；请联系管理员处理。
                   </p>
                 ) : null}
-                <a
-                  className="button secondary"
-                  href={account.profileUrl}
-                  rel="noreferrer"
-                  target="_blank"
-                >
+                <a className="button secondary" href={account.profileUrl}>
                   <ExternalLink aria-hidden="true" className="button-icon" />
                   管理统一资料
                 </a>

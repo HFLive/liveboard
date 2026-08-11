@@ -9,7 +9,10 @@ import {
   type HfliveDirectoryService,
 } from "./directory.service";
 import type { HfliveAuthConfig } from "./hflive-auth.config";
-import { HfliveAuthService } from "./hflive-auth.service";
+import {
+  HfliveAuthService,
+  usernamesMatchForLink,
+} from "./hflive-auth.service";
 import type { OidcTransactionService } from "./oidc-transaction.service";
 
 describe("HfliveAuthService webhook and status convergence", () => {
@@ -195,5 +198,15 @@ describe("HfliveAuthService webhook and status convergence", () => {
     await expect(service.checkExternalSession("user-1")).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
+  });
+});
+
+describe("HFLive legacy account username matching", () => {
+  it("accepts the same normalized username", () => {
+    expect(usernamesMatchForLink(" Teacher_01 ", "teacher_01")).toBe(true);
+  });
+
+  it("rejects a different HFLive username", () => {
+    expect(usernamesMatchForLink("teacher_01", "teacher_02")).toBe(false);
   });
 });

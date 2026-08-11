@@ -34,6 +34,7 @@ suite("Phase 6 HFLive Auth persistence", () => {
     directory as unknown as HfliveDirectoryService,
   );
   let userId: string | undefined;
+  let mismatchUserId: string | undefined;
   let redisService: RedisService | undefined;
 
   beforeAll(() => {
@@ -47,6 +48,12 @@ suite("Phase 6 HFLive Auth persistence", () => {
         where: { subjectUserId: userId },
       });
       await database.user.deleteMany({ where: { id: userId } });
+    }
+    if (mismatchUserId) {
+      await database.authenticationAuditEvent.deleteMany({
+        where: { subjectUserId: mismatchUserId },
+      });
+      await database.user.deleteMany({ where: { id: mismatchUserId } });
     }
     await redisService?.onModuleDestroy();
     await database.$disconnect();
@@ -88,6 +95,48 @@ suite("Phase 6 HFLive Auth persistence", () => {
       systemRole: "member",
       localPasswordEnabled: false,
     });
+  });
+
+  it("rejects linking an old user whose username differs from HFLive", async () => {
+    const localUser = await database.user.create({
+      data: {
+        username: `old_${runId.replaceAll("-", "").slice(0, 16)}`,
+        displayName: "Old account",
+        passwordHash: "not-used-by-this-test",
+        systemRole: "member",
+        status: "active",
+      },
+    });
+    mismatchUserId = localUser.id;
+    const profile = {
+      issuer: "https://auth.hsfz.live",
+      subject: `mismatch-${subject}`,
+      preferredUsername: `new_${runId.replaceAll("-", "").slice(0, 16)}`,
+      email: null,
+      emailVerified: false,
+      displayName: "HFLive account",
+      picture: null,
+      directoryUpdatedAt: new Date().toISOString(),
+    };
+    const linkIdentity = (
+      service as unknown as {
+        linkIdentity(
+          targetUserId: string,
+          value: typeof profile,
+          input: { method: "ADMIN"; linkedByUserId: string },
+        ): Promise<unknown>;
+      }
+    ).linkIdentity.bind(service);
+
+    await expect(
+      linkIdentity(localUser.id, profile, {
+        method: "ADMIN",
+        linkedByUserId: localUser.id,
+      }),
+    ).rejects.toThrow("LiveBoard 用户名必须与 HFLive 用户名一致");
+    await expect(
+      database.externalIdentity.count({ where: { userId: localUser.id } }),
+    ).resolves.toBe(0);
   });
 
   it("rolls back the duplicate webhook transaction so sessionVersion increments once", async () => {
