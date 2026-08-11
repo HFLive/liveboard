@@ -44,12 +44,23 @@ Deployment URL。Directory client 至少需要 `directory:user:status` 和
 - `POST /auth/hflive/link/start`：已有本地会话在近期密码确认后发起本人关联。
 - `POST /admin/users/:id/hflive-link`：管理员受控关联；高权限目标要求
   `super_admin`。
-- `GET /admin/users/:id/hflive-identity`：返回不含 subject、token 或邮箱的同步状态，
-  供管理端处理资料冲突和故障。
+- `GET /admin/users/:id/hflive-identity`：返回不含 subject、token 或
+  `emailNormalized` 的同步状态与资料快照（含统一用户名/邮箱/显示名），供管理端
+  处理资料冲突和故障。
+- `POST /admin/users/:id/hflive-sync`：管理员立即回拉 Directory 权威资料并应用，
+  返回刷新后的身份状态；目标未绑定返回 400，Directory 瞬态故障返回 503。
+- `PATCH /admin/users/:id`：已绑定用户拒绝修改显示名/重置密码（与个人设置一致）；
+  `username` 字段仅 `super_admin` 可改（共享命名规则 + 大小写不敏感判重，
+  成功后递增 sessionVersion 并写审计）。
+- `POST /admin/users/bulk-status`：`{ ids, status }` 批量启停，ids 上限 200；
+  逐条套用与单条更新相同的权限规则（不能操作自己、admin 不能操作非 member、
+  不能停用最后一位正常最高管理员），返回 `{ updated, skipped }`。
 - `POST /auth/breakglass/login`：仅 `hflive_oidc` 且显式开启时接受本地
   `super_admin`。
 - `POST /internal/hflive/events`：对原始 JSON body 验证时间窗和 HMAC，按事件 ID
-  持久化幂等。
+  持久化幂等。`AUTH_MODE=local` 时直接 204 丢弃（外部身份不权威，不产生无效重试）。
+- `GET /internal/cron/identity-sync`、`GET /internal/cron/daily`：每日对账入口，
+  见「对账与投递语义」。
 
 OIDC 成功后仍只签发 LiveBoard 自己的 7 天 HMAC Cookie。HFLive Auth token、授权码、
 PKCE verifier、Cookie 和完整 claims 不写入数据库、审计 metadata 或日志。
@@ -84,7 +95,34 @@ OIDC 回调失败统一返回登录页的可重试错误状态，不向浏览器
   关联；回调成功后仍使用 LiveBoard 本地会话。
 
 切回 `AUTH_MODE=local` 时，旧本地显示名和头像重新生效，统一身份资料不再作为权威
-来源；不会删除映射或 JIT 用户。
+来源；不会删除映射或 JIT 用户。已绑定用户的头像在外部认证启用时不回退本地历史头像：
+HFLive 无头像时显示首字母占位。
+
+## 对账与投递语义
+
+事件只是提示（hint），LiveBoard 必须回拉 Directory 取权威资料。同步有三层自愈路径：
+
+1. **webhook 即时投递**：`processWebhook` 先做事务前校准（ACTIVE 状态事件
+   `getStatus`、资料事件 `loadVerifiedProfile`）。校准失败返回 `retryable`
+   → 控制器 503 → live_sso outbox 指数退避重试（10 次封顶进死信，管理端可观测）。
+   瞬态失败**不写事件行、不更新 `lastStatusEventAt` / `syncState`**，否则重试会被
+   eventId 幂等去重或状态事件乱序保护挡掉。终态（applied / duplicate /
+   UNKNOWN_SUBJECT / STALE_EVENT / HFLIVE_DISABLED）一律 204。
+2. **请求驱动周期刷新**：已关联会话每 15 分钟用 `getProfile` 一次往返同时拿到
+   状态与完整资料；ACTIVE 时顺带回写资料（displayName 总是更新，username/email
+   仅在无大小写不敏感冲突时更新，冲突标 `PROFILE_CONFLICT`）。即使 webhook 完全
+   丢失，活跃用户的资料也会在 15 分钟内自愈。短租约合并并发刷新；最近一次明确
+   ACTIVE 不超过 60 分钟时，暂时故障可宽限，之后返回 503。
+3. **每日兜底对账 cron**：`GET /internal/cron/identity-sync` 清扫
+   `syncState != CURRENT` 或超过 7 天未同步资料的身份，单次上限 30 条，单条失败
+   跳过继续；`GET /internal/cron/daily` 顺序执行「存储清理 + 身份对账」，两个
+   子任务各自持 Redis 锁。二者都要求 `Authorization: Bearer ${CRON_SECRET}`
+   （恒定时间比较）。`apps/api/vercel.json` 的 cron 指向 `/internal/cron/daily`
+   （`3 4 * * *`），旧 `/internal/cron/storage-cleanup` 端点保留供自托管/回滚兼容。
+
+Directory client_credentials token 缓存在 Redis（TTL = `expires_in - 60s`），进程内
+单飞合并并发请求；Redis 不可用时回退为每次获取。Directory 请求收到 401/403 时清除
+缓存并用新 token 重试一次（应对上游轮换）。
 
 ## 本地验证
 
@@ -119,7 +157,13 @@ JIT 用户仍有有效的随机 Argon2 哈希，但 `localPasswordEnabled=false`
 ## 状态语义
 
 本地 `User.status` 与 HFLive Auth 全局状态做 AND 判断。已关联会话每 15 分钟刷新一次
-Directory 状态；短租约合并并发刷新。最近一次明确 ACTIVE 不超过 60 分钟时，暂时的
-网络/5xx/服务凭据故障可宽限，之后返回 503。DISABLED、Directory 404 或签名
+Directory 状态与资料（`getProfile` 单次往返）。最近一次明确 ACTIVE 不超过 60 分钟时，
+暂时的网络/5xx/服务凭据故障可宽限，之后返回 503。DISABLED、Directory 404 或签名
 DISABLED webhook 会递增 `sessionVersion` 并撤销旧 Cookie；HFLive Auth 恢复 ACTIVE
 永远不会覆盖 LiveBoard 管理员设置的本地 disabled。
+
+管理端成员列表携带 `hflive` 身份摘要（绑定状态、syncState、externalStatus、
+linkMethod、最近同步时间），支持「统一身份」列与筛选；编辑弹窗按字段所有权分区：
+统一字段只读并链接到 `profileUrl`，管理员只操作角色/状态/AI 限额/标签，支持
+「立即同步」与 `super_admin` 改名。`AUTH_MODE=hflive_oidc` 时隐藏「创建成员」与
+「批量导入」入口（JIT 成为唯一创建路径）。

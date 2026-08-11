@@ -666,6 +666,7 @@ export function updateUser(
   userId: string,
   input: {
     displayName?: string;
+    username?: string;
     systemRole?: SystemRole;
     status?: UserSummary["status"];
     password?: string;
@@ -677,6 +678,48 @@ export function updateUser(
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+export interface AdminHfliveIdentityDetail {
+  issuer: string;
+  preferredUsername: string;
+  email: string | null;
+  displayName: string;
+  picture: string | null;
+  externalStatus: "ACTIVE" | "DISABLED" | "UNKNOWN";
+  syncState: "CURRENT" | "PROFILE_CONFLICT" | "ERROR";
+  syncErrorCode: string | null;
+  linkMethod: "JIT" | "LOCAL_PASSWORD" | "LOCAL_SESSION" | "ADMIN";
+  lastStatusConfirmedAt: string | null;
+  lastProfileSyncedAt: string | null;
+  directoryUpdatedAt: string | null;
+}
+
+export function getAdminHfliveIdentity(userId: string) {
+  return request<{
+    linked: boolean;
+    identity: AdminHfliveIdentityDetail | null;
+  }>(`/admin/users/${userId}/hflive-identity`);
+}
+
+export function hfliveSyncUser(userId: string) {
+  return request<{
+    linked: boolean;
+    identity: AdminHfliveIdentityDetail | null;
+  }>(`/admin/users/${userId}/hflive-sync`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function bulkUpdateUserStatus(
+  ids: string[],
+  status: UserSummary["status"],
+) {
+  return request<{ result: { updated: number; skipped: number } }>(
+    "/admin/users/bulk-status",
+    { method: "POST", body: JSON.stringify({ ids, status }) },
+  );
 }
 
 export interface UserStorageSummary {

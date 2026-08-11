@@ -3,17 +3,34 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import type {
   AdminUserSummary,
+  AuthMode,
   SystemRole,
   UserTagSummary,
   UserSummary,
 } from "@liveboard/shared";
-import { FileUp, Pencil, Plus, Search, Tags, Trash2, X } from "lucide-react";
 import {
+  ExternalLink,
+  FileUp,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Tags,
+  Trash2,
+  X,
+} from "lucide-react";
+import {
+  bulkUpdateUserStatus,
   createUserTag,
   createUser,
   deleteUserTag,
+  getAdminHfliveIdentity,
+  getAuthCapabilities,
   getMe,
+  hfliveSyncUser,
   importUsers as importUsersApi,
+  type AdminHfliveIdentityDetail,
   type ImportUsersResult,
   listUsers,
   listUserTags,
@@ -21,13 +38,23 @@ import {
   updateUserTag,
   updateUser,
 } from "@/lib/api";
-import { roleLabel, userStatusLabel } from "@/lib/labels";
+import {
+  hfliveLinkMethodLabel,
+  hfliveSyncStateLabel,
+  roleLabel,
+  userStatusLabel,
+} from "@/lib/labels";
 import { UserProfileLink } from "@/components/UserProfileLink";
 import { AutoTextarea } from "@/components/AutoTextarea";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import {
+  FeedbackNotice,
+  useFeedbackNotice,
+} from "@/components/system/FeedbackNotice";
 import { TableSkeletonRows } from "@/components/system/ProgressiveLoading";
 
 type UserEditDraft = {
+  username: string;
   displayName: string;
   systemRole: SystemRole;
   status: UserSummary["status"];
@@ -191,12 +218,15 @@ export function UserManagementClient() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
   const [newTagName, setNewTagName] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [errorNotice, setError] = useFeedbackNotice();
+  const [messageNotice, setMessage] = useFeedbackNotice();
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | SystemRole>("all");
   const [statusFilter, setStatusFilter] = useState<
     "all" | UserSummary["status"]
+  >("all");
+  const [identityFilter, setIdentityFilter] = useState<
+    "all" | "linked" | "unlinked" | "attention"
   >("all");
   const [tagFilter, setTagFilter] = useState("all");
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(
@@ -204,22 +234,47 @@ export function UserManagementClient() {
   );
   const [batchUpdating, setBatchUpdating] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [authMode, setAuthMode] = useState<AuthMode>("local");
+  const [authProfileUrl, setAuthProfileUrl] = useState("");
+  const [editingIdentity, setEditingIdentity] =
+    useState<AdminHfliveIdentityDetail | null>(null);
+  const [identitySyncing, setIdentitySyncing] = useState(false);
+  const [identityLoaded, setIdentityLoaded] = useState(false);
   const parsedImport = useMemo(() => parseUserImportCsv(csvText), [csvText]);
   const editingUser = users.find((user) => user.id === editingUserId) ?? null;
   const actorIsSuperAdmin = actor?.systemRole === "super_admin";
+  const hfliveEnabled = authMode !== "local";
+  const ssoOnly = authMode === "hflive_oidc";
+  const needsIdentityAttention = (user: AdminUserSummary) =>
+    user.hflive?.linked &&
+    (user.hflive.externalStatus === "DISABLED" ||
+      user.hflive.syncState === "ERROR" ||
+      user.hflive.syncState === "PROFILE_CONFLICT");
   const filteredUsers = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return users.filter(
       (user) =>
         (roleFilter === "all" || user.systemRole === roleFilter) &&
         (statusFilter === "all" || user.status === statusFilter) &&
+        (identityFilter === "all" ||
+          (identityFilter === "linked" && user.hflive?.linked) ||
+          (identityFilter === "unlinked" && !user.hflive?.linked) ||
+          (identityFilter === "attention" && needsIdentityAttention(user))) &&
         (tagFilter === "all" ||
           user.tags?.some((tag) => tag.id === tagFilter)) &&
         (!normalizedQuery ||
           user.displayName.toLowerCase().includes(normalizedQuery) ||
           user.username.toLowerCase().includes(normalizedQuery)),
     );
-  }, [query, roleFilter, statusFilter, tagFilter, users]);
+  }, [
+    query,
+    roleFilter,
+    statusFilter,
+    identityFilter,
+    tagFilter,
+    users,
+    authMode,
+  ]);
 
   async function loadUsers() {
     const [userResult, tagResult] = await Promise.all([
@@ -239,6 +294,12 @@ export function UserManagementClient() {
     getMe()
       .then((result) => setActor(result.user))
       .catch(() => setActor(null));
+    getAuthCapabilities()
+      .then((result) => {
+        setAuthMode(result.mode);
+        setAuthProfileUrl(result.profileUrl);
+      })
+      .catch(() => setAuthMode("local"));
   }, []);
 
   async function onCreateUser(event: FormEvent<HTMLFormElement>) {
@@ -279,6 +340,8 @@ export function UserManagementClient() {
       setImportResult(null);
       setError(null);
       setMessage(null);
+      setError(null);
+      setMessage(null);
     };
     reader.readAsText(file);
     event.target.value = "";
@@ -315,6 +378,7 @@ export function UserManagementClient() {
     setMessage(null);
     setEditingUserId(user.id);
     setEditDraft({
+      username: user.username,
       displayName: user.displayName,
       systemRole: user.systemRole,
       status: user.status,
@@ -322,11 +386,41 @@ export function UserManagementClient() {
       aiCallLimit: user.aiCallLimit === null ? "" : String(user.aiCallLimit),
       tagIds: user.tags?.map((tag) => tag.id) ?? [],
     });
+    setEditingIdentity(null);
+    setIdentityLoaded(false);
+    if (hfliveEnabled && user.hflive?.linked) {
+      getAdminHfliveIdentity(user.id)
+        .then((result) => {
+          setEditingIdentity(result.identity);
+        })
+        .catch(() => setEditingIdentity(null))
+        .finally(() => setIdentityLoaded(true));
+    } else {
+      setIdentityLoaded(true);
+    }
   }
 
   function cancelEdit() {
     setEditingUserId(null);
     setEditDraft(null);
+    setEditingIdentity(null);
+  }
+
+  async function onSyncIdentity(userId: string) {
+    if (identitySyncing) return;
+    setIdentitySyncing(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await hfliveSyncUser(userId);
+      setEditingIdentity(result.identity);
+      setMessage("统一身份资料已同步");
+      await loadUsers();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "同步统一身份失败");
+    } finally {
+      setIdentitySyncing(false);
+    }
   }
 
   async function onUpdateUser(userId: string) {
@@ -354,13 +448,21 @@ export function UserManagementClient() {
     }
 
     const currentAiCallLimit = editingUser?.aiCallLimit ?? null;
+    const linked = Boolean(editingUser?.hflive?.linked);
 
     try {
       await updateUser(userId, {
-        displayName: editDraft.displayName,
+        // 已绑定用户显示名/密码由 HFLive Auth 权威管理，服务端会拒绝；
+        // 前端直接不提交这些字段（双保险）。
+        ...(!linked ? { displayName: editDraft.displayName } : {}),
+        ...(actorIsSuperAdmin && editDraft.username !== editingUser?.username
+          ? { username: editDraft.username }
+          : {}),
         systemRole: editDraft.systemRole,
         status: editDraft.status,
-        password: editDraft.password || undefined,
+        ...(!linked && editDraft.password
+          ? { password: editDraft.password }
+          : {}),
         ...(aiCallLimit !== currentAiCallLimit ? { aiCallLimit } : {}),
       });
       await setUserTags(userId, editDraft.tagIds);
@@ -376,6 +478,7 @@ export function UserManagementClient() {
     event.preventDefault();
     if (!newTagName.trim()) return;
     setError(null);
+    setMessage(null);
     try {
       await createUserTag(newTagName);
       setNewTagName("");
@@ -430,18 +533,16 @@ export function UserManagementClient() {
 
     setBatchUpdating(true);
     setError(null);
+    setMessage(null);
     try {
-      await Promise.all(
-        targets.map((user) =>
-          updateUser(user.id, {
-            displayName: user.displayName,
-            systemRole: user.systemRole,
-            status,
-          }),
-        ),
+      const { result } = await bulkUpdateUserStatus(
+        targets.map((user) => user.id),
+        status,
       );
       setMessage(
-        `已${status === "active" ? "启用" : "停用"} ${targets.length} 位成员`,
+        `已${status === "active" ? "启用" : "停用"} ${result.updated} 位成员${
+          result.skipped > 0 ? `，跳过 ${result.skipped} 位` : ""
+        }`,
       );
       setSelectedUserIds(new Set());
       await loadUsers();
@@ -460,8 +561,8 @@ export function UserManagementClient() {
         title="成员管理"
       />
 
-      {error ? <p className="error-text">{error}</p> : null}
-      {message ? <p className="success-text">{message}</p> : null}
+      <FeedbackNotice notice={errorNotice} tone="error" />
+      <FeedbackNotice notice={messageNotice} tone="success" />
 
       <section className="workbench admin-users-layout">
         <div className="workbench-main">
@@ -487,22 +588,26 @@ export function UserManagementClient() {
                 <Tags aria-hidden="true" className="button-icon" />
                 标签管理
               </button>
-              <button
-                className="button secondary"
-                onClick={() => setShowImportModal(true)}
-                type="button"
-              >
-                <FileUp aria-hidden="true" className="button-icon" />
-                批量导入
-              </button>
-              <button
-                className="button"
-                onClick={() => setShowCreateUserModal(true)}
-                type="button"
-              >
-                <Plus aria-hidden="true" className="button-icon" />
-                创建成员
-              </button>
+              {!ssoOnly ? (
+                <>
+                  <button
+                    className="button secondary"
+                    onClick={() => setShowImportModal(true)}
+                    type="button"
+                  >
+                    <FileUp aria-hidden="true" className="button-icon" />
+                    批量导入
+                  </button>
+                  <button
+                    className="button"
+                    onClick={() => setShowCreateUserModal(true)}
+                    type="button"
+                  >
+                    <Plus aria-hidden="true" className="button-icon" />
+                    创建成员
+                  </button>
+                </>
+              ) : null}
             </div>
           </div>
           <div className="admin-user-filters">
@@ -554,6 +659,24 @@ export function UserManagementClient() {
               <option value="active">正常</option>
               <option value="disabled">已停用</option>
             </select>
+            {hfliveEnabled ? (
+              <select
+                aria-label="按统一身份筛选"
+                className="select compact-select"
+                onChange={(event) =>
+                  setIdentityFilter(
+                    event.target.value as
+                      "all" | "linked" | "unlinked" | "attention",
+                  )
+                }
+                value={identityFilter}
+              >
+                <option value="all">全部身份</option>
+                <option value="linked">已绑定</option>
+                <option value="unlinked">未绑定</option>
+                <option value="attention">需处理</option>
+              </select>
+            ) : null}
           </div>
           {selectedUserIds.size > 0 ? (
             <div className="admin-user-batch-bar">
@@ -593,13 +716,17 @@ export function UserManagementClient() {
                   <th>标签</th>
                   <th>角色</th>
                   <th>状态</th>
+                  {hfliveEnabled ? <th>统一身份</th> : null}
                   <th>今日 AI</th>
                   <th>操作</th>
                 </tr>
               </thead>
               <tbody>
                 {loadingUsers ? (
-                  <TableSkeletonRows colSpan={8} count={6} />
+                  <TableSkeletonRows
+                    colSpan={hfliveEnabled ? 9 : 8}
+                    count={6}
+                  />
                 ) : null}
                 {filteredUsers.map((user) => (
                   <tr key={user.id}>
@@ -636,7 +763,17 @@ export function UserManagementClient() {
                       </div>
                     </td>
                     <td data-label="角色">{roleLabel(user.systemRole)}</td>
-                    <td data-label="状态">{userStatusLabel(user.status)}</td>
+                    <td data-label="状态">
+                      {user.status === "disabled" &&
+                      user.hflive?.externalStatus === "DISABLED"
+                        ? "已停用（统一身份）"
+                        : userStatusLabel(user.status)}
+                    </td>
+                    {hfliveEnabled ? (
+                      <td data-label="统一身份">
+                        <IdentityStateBadge user={user} />
+                      </td>
+                    ) : null}
                     <td data-label="今日 AI">
                       {user.aiCallCount} 次
                       <span className="muted">
@@ -663,7 +800,7 @@ export function UserManagementClient() {
                 ))}
                 {!loadingUsers && filteredUsers.length === 0 ? (
                   <tr>
-                    <td className="empty-cell" colSpan={8}>
+                    <td className="empty-cell" colSpan={hfliveEnabled ? 9 : 8}>
                       {users.length ? "没有匹配的成员" : "暂无成员"}
                     </td>
                   </tr>
@@ -882,136 +1019,251 @@ export function UserManagementClient() {
               </button>
             </div>
             <div className="modal-body">
-              <div className="profile-readonly-grid">
-                <div>
-                  <span>登录账号</span>
-                  <strong>{editingUser.username}</strong>
-                </div>
-                <div>
-                  <span>当前角色</span>
-                  <strong>{roleLabel(editingUser.systemRole)}</strong>
-                </div>
-                <div>
-                  <span>当前状态</span>
-                  <strong>{userStatusLabel(editingUser.status)}</strong>
-                </div>
-              </div>
-              <label className="label">
-                显示名
-                <input
-                  className="input"
-                  value={editDraft.displayName}
-                  onChange={(event) =>
-                    setEditDraft({
-                      ...editDraft,
-                      displayName: event.target.value,
-                    })
-                  }
-                />
-              </label>
-              <div className="form-grid two">
-                <label className="label">
-                  角色
-                  <select
-                    className="select"
-                    value={editDraft.systemRole}
-                    onChange={(event) =>
-                      setEditDraft({
-                        ...editDraft,
-                        systemRole: event.target.value as SystemRole,
-                      })
-                    }
-                  >
-                    <option value="member">普通成员</option>
-                    {actorIsSuperAdmin ? (
-                      <>
-                        <option value="admin">管理员</option>
-                        <option value="super_admin">最高管理员</option>
-                      </>
+              {hfliveEnabled && editingUser.hflive?.linked ? (
+                <section className="identity-owner-panel">
+                  <h3>
+                    <ShieldCheck aria-hidden="true" className="heading-icon" />
+                    统一身份
+                  </h3>
+                  <p className="muted">
+                    HFLive Auth 是权威来源，以下字段不在此修改。
+                  </p>
+                  <div className="profile-readonly-grid">
+                    <div>
+                      <span>统一账号</span>
+                      <strong>
+                        {editingIdentity?.preferredUsername ?? "…"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>统一邮箱</span>
+                      <strong>{editingIdentity?.email ?? "-"}</strong>
+                    </div>
+                    <div>
+                      <span>统一显示名</span>
+                      <strong>{editingIdentity?.displayName ?? "…"}</strong>
+                    </div>
+                  </div>
+                  {identityLoaded && editingIdentity ? (
+                    <div className="identity-owner-meta">
+                      <span>
+                        绑定方式：
+                        {hfliveLinkMethodLabel(editingIdentity.linkMethod)}
+                      </span>
+                      <span>
+                        最近同步：
+                        {editingIdentity.lastProfileSyncedAt
+                          ? new Date(
+                              editingIdentity.lastProfileSyncedAt,
+                            ).toLocaleString("zh-CN", { hour12: false })
+                          : "从未"}
+                      </span>
+                      <span className="identity-state-line">
+                        同步状态：
+                        {hfliveSyncStateLabel(editingIdentity.syncState)}
+                      </span>
+                      {editingIdentity.syncState === "PROFILE_CONFLICT" ? (
+                        <p className="identity-state-explain">
+                          统一用户名或邮箱与另一本地账号冲突，暂保留本地值。
+                          最高管理员可给占用账号改名后重新同步解决。
+                        </p>
+                      ) : null}
+                      {editingIdentity.syncState === "ERROR" ? (
+                        <p className="identity-state-explain">
+                          最近一次同步失败，资料可能已过期。可点「立即同步」重试。
+                        </p>
+                      ) : null}
+                      {editingIdentity.externalStatus === "DISABLED" ? (
+                        <p className="identity-state-explain">
+                          该账号已在 HFLive Auth
+                          停用，其下一次认证请求会被拒绝。
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <div className="button-row">
+                    <button
+                      className="button secondary"
+                      disabled={identitySyncing}
+                      onClick={() => void onSyncIdentity(editingUser.id)}
+                      type="button"
+                    >
+                      <RefreshCw
+                        aria-hidden="true"
+                        className={identitySyncing ? "spin" : "button-icon"}
+                      />
+                      {identitySyncing ? "正在同步…" : "立即同步"}
+                    </button>
+                    {authProfileUrl ? (
+                      <a
+                        className="button secondary"
+                        href={authProfileUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        <ExternalLink
+                          aria-hidden="true"
+                          className="button-icon"
+                        />
+                        前往 HFLive Auth 修改
+                      </a>
                     ) : null}
-                  </select>
-                </label>
-                <label className="label">
-                  状态
-                  <select
-                    className="select"
-                    value={editDraft.status}
-                    onChange={(event) =>
-                      setEditDraft({
-                        ...editDraft,
-                        status: event.target.value as UserSummary["status"],
-                      })
-                    }
-                  >
-                    <option value="active">正常</option>
-                    <option value="disabled">已停用</option>
-                  </select>
-                </label>
-              </div>
-              {editingUser.systemRole === "super_admin" ? (
-                <p className="muted">
-                  系统必须始终保留至少一位正常状态的最高管理员。
-                </p>
+                  </div>
+                </section>
               ) : null}
-              <label className="label">
-                重置密码
-                <input
-                  className="input"
-                  type="password"
-                  placeholder="不修改密码可留空"
-                  value={editDraft.password}
-                  onChange={(event) =>
-                    setEditDraft({
-                      ...editDraft,
-                      password: event.target.value,
-                    })
-                  }
-                />
-              </label>
-              <label className="label">
-                每日 AI 调用限额
-                <input
-                  className="input"
-                  min={0}
-                  placeholder="留空则跟随默认限额"
-                  type="number"
-                  value={editDraft.aiCallLimit}
-                  onChange={(event) =>
-                    setEditDraft({
-                      ...editDraft,
-                      aiCallLimit: event.target.value,
-                    })
-                  }
-                />
-                <small className="field-hint">
-                  今日已用 {editingUser.aiCallCount} 次；留空使用默认限额。
-                </small>
-              </label>
-              <fieldset className="tag-choice-field">
-                <legend>成员标签</legend>
-                <div className="tag-choice-grid">
-                  {tags.map((tag) => (
-                    <label key={tag.id}>
+              <section className="identity-owner-panel">
+                <h3>本地管理</h3>
+                {hfliveEnabled && !editingUser.hflive?.linked ? (
+                  <p className="muted">
+                    该用户尚未绑定统一身份，绑定需用户在登录时自助完成。
+                  </p>
+                ) : null}
+                <label className="label">
+                  登录账号
+                  {actorIsSuperAdmin ? (
+                    <>
                       <input
-                        checked={editDraft.tagIds.includes(tag.id)}
-                        onChange={() =>
+                        className="input"
+                        value={editDraft.username}
+                        onChange={(event) =>
                           setEditDraft({
                             ...editDraft,
-                            tagIds: editDraft.tagIds.includes(tag.id)
-                              ? editDraft.tagIds.filter((id) => id !== tag.id)
-                              : [...editDraft.tagIds, tag.id],
+                            username: event.target.value,
                           })
                         }
-                        type="checkbox"
                       />
-                      <span>{tag.name}</span>
-                    </label>
-                  ))}
-                  {tags.length === 0 ? (
-                    <span className="muted">暂无标签</span>
-                  ) : null}
+                      <small className="field-hint">
+                        仅最高管理员可改。若该用户已绑定 HFLive，下次同步会被
+                        统一用户名覆盖（用于解决用户名冲突）。
+                      </small>
+                    </>
+                  ) : (
+                    <strong className="readonly-value">
+                      {editingUser.username}
+                    </strong>
+                  )}
+                </label>
+                {!editingUser.hflive?.linked ? (
+                  <label className="label">
+                    显示名
+                    <input
+                      className="input"
+                      value={editDraft.displayName}
+                      onChange={(event) =>
+                        setEditDraft({
+                          ...editDraft,
+                          displayName: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                ) : null}
+                <div className="form-grid two">
+                  <label className="label">
+                    角色
+                    <select
+                      className="select"
+                      value={editDraft.systemRole}
+                      onChange={(event) =>
+                        setEditDraft({
+                          ...editDraft,
+                          systemRole: event.target.value as SystemRole,
+                        })
+                      }
+                    >
+                      <option value="member">普通成员</option>
+                      {actorIsSuperAdmin ? (
+                        <>
+                          <option value="admin">管理员</option>
+                          <option value="super_admin">最高管理员</option>
+                        </>
+                      ) : null}
+                    </select>
+                  </label>
+                  <label className="label">
+                    状态
+                    <select
+                      className="select"
+                      value={editDraft.status}
+                      onChange={(event) =>
+                        setEditDraft({
+                          ...editDraft,
+                          status: event.target.value as UserSummary["status"],
+                        })
+                      }
+                    >
+                      <option value="active">正常</option>
+                      <option value="disabled">已停用</option>
+                    </select>
+                  </label>
                 </div>
-              </fieldset>
+                {editingUser.systemRole === "super_admin" ? (
+                  <p className="muted">
+                    系统必须始终保留至少一位正常状态的最高管理员。
+                  </p>
+                ) : null}
+                {!editingUser.hflive?.linked ? (
+                  <label className="label">
+                    重置密码
+                    <input
+                      className="input"
+                      type="password"
+                      placeholder="不修改密码可留空"
+                      value={editDraft.password}
+                      onChange={(event) =>
+                        setEditDraft({
+                          ...editDraft,
+                          password: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                ) : null}
+                <label className="label">
+                  每日 AI 调用限额
+                  <input
+                    className="input"
+                    min={0}
+                    placeholder="留空则跟随默认限额"
+                    type="number"
+                    value={editDraft.aiCallLimit}
+                    onChange={(event) =>
+                      setEditDraft({
+                        ...editDraft,
+                        aiCallLimit: event.target.value,
+                      })
+                    }
+                  />
+                  <small className="field-hint">
+                    今日已用 {editingUser.aiCallCount} 次；留空使用默认限额。
+                  </small>
+                </label>
+                <fieldset className="tag-choice-field">
+                  <legend>成员标签</legend>
+                  <div className="tag-choice-grid">
+                    {tags.map((tag) => (
+                      <label key={tag.id}>
+                        <input
+                          checked={editDraft.tagIds.includes(tag.id)}
+                          onChange={() =>
+                            setEditDraft({
+                              ...editDraft,
+                              tagIds: editDraft.tagIds.includes(tag.id)
+                                ? editDraft.tagIds.filter((id) => id !== tag.id)
+                                : [...editDraft.tagIds, tag.id],
+                            })
+                          }
+                          type="checkbox"
+                        />
+                        <span>{tag.name}</span>
+                      </label>
+                    ))}
+                    {tags.length === 0 ? (
+                      <span className="muted">暂无标签</span>
+                    ) : null}
+                  </div>
+                </fieldset>
+              </section>
             </div>
             <div className="modal-foot">
               <div className="button-row">
@@ -1093,5 +1345,37 @@ export function UserManagementClient() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function IdentityStateBadge({ user }: { user: AdminUserSummary }) {
+  const identity = user.hflive;
+  if (!identity?.linked) {
+    return <span className="muted identity-state-text">未绑定</span>;
+  }
+  let text = "正常";
+  let tone: "attention" | "danger" | "ok" = "ok";
+  if (identity.externalStatus === "DISABLED") {
+    text = "外部停用";
+    tone = "danger";
+  } else if (identity.syncState === "PROFILE_CONFLICT") {
+    text = "同步冲突";
+    tone = "attention";
+  } else if (identity.syncState === "ERROR") {
+    text = "同步异常";
+    tone = "attention";
+  }
+  const syncedAt = identity.lastProfileSyncedAt
+    ? new Date(identity.lastProfileSyncedAt).toLocaleString("zh-CN", {
+        hour12: false,
+      })
+    : "从未";
+  return (
+    <span
+      className={`identity-state-badge ${tone}`}
+      title={`绑定方式：${hfliveLinkMethodLabel(identity.linkMethod)}；最近同步：${syncedAt}`}
+    >
+      {text}
+    </span>
   );
 }

@@ -22,6 +22,13 @@ import {
   DEFAULT_MEMBER_ATTACHMENT_QUOTA_BYTES,
 } from "../../common/storage-quota";
 import { PrismaService } from "../prisma/prisma.service";
+import { validateResourceName } from "@liveboard/shared";
+import {
+  HFLIVE_ISSUER,
+  HfliveAuthConfig,
+} from "../hflive-auth/hflive-auth.config";
+
+const AUDIT_RETENTION_MS = 180 * 24 * 60 * 60_000;
 
 export interface CreateUserInput {
   username: string;
@@ -40,6 +47,7 @@ export interface ImportUsersResult {
 
 export interface UpdateUserInput {
   displayName?: string;
+  username?: string;
   systemRole?: SystemRole;
   status?: UserSummary["status"];
   password?: string;
@@ -72,7 +80,10 @@ export interface UpdateUserTagInput {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly hfliveConfig: HfliveAuthConfig,
+  ) {}
 
   async listUsers(actorUserId: string | null): Promise<AdminUserSummary[]> {
     await this.requireAdmin(actorUserId);
@@ -88,6 +99,16 @@ export class UsersService {
             orderBy: { equippedOrder: "asc" },
             take: 3,
           },
+          externalIdentities: {
+            where: { issuer: HFLIVE_ISSUER },
+            select: {
+              syncState: true,
+              externalStatus: true,
+              linkMethod: true,
+              lastProfileSyncedAt: true,
+            },
+            take: 1,
+          },
         },
       }),
       this.prisma.workspace.findFirst({
@@ -100,11 +121,22 @@ export class UsersService {
       workspace?.timeZone ?? "Asia/Shanghai",
     );
 
-    return users.map((user) => ({
-      ...this.toSummary(user),
-      aiCallCount: user.aiCallDateKey === dateKey ? user.aiCallCount : 0,
-      aiCallLimit: user.aiCallLimit,
-    }));
+    return users.map((user) => {
+      const identity = user.externalIdentities?.[0];
+      return {
+        ...this.toSummary(user),
+        aiCallCount: user.aiCallDateKey === dateKey ? user.aiCallCount : 0,
+        aiCallLimit: user.aiCallLimit,
+        hflive: {
+          linked: Boolean(identity),
+          syncState: identity?.syncState ?? null,
+          externalStatus: identity?.externalStatus ?? null,
+          linkMethod: identity?.linkMethod ?? null,
+          lastProfileSyncedAt:
+            identity?.lastProfileSyncedAt?.toISOString() ?? null,
+        },
+      };
+    });
   }
 
   async listVisibilityUsers(
@@ -725,6 +757,7 @@ export class UsersService {
 
     const data: {
       displayName?: string;
+      username?: string;
       systemRole?: SystemRole;
       status?: UserSummary["status"];
       passwordHash?: string;
@@ -734,12 +767,45 @@ export class UsersService {
       sessionVersion?: { increment: number };
     } = {};
 
+    const hfliveLinked =
+      this.hfliveConfig.enabled && (await this.hasHfliveIdentity(target.id));
+
     if (typeof input.displayName === "string") {
+      if (hfliveLinked) {
+        // 已绑定用户显示名以 HFLive Auth 为权威，管理员同样不能改。
+        throw new BadRequestException("统一身份资料请前往 HFLive Auth 修改");
+      }
       const displayName = input.displayName.trim();
       if (!displayName) {
         throw new BadRequestException("显示名不能为空");
       }
       data.displayName = displayName;
+    }
+
+    if (typeof input.username === "string") {
+      if (!isSuperAdmin(actor.systemRole)) {
+        throw new ForbiddenException("只有最高管理员可以修改登录账号");
+      }
+      let username: string;
+      try {
+        username = validateResourceName(input.username, "登录账号");
+      } catch (caught) {
+        throw new BadRequestException(
+          caught instanceof Error ? caught.message : "登录账号无效",
+        );
+      }
+      const occupied = await this.prisma.user.findFirst({
+        where: {
+          id: { not: target.id },
+          username: { equals: username, mode: "insensitive" },
+        },
+        select: { id: true },
+      });
+      if (occupied) {
+        throw new ConflictException("该登录账号已被其他用户占用");
+      }
+      data.username = username;
+      data.sessionVersion = { increment: 1 };
     }
 
     if (input.systemRole) {
@@ -760,6 +826,10 @@ export class UsersService {
         input.status === "disabled");
 
     if (input.password) {
+      if (hfliveLinked) {
+        // 已绑定用户密码由 HFLive Auth 管理，管理员不能重置。
+        throw new BadRequestException("统一身份密码由 HFLive Auth 管理");
+      }
       data.passwordHash = await argon2.hash(input.password);
       data.localPasswordEnabled = true;
     }
@@ -834,7 +904,96 @@ export class UsersService {
     if (!updated) {
       throw new ConflictException("用户状态同时发生了变化，请重试");
     }
+    if (typeof input.username === "string") {
+      await this.prisma.authenticationAuditEvent.create({
+        data: {
+          eventType: "admin.user.username.renamed",
+          outcome: "SUCCESS",
+          actorUserId: actor.id,
+          subjectUserId: target.id,
+          metadata: { from: target.username, to: updated.username },
+          expiresAt: new Date(Date.now() + AUDIT_RETENTION_MS),
+        },
+      });
+    }
     return this.toSummary(updated);
+  }
+
+  async bulkUpdateUserStatus(
+    actorUserId: string | null,
+    ids: string[],
+    status: UserSummary["status"],
+  ): Promise<{ updated: number; skipped: number }> {
+    const actor = await this.requireAdmin(actorUserId);
+    const uniqueIds = [...new Set(ids)];
+    const targets = await this.prisma.user.findMany({
+      where: { id: { in: uniqueIds } },
+    });
+
+    let updatable: Array<{
+      id: string;
+      systemRole: SystemRole;
+      status: UserSummary["status"];
+    }> = [];
+    let skipped = uniqueIds.length - targets.length; // 不存在的 id
+    for (const target of targets) {
+      if (target.id === actor.id) {
+        skipped += 1; // 不能操作自己
+        continue;
+      }
+      if (!isSuperAdmin(actor.systemRole) && target.systemRole !== "member") {
+        skipped += 1; // 管理员不能操作其他管理员
+        continue;
+      }
+      if (target.status === status) {
+        skipped += 1; // 幂等跳过
+        continue;
+      }
+      updatable.push(target);
+    }
+
+    // 与单条更新相同的不变量：不能停用最后一位正常状态的最高管理员。
+    const disablingActiveSuperAdmins = updatable.filter(
+      (target) =>
+        status === "disabled" &&
+        target.systemRole === "super_admin" &&
+        target.status === "active",
+    );
+    if (disablingActiveSuperAdmins.length > 0) {
+      const activeSuperAdminCount = await this.prisma.user.count({
+        where: { systemRole: "super_admin", status: "active" },
+      });
+      if (activeSuperAdminCount - disablingActiveSuperAdmins.length < 1) {
+        const blocked = new Set(
+          disablingActiveSuperAdmins.map((target) => target.id),
+        );
+        updatable = updatable.filter((target) => !blocked.has(target.id));
+        skipped += disablingActiveSuperAdmins.length;
+      }
+    }
+
+    if (updatable.length > 0) {
+      await this.prisma.$transaction(
+        async (tx) => {
+          for (const target of updatable) {
+            await tx.user.update({
+              where: { id: target.id },
+              data: { status, sessionVersion: { increment: 1 } },
+            });
+          }
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    }
+    return { updated: updatable.length, skipped };
+  }
+
+  private async hasHfliveIdentity(userId: string) {
+    const identity = await this.prisma.externalIdentity.findUnique({
+      where: { userId_issuer: { userId, issuer: HFLIVE_ISSUER } },
+      select: { id: true },
+    });
+    return Boolean(identity);
   }
 
   private async requireAdmin(actorUserId: string | null) {

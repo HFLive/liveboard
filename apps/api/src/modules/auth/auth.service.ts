@@ -41,7 +41,7 @@ const PROFILE_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const externalPictureInclude = {
   externalIdentities: {
     where: { issuer: "https://auth.hsfz.live" },
-    select: { picture: true },
+    select: { id: true, picture: true },
     take: 1,
   },
 } as const;
@@ -101,11 +101,7 @@ export class AuthService {
     const user = await this.prisma.user.findFirst({
       where: { username: { equals: normalizedUsername, mode: "insensitive" } },
       include: {
-        externalIdentities: {
-          where: { issuer: "https://auth.hsfz.live" },
-          select: { picture: true },
-          take: 1,
-        },
+        externalIdentities: { ...externalPictureInclude.externalIdentities },
         badgeAssignments: {
           where: { equippedOrder: { not: null } },
           include: { badge: true },
@@ -145,11 +141,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        externalIdentities: {
-          where: { issuer: "https://auth.hsfz.live" },
-          select: { picture: true },
-          take: 1,
-        },
+        externalIdentities: { ...externalPictureInclude.externalIdentities },
         badgeAssignments: {
           where: { equippedOrder: { not: null } },
           include: { badge: true },
@@ -174,11 +166,7 @@ export class AuthService {
     const target = await this.prisma.user.findUnique({
       where: { id: targetUserId },
       include: {
-        externalIdentities: {
-          where: { issuer: "https://auth.hsfz.live" },
-          select: { picture: true },
-          take: 1,
-        },
+        externalIdentities: { ...externalPictureInclude.externalIdentities },
         badgeAssignments: {
           where: { equippedOrder: { not: null } },
           include: { badge: true },
@@ -845,20 +833,22 @@ export class AuthService {
         color: string;
       };
     }>;
-    externalIdentities?: Array<{ picture: string | null }>;
+    externalIdentities?: Array<{ id: string; picture: string | null }>;
   }): UserSummary {
-    const externalPicture = this.hfliveConfig.enabled
-      ? user.externalIdentities?.[0]?.picture
+    const identity = this.hfliveConfig.enabled
+      ? user.externalIdentities?.[0]
       : null;
     return {
       id: user.id,
       username: user.username,
       displayName: user.displayName,
-      avatarUrl:
-        externalPicture ??
-        (user.avatarUpdatedAt
+      avatarUrl: identity
+        ? // 已绑定用户资料以 HFLive 为权威：无头像时显示首字母占位，
+          // 不回退本地历史头像。
+          identity.picture
+        : user.avatarUpdatedAt
           ? `/auth/avatar/${user.id}?v=${user.avatarUpdatedAt.getTime()}`
-          : null),
+          : null,
       systemRole: user.systemRole,
       status: user.status,
       badges: user.badgeAssignments?.map(({ badge }) => ({
@@ -889,7 +879,7 @@ export class AuthService {
         color: string;
       };
     }>;
-    externalIdentities?: Array<{ picture: string | null }>;
+    externalIdentities?: Array<{ id: string; picture: string | null }>;
   }): UserProfile {
     return {
       ...this.toSummary(user),

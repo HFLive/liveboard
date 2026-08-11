@@ -1,7 +1,11 @@
 import { HttpException, HttpStatus } from "@nestjs/common";
 import type { Request, Response } from "express";
-import { HfliveAuthController } from "./hflive-auth.controller";
+import {
+  HfliveAuthController,
+  HfliveWebhookController,
+} from "./hflive-auth.controller";
 import type { HfliveAuthService } from "./hflive-auth.service";
+import { ServiceUnavailableException } from "@nestjs/common";
 
 describe("HfliveAuthController callback UX", () => {
   const hflive = {
@@ -75,5 +79,42 @@ describe("HfliveAuthController callback UX", () => {
       302,
       "https://board.example/login?reason=hflive-failed",
     );
+  });
+});
+
+describe("HfliveWebhookController delivery semantics", () => {
+  const hflive = { processWebhook: jest.fn() };
+  let controller: HfliveWebhookController;
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    controller = new HfliveWebhookController(
+      hflive as unknown as HfliveAuthService,
+    );
+  });
+
+  it("maps a retryable outcome to 503 so the outbox retries", async () => {
+    hflive.processWebhook.mockResolvedValue({ kind: "retryable" });
+    await expect(
+      controller.event(Buffer.from("{}"), {}),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it("acknowledges terminal outcomes with 204", async () => {
+    hflive.processWebhook.mockResolvedValue({ kind: "applied" });
+    await expect(
+      controller.event(Buffer.from("{}"), {}),
+    ).resolves.toBeUndefined();
+    hflive.processWebhook.mockResolvedValue({ kind: "duplicate" });
+    await expect(
+      controller.event(Buffer.from("{}"), {}),
+    ).resolves.toBeUndefined();
+    hflive.processWebhook.mockResolvedValue({
+      kind: "ignored",
+      reason: "HFLIVE_DISABLED",
+    });
+    await expect(
+      controller.event(Buffer.from("{}"), {}),
+    ).resolves.toBeUndefined();
   });
 });

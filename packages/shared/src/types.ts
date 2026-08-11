@@ -213,10 +213,19 @@ export interface NotificationListResult {
   nextCursor: string | null;
 }
 
-// 管理端用户列表专用：在 UserSummary 基础上附带 AI 调用配额信息
+// 管理端用户列表专用：在 UserSummary 基础上附带 AI 调用配额与统一身份信息
+export interface AdminHfliveIdentitySummary {
+  linked: boolean;
+  syncState: "CURRENT" | "PROFILE_CONFLICT" | "ERROR" | null;
+  externalStatus: "ACTIVE" | "DISABLED" | "UNKNOWN" | null;
+  linkMethod: "JIT" | "LOCAL_PASSWORD" | "LOCAL_SESSION" | "ADMIN" | null;
+  lastProfileSyncedAt: string | null; // ISO
+}
+
 export interface AdminUserSummary extends UserSummary {
   aiCallCount: number;
   aiCallLimit: number | null;
+  hflive?: AdminHfliveIdentitySummary;
 }
 
 export interface AiProviderConfigSummary {

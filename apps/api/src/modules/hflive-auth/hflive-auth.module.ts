@@ -1,4 +1,6 @@
 import { Global, Module } from "@nestjs/common";
+import { StorageModule } from "../storage/storage.module";
+import { HfliveCronController } from "./hflive-cron.controller";
 import {
   HfliveAdminController,
   HfliveAuthController,
@@ -11,10 +13,12 @@ import { OidcTransactionService } from "./oidc-transaction.service";
 
 @Global()
 @Module({
+  imports: [StorageModule],
   controllers: [
     HfliveAuthController,
     HfliveAdminController,
     HfliveWebhookController,
+    HfliveCronController,
   ],
   providers: [
     HfliveAuthConfig,

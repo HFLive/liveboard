@@ -53,6 +53,15 @@ const importOpenidClient = () => import("openid-client");
 
 type VerifiedProfile = ConflictTicket;
 
+export type WebhookOutcome =
+  | { kind: "duplicate" }
+  | {
+      kind: "ignored";
+      reason: "UNKNOWN_SUBJECT" | "STALE_EVENT" | "HFLIVE_DISABLED";
+    }
+  | { kind: "applied" }
+  | { kind: "retryable" };
+
 @Injectable()
 export class HfliveAuthService {
   private readonly logger = new Logger(HfliveAuthService.name);
@@ -296,6 +305,78 @@ export class HfliveAuthService {
   }
 
   async adminIdentityStatus(actorUserId: string | null, targetUserId: string) {
+    await this.authorizeAdminTarget(actorUserId, targetUserId);
+    const identity = await this.prisma.externalIdentity.findUnique({
+      where: {
+        userId_issuer: { userId: targetUserId, issuer: HFLIVE_ISSUER },
+      },
+      select: {
+        issuer: true,
+        preferredUsername: true,
+        email: true,
+        displayName: true,
+        picture: true,
+        externalStatus: true,
+        syncState: true,
+        syncErrorCode: true,
+        linkMethod: true,
+        lastStatusConfirmedAt: true,
+        lastProfileSyncedAt: true,
+        directoryUpdatedAt: true,
+      },
+    });
+    if (!identity) return { linked: false as const, identity: null };
+    return {
+      linked: true as const,
+      identity: {
+        issuer: identity.issuer,
+        preferredUsername: identity.preferredUsername,
+        email: identity.email,
+        displayName: identity.displayName,
+        picture: identity.picture,
+        externalStatus: identity.externalStatus,
+        syncState: identity.syncState,
+        syncErrorCode: identity.syncErrorCode,
+        linkMethod: identity.linkMethod,
+        lastStatusConfirmedAt:
+          identity.lastStatusConfirmedAt?.toISOString() ?? null,
+        lastProfileSyncedAt:
+          identity.lastProfileSyncedAt?.toISOString() ?? null,
+        directoryUpdatedAt: identity.directoryUpdatedAt?.toISOString() ?? null,
+      },
+    };
+  }
+
+  /** 管理端立即同步：回拉 Directory 权威资料并应用，返回刷新后的身份状态。 */
+  async adminSyncIdentity(actorUserId: string | null, targetUserId: string) {
+    await this.authorizeAdminTarget(actorUserId, targetUserId);
+    const identity = await this.prisma.externalIdentity.findUnique({
+      where: { userId_issuer: { userId: targetUserId, issuer: HFLIVE_ISSUER } },
+    });
+    if (!identity) {
+      throw new BadRequestException("该用户尚未绑定统一身份");
+    }
+    let profile: DirectoryProfile;
+    try {
+      profile = await this.directory.getProfile(identity.subject);
+    } catch (caught) {
+      if (
+        caught instanceof DirectoryRequestError &&
+        caught.code === "NOT_FOUND"
+      ) {
+        throw new BadRequestException("HFLive Auth 中不存在该账号");
+      }
+      // 瞬态失败 → 503，前端可提示稍后重试。
+      throw new ServiceUnavailableException("HFLive Auth 用户资料暂时不可用");
+    }
+    await this.applyDirectorySnapshot(identity, profile);
+    return this.adminIdentityStatus(actorUserId, targetUserId);
+  }
+
+  private async authorizeAdminTarget(
+    actorUserId: string | null,
+    targetUserId: string,
+  ): Promise<User> {
     if (!actorUserId) throw new UnauthorizedException("Missing session");
     const [actor, target] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: actorUserId } }),
@@ -307,26 +388,10 @@ export class HfliveAuthService {
     if (!target) throw new BadRequestException("Target user not found");
     if (target.systemRole !== "member" && actor.systemRole !== "super_admin") {
       throw new ForbiddenException(
-        "Only a super administrator can inspect administrators",
+        "Only a super administrator can manage administrators",
       );
     }
-    const identity = await this.prisma.externalIdentity.findUnique({
-      where: {
-        userId_issuer: { userId: targetUserId, issuer: HFLIVE_ISSUER },
-      },
-      select: {
-        issuer: true,
-        preferredUsername: true,
-        externalStatus: true,
-        syncState: true,
-        syncErrorCode: true,
-        linkMethod: true,
-        lastStatusConfirmedAt: true,
-        lastProfileSyncedAt: true,
-        directoryUpdatedAt: true,
-      },
-    });
-    return { linked: Boolean(identity), identity };
+    return target;
   }
 
   async checkExternalSession(userId: string) {
@@ -365,27 +430,12 @@ export class HfliveAuthService {
       throw new ServiceUnavailableException("HFLive Auth 账号状态正在刷新");
     }
     try {
-      const status = await this.directory.getStatus(identity.subject);
-      if (
-        status.subject !== identity.subject ||
-        !["ACTIVE", "DISABLED"].includes(status.status)
-      ) {
-        throw new DirectoryRequestError("INVALID_RESPONSE");
-      }
-      if (status.status === "ACTIVE") {
-        await this.prisma.externalIdentity.update({
-          where: { id: identity.id },
-          data: {
-            externalStatus: "ACTIVE",
-            lastStatusConfirmedAt: new Date(),
-            statusRefreshLeaseUntil: null,
-            syncErrorCode: null,
-          },
-        });
-        return { allowed: true as const };
-      }
-      await this.disableIdentity(identity, "DIRECTORY_DISABLED");
-      return { allowed: false as const };
+      // 周期刷新直接拉完整资料（一次往返同时得到状态与资料），ACTIVE 时顺带
+      // 回写资料——即使 webhook 完全丢失，活跃用户的显示名/用户名/邮箱/头像
+      // 也会在 15 分钟内自愈。节流/租约/宽限窗口语义保持不变。
+      const profile = await this.directory.getProfile(identity.subject);
+      const snapshot = await this.applyDirectorySnapshot(identity, profile);
+      return { allowed: snapshot === "ACTIVE" };
     } catch (caught) {
       if (
         caught instanceof DirectoryRequestError &&
@@ -418,8 +468,11 @@ export class HfliveAuthService {
   async processWebhook(
     rawBody: Buffer,
     headers: Record<string, string | undefined>,
-  ) {
-    this.requireEnabled();
+  ): Promise<WebhookOutcome> {
+    // AUTH_MODE=local 时外部身份不权威：直接丢弃并返回 204，避免 outbox 无效
+    // 重试 10 次进死信。重新启用后由登录/对账补齐。
+    if (!this.config.enabled)
+      return { kind: "ignored", reason: "HFLIVE_DISABLED" };
     if (!Buffer.isBuffer(rawBody)) {
       throw new BadRequestException("Webhook requires application/json");
     }
@@ -456,22 +509,25 @@ export class HfliveAuthService {
     if (Number.isNaN(occurredAt.getTime()))
       throw new BadRequestException("Invalid event time");
     const digest = createHash("sha256").update(rawBody).digest("base64url");
-    let calibratedStatus: "ACTIVE" | "DISABLED" | null = null;
+    // 事务前校准（Directory 往返）。瞬态失败直接返回 retryable：不写事件行、
+    // 不更新 lastStatusEventAt / syncState，让 outbox 的指数退避重试真正生效
+    // ——否则重试会被 eventId 幂等去重或状态事件乱序保护挡掉，资料永久陈旧。
     let refreshedProfile: VerifiedProfile | null = null;
     if (payload.type === "user.status.changed" && payload.status === "ACTIVE") {
+      let calibrated = false;
       try {
         const status = await this.directory.getStatus(payload.subject);
-        if (status.subject === payload.subject && status.status === "ACTIVE") {
-          calibratedStatus = "ACTIVE";
-        }
+        calibrated =
+          status.subject === payload.subject && status.status === "ACTIVE";
       } catch {
-        calibratedStatus = null;
+        calibrated = false;
       }
+      if (!calibrated) return { kind: "retryable" };
     } else if (payload.type === "user.profile.changed") {
       try {
         refreshedProfile = await this.loadVerifiedProfile(payload.subject);
       } catch {
-        refreshedProfile = null;
+        return { kind: "retryable" };
       }
     }
     try {
@@ -479,7 +535,7 @@ export class HfliveAuthService {
         const duplicate = await tx.externalIdentityEvent.findUnique({
           where: { eventId },
         });
-        if (duplicate) return { duplicate: true };
+        if (duplicate) return { kind: "duplicate" };
         const identity = await tx.externalIdentity.findUnique({
           where: {
             issuer_subject: {
@@ -501,7 +557,7 @@ export class HfliveAuthService {
               processedAt: new Date(),
             },
           });
-          return { ignored: true };
+          return { kind: "ignored", reason: "UNKNOWN_SUBJECT" };
         }
         if (
           payload.type === "user.status.changed" &&
@@ -520,9 +576,8 @@ export class HfliveAuthService {
               processedAt: new Date(),
             },
           });
-          return { ignored: true };
+          return { kind: "ignored", reason: "STALE_EVENT" };
         }
-        let outcome: "APPLIED" | "IGNORED" = "APPLIED";
         if (
           payload.type === "user.status.changed" &&
           payload.status === "DISABLED"
@@ -538,87 +593,21 @@ export class HfliveAuthService {
             });
           }
         } else if (payload.type === "user.status.changed") {
+          // 走到这里说明校准已确认 ACTIVE（否则上面已返回 retryable）。
           await tx.externalIdentity.update({
             where: { id: identity.id },
-            data:
-              calibratedStatus === "ACTIVE"
-                ? {
-                    externalStatus: "ACTIVE",
-                    lastStatusEventAt: occurredAt,
-                    lastStatusConfirmedAt: new Date(),
-                    statusRefreshLeaseUntil: null,
-                    syncState: "CURRENT",
-                    syncErrorCode: null,
-                  }
-                : {
-                    lastStatusEventAt: occurredAt,
-                    syncState: "ERROR",
-                    syncErrorCode: "STATUS_REFRESH_REQUIRED",
-                  },
+            data: {
+              externalStatus: "ACTIVE",
+              lastStatusEventAt: occurredAt,
+              lastStatusConfirmedAt: new Date(),
+              statusRefreshLeaseUntil: null,
+              syncState: "CURRENT",
+              syncErrorCode: null,
+            },
           });
-          outcome = calibratedStatus === "ACTIVE" ? "APPLIED" : "IGNORED";
         } else {
-          if (refreshedProfile) {
-            const user = await tx.user.findUniqueOrThrow({
-              where: { id: identity.userId },
-            });
-            const conflict = await tx.user.findFirst({
-              where: {
-                id: { not: user.id },
-                OR: [
-                  {
-                    username: {
-                      equals: refreshedProfile.preferredUsername,
-                      mode: "insensitive",
-                    },
-                  },
-                  ...(refreshedProfile.emailVerified && refreshedProfile.email
-                    ? [
-                        {
-                          emailNormalized: normalizeEmail(
-                            refreshedProfile.email,
-                          ),
-                        },
-                      ]
-                    : []),
-                ],
-              },
-              select: { id: true },
-            });
-            await tx.user.update({
-              where: { id: user.id },
-              data: {
-                displayName: refreshedProfile.displayName,
-                ...(!conflict
-                  ? { username: refreshedProfile.preferredUsername }
-                  : {}),
-                ...(!conflict && refreshedProfile.emailVerified
-                  ? {
-                      email: refreshedProfile.email,
-                      emailNormalized: normalizeEmail(refreshedProfile.email),
-                    }
-                  : {}),
-              },
-            });
-            await tx.externalIdentity.update({
-              where: { id: identity.id },
-              data: {
-                ...identitySnapshot(refreshedProfile),
-                lastProfileSyncedAt: new Date(),
-                syncState: conflict ? "PROFILE_CONFLICT" : "CURRENT",
-                syncErrorCode: conflict ? "PROFILE_CONFLICT" : null,
-              },
-            });
-          } else {
-            await tx.externalIdentity.update({
-              where: { id: identity.id },
-              data: {
-                syncState: "ERROR",
-                syncErrorCode: "PROFILE_REFRESH_REQUIRED",
-              },
-            });
-            outcome = "IGNORED";
-          }
+          // user.profile.changed：refreshedProfile 已在上方确认非空。
+          await this.applyVerifiedProfile(tx, identity, refreshedProfile!);
         }
         await tx.externalIdentityEvent.create({
           data: {
@@ -627,23 +616,23 @@ export class HfliveAuthService {
             subject: identity.subject,
             occurredAt,
             payloadDigest: digest,
-            outcome,
+            outcome: "APPLIED",
             processedAt: new Date(),
           },
         });
         await this.auditWith(tx, "hflive.webhook", "SUCCESS", {
           subjectUserId: identity.userId,
           profile: { issuer: HFLIVE_ISSUER, subject: identity.subject },
-          metadata: { eventType: String(payload.type), outcome },
+          metadata: { eventType: String(payload.type) },
         });
-        return { applied: outcome === "APPLIED" };
+        return { kind: "applied" };
       });
     } catch (caught) {
       if (
         caught instanceof Prisma.PrismaClientKnownRequestError &&
         caught.code === "P2002"
       ) {
-        return { duplicate: true };
+        return { kind: "duplicate" };
       }
       throw caught;
     }
@@ -826,9 +815,18 @@ export class HfliveAuthService {
     } catch {
       throw new ServiceUnavailableException("HFLive Auth 用户资料暂时不可用");
     }
+    if (profile.status !== "ACTIVE") {
+      throw new UnauthorizedException("HFLive Auth 账号不可用");
+    }
+    return this.toVerifiedProfile(profile, subject);
+  }
+
+  private toVerifiedProfile(
+    profile: DirectoryProfile,
+    subject: string,
+  ): VerifiedProfile {
     if (
       profile.subject !== subject ||
-      profile.status !== "ACTIVE" ||
       !profile.preferredUsername?.trim() ||
       !profile.name?.trim() ||
       Number.isNaN(new Date(profile.updatedAt).getTime())
@@ -845,6 +843,149 @@ export class HfliveAuthService {
       picture: profile.picture ?? null,
       directoryUpdatedAt: profile.updatedAt,
     };
+  }
+
+  /**
+   * 「目录资料 → 本地写入」的冲突感知更新，webhook 事务、周期对账、登录同步
+   * 三处共用，行为保持一致：
+   * - User.displayName 总是更新；
+   * - username/email 仅在无其他用户的大小写不敏感冲突时更新；
+   * - ExternalIdentity 写 identitySnapshot + lastProfileSyncedAt，
+   *   syncState = 冲突 ? PROFILE_CONFLICT : CURRENT。
+   * 事务（webhook）与非事务（对账/登录）上下文都可传入（PrismaService 也是
+   * PrismaClient）。
+   */
+  private async applyVerifiedProfile(
+    tx: Prisma.TransactionClient | PrismaService,
+    identity: Pick<ExternalIdentity, "id" | "userId">,
+    profile: VerifiedProfile,
+  ) {
+    const user = await tx.user.findUniqueOrThrow({
+      where: { id: identity.userId },
+    });
+    const conflict = await tx.user.findFirst({
+      where: {
+        id: { not: user.id },
+        OR: [
+          {
+            username: {
+              equals: profile.preferredUsername,
+              mode: "insensitive",
+            },
+          },
+          ...(profile.emailVerified && profile.email
+            ? [{ emailNormalized: normalizeEmail(profile.email) }]
+            : []),
+        ],
+      },
+      select: { id: true },
+    });
+    const updated = await tx.user.update({
+      where: { id: user.id },
+      data: {
+        displayName: profile.displayName,
+        ...(!conflict ? { username: profile.preferredUsername } : {}),
+        ...(!conflict && profile.emailVerified
+          ? {
+              email: profile.email,
+              emailNormalized: normalizeEmail(profile.email),
+            }
+          : {}),
+      },
+    });
+    await tx.externalIdentity.update({
+      where: { id: identity.id },
+      data: {
+        ...identitySnapshot(profile),
+        lastProfileSyncedAt: new Date(),
+        syncState: conflict ? "PROFILE_CONFLICT" : "CURRENT",
+        syncErrorCode: conflict ? "PROFILE_CONFLICT" : null,
+      },
+    });
+    return { user: updated, conflict: Boolean(conflict) };
+  }
+
+  /**
+   * 把一次 Directory 资料快照落到本地：ACTIVE → 回写资料 + 确认状态；
+   * DISABLED → disableIdentity（幂等，仅在状态实际变化时踢会话）。
+   * checkExternalSession 周期刷新与每日对账 cron 共用。
+   */
+  private async applyDirectorySnapshot(
+    identity: ExternalIdentity,
+    profile: DirectoryProfile,
+  ): Promise<"ACTIVE" | "DISABLED"> {
+    if (
+      profile.subject !== identity.subject ||
+      !["ACTIVE", "DISABLED"].includes(profile.status)
+    ) {
+      throw new DirectoryRequestError("INVALID_RESPONSE");
+    }
+    if (profile.status === "ACTIVE") {
+      let verified: VerifiedProfile;
+      try {
+        verified = this.toVerifiedProfile(profile, identity.subject);
+      } catch {
+        // 资料字段不合法（缺 name/username 等）按无效响应处理，走调用方的
+        // 宽限/失败路径，而不是让会话检查直接失败。
+        throw new DirectoryRequestError("INVALID_RESPONSE");
+      }
+      await this.prisma.$transaction(async (tx) => {
+        await this.applyVerifiedProfile(tx, identity, verified);
+        await tx.externalIdentity.update({
+          where: { id: identity.id },
+          data: {
+            externalStatus: "ACTIVE",
+            lastStatusConfirmedAt: new Date(),
+            statusRefreshLeaseUntil: null,
+            syncErrorCode: null,
+          },
+        });
+      });
+      return "ACTIVE";
+    }
+    await this.disableIdentity(identity, "DIRECTORY_DISABLED");
+    return "DISABLED";
+  }
+
+  /**
+   * 每日兜底对账：清扫 syncState != CURRENT 或超过 7 天未同步资料的身份。
+   * 单条失败跳过继续，不中断整批（Hobby 函数时长受限，单次上限由调用方控制，
+   * 积压靠每日多轮消化）。
+   */
+  async reconcileStaleIdentities(limit: number) {
+    const stale = await this.prisma.externalIdentity.findMany({
+      where: {
+        issuer: HFLIVE_ISSUER,
+        OR: [
+          { syncState: { not: "CURRENT" } },
+          { lastProfileSyncedAt: null },
+          {
+            lastProfileSyncedAt: {
+              lt: new Date(Date.now() - 7 * 24 * 60 * 60_000),
+            },
+          },
+        ],
+      },
+      orderBy: { lastProfileSyncedAt: "asc" },
+      take: limit,
+    });
+    let repaired = 0;
+    let failed = 0;
+    for (const identity of stale) {
+      try {
+        const profile = await this.directory.getProfile(identity.subject);
+        await this.applyDirectorySnapshot(identity, profile);
+        repaired += 1;
+      } catch (caught) {
+        failed += 1;
+        this.logger.warn(
+          `Identity reconciliation failed for ${identity.subject}: ${
+            caught instanceof Error ? caught.message : String(caught)
+          }`,
+        );
+      }
+    }
+    return { scanned: stale.length, repaired, failed };
   }
 
   private async getOidcConfiguration() {
@@ -914,21 +1055,12 @@ export class HfliveAuthService {
     profile: VerifiedProfile,
   ) {
     return this.prisma.$transaction(async (tx) => {
-      const user = await this.updateCompatibleProfile(
-        tx,
-        identity.user,
-        profile,
-      );
-      const conflict = await this.findProfileConflict(profile, identity.userId);
+      const { user } = await this.applyVerifiedProfile(tx, identity, profile);
       await tx.externalIdentity.update({
         where: { id: identity.id },
         data: {
-          ...identitySnapshot(profile),
           externalStatus: "ACTIVE",
           lastStatusConfirmedAt: new Date(),
-          lastProfileSyncedAt: new Date(),
-          syncState: conflict ? "PROFILE_CONFLICT" : "CURRENT",
-          syncErrorCode: conflict ? "PROFILE_CONFLICT" : null,
         },
       });
       return user;

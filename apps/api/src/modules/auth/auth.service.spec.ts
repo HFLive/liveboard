@@ -229,7 +229,10 @@ describe("AuthService", () => {
       systemRole: "member",
       status: "active",
       externalIdentities: [
-        { picture: "https://auth.hsfz.live/api/profile/avatar/id?v=2" },
+        {
+          id: "identity-1",
+          picture: "https://auth.hsfz.live/api/profile/avatar/id?v=2",
+        },
       ],
       badgeAssignments: [],
     });
@@ -262,7 +265,10 @@ describe("AuthService", () => {
         systemRole: "member",
         status: "active",
         externalIdentities: [
-          { picture: "https://auth.hsfz.live/api/profile/avatar/id?v=3" },
+          {
+            id: "identity-1",
+            picture: "https://auth.hsfz.live/api/profile/avatar/id?v=3",
+          },
         ],
         badgeAssignments: [],
       });
@@ -277,12 +283,41 @@ describe("AuthService", () => {
         include: expect.objectContaining({
           externalIdentities: {
             where: { issuer: "https://auth.hsfz.live" },
-            select: { picture: true },
+            select: { id: true, picture: true },
             take: 1,
           },
         }),
       }),
     );
+
+    Object.defineProperty(hfliveConfig, "enabled", {
+      configurable: true,
+      value: false,
+    });
+  });
+
+  it("shows the first-letter placeholder instead of the local avatar when HFLive has no picture", async () => {
+    Object.defineProperty(hfliveConfig, "enabled", {
+      configurable: true,
+      value: true,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      username: "teacher",
+      displayName: "统一姓名",
+      bio: null,
+      bannerUpdatedAt: null,
+      avatarUpdatedAt: new Date("2026-08-10T00:00:00.000Z"),
+      openContentInCurrentTab: false,
+      systemRole: "member",
+      status: "active",
+      externalIdentities: [{ id: "identity-1", picture: null }],
+      badgeAssignments: [],
+    });
+
+    await expect(service.getCurrentUser("user-1")).resolves.toMatchObject({
+      avatarUrl: null,
+    });
 
     Object.defineProperty(hfliveConfig, "enabled", {
       configurable: true,

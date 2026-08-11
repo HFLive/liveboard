@@ -2,7 +2,7 @@
   "regions": ["sin1"],
   "crons": [
     {
-      "path": "/internal/cron/storage-cleanup",
+      "path": "/internal/cron/daily",
       "schedule": "3 4 * * *"
     },
     {

@@ -47,6 +47,11 @@ class UpdateUserDto {
   displayName?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  username?: string;
+
+  @IsOptional()
   @IsIn(["super_admin", "admin", "member"])
   systemRole?: SystemRole;
 
@@ -80,6 +85,17 @@ class UpdateStorageQuotaDefaultsDto {
   @IsInt()
   @Min(0)
   classroomStorageQuotaBytes?: number | null;
+}
+
+class BulkStatusDto {
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ArrayUnique()
+  @IsString({ each: true })
+  ids!: string[];
+
+  @IsIn(["active", "disabled"])
+  status!: "active" | "disabled";
 }
 
 class ImportUserRowDto extends CreateUserDto {}
@@ -129,6 +145,20 @@ export class UsersController {
   ) {
     return {
       result: await this.usersService.importUsers(actorUserId, body.users),
+    };
+  }
+
+  @Post("bulk-status")
+  async bulkStatus(
+    @CurrentUserId() actorUserId: string | null,
+    @Body() body: BulkStatusDto,
+  ) {
+    return {
+      result: await this.usersService.bulkUpdateUserStatus(
+        actorUserId,
+        body.ids,
+        body.status,
+      ),
     };
   }
 

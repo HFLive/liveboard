@@ -157,6 +157,90 @@
   color: var(--muted);
 }
 
+/* 统一身份列：紧凑文字/小徽章，不用大色块。 */
+.identity-state-text {
+  font-size: 12px;
+}
+
+.identity-state-badge {
+  display: inline-block;
+  border-radius: 6px;
+  background: var(--fill-subtle);
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.identity-state-badge.attention {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.identity-state-badge.danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* 编辑弹窗字段所有权分区：标题 + 顶部与底部分隔线，透明连续布局。 */
+.identity-owner-panel {
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.identity-owner-panel:first-child {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.identity-owner-panel h3 {
+  align-items: center;
+  display: flex;
+  font-size: 13px;
+  font-weight: 650;
+  gap: 6px;
+  margin: 0 0 4px;
+}
+
+.identity-owner-panel .heading-icon {
+  height: 15px;
+  width: 15px;
+}
+
+.identity-owner-meta {
+  color: var(--text-soft);
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  gap: 3px;
+  margin: 8px 0;
+}
+
+.identity-state-explain {
+  color: var(--accent-dark);
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+.readonly-value {
+  display: block;
+  font-weight: 550;
+  padding-top: 4px;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 720px) {
   .admin-user-filters,
   .admin-user-batch-bar {

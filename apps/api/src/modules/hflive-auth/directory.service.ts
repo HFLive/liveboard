@@ -1,5 +1,8 @@
 import { Injectable } from "@nestjs/common";
+import { RedisService } from "../redis/redis.service";
 import { HFLIVE_ISSUER, HfliveAuthConfig } from "./hflive-auth.config";
+
+const DIRECTORY_TOKEN_KEY = "liveboard:hflive:directory-token";
 
 export type DirectoryStatus = "ACTIVE" | "DISABLED";
 
@@ -25,7 +28,12 @@ export class DirectoryRequestError extends Error {
 
 @Injectable()
 export class HfliveDirectoryService {
-  constructor(private readonly config: HfliveAuthConfig) {}
+  private inFlightTokenPromise: Promise<string> | null = null;
+
+  constructor(
+    private readonly config: HfliveAuthConfig,
+    private readonly redis: RedisService,
+  ) {}
 
   async getStatus(subject: string) {
     return this.request<{
@@ -48,11 +56,9 @@ export class HfliveDirectoryService {
     kind: "status" | "profile",
     scope: string,
   ) {
-    const token = await this.getAccessToken(scope);
     const suffix = kind === "status" ? "/status" : "";
-    let response: Response;
-    try {
-      response = await fetch(
+    const directoryFetch = (token: string) =>
+      fetch(
         `${HFLIVE_ISSUER}/api/directory/users/${encodeURIComponent(subject)}${suffix}`,
         {
           redirect: "error",
@@ -63,8 +69,24 @@ export class HfliveDirectoryService {
           },
         },
       );
+    let token = await this.getAccessToken(scope);
+    let response: Response;
+    try {
+      response = await directoryFetch(token);
     } catch {
       throw new DirectoryRequestError("UNAVAILABLE");
+    }
+    // 上游轮换后缓存 token 失效：清除缓存并用新 token 重试一次。
+    if (response.status === 401 || response.status === 403) {
+      await response.body?.cancel();
+      await this.invalidateToken();
+      try {
+        token = await this.fetchAccessToken(scope);
+        response = await directoryFetch(token);
+      } catch (caught) {
+        if (caught instanceof DirectoryRequestError) throw caught;
+        throw new DirectoryRequestError("UNAVAILABLE");
+      }
     }
     if (response.status === 401 || response.status === 403) {
       await response.body?.cancel();
@@ -85,7 +107,36 @@ export class HfliveDirectoryService {
     }
   }
 
+  /**
+   * client_credentials token 缓存在 Redis（TTL = expires_in - 60s），并做
+   * 进程内单飞合并并发请求。Redis 不可用时（本地开发/测试允许内存降级）回退
+   * 为每次调用都重新获取。
+   */
   private async getAccessToken(scope: string) {
+    const client = await this.redis.getClient().catch(() => null);
+    if (client) {
+      const cached = await client.get(DIRECTORY_TOKEN_KEY).catch(() => null);
+      if (cached) return cached;
+    }
+    if (this.inFlightTokenPromise) return this.inFlightTokenPromise;
+    this.inFlightTokenPromise = this.fetchAccessToken(scope, client).finally(
+      () => {
+        this.inFlightTokenPromise = null;
+      },
+    );
+    return this.inFlightTokenPromise;
+  }
+
+  private async invalidateToken() {
+    this.inFlightTokenPromise = null;
+    const client = await this.redis.getClient().catch(() => null);
+    if (client) await client.del(DIRECTORY_TOKEN_KEY).catch(() => undefined);
+  }
+
+  private async fetchAccessToken(
+    scope: string,
+    client?: Awaited<ReturnType<RedisService["getClient"]>> | null,
+  ) {
     const authorization = Buffer.from(
       `${this.config.directoryClientId}:${this.config.directoryClientSecret}`,
     ).toString("base64");
@@ -119,9 +170,18 @@ export class HfliveDirectoryService {
     }
     const payload = (await response.json().catch(() => null)) as {
       access_token?: unknown;
+      expires_in?: unknown;
     } | null;
     if (!payload || typeof payload.access_token !== "string") {
       throw new DirectoryRequestError("INVALID_RESPONSE");
+    }
+    if (client && typeof payload.expires_in === "number") {
+      const ttlSeconds = Math.max(60, Math.floor(payload.expires_in) - 60);
+      await client
+        .set(DIRECTORY_TOKEN_KEY, payload.access_token, {
+          EX: ttlSeconds,
+        })
+        .catch(() => undefined);
     }
     return payload.access_token;
   }

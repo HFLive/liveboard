@@ -203,3 +203,36 @@ export function userStatusLabel(status: UserStatusString) {
 }
 
 type UserStatusString = "active" | "disabled";
+
+export function hfliveSyncStateLabel(
+  state: "CURRENT" | "PROFILE_CONFLICT" | "ERROR" | null,
+) {
+  const labels = {
+    CURRENT: "正常",
+    PROFILE_CONFLICT: "同步冲突",
+    ERROR: "同步异常",
+  } as const;
+  return state ? (labels[state] ?? "正常") : "正常";
+}
+
+export function hfliveLinkMethodLabel(
+  method: "JIT" | "LOCAL_PASSWORD" | "LOCAL_SESSION" | "ADMIN" | null,
+) {
+  const labels = {
+    JIT: "登录时自动创建",
+    LOCAL_PASSWORD: "密码自助关联",
+    LOCAL_SESSION: "会话自助关联",
+    ADMIN: "管理员绑定",
+  } as const;
+  return method ? (labels[method] ?? "-") : "-";
+}
+
+export function hfliveIdentityFilterLabel(filter: string) {
+  const labels: Record<string, string> = {
+    all: "全部身份",
+    linked: "已绑定",
+    unlinked: "未绑定",
+    attention: "需处理",
+  };
+  return labels[filter] ?? filter;
+}

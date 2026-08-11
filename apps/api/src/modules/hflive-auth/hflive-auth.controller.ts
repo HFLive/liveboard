@@ -10,6 +10,7 @@ import {
   Query,
   Req,
   Res,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { IsString, MinLength } from "class-validator";
 import type { Request, Response } from "express";
@@ -160,6 +161,14 @@ export class HfliveAdminController {
   ) {
     return this.hflive.adminIdentityStatus(actorUserId, targetUserId);
   }
+
+  @Post(":id/hflive-sync")
+  sync(
+    @CurrentUserId() actorUserId: string | null,
+    @Param("id") targetUserId: string,
+  ) {
+    return this.hflive.adminSyncIdentity(actorUserId, targetUserId);
+  }
 }
 
 @Controller("internal/hflive")
@@ -173,7 +182,12 @@ export class HfliveWebhookController {
     @Body() body: Buffer,
     @Headers() headers: Record<string, string | undefined>,
   ) {
-    await this.hflive.processWebhook(body, headers);
+    const outcome = await this.hflive.processWebhook(body, headers);
+    // retryable 返回 503（非 2xx）：live_sso outbox 只会把非 2xx 当失败重试，
+    // 终态（applied/duplicate/ignored）一律 204，避免无效重试耗尽进死信。
+    if (outcome.kind === "retryable") {
+      throw new ServiceUnavailableException("HFLive webhook retry required");
+    }
   }
 }
 
