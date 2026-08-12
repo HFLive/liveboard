@@ -204,6 +204,22 @@ describe("HfliveAuthService webhook and status convergence", () => {
     );
   });
 
+  it("lets concurrent requests pass degraded while another refresh holds the lease", async () => {
+    // 租约已被并发请求持有（updateMany count === 0）：ACTIVE 用户即使超过
+    // 宽限期也降级放行，而不是 503「正在刷新」——持有者正在向目录确认，
+    // 页面加载的并发请求不应整页报错。
+    prisma.externalIdentity.findUnique.mockResolvedValue({
+      ...identity,
+      lastStatusConfirmedAt: new Date(Date.now() - 61 * 60_000),
+    });
+    prisma.externalIdentity.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.checkExternalSession("user-1")).resolves.toEqual({
+      allowed: true,
+      degraded: true,
+    });
+    expect(directory.getProfile).not.toHaveBeenCalled();
+  });
+
   it("returns retryable without any event row when Directory refresh fails for a profile event", async () => {
     const body = Buffer.from(
       JSON.stringify({

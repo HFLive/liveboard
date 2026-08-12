@@ -421,10 +421,11 @@ export class HfliveAuthService {
       data: { statusRefreshLeaseUntil: new Date(now.getTime() + 10_000) },
     });
     if (lease.count === 0) {
-      if (
-        identity.externalStatus === "ACTIVE" &&
-        Date.now() - confirmedAt <= STATUS_GRACE_MS
-      ) {
+      // 租约已被并发请求持有：对方正在向目录确认状态。ACTIVE 用户直接降级
+      // 放行（与宽限窗口语义一致），避免页面加载的并发请求除租约持有者外
+      // 全部 503「正在刷新」导致页面整页报错；若目录确认 DISABLED，快照
+      // /webhook 路径会同步踢会话兜底，无新增安全暴露。
+      if (identity.externalStatus === "ACTIVE") {
         return { allowed: true as const, degraded: true as const };
       }
       throw new ServiceUnavailableException("HFLive Auth 账号状态正在刷新");

@@ -122,6 +122,73 @@ describe("API request client", () => {
     });
   });
 
+  it("retries a transient 503 and succeeds on the next attempt", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ message: "HFLive Auth 账号状态正在刷新" }),
+            { status: 503, headers: { "Content-Type": "application/json" } },
+          ),
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const pending = request<{ ok: boolean }>("/resource");
+      await vi.advanceTimersByTimeAsync(700);
+      await expect(pending).resolves.toEqual({ ok: true });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives up after all retries on a persistent 503", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({ message: "HFLive Auth 账号状态正在刷新" }),
+            { status: 503, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+      );
+
+      const pending = request("/resource").catch((caught) => caught);
+      await vi.advanceTimersByTimeAsync(700 + 1400);
+      const error = await pending;
+      expect(error).toMatchObject({
+        name: "ApiError",
+        message: "HFLive Auth 账号状态正在刷新",
+        status: 503,
+      });
+      expect(fetch).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not retry a 503 on a mutating request", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("busy", { status: 503 })),
+    );
+
+    await expect(
+      request("/resource", { method: "POST", body: "{}" }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     [401, "/files", true],
     [401, "/auth/login", false],

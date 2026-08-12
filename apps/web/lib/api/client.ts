@@ -446,15 +446,44 @@ function parseJsonResponse(value: string): unknown {
   }
 }
 
+/**
+ * 503 重试策略：HFLive 外部账号状态刷新窗口最长约 10 秒，页面加载的并发请求
+ * 可能瞬时命中 503「正在刷新」。GET/HEAD 幂等，短暂退避重试即可覆盖该窗口；
+ * 变更类请求（POST/PATCH/PUT/DELETE）不重试，避免副作用重复执行。
+ */
+const RETRYABLE_503_ATTEMPTS = 3;
+const RETRYABLE_503_BACKOFF_MS = 700;
+
+function isIdempotentRequest(init?: RequestInit) {
+  const method = (init?.method ?? "GET").toUpperCase();
+  return method === "GET" || method === "HEAD";
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-  });
+  const url = `${API_URL}${path}`;
+  const call = () =>
+    fetch(url, {
+      ...init,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...init?.headers,
+      },
+    });
+
+  let response = await call();
+  if (isIdempotentRequest(init)) {
+    for (
+      let attempt = 1;
+      response.status === 503 && attempt < RETRYABLE_503_ATTEMPTS;
+      attempt += 1
+    ) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, RETRYABLE_503_BACKOFF_MS * attempt),
+      );
+      response = await call();
+    }
+  }
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
