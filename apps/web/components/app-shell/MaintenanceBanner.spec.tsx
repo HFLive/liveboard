@@ -49,7 +49,9 @@ describe("MaintenanceBanner", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
 
-    expect(screen.getByRole("status")).toHaveTextContent("系统维护中，站点暂时只读");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "系统维护中，站点暂时只读",
+    );
     expect(screen.getByRole("status")).toHaveTextContent("迁移数据");
   });
 

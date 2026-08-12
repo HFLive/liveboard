@@ -155,12 +155,14 @@ describe("API request client", () => {
     try {
       vi.stubGlobal(
         "fetch",
-        vi.fn().mockResolvedValue(
-          new Response(
-            JSON.stringify({ message: "HFLive Auth 账号状态正在刷新" }),
-            { status: 503, headers: { "Content-Type": "application/json" } },
+        vi
+          .fn()
+          .mockResolvedValue(
+            new Response(
+              JSON.stringify({ message: "HFLive Auth 账号状态正在刷新" }),
+              { status: 503, headers: { "Content-Type": "application/json" } },
+            ),
           ),
-        ),
       );
 
       const pending = request("/resource").catch((caught) => caught);
