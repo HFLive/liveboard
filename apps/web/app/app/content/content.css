@@ -1033,6 +1033,45 @@
   grid-column: 1 / -1;
 }
 
+/* 桌面端网格视图的骨架与卡片网格同构：卡片状占位、与真实卡片逐格对齐，
+   而不是撑成整宽的列表条把内容挤到下面（移动端 760px 块已有同款处理）。 */
+@media (min-width: 761px) {
+  .content-drive-grid > .progressive-list-skeleton {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+    margin-top: 0;
+  }
+
+  .content-drive-grid .progressive-list-skeleton-row {
+    grid-template-columns: 38px minmax(0, 1fr);
+    align-items: start;
+    min-height: 142px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--fill-subtle);
+    padding: 12px;
+  }
+
+  .content-drive-grid .progressive-list-skeleton-row .skeleton-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+  }
+
+  .content-drive-grid .progressive-list-skeleton-row .skeleton-action {
+    display: none;
+  }
+
+  .content-drive-grid .progressive-list-skeleton-row .skeleton-line.primary {
+    width: 78%;
+  }
+
+  .content-drive-grid .progressive-list-skeleton-row .skeleton-line.secondary {
+    width: 52%;
+  }
+}
+
 .content-drive-card {
   display: flex;
   min-width: 0;

@@ -252,6 +252,7 @@ export function ContentClient() {
   );
   const [assetRename, setAssetRename] = useState("");
   const assetInputRef = useRef<HTMLInputElement>(null);
+  const folderContentsRequestRef = useRef(0);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
@@ -540,7 +541,10 @@ export function ContentClient() {
   }
 
   async function refreshFolderContents(folderId: string) {
+    const requestId = ++folderContentsRequestRef.current;
     const fileResult = await listFiles(folderId);
+    // 丢弃过期响应：快速连续切换目录时，只应用最后一次请求的结果。
+    if (requestId !== folderContentsRequestRef.current) return;
     setFiles(fileResult.files);
     setStandaloneAssets(fileResult.standaloneAssets);
   }
@@ -698,14 +702,25 @@ export function ContentClient() {
     await savePinnedTargets(nextItems.map(pinnedTarget), "置顶顺序已更新");
   }
 
-  async function selectFolder(folderId: string) {
+  async function selectFolder(
+    folderId: string,
+    options?: { silent?: boolean },
+  ) {
     setActiveFolderId(folderId);
     persistActiveFolder(folderId);
     setContentSearchQuery("");
     setIsBreadcrumbOverflowOpen(false);
     setShowCreateMenu(false);
     setError(null);
-    await refreshFolderContents(folderId);
+    // 进入新目录时先隐藏旧内容、显示占位，避免旧目录文件残留到数据返回。
+    if (!options?.silent) {
+      setLoadingItems(true);
+    }
+    try {
+      await refreshFolderContents(folderId);
+    } finally {
+      setLoadingItems(false);
+    }
   }
 
   function selectRoot() {
@@ -775,7 +790,8 @@ export function ContentClient() {
       setFileTitle("");
       setShowCreateFile(false);
       setMessage("文档已创建");
-      await selectFolder(activeFolderId);
+      // 同一目录就地刷新，不需要骨架占位。
+      await selectFolder(activeFolderId, { silent: true });
       await refreshTree();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "创建文档失败");
@@ -799,7 +815,8 @@ export function ContentClient() {
       setMessage(
         `“${result.file.title}”已导入，共 ${result.blockCount} 个内容块${warningText}`,
       );
-      await selectFolder(activeFolderId);
+      // 同一目录就地刷新，不需要骨架占位。
+      await selectFolder(activeFolderId, { silent: true });
       await refreshTree();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "导入 Markdown 失败");
@@ -2165,219 +2182,233 @@ export function ContentClient() {
                   <tbody>
                     {loadingItems ? (
                       <TableSkeletonRows colSpan={3} count={6} />
-                    ) : null}
-                    {visiblePinnedItems.map((item) =>
-                      renderPinnedTableRow(item, pinnedItems.indexOf(item)),
-                    )}
-                    {visibleChildFolders.map((folder) => (
-                      <tr
-                        className="content-drive-row content-folder-row"
-                        key={folder.id}
-                        onClick={(event) =>
-                          onContentRowClick(event, { kind: "folder", folder })
-                        }
-                      >
-                        <td data-label="文件名">
-                          <button
-                            className="content-folder-link"
-                            onClick={() => void selectFolder(folder.id)}
-                            type="button"
-                          >
-                            <Folder aria-hidden="true" />
-                            {folder.name}
-                          </button>
-                        </td>
-                        <td data-label="最近更新">
-                          {formatRelativeTime(folder.updatedAt)}
-                        </td>
-                        <td data-label="操作">
-                          <div className="row-menu-wrap" data-menu-root="true">
-                            <button
-                              aria-label={`“${folder.name}”文件夹操作`}
-                              className="icon-button subtle content-row-menu-button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                toggleContentRowMenu(
-                                  "folder",
-                                  folder.id,
-                                  event.currentTarget,
-                                  "list",
-                                  getContentRowMenuItemCount(),
-                                );
-                              }}
-                              title="文件夹操作"
-                              type="button"
-                            >
-                              <MoreHorizontal aria-hidden="true" />
-                            </button>
-                            {renderContentRowContextMenu(
-                              {
+                    ) : (
+                      <>
+                        {visiblePinnedItems.map((item) =>
+                          renderPinnedTableRow(item, pinnedItems.indexOf(item)),
+                        )}
+                        {visibleChildFolders.map((folder) => (
+                          <tr
+                            className="content-drive-row content-folder-row"
+                            key={folder.id}
+                            onClick={(event) =>
+                              onContentRowClick(event, {
                                 kind: "folder",
                                 folder,
-                              },
-                              "list",
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {visibleFiles.map((file) => (
-                      <Fragment key={file.id}>
-                        <tr
-                          className="content-drive-row content-file-row"
-                          onClick={(event) =>
-                            onContentRowClick(event, { kind: "file", file })
-                          }
-                        >
-                          <td data-label="文件名">
-                            <Link
-                              aria-label={file.title}
-                              className="content-file-link"
-                              href={contentDetail(file.id)}
-                              rel="noopener noreferrer"
-                              target={
-                                openContentInCurrentTab ? undefined : "_blank"
-                              }
-                            >
-                              <FileText aria-hidden="true" />
-                              {file.status === "draft" ? (
-                                <span
-                                  aria-hidden="true"
-                                  className="content-draft-tag"
-                                >
-                                  草稿
-                                </span>
-                              ) : null}
-                              {file.title}
-                            </Link>
-                          </td>
-                          <td data-label="最近更新">
-                            {formatRelativeTime(file.updatedAt)}
-                          </td>
-                          <td data-label="操作">
-                            <div
-                              className="row-menu-wrap"
-                              data-menu-root="true"
-                            >
+                              })
+                            }
+                          >
+                            <td data-label="文件名">
                               <button
-                                aria-label={`“${file.title}”文档操作`}
-                                className="icon-button subtle content-row-menu-button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  toggleContentRowMenu(
-                                    "file",
-                                    file.id,
-                                    event.currentTarget,
-                                    "list",
-                                    getContentRowMenuItemCount(),
-                                  );
-                                }}
-                                title="文档操作"
+                                className="content-folder-link"
+                                onClick={() => void selectFolder(folder.id)}
                                 type="button"
                               >
-                                <MoreHorizontal aria-hidden="true" />
+                                <Folder aria-hidden="true" />
+                                {folder.name}
                               </button>
-                              {renderContentRowContextMenu(
-                                { kind: "file", file },
-                                "list",
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      </Fragment>
-                    ))}
-                    {visibleAssets.map((asset) => (
-                      <tr
-                        className="content-drive-row content-asset-row"
-                        key={asset.id}
-                        onClick={(event) => onAssetRowClick(event, asset)}
-                      >
-                        <td data-label="文件名">
-                          <a
-                            className="content-file-link"
-                            href={apiResourceUrl(`/assets/${asset.id}`)}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              setPreviewAsset(asset);
-                            }}
-                          >
-                            <FileIcon aria-hidden="true" />
-                            {asset.filename}
-                            <small className="muted">
-                              {formatFileSize(asset.sizeBytes)}
-                            </small>
-                          </a>
-                        </td>
-                        <td data-label="最近更新">
-                          {formatRelativeTime(asset.updatedAt)}
-                        </td>
-                        <td data-label="操作">
-                          <div className="content-asset-actions">
-                            {asset.canManage ? (
+                            </td>
+                            <td data-label="最近更新">
+                              {formatRelativeTime(folder.updatedAt)}
+                            </td>
+                            <td data-label="操作">
                               <div
                                 className="row-menu-wrap"
                                 data-menu-root="true"
                               >
                                 <button
-                                  aria-label={`“${asset.filename}”文件操作`}
+                                  aria-label={`“${folder.name}”文件夹操作`}
                                   className="icon-button subtle content-row-menu-button"
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     toggleContentRowMenu(
-                                      "asset",
-                                      asset.id,
+                                      "folder",
+                                      folder.id,
                                       event.currentTarget,
                                       "list",
-                                      3,
+                                      getContentRowMenuItemCount(),
                                     );
                                   }}
-                                  title="文件操作"
+                                  title="文件夹操作"
                                   type="button"
                                 >
                                   <MoreHorizontal aria-hidden="true" />
                                 </button>
-                                {renderAssetContextMenu(asset)}
+                                {renderContentRowContextMenu(
+                                  {
+                                    kind: "folder",
+                                    folder,
+                                  },
+                                  "list",
+                                )}
                               </div>
-                            ) : (
+                            </td>
+                          </tr>
+                        ))}
+                        {visibleFiles.map((file) => (
+                          <Fragment key={file.id}>
+                            <tr
+                              className="content-drive-row content-file-row"
+                              onClick={(event) =>
+                                onContentRowClick(event, { kind: "file", file })
+                              }
+                            >
+                              <td data-label="文件名">
+                                <Link
+                                  aria-label={file.title}
+                                  className="content-file-link"
+                                  href={contentDetail(file.id)}
+                                  rel="noopener noreferrer"
+                                  target={
+                                    openContentInCurrentTab
+                                      ? undefined
+                                      : "_blank"
+                                  }
+                                >
+                                  <FileText aria-hidden="true" />
+                                  {file.status === "draft" ? (
+                                    <span
+                                      aria-hidden="true"
+                                      className="content-draft-tag"
+                                    >
+                                      草稿
+                                    </span>
+                                  ) : null}
+                                  {file.title}
+                                </Link>
+                              </td>
+                              <td data-label="最近更新">
+                                {formatRelativeTime(file.updatedAt)}
+                              </td>
+                              <td data-label="操作">
+                                <div
+                                  className="row-menu-wrap"
+                                  data-menu-root="true"
+                                >
+                                  <button
+                                    aria-label={`“${file.title}”文档操作`}
+                                    className="icon-button subtle content-row-menu-button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      toggleContentRowMenu(
+                                        "file",
+                                        file.id,
+                                        event.currentTarget,
+                                        "list",
+                                        getContentRowMenuItemCount(),
+                                      );
+                                    }}
+                                    title="文档操作"
+                                    type="button"
+                                  >
+                                    <MoreHorizontal aria-hidden="true" />
+                                  </button>
+                                  {renderContentRowContextMenu(
+                                    { kind: "file", file },
+                                    "list",
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          </Fragment>
+                        ))}
+                        {visibleAssets.map((asset) => (
+                          <tr
+                            className="content-drive-row content-asset-row"
+                            key={asset.id}
+                            onClick={(event) => onAssetRowClick(event, asset)}
+                          >
+                            <td data-label="文件名">
                               <a
-                                aria-label={`下载“${asset.filename}”`}
-                                className="icon-button subtle"
-                                href={assetDownloadUrl(asset.id)}
-                                title="下载"
+                                className="content-file-link"
+                                href={apiResourceUrl(`/assets/${asset.id}`)}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  setPreviewAsset(asset);
+                                }}
                               >
-                                <Download aria-hidden="true" />
+                                <FileIcon aria-hidden="true" />
+                                {asset.filename}
+                                <small className="muted">
+                                  {formatFileSize(asset.sizeBytes)}
+                                </small>
                               </a>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {!loadingItems && !hasVisibleContentItems ? (
-                      <tr className="content-empty-row">
-                        <td className="empty-cell" colSpan={3}>
-                          {renderContentEmptyState()}
-                        </td>
-                      </tr>
-                    ) : null}
+                            </td>
+                            <td data-label="最近更新">
+                              {formatRelativeTime(asset.updatedAt)}
+                            </td>
+                            <td data-label="操作">
+                              <div className="content-asset-actions">
+                                {asset.canManage ? (
+                                  <div
+                                    className="row-menu-wrap"
+                                    data-menu-root="true"
+                                  >
+                                    <button
+                                      aria-label={`“${asset.filename}”文件操作`}
+                                      className="icon-button subtle content-row-menu-button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        toggleContentRowMenu(
+                                          "asset",
+                                          asset.id,
+                                          event.currentTarget,
+                                          "list",
+                                          3,
+                                        );
+                                      }}
+                                      title="文件操作"
+                                      type="button"
+                                    >
+                                      <MoreHorizontal aria-hidden="true" />
+                                    </button>
+                                    {renderAssetContextMenu(asset)}
+                                  </div>
+                                ) : (
+                                  <a
+                                    aria-label={`下载“${asset.filename}”`}
+                                    className="icon-button subtle"
+                                    href={assetDownloadUrl(asset.id)}
+                                    title="下载"
+                                  >
+                                    <Download aria-hidden="true" />
+                                  </a>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {!hasVisibleContentItems ? (
+                          <tr className="content-empty-row">
+                            <td className="empty-cell" colSpan={3}>
+                              {renderContentEmptyState()}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </>
+                    )}
                   </tbody>
                 </table>
               </div>
             ) : (
               <div className="content-drive-grid">
-                {loadingItems ? <SkeletonRows count={6} /> : null}
-                {visiblePinnedItems.map((item) =>
-                  renderContentGridCard(item, pinnedItems.indexOf(item)),
+                {loadingItems ? (
+                  <SkeletonRows count={6} />
+                ) : (
+                  <>
+                    {visiblePinnedItems.map((item) =>
+                      renderContentGridCard(item, pinnedItems.indexOf(item)),
+                    )}
+                    {visibleChildFolders.map((folder) =>
+                      renderContentGridCard({ kind: "folder", folder }),
+                    )}
+                    {visibleFiles.map((file) =>
+                      renderContentGridCard({ kind: "file", file }),
+                    )}
+                    {visibleAssets.map(renderAssetGridCard)}
+                    {!hasVisibleContentItems ? renderContentEmptyState() : null}
+                  </>
                 )}
-                {visibleChildFolders.map((folder) =>
-                  renderContentGridCard({ kind: "folder", folder }),
-                )}
-                {visibleFiles.map((file) =>
-                  renderContentGridCard({ kind: "file", file }),
-                )}
-                {visibleAssets.map(renderAssetGridCard)}
-                {!loadingItems && !hasVisibleContentItems
-                  ? renderContentEmptyState()
-                  : null}
               </div>
             )}
           </div>
