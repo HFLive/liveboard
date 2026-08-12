@@ -105,6 +105,9 @@
 
 .doc-block-render {
   min-height: 2em;
+  /* grid item 默认 min-width: auto 会让不可断行的 pre/长链接把块撑出文档列，
+     必须允许收缩，长文本交给 overflow-wrap、代码块交给自身的 overflow-x */
+  min-width: 0;
   padding: 2px 0;
   font-family:
     "Noto Serif SC", "Songti SC", STSong, SimSun, "Noto Serif CJK SC", serif;
@@ -113,6 +116,9 @@
   color: var(--text-soft);
   text-rendering: optimizeLegibility;
   cursor: text;
+  /* 长链接/长单词按需任意断行，避免撑破文档列导致页面横向滚动
+     （.render-code 代码块自带 overflow-x 滚动，不受影响） */
+  overflow-wrap: anywhere;
 }
 
 .doc-block-render :is(h1, h2, h3, h4, h5, h6) {

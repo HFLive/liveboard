@@ -329,6 +329,9 @@
   font-size: var(--reader-font-size);
   line-height: 1.88;
   text-rendering: optimizeLegibility;
+  /* 长链接/长单词按需任意断行，避免撑破 760px 正文容器导致页面横向滚动
+     （.render-code 代码块自带 overflow-x 滚动，不受影响） */
+  overflow-wrap: anywhere;
 }
 
 .content-viewer-document[data-reader-font="kai"] {

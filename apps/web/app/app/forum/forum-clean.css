@@ -1321,6 +1321,9 @@
   .forum-thread-detail .forum-thread-actions {
     grid-column: 1;
     grid-row: 1;
+    /* 与 .forum-thread-context 同占 row 1:若不收窄宽度,透明容器会拉伸占满整行,
+       截获指针事件导致左侧「返回论坛」链接无法点击 */
+    justify-self: end;
     justify-content: flex-end;
   }
 
