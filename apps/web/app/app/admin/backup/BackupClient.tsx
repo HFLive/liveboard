@@ -480,7 +480,7 @@ export function BackupClient() {
                       onClick={() => void onSaveSettings()}
                     >
                       {saving ? (
-                        <Loader2 className="spin" size={16} />
+                        <Loader2 className="spinner" size={16} />
                       ) : (
                         "保存设置"
                       )}
@@ -508,7 +508,7 @@ export function BackupClient() {
                   onClick={() => void onStartBackup()}
                 >
                   {starting ? (
-                    <Loader2 className="spin" size={16} />
+                    <Loader2 className="spinner" size={16} />
                   ) : (
                     <Database size={16} />
                   )}
@@ -565,13 +565,15 @@ export function BackupClient() {
                           className={`backup-status backup-status-${job.status}`}
                         >
                           {job.status === "running" && (
-                            <Loader2 className="spin" size={16} />
+                            <Loader2 className="spinner" size={16} />
                           )}
                           {job.status === "succeeded" && (
                             <CheckCircle2 size={16} />
                           )}
                           {job.status === "failed" && <XCircle size={16} />}
-                          {job.status === "pending" && <Loader2 size={16} />}
+                          {job.status === "pending" && (
+                            <Loader2 className="spinner" size={16} />
+                          )}
                           {statusLabel(job.status)}
                         </span>
                         <span className="backup-time">
@@ -623,7 +625,7 @@ export function BackupClient() {
                             onClick={() => void onDismiss(job.id)}
                           >
                             {dismissingJob === job.id && (
-                              <Loader2 className="spin" size={14} />
+                              <Loader2 className="spinner" size={14} />
                             )}
                             知道了
                           </button>
@@ -721,7 +723,7 @@ export function BackupClient() {
                   disabled={deleting}
                   onClick={() => void onDelete()}
                 >
-                  {deleting && <Loader2 className="spin" size={16} />}
+                  {deleting && <Loader2 className="spinner" size={16} />}
                   删除备份
                 </button>
               </div>
@@ -789,7 +791,7 @@ export function BackupClient() {
                   disabled={restoring}
                   onClick={() => void onRestore()}
                 >
-                  {restoring && <Loader2 className="spin" size={16} />}
+                  {restoring && <Loader2 className="spinner" size={16} />}
                   确认回滚
                 </button>
               </div>

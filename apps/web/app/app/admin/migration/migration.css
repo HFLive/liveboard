@@ -467,16 +467,6 @@
   font-size: 11px;
 }
 
-.spin {
-  animation: migration-spin 0.9s linear infinite;
-}
-
-@keyframes migration-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (max-width: 980px) {
   .migration-page .migration-layout {
     grid-template-columns: minmax(0, 1fr);

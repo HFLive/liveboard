@@ -52,6 +52,7 @@ import {
   useFeedbackNotice,
 } from "@/components/system/FeedbackNotice";
 import { TableSkeletonRows } from "@/components/system/ProgressiveLoading";
+import { InlineLoading } from "@/components/system/Loading";
 
 type UserEditDraft = {
   username: string;
@@ -571,11 +572,15 @@ export function UserManagementClient() {
               <h2 className="admin-list-heading">
                 成员列表
                 <span className="admin-list-count">
-                  {filteredUsers.length === users.length
-                    ? loadingUsers
-                      ? "正在加载"
-                      : `${users.length} 人`
-                    : `${filteredUsers.length} / ${users.length} 人`}
+                  {filteredUsers.length === users.length ? (
+                    loadingUsers ? (
+                      <InlineLoading label="正在加载" />
+                    ) : (
+                      `${users.length} 人`
+                    )
+                  ) : (
+                    `${filteredUsers.length} / ${users.length} 人`
+                  )}
                 </span>
               </h2>
             </div>
@@ -1090,7 +1095,7 @@ export function UserManagementClient() {
                     >
                       <RefreshCw
                         aria-hidden="true"
-                        className={identitySyncing ? "spin" : "button-icon"}
+                        className={identitySyncing ? "spinner" : "button-icon"}
                       />
                       {identitySyncing ? "正在同步…" : "立即同步"}
                     </button>

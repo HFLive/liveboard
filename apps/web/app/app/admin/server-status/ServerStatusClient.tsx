@@ -171,7 +171,7 @@ export function ServerStatusClient() {
                 >
                   <RefreshCw
                     aria-hidden="true"
-                    className={refreshing ? "spinning" : undefined}
+                    className={refreshing ? "spinner" : undefined}
                   />
                 </button>
               </div>

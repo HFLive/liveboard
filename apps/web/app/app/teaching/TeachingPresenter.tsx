@@ -27,6 +27,7 @@ import { classroomDetail, teachingEdit } from "@/lib/routes";
 import { RenderBlockContent } from "../content/[id]/ContentBlockRenderer";
 import { buildTeachingSlides } from "./teachingSlides";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { InlineLoading } from "@/components/system/Loading";
 
 type AnswerValue = string | string[] | boolean;
 
@@ -194,9 +195,11 @@ export function TeachingPresenter({ deckId }: { deckId: string }) {
         <div>
           <h1>{deck?.title ?? "课件"}</h1>
           <span className="teaching-page-count">
-            {slides.length
-              ? `${activeIndex + 1} / ${slides.length}`
-              : "正在加载"}
+            {slides.length ? (
+              `${activeIndex + 1} / ${slides.length}`
+            ) : (
+              <InlineLoading label="正在加载" />
+            )}
           </span>
         </div>
         <div className="button-row">
@@ -410,7 +413,7 @@ function TeachingManuscript({
 
       {error ? <p className="error-text">{error}</p> : null}
       <article className="teaching-manuscript-body">
-        {!deck && !error ? <p className="muted">正在加载课件…</p> : null}
+        {!deck && !error ? <InlineLoading label="正在加载课件…" /> : null}
         {deck?.items.length === 0 ? (
           <p className="muted">课件暂无内容。</p>
         ) : null}
@@ -506,7 +509,7 @@ function EmbeddedExercise({ exerciseSetId }: { exerciseSetId: string }) {
       <div className="embedded-exercise-head">
         <div>
           <span className="embedded-exercise-kicker">课堂练习</span>
-          <h2>{exercise?.title ?? "加载练习…"}</h2>
+          <h2>{exercise?.title ?? <InlineLoading label="加载练习…" />}</h2>
         </div>
         <span className="embedded-exercise-count">
           {exercise?.questions.length ?? 0} 道题

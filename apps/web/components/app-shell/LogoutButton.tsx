@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LogOut } from "lucide-react";
 import { logout } from "@/lib/api";
+import { Spinner } from "@/components/system/Loading";
 
 export function LogoutButton() {
   const router = useRouter();
@@ -25,13 +26,18 @@ export function LogoutButton() {
 
   return (
     <button
+      aria-busy={loading}
       aria-label={loading ? "正在退出" : "退出登录"}
       className="nav-button rail-logout-button"
       disabled={loading}
       onClick={onLogout}
       type="button"
     >
-      <LogOut aria-hidden="true" className="rail-icon" />
+      {loading ? (
+        <Spinner size={17} className="rail-icon" />
+      ) : (
+        <LogOut aria-hidden="true" className="rail-icon" />
+      )}
       <span className="rail-logout-label">退出登录</span>
     </button>
   );

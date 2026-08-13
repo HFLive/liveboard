@@ -416,7 +416,7 @@ export function MigrationClient() {
                 type="button"
               >
                 {starting === "export" ? (
-                  <Loader2 aria-hidden="true" className="button-icon spin" />
+                  <Loader2 aria-hidden="true" className="button-icon spinner" />
                 ) : (
                   <Download aria-hidden="true" className="button-icon" />
                 )}
@@ -552,7 +552,10 @@ export function MigrationClient() {
                   type="button"
                 >
                   {starting === "import" ? (
-                    <Loader2 aria-hidden="true" className="button-icon spin" />
+                    <Loader2
+                      aria-hidden="true"
+                      className="button-icon spinner"
+                    />
                   ) : (
                     <ArrowLeftRight
                       aria-hidden="true"
@@ -637,7 +640,7 @@ function JobRow({
           ) : job.status === "failed" ? (
             <XCircle aria-hidden="true" className="job-status-icon" />
           ) : (
-            <Loader2 aria-hidden="true" className="job-status-icon spin" />
+            <Loader2 aria-hidden="true" className="job-status-icon spinner" />
           )}
           {job.status === "succeeded"
             ? "成功"

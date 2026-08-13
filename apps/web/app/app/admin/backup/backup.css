@@ -404,16 +404,6 @@
   font-weight: 700;
 }
 
-.spin {
-  animation: backup-spin 1s linear infinite;
-}
-
-@keyframes backup-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (max-width: 980px) {
   .backup-page .backup-layout,
   .backup-notice-panel,

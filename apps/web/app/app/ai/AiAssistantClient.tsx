@@ -45,6 +45,7 @@ import { formatRelativeTime } from "@/lib/labels";
 import { APP_ROUTES, contentDetail } from "@/lib/routes";
 import { AutoTextarea } from "@/components/AutoTextarea";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
+import { InlineLoading } from "@/components/system/Loading";
 
 type ChatMessage = {
   id: string;
@@ -583,9 +584,11 @@ export function AiAssistantClient() {
           <div className="ai-sidebar-head">
             <h2>最近对话</h2>
             <span>
-              {loadingHistory
-                ? "正在加载"
-                : `${filteredConversations.length} 条`}
+              {loadingHistory ? (
+                <InlineLoading label="正在加载" size={12} />
+              ) : (
+                `${filteredConversations.length} 条`
+              )}
             </span>
           </div>
           <div className="history-list">
@@ -623,9 +626,11 @@ export function AiAssistantClient() {
                         </time>
                       </span>
                       <small>
-                        {loadingConversationId === conversation.id
-                          ? "加载中"
-                          : conversation.lastMessagePreview || "暂无消息"}
+                        {loadingConversationId === conversation.id ? (
+                          <InlineLoading label="加载中" size={12} />
+                        ) : (
+                          conversation.lastMessagePreview || "暂无消息"
+                        )}
                       </small>
                     </button>
                     <button
@@ -717,7 +722,11 @@ export function AiAssistantClient() {
               </>
             ) : (
               <span>
-                {usageFailed ? "AI 额度暂不可用" : "正在读取 AI 额度"}
+                {usageFailed ? (
+                  "AI 额度暂不可用"
+                ) : (
+                  <InlineLoading label="正在读取 AI 额度" size={12} />
+                )}
               </span>
             )}
           </div>

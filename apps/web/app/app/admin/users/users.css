@@ -231,16 +231,6 @@
   padding-top: 4px;
 }
 
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (max-width: 720px) {
   .admin-user-filters,
   .admin-user-batch-bar {

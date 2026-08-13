@@ -18,6 +18,7 @@ import {
 } from "@/lib/labels";
 import { classroomDetail } from "@/lib/routes";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { InlineLoading, Spinner } from "@/components/system/Loading";
 
 type AnswerState = Record<string, string | string[] | boolean>;
 
@@ -254,9 +255,11 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
           <p className="page-eyebrow">练习详情</p>
           <h1>{exerciseSet?.title ?? "练习详情"}</h1>
           <p className="muted">
-            {exerciseSet
-              ? `共 ${exerciseSet.questions.length} 道题 · ${exerciseSet.dueAt ? `截止 ${formatDateTime(exerciseSet.dueAt)}` : "无截止时间"}`
-              : "正在加载练习内容与提交状态。"}
+            {exerciseSet ? (
+              `共 ${exerciseSet.questions.length} 道题 · ${exerciseSet.dueAt ? `截止 ${formatDateTime(exerciseSet.dueAt)}` : "无截止时间"}`
+            ) : (
+              <InlineLoading label="正在加载练习内容与提交状态。" />
+            )}
           </p>
         </div>
       </section>
@@ -283,6 +286,7 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
               disabled={loading || !canSubmit}
               type="submit"
             >
+              {loading ? <Spinner size={16} className="button-icon" /> : null}
               {loading ? "提交中" : "提交"}
             </button>
           </div>
@@ -499,6 +503,9 @@ export function ExerciseRunner({ exerciseSetId }: { exerciseSetId: string }) {
                   onClick={() => void confirmSubmit()}
                   type="button"
                 >
+                  {loading ? (
+                    <Spinner size={16} className="button-icon" />
+                  ) : null}
                   {loading ? "提交中" : "确认提交"}
                 </button>
               </div>

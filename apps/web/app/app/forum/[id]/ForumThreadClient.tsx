@@ -45,6 +45,7 @@ import { ForumUserAvatar } from "../ForumUserAvatar";
 import { ForumImagePicker } from "../ForumImagePicker";
 import { ForumPostImages } from "../ForumPostImages";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { Spinner } from "@/components/system/Loading";
 
 interface ForumThreadClientProps {
   threadId: string;
@@ -74,6 +75,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [votingPostIds, setVotingPostIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const draftKey = `liveboard:forum-reply-draft:${threadId}`;
@@ -300,6 +302,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     }
 
     setActionLoading(true);
+    setPendingAction("thread-status");
     setError(null);
 
     try {
@@ -309,6 +312,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       setError(caught instanceof Error ? caught.message : "更新帖子状态失败");
     } finally {
       setActionLoading(false);
+      setPendingAction(null);
     }
   }
 
@@ -321,6 +325,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     }
 
     setActionLoading(true);
+    setPendingAction("thread-delete");
     setError(null);
 
     try {
@@ -329,6 +334,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "删除帖子失败");
       setActionLoading(false);
+      setPendingAction(null);
     }
   }
 
@@ -342,6 +348,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
     }
 
     setActionLoading(true);
+    setPendingAction(postId);
     setError(null);
 
     try {
@@ -387,6 +394,7 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
       setError(caught instanceof Error ? caught.message : "删除回复失败");
     } finally {
       setActionLoading(false);
+      setPendingAction(null);
     }
   }
 
@@ -520,7 +528,11 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                       title="删除"
                       type="button"
                     >
-                      <Trash2 aria-hidden="true" />
+                      {pendingAction === replyPost.id ? (
+                        <Spinner size={14} />
+                      ) : (
+                        <Trash2 aria-hidden="true" />
+                      )}
                     </button>
                   ) : null}
                 </span>
@@ -655,7 +667,11 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                           onClick={() => setThreadStatus("open")}
                           type="button"
                         >
-                          <Unlock aria-hidden="true" />
+                          {pendingAction === "thread-status" ? (
+                            <Spinner size={14} />
+                          ) : (
+                            <Unlock aria-hidden="true" />
+                          )}
                           解锁帖子
                         </button>
                       ) : (
@@ -664,7 +680,11 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                           onClick={() => setThreadStatus("locked")}
                           type="button"
                         >
-                          <Lock aria-hidden="true" />
+                          {pendingAction === "thread-status" ? (
+                            <Spinner size={14} />
+                          ) : (
+                            <Lock aria-hidden="true" />
+                          )}
                           锁定帖子
                         </button>
                       )
@@ -676,7 +696,11 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                         onClick={deleteThread}
                         type="button"
                       >
-                        <Trash2 aria-hidden="true" />
+                        {pendingAction === "thread-delete" ? (
+                          <Spinner size={14} />
+                        ) : (
+                          <Trash2 aria-hidden="true" />
+                        )}
                         删除帖子
                       </button>
                     ) : null}
@@ -739,7 +763,11 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                       title="删除"
                       type="button"
                     >
-                      <Trash2 aria-hidden="true" />
+                      {pendingAction === postStructure.mainPost!.id ? (
+                        <Spinner size={14} />
+                      ) : (
+                        <Trash2 aria-hidden="true" />
+                      )}
                     </button>
                   ) : null}
                 </header>
@@ -825,7 +853,11 @@ export function ForumThreadClient({ threadId }: ForumThreadClientProps) {
                                 title="删除"
                                 type="button"
                               >
-                                <Trash2 aria-hidden="true" />
+                                {pendingAction === post.id ? (
+                                  <Spinner size={14} />
+                                ) : (
+                                  <Trash2 aria-hidden="true" />
+                                )}
                               </button>
                             ) : null}
                           </span>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { fetchFilePreview } from "@/lib/api";
+import { InlineLoading } from "@/components/system/Loading";
 
 export function AssetTextPreview({
   previewPath,
@@ -41,8 +42,8 @@ export function AssetTextPreview({
   }
   if (content === null) {
     return (
-      <div className="asset-preview-status" role="status">
-        正在加载预览…
+      <div className="asset-preview-status">
+        <InlineLoading label="正在加载预览…" />
       </div>
     );
   }

@@ -15,6 +15,7 @@ import {
   useFeedbackNotice,
 } from "@/components/system/FeedbackNotice";
 import { NotificationList } from "@/components/notifications/NotificationList";
+import { InlineLoading } from "@/components/system/Loading";
 import {
   broadcastNotificationsUpdated,
   NOTIFICATIONS_UPDATED_EVENT,
@@ -303,7 +304,11 @@ export function NotificationsClient() {
           onClick={() => void loadMore()}
           type="button"
         >
-          {loadingMore ? "正在加载…" : "加载更多"}
+          {loadingMore ? (
+            <InlineLoading label="正在加载…" size={12} />
+          ) : (
+            "加载更多"
+          )}
         </button>
       ) : null}
     </section>

@@ -3284,6 +3284,27 @@ body,
   }
 }
 
+/* 统一加载动画：轻量旋转 spinner 与行内加载文案。
+   spinner 使用线性匀速旋转 + GPU 合成，保证流畅丝滑。 */
+.spinner {
+  flex: none;
+  animation: liveboard-spin 0.85s linear infinite;
+  will-change: transform;
+}
+
+.inline-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+}
+
+@keyframes liveboard-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .route-content-skeleton {
   align-content: start;
   min-height: min(620px, calc(100dvh - (var(--page-gutter) * 2)));
@@ -3390,7 +3411,8 @@ body,
 
 @media (prefers-reduced-motion: reduce) {
   .skeleton-block,
-  .skeleton {
+  .skeleton,
+  .spinner {
     animation: none;
   }
 }

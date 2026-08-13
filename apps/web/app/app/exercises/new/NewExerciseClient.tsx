@@ -31,6 +31,7 @@ import {
 import { questionTypeLabel } from "@/lib/labels";
 import { classroomDetail } from "@/lib/routes";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { Spinner } from "@/components/system/Loading";
 
 const questionTypes: Array<{ value: QuestionType; label: string }> = [
   { value: "single_choice", label: questionTypeLabel("single_choice") },
@@ -805,7 +806,11 @@ export function NewExerciseClient({
             title={exerciseId ? "保存练习" : "创建练习"}
             type="button"
           >
-            <Check aria-hidden="true" className="button-icon" />
+            {loading ? (
+              <Spinner size={16} className="button-icon" />
+            ) : (
+              <Check aria-hidden="true" className="button-icon" />
+            )}
             <span className="quiz-publish-label">
               {loading
                 ? exerciseId

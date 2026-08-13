@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, LogIn, ShieldAlert } from "lucide-react";
 import type { AuthCapabilities } from "@liveboard/shared";
+import { InlineLoading, Spinner } from "@/components/system/Loading";
 import {
   ApiError,
   breakglassLogin,
@@ -93,7 +94,9 @@ export function LoginForm({ reason }: { reason?: string }) {
   }
 
   if (!capabilities) {
-    return <p className="muted login-loading">正在确认登录方式…</p>;
+    return (
+      <InlineLoading className="login-loading" label="正在确认登录方式…" />
+    );
   }
 
   const localForm = (emergency = false) => (
@@ -158,6 +161,7 @@ export function LoginForm({ reason }: { reason?: string }) {
         </p>
       ) : null}
       <button className="button login-submit" disabled={loading} type="submit">
+        {loading ? <Spinner size={16} className="button-icon" /> : null}
         {loading ? "正在登录…" : emergency ? "紧急登录" : "登录"}
       </button>
 

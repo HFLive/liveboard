@@ -12,6 +12,7 @@ import {
 import { AutoTextarea } from "@/components/AutoTextarea";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
+import { InlineLoading } from "@/components/system/Loading";
 
 type CategoryDraft = {
   name: string;
@@ -153,7 +154,11 @@ export function ForumSettingsClient() {
             </h2>
             <div className="button-row">
               <span className="muted">
-                {loadingCategories ? "正在加载" : `${categories.length} 个`}
+                {loadingCategories ? (
+                  <InlineLoading label="正在加载" />
+                ) : (
+                  `${categories.length} 个`
+                )}
               </span>
               <button
                 className="button secondary"

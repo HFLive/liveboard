@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { linkHfliveWithPassword } from "@/lib/api";
 import { APP_ROUTES } from "@/lib/routes";
+import { InlineLoading, Spinner } from "@/components/system/Loading";
 
 export function AccountLinkForm() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export function AccountLinkForm() {
     }
   }
 
-  if (!ready) return <p className="muted">正在读取关联请求…</p>;
+  if (!ready) return <InlineLoading label="正在读取关联请求…" />;
   if (!ticket) {
     return (
       <div className="login-link-expired" role="alert">
@@ -86,6 +87,7 @@ export function AccountLinkForm() {
         />
       </label>
       <button className="button login-submit" disabled={loading} type="submit">
+        {loading ? <Spinner size={16} className="button-icon" /> : null}
         {loading ? "正在关联…" : "确认关联并登录"}
       </button>
       <Link className="login-cancel-link" href="/login">
