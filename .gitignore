@@ -18,3 +18,8 @@ backups/
 releases/
 # Claude Code 本地权限/环境配置（每台机器各不相同，勿提交）
 .claude/
+# Qwen 工具本地配置（勿提交）
+.qwen/
+# 本地教学草稿（勿提交）
+teach.md
+improveteach.md
