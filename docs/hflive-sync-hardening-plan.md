@@ -74,11 +74,11 @@ cron 频率最低每天一次且 cron 条数受限（LiveBoard 已有 2 条）�
 只有两种事件类型（`live_sso/src/lib/security/client-service.ts:8` `EVENT_TYPES`）。
 投递时顶层附带 `id`（事件 UUID）与 `type`，其余为 payload 字段：
 
-| 事件 | payload 字段 | 说明 |
-|---|---|---|
-| `user.status.changed` | `webhookId, clientId, subject, status(ACTIVE\|DISABLED), occurredAt` | 全局启停 |
-| `user.profile.changed`（改名变体） | `webhookId, clientId, subject, name, occurredAt` | 不含 picture |
-| `user.profile.changed`（头像变体） | `webhookId, clientId, subject, picture, version, occurredAt` | 不含 name |
+| 事件                               | payload 字段                                                         | 说明         |
+| ---------------------------------- | -------------------------------------------------------------------- | ------------ |
+| `user.status.changed`              | `webhookId, clientId, subject, status(ACTIVE\|DISABLED), occurredAt` | 全局启停     |
+| `user.profile.changed`（改名变体） | `webhookId, clientId, subject, name, occurredAt`                     | 不含 picture |
+| `user.profile.changed`（头像变体） | `webhookId, clientId, subject, picture, version, occurredAt`         | 不含 name    |
 
 **事件只是提示（hint）**：payload 不完整是刻意设计，接收方必须回拉 Directory 取权威资料。
 不存在 `user.created` / `user.deleted` / 改用户名 / 改邮箱事件（live_sso 目前也没有这些变更 API）。
@@ -218,7 +218,7 @@ webhook-status 聚合）。
      含 Directory 抛错）→ 同样返回 retryable，**不更新 `lastStatusEventAt`**
      （否则重试会命中乱序保护被当 STALE 丢弃）。
    - 幂等依然成立：事件行只在终态决策时写入；并发重试由 eventId 唯一键
-     + P2002 兜底（现有 637-643 行逻辑保留）。
+     - P2002 兜底（现有 637-643 行逻辑保留）。
 3. **终态维持现状**：DISABLED 立即应用（递增 sessionVersion）；APPLIED、
    重复、未知主体（UNKNOWN_SUBJECT）、乱序（STALE_EVENT）都是终态。
 4. 控制器按返回值映射 HTTP 状态：
@@ -467,14 +467,14 @@ cron 批次时长，减少 Hobby 函数超时风险）。
 
 ### 已确认（用户 2026-08-11 决策）
 
-| 决策 | 内容 |
-|---|---|
-| 目标认证模式 | 未来仅 `AUTH_MODE=hflive_oidc`（SSO 唯一登录），本地登录弃用 |
-| 资料权威 | 已绑定用户的 username/email/显示名/头像一律以 HFLive 为权威，不回退本地旧值 |
-| 创建入口 | hflive_oidc 模式下隐藏「创建成员」「批量导入」（JIT 成为唯一入口） |
-| 成员删除 | 不加，保持只能停用 |
-| 改名能力 | 做，仅 super_admin 可改 |
-| 改动范围 | live_sso 与 LiveBoard 两边都可改 |
+| 决策         | 内容                                                                        |
+| ------------ | --------------------------------------------------------------------------- |
+| 目标认证模式 | 未来仅 `AUTH_MODE=hflive_oidc`（SSO 唯一登录），本地登录弃用                |
+| 资料权威     | 已绑定用户的 username/email/显示名/头像一律以 HFLive 为权威，不回退本地旧值 |
+| 创建入口     | hflive_oidc 模式下隐藏「创建成员」「批量导入」（JIT 成为唯一入口）          |
+| 成员删除     | 不加，保持只能停用                                                          |
+| 改名能力     | 做，仅 super_admin 可改                                                     |
+| 改动范围     | live_sso 与 LiveBoard 两边都可改                                            |
 
 ### 明确不做（本轮）
 
@@ -522,19 +522,19 @@ cron 批次时长，减少 Hobby 函数超时风险）。
 
 ### 7.2 手工端到端（hybrid 环境，双端本地或预发布）
 
-| # | 场景 | 预期 |
-|---|---|---|
-| 1 | HFLive 改显示名 | ≤1 分钟（cron 派发）LiveBoard 列表/帖子/个人主页全部更新 |
-| 2 | HFLive 换头像 | 新 `?v=` URL 落库，页面头像即时更新，无旧图闪现 |
-| 3 | HFLive 停用账号 | 事件立即生效（sessionVersion 递增），该用户下次请求被拒 |
-| 4 | 模拟 Directory 故障（停 live_sso 或改错 directory 密钥）时发 profile 事件 | webhook 返回 503；live_sso OutboxEvent 保持 PENDING 并退避重试；恢复后资料收敛；事件不重复应用 |
-| 5 | 手动把某身份置为 `syncState=ERROR`（或等待场景 4）后，该用户发起任一认证请求 | 15 分钟窗口内 `checkExternalSession` 用 getProfile 修复为 CURRENT |
-| 6 | 管理端「立即同步」 | 返回最新 syncState，列表行刷新 |
-| 7 | PATCH 改已绑定用户 displayName / 重置密码 | 400 + 明确文案 |
-| 8 | super_admin 改名占用用户名的账号 | 成功；原冲突身份下次同步变 CURRENT |
-| 9 | 批量停用 3 个成员 | 单次请求，updated=3，会话被踢 |
-| 10 | hflive_oidc 模式下打开成员管理 | 创建/导入入口不可见；未绑定用户弹窗有说明 |
-| 11 | 每日 cron（可手工带 Bearer 触发） | ERROR/陈旧身份被限量清扫，日志计数正确 |
+| #   | 场景                                                                         | 预期                                                                                           |
+| --- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 1   | HFLive 改显示名                                                              | ≤1 分钟（cron 派发）LiveBoard 列表/帖子/个人主页全部更新                                       |
+| 2   | HFLive 换头像                                                                | 新 `?v=` URL 落库，页面头像即时更新，无旧图闪现                                                |
+| 3   | HFLive 停用账号                                                              | 事件立即生效（sessionVersion 递增），该用户下次请求被拒                                        |
+| 4   | 模拟 Directory 故障（停 live_sso 或改错 directory 密钥）时发 profile 事件    | webhook 返回 503；live_sso OutboxEvent 保持 PENDING 并退避重试；恢复后资料收敛；事件不重复应用 |
+| 5   | 手动把某身份置为 `syncState=ERROR`（或等待场景 4）后，该用户发起任一认证请求 | 15 分钟窗口内 `checkExternalSession` 用 getProfile 修复为 CURRENT                              |
+| 6   | 管理端「立即同步」                                                           | 返回最新 syncState，列表行刷新                                                                 |
+| 7   | PATCH 改已绑定用户 displayName / 重置密码                                    | 400 + 明确文案                                                                                 |
+| 8   | super_admin 改名占用用户名的账号                                             | 成功；原冲突身份下次同步变 CURRENT                                                             |
+| 9   | 批量停用 3 个成员                                                            | 单次请求，updated=3，会话被踢                                                                  |
+| 10  | hflive_oidc 模式下打开成员管理                                               | 创建/导入入口不可见；未绑定用户弹窗有说明                                                      |
+| 11  | 每日 cron（可手工带 Bearer 触发）                                            | ERROR/陈旧身份被限量清扫，日志计数正确                                                         |
 
 ### 7.3 UI 检查（AGENTS.md 清单）
 
