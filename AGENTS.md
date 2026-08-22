@@ -10,9 +10,11 @@ LiveBoard 是自托管教学工作台。产品设计应优先服务真实教学�
 
 - `apps/web`：Next.js App Router 前端。
 - `apps/api`：NestJS API 与 Prisma 数据访问。
-- `packages/shared`：前后端共享类型、权限和评分纯函数。
-- `apps/web/lib/routes.ts`：应用路由唯一来源，组件不要手写内部路径。
-- `apps/web/lib/api`：前端 API 调用唯一入口，页面组件不要直接调用 `fetch`。
+- `apps/mobile`：Expo + React Native 客户端（Android 优先，iOS 配置保留）。
+- `packages/shared`：前后端与移动端共享类型、权限和评分纯函数。
+- `apps/web/lib/routes.ts`：Web 应用路由唯一来源，组件不要手写内部路径。
+- `apps/web/lib/api`：Web 前端 API 调用唯一入口，页面组件不要直接调用 `fetch`。
+- `apps/mobile/src/lib/api`：移动端 API 调用入口；认证使用 Bearer 会话，不要套用 Web 的 Cookie `fetch`。
 - API 按 `apps/api/src/modules/<domain>` 划分业务域。
 
 ## 必须遵守的开发流程
@@ -38,6 +40,7 @@ pnpm dev
 - Web：Next.js dev server，端口 3000，支持热更新。
 - API：NestJS watch mode，端口 4000。
 - PostgreSQL、Redis、MinIO：Docker 容器。
+- Mobile：`pnpm dev:mobile` 启动 Expo。Android 真机填局域网 API 地址；模拟器使用 `http://10.0.2.2:4000`。不要把 mobile 并进默认 `pnpm dev`。
 
 生产容器：
 
@@ -237,7 +240,7 @@ LiveBoard 支持双目标部署，自托管能力保持不变：
 
 - 系统角色为 `super_admin`、`admin`、`member`；文档权限只由系统角色决定：两类管理员均可创建和编辑，普通成员仅可查看已发布文档。
 - 后端服务层是权限安全边界。
-- 非公开 API 统一通过全局活动用户守卫校验账号状态和 `sessionVersion`；停用账号、修改密码或管理员重置关键账号属性后，旧会话必须立即失效。
+- 非公开 API 统一通过全局活动用户守卫校验账号状态和 `sessionVersion`；停用账号、修改密码或管理员重置关键账号属性后，旧会话必须立即失效。Web 继续只使用 HttpOnly Cookie。原生客户端登录时携带 `X-LiveBoard-Client: mobile`，响应才包含与 Cookie 相同的 `sessionToken`；守卫同时接受 Cookie 与 `Authorization: Bearer`。不得把 sessionToken 返回给浏览器页面。
 - 登录失败次数使用 Redis 计数，`TRUST_PROXY_HOPS` 必须与 API 前实际可信代理层数一致，避免直接信任客户端伪造的转发头。
 - 上传内容不得以内联方式提供 SVG；只有经过文件头识别的 PNG、JPEG、GIF 和 WebP 可以内联，其他类型强制下载并使用 `nosniff`。安全图片响应使用 `Cross-Origin-Resource-Policy: same-site`，以支持本地 Web 与 API 不同端口的预览；下载型附件继续使用 `same-origin`。
 - AI 服务商 API Key 使用 `AI_ENCRYPTION_KEY` 进行 AES-GCM 加密后存入数据库；生产部署必须保留该密钥，否则已有配置无法解密。
@@ -379,3 +382,4 @@ UI 修改额外确认：
 - 2026-08-09：Vercel 备份与回滚禁止通过 `fetch` 自调用同 Project 的 `/internal/cron/backup?jobId=` 续棒，平台递归保护会在有限层数后返回 508 并让任务永久停在「复制对象」。管理端创建任务后必须用 `@vercel/functions` 的 `waitUntil` 立即响应并在单次 Hobby Fluid Compute 生命周期内推进（预算 270 秒）；每日 Cron 同样在本次调用内尽量跑完存量任务，带 `jobId` 的入口只保留给外部 Cron/运维显式恢复。Vercel 任务列表进度必须回退读取 `BackupJob.progress`，不能只读不存在的本地状态文件。
 - 2026-08-09：个人主页增加类似 GitHub 的年度贡献热力图，按 workspace 时区聚合发布文档、创建课件/练习、练习提交、人工批改、课堂公告、课堂/独立文件和非匿名论坛内容；登录、浏览、AI 调用、点赞、自动保存、自动批改及匿名内容不计入。热力等级固定为 0、1、2–3、4–6、7+ 次，使用语义暖金色；默认显示过去 12 个月，可切换自然年。贡献图向工作区成员显示，但只提供日期、次数与分类汇总，不暴露资源详情。手机端热力图只在自身区域横向滚动并默认定位到最近日期，不能让页面产生横向溢出。
 - 2026-08-11：HFLive Auth 用户同步加固与成员管理 SSO-aware 改造。同步链路三层自愈：①webhook 投递改为「事务前校准 + retryable」语义——Directory 回拉失败返回 503 让 live_sso outbox 指数退避真正生效，瞬态失败不写事件行、不更新 lastStatusEventAt/syncState（否则重试会被 eventId 幂等或状态乱序保护挡掉）；`AUTH_MODE=local` 时 webhook 直接 204 丢弃，不产生无效死信。②已关联会话周期刷新从 getStatus 改为 getProfile 单次往返，ACTIVE 时顺带回写资料（displayName 总是写，username/email 仅在无大小写不敏感冲突时写，冲突标 PROFILE_CONFLICT），15 分钟窗口内自愈 webhook 丢失的资料。③新增 `/internal/cron/identity-sync` 与合并入口 `/internal/cron/daily`（存储清理 + 身份对账，各自持 Redis 锁，CRON_SECRET 认证），vercel.json cron 由 storage-cleanup 改指 daily，旧端点保留。Directory client_credentials token 缓存到 Redis（expires_in-60s）并进程内单飞，401 时清缓存重取一次。头像在外部认证启用且已绑定时一律以 HFLive 为准（无头像显示首字母占位，不回退本地旧图）。管理端：成员列表新增 `hflive` 身份摘要与「统一身份」列/筛选（外部停用→同步冲突→同步异常→正常）；编辑弹窗按字段所有权分区（统一身份区只读 + 立即同步 + 跳转 profileUrl，本地管理区只保留角色/状态/AI 限额/标签）；已绑定用户服务端拒绝改显示名/重置密码（个人设置同文案）；`username` 仅 super_admin 可改（共享命名规则 + 大小写不敏感判重，用于解决 PROFILE_CONFLICT，已绑定用户改名下次同步会被 HFLive 覆盖）；`POST /admin/users/bulk-status` 批量启停（ids≤200，跳过无权限/自身/不存在/幂等项与最后一位最高管理员停用）；`AUTH_MODE=hflive_oidc` 隐藏「创建成员」「批量导入」。前端反馈改用 `useFeedbackNotice` 双 hook（错误/成功分离）悬浮通知。
+- 2026-08-22：新增 `apps/mobile`（Expo SDK 57 + React Native）。Android 优先，iOS 仅保留工程兼容。原生端不使用 WebView 包裹 Next.js；登录带 `X-LiveBoard-Client: mobile` 以取得 `sessionToken`，`ActiveUserGuard` 同时接受 Cookie 与 Bearer。当前范围是服务器地址、登录、课堂、文档阅读、练习、文件、论坛和 AI；文档编辑、课件制作和管理中心仍走 Web。五个 Tab 页不显示顶部导航标题，底栏选中态即当前板块；详情页只用紧凑顶栏显示资源名称，正文不再重复标题。

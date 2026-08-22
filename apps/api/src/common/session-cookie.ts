@@ -42,6 +42,26 @@ export function verifySessionCookies(
   return null;
 }
 
+/**
+ * 原生客户端无法可靠使用 HttpOnly Cookie，因此复用同一份 HMAC 会话值，
+ * 通过 `Authorization: Bearer <sessionToken>` 提交。Web 继续只走 Cookie。
+ */
+export function verifySessionAuthorization(header: string | undefined) {
+  if (!header) {
+    return null;
+  }
+
+  const match = header.match(/^Bearer\s+(\S+)$/i);
+  return match ? verifySessionCookieValue(match[1]) : null;
+}
+
+export const MOBILE_CLIENT_HEADER = "x-liveboard-client";
+export const MOBILE_CLIENT_VALUE = "mobile";
+
+export function isMobileClientRequest(headerValue: string | undefined) {
+  return headerValue?.trim().toLowerCase() === MOBILE_CLIENT_VALUE;
+}
+
 function getSessionSecret() {
   const secret = process.env.SESSION_SECRET;
 

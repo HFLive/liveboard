@@ -5,6 +5,7 @@ import {
   HTTPS_SESSION_COOKIE_NAME,
   SESSION_TTL_MS,
   shouldUseSecureSessionCookie,
+  verifySessionAuthorization,
   verifySessionCookies,
   verifySessionCookieValue,
 } from "./session-cookie";
@@ -115,6 +116,30 @@ describe("session cookie", () => {
 
     expect(
       verifySessionCookies({ [HTTP_SESSION_COOKIE_NAME]: httpSession }, true),
+    ).toBeNull();
+  });
+
+  it("accepts the same signed value from an Authorization Bearer header", () => {
+    const value = createSessionCookieValue("user-1", 3);
+
+    expect(verifySessionAuthorization(`Bearer ${value}`)).toEqual({
+      userId: "user-1",
+      sessionVersion: 3,
+    });
+    expect(verifySessionAuthorization(`bearer ${value}`)).toEqual({
+      userId: "user-1",
+      sessionVersion: 3,
+    });
+  });
+
+  it("rejects missing, malformed, or tampered Bearer sessions", () => {
+    const value = createSessionCookieValue("user-1", 3);
+
+    expect(verifySessionAuthorization(undefined)).toBeNull();
+    expect(verifySessionAuthorization("Basic abc")).toBeNull();
+    expect(verifySessionAuthorization("Bearer")).toBeNull();
+    expect(
+      verifySessionAuthorization(`Bearer ${value.replace("user-1", "user-2")}`),
     ).toBeNull();
   });
 });

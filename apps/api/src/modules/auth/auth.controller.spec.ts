@@ -20,6 +20,7 @@ describe("AuthController session cookies", () => {
   const request = {
     ip: "127.0.0.1",
     socket: { remoteAddress: "127.0.0.1" },
+    headers: {},
   } as Request;
   const response = {
     clearCookie: jest.fn(),
@@ -32,6 +33,7 @@ describe("AuthController session cookies", () => {
   beforeEach(() => {
     jest.resetAllMocks();
     process.env.SESSION_SECRET = "test-session-secret-with-sufficient-length";
+    request.headers = {};
     authService.validateLogin.mockResolvedValue({
       sessionVersion: 3,
       user: { id: "user-1" },
@@ -77,6 +79,29 @@ describe("AuthController session cookies", () => {
       expect.any(String),
       expect.objectContaining({ httpOnly: true, secure: true }),
     );
+  });
+
+  it("returns a sessionToken only for the native mobile client", async () => {
+    process.env.SESSION_COOKIE_SECURE = "true";
+
+    const webResult = await controller.login(
+      { username: "admin", password: "password" },
+      request,
+      response,
+    );
+    expect(webResult).toEqual({ user: { id: "user-1" } });
+
+    request.headers = { "x-liveboard-client": "mobile" };
+    const mobileResult = await controller.login(
+      { username: "admin", password: "password" },
+      request,
+      response,
+    );
+    expect(mobileResult).toEqual({
+      user: { id: "user-1" },
+      sessionToken: expect.any(String),
+    });
+    expect("sessionToken" in mobileResult).toBe(true);
   });
 
   it.each([

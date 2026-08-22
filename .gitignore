@@ -23,3 +23,5 @@ releases/
 # 本地教学草稿（勿提交）
 teach.md
 improveteach.md
+**/.expo/
+apps/mobile/expo-go-qr.png

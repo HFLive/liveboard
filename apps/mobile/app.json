@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "LiveBoard",
+    "slug": "liveboard",
+    "scheme": "liveboard",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.hflive.liveboard",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        },
+        "NSPhotoLibraryUsageDescription": "用于上传论坛图片和头像。",
+        "NSCameraUsageDescription": "用于拍摄并上传图片。"
+      }
+    },
+    "android": {
+      "package": "org.hflive.liveboard",
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "backgroundColor": "#f7f6f3"
+      },
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-document-picker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "用于上传论坛图片。",
+          "cameraPermission": "用于拍摄并上传图片。"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

@@ -15,7 +15,11 @@ describe("ActiveUserGuard", () => {
   const prisma = { user: { findUnique: jest.fn() } };
   const maintenance = { isEnabled: jest.fn() };
   const hfliveAuth = { checkExternalSession: jest.fn() };
-  const request: Partial<AuthenticatedRequest> = { cookies: {}, method: "GET" };
+  const request: Partial<AuthenticatedRequest> = {
+    cookies: {},
+    headers: {},
+    method: "GET",
+  };
   const response = { clearCookie: jest.fn() };
   const context = {
     getHandler: jest.fn(),
@@ -32,6 +36,7 @@ describe("ActiveUserGuard", () => {
     process.env.SESSION_SECRET = "test-session-secret-with-sufficient-length";
     process.env.SESSION_COOKIE_SECURE = "true";
     request.cookies = {};
+    request.headers = {};
     request.method = "GET";
     delete request.currentUserId;
     delete request.degradedSession;
@@ -202,6 +207,41 @@ describe("ActiveUserGuard", () => {
 
     await expect(guard.canActivate(context)).rejects.toThrow(/does not exist/);
     expect(request.currentUserId).toBeUndefined();
+  });
+
+  it("accepts the same session value via Authorization Bearer", async () => {
+    reflector.getAllAndOverride.mockReturnValue(false);
+    const sessionToken = createSessionCookieValue("user-1", 4);
+    request.headers = { authorization: `Bearer ${sessionToken}` };
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      status: "active",
+      sessionVersion: 4,
+    });
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(request.currentUserId).toBe("user-1");
+    expect(response.clearCookie).not.toHaveBeenCalled();
+  });
+
+  it("prefers a valid cookie over a Bearer token", async () => {
+    reflector.getAllAndOverride.mockReturnValue(false);
+    request.cookies = {
+      liveboard_session: createSessionCookieValue("cookie-user", 4),
+    };
+    request.headers = {
+      authorization: `Bearer ${createSessionCookieValue("bearer-user", 4)}`,
+    };
+    prisma.user.findUnique.mockResolvedValue({
+      id: "cookie-user",
+      status: "active",
+      sessionVersion: 4,
+    });
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(prisma.user.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "cookie-user" } }),
+    );
   });
 
   it("rethrows DB errors when maintenance is off", async () => {

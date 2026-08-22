@@ -10,6 +10,7 @@
     "dev": "pnpm --filter @liveboard/shared build && pnpm --parallel --filter @liveboard/web --filter @liveboard/api dev",
     "dev:web": "pnpm --filter @liveboard/shared build && pnpm --filter @liveboard/web dev",
     "dev:api": "pnpm --filter @liveboard/shared build && pnpm --filter @liveboard/api dev",
+    "dev:mobile": "pnpm --filter @liveboard/shared build && pnpm --filter @liveboard/mobile start",
     "infra:up": "docker compose up -d postgres redis minio",
     "infra:down": "docker compose down",
     "build": "pnpm -r build",
