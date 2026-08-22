@@ -26,6 +26,8 @@ import {
   getSessionCookieName,
   HTTP_SESSION_COOKIE_NAME,
   HTTPS_SESSION_COOKIE_NAME,
+  isMobileClientRequest,
+  MOBILE_CLIENT_HEADER,
   SESSION_TTL_MS,
   shouldUseSecureSessionCookie,
 } from "../../common/session-cookie";
@@ -63,20 +65,11 @@ export class AuthController {
       body.password,
       req.ip || req.socket.remoteAddress || "unknown",
     );
-    const secure = shouldUseSecureSessionCookie();
-    res.cookie(
-      getSessionCookieName(secure),
-      createSessionCookieValue(user.id, sessionVersion),
-      {
-        httpOnly: true,
-        maxAge: SESSION_TTL_MS,
-        path: "/",
-        sameSite: "lax",
-        secure,
-      },
-    );
-
-    return { user };
+    const sessionToken = issueSessionCookie(res, user.id, sessionVersion);
+    return {
+      user,
+      ...mobileSessionFields(req, sessionToken),
+    };
   }
 
   @Post("breakglass/login")
@@ -99,19 +92,11 @@ export class AuthController {
     }
     const { user, sessionVersion } = result;
     await this.hfliveAuth.recordBreakglass("SUCCESS", user.id);
-    const secure = shouldUseSecureSessionCookie();
-    res.cookie(
-      getSessionCookieName(secure),
-      createSessionCookieValue(user.id, sessionVersion),
-      {
-        httpOnly: true,
-        maxAge: SESSION_TTL_MS,
-        path: "/",
-        sameSite: "lax",
-        secure,
-      },
-    );
-    return { user };
+    const sessionToken = issueSessionCookie(res, user.id, sessionVersion);
+    return {
+      user,
+      ...mobileSessionFields(req, sessionToken),
+    };
   }
 
   @Post("logout")
@@ -286,21 +271,42 @@ export class AuthController {
   async changePassword(
     @CurrentUserId() userId: string | null,
     @Body() body: ChangePasswordDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.changePassword(userId, body);
-    const secure = shouldUseSecureSessionCookie();
-    res.cookie(
-      getSessionCookieName(secure),
-      createSessionCookieValue(result.userId, result.sessionVersion),
-      {
-        httpOnly: true,
-        maxAge: SESSION_TTL_MS,
-        path: "/",
-        sameSite: "lax",
-        secure,
-      },
+    const sessionToken = issueSessionCookie(
+      res,
+      result.userId,
+      result.sessionVersion,
     );
-    return { ok: true };
+    return {
+      ok: true,
+      ...mobileSessionFields(req, sessionToken),
+    };
   }
+}
+
+function issueSessionCookie(
+  res: Response,
+  userId: string,
+  sessionVersion: number,
+) {
+  const secure = shouldUseSecureSessionCookie();
+  const sessionToken = createSessionCookieValue(userId, sessionVersion);
+  res.cookie(getSessionCookieName(secure), sessionToken, {
+    httpOnly: true,
+    maxAge: SESSION_TTL_MS,
+    path: "/",
+    sameSite: "lax",
+    secure,
+  });
+  return sessionToken;
+}
+
+function mobileSessionFields(req: Request, sessionToken: string) {
+  const raw =
+    req.headers?.[MOBILE_CLIENT_HEADER] ?? req.headers?.["x-liveboard-client"];
+  const header = Array.isArray(raw) ? raw[0] : raw;
+  return isMobileClientRequest(header) ? { sessionToken } : {};
 }

@@ -15,6 +15,7 @@ import {
   HTTP_SESSION_COOKIE_NAME,
   HTTPS_SESSION_COOKIE_NAME,
   shouldUseSecureSessionCookie,
+  verifySessionAuthorization,
   verifySessionCookies,
 } from "./session-cookie";
 
@@ -70,7 +71,12 @@ export class ActiveUserGuard implements CanActivate {
     const response = context.switchToHttp().getResponse<Response>();
     const cookies = request.cookies as
       Record<string, string | undefined> | undefined;
-    const session = verifySessionCookies(cookies);
+    const authorizationHeader = Array.isArray(request.headers?.authorization)
+      ? request.headers.authorization[0]
+      : request.headers?.authorization;
+    const session =
+      verifySessionCookies(cookies) ??
+      verifySessionAuthorization(authorizationHeader);
     if (!session) {
       // 存在但已失效（过期/签名不符/配置分裂）的 cookie 需要清掉，
       // 否则死 cookie 会一直保留并让中间件反复把用户弹去登录页。
