@@ -193,14 +193,16 @@ describe("FilesController Markdown endpoints", () => {
     });
   });
 
-  it("restores UTF-8 Markdown filenames decoded as Latin-1 by multipart", async () => {
+  it("passes through UTF-8 Markdown filenames without double-decoding", async () => {
+    // 回归：defParamCharset: "utf8" 已在解析层把文件名解成正确 UTF-8，
+    // 这里不能再做 latin1→utf8 翻修（会把"你好.md"二次损坏成"`}.md"）。
     filesService.importMarkdown.mockResolvedValue({
       file: { id: "file-1" },
       warnings: [],
       blockCount: 1,
     });
     const file = {
-      originalname: "ä½ å¥½.md",
+      originalname: "你好.md",
       mimetype: "text/markdown",
       size: 8,
       buffer: Buffer.from("# 标题"),
