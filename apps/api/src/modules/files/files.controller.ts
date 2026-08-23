@@ -239,12 +239,6 @@ interface UploadedMarkdownFile {
   buffer: Buffer;
 }
 
-function decodeMultipartFilename(filename: string) {
-  const decoded = Buffer.from(filename, "latin1").toString("utf8");
-
-  return decoded.includes("\uFFFD") ? filename : decoded;
-}
-
 @Controller()
 export class FilesController {
   constructor(
@@ -342,7 +336,7 @@ export class FilesController {
 
     return this.filesService.importMarkdown(userId, {
       folderId: body.folderId,
-      originalname: decodeMultipartFilename(file.originalname),
+      originalname: file.originalname,
       size: file.size,
       buffer: file.buffer,
     });
