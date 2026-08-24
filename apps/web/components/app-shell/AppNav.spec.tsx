@@ -1,5 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getMe,
   listNotifications,
@@ -53,6 +59,15 @@ describe("AppNav", () => {
       unreadCount: 0,
       nextCursor: null,
     });
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it.each(["/app/ai", "/app/library"])(
@@ -189,5 +204,45 @@ describe("AppNav", () => {
     await waitFor(() =>
       expect(setNotificationRead).toHaveBeenCalledWith("notification-1", true),
     );
+  });
+
+  it("pauses notification polling while hidden and refreshes on visibility", async () => {
+    render(<AppNav />);
+
+    await waitFor(() => expect(listNotifications).toHaveBeenCalledTimes(1));
+    const pollingCallbacks: Array<() => void> = [];
+    const setIntervalSpy = vi
+      .spyOn(window, "setInterval")
+      .mockImplementation((handler) => {
+        pollingCallbacks.push(handler as () => void);
+        return pollingCallbacks.length as unknown as ReturnType<
+          typeof window.setInterval
+        >;
+      });
+    const clearIntervalSpy = vi.spyOn(window, "clearInterval");
+
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
+    expect(listNotifications).toHaveBeenCalledTimes(1);
+
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(listNotifications).toHaveBeenCalledTimes(2);
+    expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      pollingCallbacks[0]?.();
+    });
+    expect(listNotifications).toHaveBeenCalledTimes(3);
   });
 });
