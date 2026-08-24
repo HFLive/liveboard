@@ -11,6 +11,7 @@ import type { FolderNode } from "@liveboard/shared";
 import { ContentClient } from "./ContentClient";
 import { UserPreferencesProvider } from "@/components/app-shell/UserPreferencesProvider";
 import {
+  deleteFile,
   deleteFolder,
   deleteLibraryAsset,
   getFolderTree,
@@ -18,6 +19,7 @@ import {
   listFiles,
   uploadAsset,
   updateContentPins,
+  updateFile,
 } from "@/lib/api";
 
 function makeUser(openContentInCurrentTab = false) {
@@ -666,6 +668,101 @@ describe("ContentClient folder deletion", () => {
       screen.queryByRole("button", { name: "新建" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByTitle("新建文件夹")).not.toBeInTheDocument();
+  });
+
+  it("selects multiple documents and moves them together", async () => {
+    const documents = [
+      folderTree[0]!.files[0]!,
+      {
+        ...folderTree[0]!.files[0]!,
+        id: "file-2",
+        title: "课程总结",
+      },
+    ];
+    vi.mocked(getFolderTree).mockReset().mockResolvedValue({
+      folders: folderTree,
+      canManagePins: false,
+    });
+    vi.mocked(listFiles).mockResolvedValue({
+      files: documents,
+      standaloneAssets: [],
+    });
+    vi.mocked(updateFile).mockResolvedValue({
+      file: {
+        ...documents[0]!,
+        permission: "editor",
+        version: 1,
+      },
+    });
+
+    render(<ContentClient />);
+    await enterFolderFromTree("课程资料");
+    fireEvent.click(screen.getByRole("button", { name: "多选" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "选择当前显示的全部文档" }),
+    );
+
+    expect(screen.getByText("已选择 2 个文档")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "移动" }));
+    expect(
+      screen.getByRole("heading", { name: "移动 2 个文档" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("课程资料 / 第一章"));
+    fireEvent.click(screen.getByRole("button", { name: "移动到这里" }));
+
+    await waitFor(() => {
+      expect(updateFile).toHaveBeenCalledWith({
+        fileId: "file-1",
+        folderId: "folder-2",
+      });
+      expect(updateFile).toHaveBeenCalledWith({
+        fileId: "file-2",
+        folderId: "folder-2",
+      });
+    });
+    expect(await screen.findByText("2 个文档已移动")).toBeInTheDocument();
+  });
+
+  it("confirms once before deleting multiple selected documents", async () => {
+    const documents = [
+      folderTree[0]!.files[0]!,
+      {
+        ...folderTree[0]!.files[0]!,
+        id: "file-2",
+        title: "课程总结",
+      },
+    ];
+    vi.mocked(getFolderTree).mockReset().mockResolvedValue({
+      folders: folderTree,
+      canManagePins: false,
+    });
+    vi.mocked(listFiles).mockResolvedValue({
+      files: documents,
+      standaloneAssets: [],
+    });
+    vi.mocked(deleteFile).mockResolvedValue({ ok: true });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<ContentClient />);
+    await enterFolderFromTree("课程资料");
+    fireEvent.click(screen.getByRole("button", { name: "多选" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "选择文档“课程导读”" }),
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "选择文档“课程总结”" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "永久删除选中的 2 个文档？此操作无法撤销。",
+    );
+    await waitFor(() => {
+      expect(deleteFile).toHaveBeenCalledWith("file-1");
+      expect(deleteFile).toHaveBeenCalledWith("file-2");
+    });
+    expect(await screen.findByText("2 个文档已删除")).toBeInTheDocument();
+    confirmSpy.mockRestore();
   });
 
   it("requires two confirmations before recursively deleting a folder", async () => {

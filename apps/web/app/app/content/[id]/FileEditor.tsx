@@ -27,6 +27,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import {
+  ArrowLeft,
   Upload,
   GripVertical,
   Image,
@@ -1883,6 +1884,11 @@ export function FileEditor({ fileId }: { fileId: string }) {
 
   return (
     <div className="workspace content-editor-workspace">
+      <Link className="page-back-link" href={contentDetail(fileId)}>
+        <ArrowLeft aria-hidden="true" />
+        <span>返回文档</span>
+      </Link>
+
       <section className="page-head compact editor-title-bar">
         <div>
           <input
