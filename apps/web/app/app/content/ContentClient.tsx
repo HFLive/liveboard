@@ -89,10 +89,7 @@ import {
   useUploadTask,
 } from "@/components/upload/useUploadTask";
 import { MarkdownImportButton } from "./MarkdownImportButton";
-import {
-  SkeletonRows,
-  TableSkeletonRows,
-} from "@/components/system/ProgressiveLoading";
+import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 import {
   FeedbackNotice,
   useFeedbackNotice,
@@ -138,6 +135,43 @@ const SORT_OPTIONS = [
 
 // 记录最近打开的目录，供新标签页中的“返回文档”回到同一位置。
 const ACTIVE_FOLDER_STORAGE_KEY = "liveboard:content-active-folder";
+
+function ContentTreeSkeleton({ count = 6 }: { count?: number }) {
+  return (
+    <div
+      aria-label="正在加载文件夹"
+      className="content-tree-skeleton"
+      role="status"
+    >
+      {Array.from({ length: count }, (_, index) => (
+        <div className="content-tree-skeleton-row" key={index}>
+          <span className="skeleton-block content-tree-skeleton-toggle" />
+          <span className="skeleton-block content-tree-skeleton-icon" />
+          <span className="skeleton-block content-tree-skeleton-label" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ContentTableSkeletonRows({ count = 6 }: { count?: number }) {
+  return Array.from({ length: count }, (_, index) => (
+    <tr aria-hidden="true" className="content-table-skeleton-row" key={index}>
+      <td>
+        <span className="content-table-skeleton-name">
+          <span className="skeleton-block content-table-skeleton-icon" />
+          <span className="skeleton-block content-table-skeleton-title" />
+        </span>
+      </td>
+      <td>
+        <span className="skeleton-block content-table-skeleton-time" />
+      </td>
+      <td>
+        <span className="skeleton-block content-table-skeleton-action" />
+      </td>
+    </tr>
+  ));
+}
 
 function persistActiveFolder(folderId: string | null) {
   if (folderId) {
@@ -2153,7 +2187,7 @@ export function ContentClient() {
             <span>文件夹</span>
           </div>
           <div className="file-tree content-drive-tree">
-            {loadingTree ? <SkeletonRows compact count={6} /> : null}
+            {loadingTree ? <ContentTreeSkeleton /> : null}
             {visibleTreeFolders.map(renderContentTreeRow)}
             {!loadingTree && flatFolders.length === 0 && !showCreateFolder ? (
               <div className="content-drive-sidebar-empty">
@@ -2477,7 +2511,7 @@ export function ContentClient() {
                   </thead>
                   <tbody>
                     {loadingItems ? (
-                      <TableSkeletonRows colSpan={3} count={6} />
+                      <ContentTableSkeletonRows />
                     ) : (
                       <>
                         {visiblePinnedItems.map((item) =>

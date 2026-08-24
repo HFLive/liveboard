@@ -2,11 +2,18 @@
 
 import Link from "next/link";
 import { type CSSProperties, useEffect, useState } from "react";
-import { ALargeSmall, Check, Edit3, Minus, Plus } from "lucide-react";
+import {
+  ALargeSmall,
+  ArrowLeft,
+  Check,
+  Edit3,
+  Minus,
+  Plus,
+} from "lucide-react";
 import type { ContentBlock, FileDetail } from "@/lib/api";
 import { dismissImportWarnings, getFile, listBlocks } from "@/lib/api";
 import { fileStatusLabel, permissionLabel } from "@/lib/labels";
-import { contentEdit } from "@/lib/routes";
+import { APP_ROUTES, contentEdit } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { RenderBlockContent } from "./ContentBlockRenderer";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
@@ -138,6 +145,13 @@ export function FileViewer({ fileId }: { fileId: string }) {
 
   return (
     <div className="content-viewer workspace">
+      <div className="content-viewer-back">
+        <Link className="page-back-link" href={APP_ROUTES.content}>
+          <ArrowLeft aria-hidden="true" />
+          <span>返回文档</span>
+        </Link>
+      </div>
+
       {error ? <p className="error-text">{error}</p> : null}
 
       {loading ? (

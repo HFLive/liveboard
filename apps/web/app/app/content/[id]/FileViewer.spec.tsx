@@ -58,9 +58,10 @@ describe("FileViewer", () => {
       "href",
       "/app/content/file-1/edit",
     );
-    expect(
-      screen.queryByRole("link", { name: "返回文档" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回文档" })).toHaveAttribute(
+      "href",
+      "/app/content",
+    );
   });
 
   it("still marks a draft so readers know it is not the published version", async () => {

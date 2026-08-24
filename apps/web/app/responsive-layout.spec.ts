@@ -248,6 +248,15 @@ describe("responsive workspace contracts", () => {
     );
   });
 
+  it("centers icon-only sort controls without an empty text track", () => {
+    expect(contentCss).toMatch(
+      /\.content-drive-actions \.sort-icon-control\s*{[\s\S]*?grid-template-columns: 1fr;[\s\S]*?gap: 0;[\s\S]*?padding: 0;/,
+    );
+    expect(redesignCss).toMatch(
+      /@media \(max-width: 620px\)[\s\S]*?\.sort-icon-control\s*{[\s\S]*?grid-template-columns: 1fr;[\s\S]*?gap: 0;[\s\S]*?padding: 0;/,
+    );
+  });
+
   it("lets the file detail action menu expand upward at every viewport", () => {
     expect(redesignCss).toMatch(
       /\.asset-detail-menu > \.context-menu\s*{[\s\S]*?top: auto;[\s\S]*?bottom: calc\(100% \+ 6px\)/,
