@@ -140,6 +140,31 @@ describe("ContentClient folder deletion", () => {
     vi.mocked(deleteFolder).mockResolvedValue({ ok: true });
   });
 
+  it("keeps the document table and folder tree structure while loading", () => {
+    vi.mocked(getFolderTree)
+      .mockReset()
+      .mockImplementation(
+        () =>
+          new Promise(() => {
+            // Keep the request pending so the stable loading frame can be checked.
+          }),
+      );
+
+    render(<ContentClient />);
+
+    expect(
+      screen.getByRole("status", { name: "正在加载文件夹" }),
+    ).toBeVisible();
+    const skeletonRows = document.querySelectorAll(
+      ".content-table-skeleton-row",
+    );
+    expect(skeletonRows).toHaveLength(6);
+    expect(skeletonRows[0]?.children).toHaveLength(3);
+    expect(
+      document.querySelectorAll(".content-tree-skeleton-row"),
+    ).toHaveLength(6);
+  });
+
   it("shows only folders in the location tree and collapses them", async () => {
     render(<ContentClient />);
 

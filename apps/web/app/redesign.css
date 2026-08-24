@@ -5382,6 +5382,8 @@ body .success-text::before {
   }
 
   .sort-icon-control {
+    grid-template-columns: 1fr;
+    gap: 0;
     width: 30px;
     padding: 0;
   }
