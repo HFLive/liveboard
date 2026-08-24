@@ -886,6 +886,54 @@
   padding-top: 8px;
 }
 
+.content-bulk-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 7px 0;
+}
+
+.content-bulk-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.content-bulk-summary strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.content-bulk-summary > button {
+  border: 0;
+  background: transparent;
+  color: var(--accent-dark);
+  font: inherit;
+  font-weight: 650;
+  padding: 4px;
+}
+
+.content-bulk-summary > button:hover {
+  color: var(--text);
+}
+
+.content-bulk-toolbar .button-row {
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.content-bulk-toolbar .button {
+  min-height: 34px;
+  padding: 0 11px;
+}
+
 .content-drive-list {
   width: 100%;
   min-width: 0;
@@ -930,6 +978,37 @@
   text-align: right;
 }
 
+.content-select-all,
+.content-row-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.content-document-selection,
+.content-selection-spacer {
+  display: grid;
+  flex: 0 0 18px;
+  place-items: center;
+  width: 18px;
+  height: 32px;
+}
+
+.content-select-all input,
+.content-document-selection input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent-dark);
+  cursor: pointer;
+}
+
+.content-row-name > :is(.content-folder-link, .content-file-link) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .content-drive-table > tbody > .content-drive-row > td {
   height: 52px;
   border: 0;
@@ -946,6 +1025,11 @@
 
 .content-drive-table > tbody > .content-drive-row:hover > td {
   background: var(--fill-hover);
+}
+
+.content-drive-table > tbody > .content-drive-row.is-selected > td,
+.content-drive-table > tbody > .content-drive-row.is-selected:hover > td {
+  background: var(--fill-active);
 }
 
 /* 列表行 hover 是通栏矩形，去掉 redesign 共享规则给首尾单元格加的
@@ -1073,6 +1157,7 @@
 }
 
 .content-drive-card {
+  position: relative;
   display: flex;
   min-width: 0;
   min-height: 142px;
@@ -1091,6 +1176,25 @@
 
 .content-drive-card--pinned {
   border-color: var(--line);
+}
+
+.content-drive-card.is-selected,
+.content-drive-card.is-selected:hover {
+  border-color: var(--line-strong);
+  background: var(--fill-active);
+}
+
+.content-drive-card > .content-document-selection {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 8px;
+  height: 28px;
+}
+
+.content-drive-card:has(> .content-document-selection)
+  .content-drive-card-main {
+  padding-right: 26px;
 }
 
 .content-drive-card-main {
@@ -1363,6 +1467,7 @@
   }
 
   .content-drive-upload,
+  .content-multi-select-button,
   .content-create-button {
     display: grid;
     place-items: center;
@@ -1373,12 +1478,14 @@
   }
 
   .content-drive-upload > span,
+  .content-multi-select-button > span,
   .content-create-button > span,
   .content-create-button > svg:last-child {
     display: none;
   }
 
   .content-drive-upload > svg,
+  .content-multi-select-button > svg,
   .content-create-button > svg {
     margin: 0;
   }
@@ -1394,6 +1501,28 @@
 
   .content-drive-content {
     padding-top: 4px;
+  }
+
+  .content-bulk-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
+    padding: 8px 0;
+  }
+
+  .content-bulk-summary {
+    justify-content: space-between;
+  }
+
+  .content-bulk-toolbar .button-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .content-bulk-toolbar .button {
+    justify-content: center;
+    min-height: 40px;
   }
 
   .content-drive-table,
@@ -1439,6 +1568,10 @@
     background: var(--fill-active);
   }
 
+  .content-drive-table > tbody > .content-drive-row.is-selected {
+    background: var(--fill-active);
+  }
+
   .content-drive-table td::before {
     display: none;
   }
@@ -1458,6 +1591,10 @@
     color: var(--muted);
     font-size: 11px;
     line-height: 1.35;
+  }
+
+  .content-drive-table.is-selection-mode td:nth-child(2) {
+    padding-left: 52px;
   }
 
   .content-drive-table td:last-child {
@@ -1853,6 +1990,14 @@
   min-width: 0;
   overflow-wrap: anywhere;
   font-size: 13px;
+}
+
+.content-workspace .content-location-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 18px 10px;
+  text-align: center;
 }
 
 @media (max-width: 760px) {

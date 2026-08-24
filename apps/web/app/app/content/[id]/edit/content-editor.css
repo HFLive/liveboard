@@ -81,6 +81,10 @@
 /* ── 文档栏 ─────────────────────────────────────────
    整页自然滚动，文档列居中；标题输入框与文档列同宽对齐。 */
 
+.content-editor-workspace > .page-back-link {
+  margin-bottom: 12px;
+}
+
 .content-editor-workspace .title-input {
   width: min(860px, 100%);
 }
@@ -566,6 +570,10 @@
 
   .content-editor-workspace {
     gap: 0;
+  }
+
+  .content-editor-workspace > .page-back-link {
+    margin: 14px 14px 10px;
   }
 
   .editor-title-bar {

@@ -17,6 +17,7 @@ import {
   ArrowDown,
   ArrowUp,
   Bot,
+  CheckSquare2,
   ChevronDown,
   ChevronRight,
   Download,
@@ -303,6 +304,13 @@ export function ContentClient() {
   const [isUpdatingPins, setIsUpdatingPins] = useState(false);
   const [loadingTree, setLoadingTree] = useState(true);
   const [loadingItems, setLoadingItems] = useState(true);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [showBulkMove, setShowBulkMove] = useState(false);
+  const [bulkMoveTargetFolderId, setBulkMoveTargetFolderId] = useState("");
+  const [isBulkOperating, setIsBulkOperating] = useState(false);
 
   const flatFolders = useMemo(() => flattenFolders(folders), [folders]);
   const visibleTreeFolders = useMemo(
@@ -319,6 +327,14 @@ export function ContentClient() {
   const canCreateFileHere = isRootView
     ? false
     : canCreateFile(activeFolder?.permission ?? null);
+  const bulkMoveTargetFolders = useMemo(
+    () =>
+      flatFolders.filter(
+        (folder) =>
+          folder.id !== activeFolderId && canCreateFile(folder.permission),
+      ),
+    [activeFolderId, flatFolders],
+  );
   const pinnedItems = useMemo(
     () => collectPinnedContent(activeFolder),
     [activeFolder],
@@ -453,6 +469,32 @@ export function ContentClient() {
       ),
     [normalizedContentSearchQuery, sortedAssets],
   );
+  const currentFilesById = useMemo(() => {
+    const byId = new Map<string, FileSummary>();
+    for (const file of [...(activeFolder?.files ?? []), ...files]) {
+      byId.set(file.id, file);
+    }
+    return byId;
+  }, [activeFolder?.files, files]);
+  const selectedFiles = useMemo(
+    () =>
+      Array.from(selectedFileIds)
+        .map((fileId) => currentFilesById.get(fileId))
+        .filter((file): file is FileSummary => file !== undefined),
+    [currentFilesById, selectedFileIds],
+  );
+  const visibleFileIds = useMemo(
+    () => [
+      ...visiblePinnedItems.flatMap((item) =>
+        item.kind === "file" ? [item.file.id] : [],
+      ),
+      ...visibleFiles.map((file) => file.id),
+    ],
+    [visibleFiles, visiblePinnedItems],
+  );
+  const allVisibleFilesSelected =
+    visibleFileIds.length > 0 &&
+    visibleFileIds.every((fileId) => selectedFileIds.has(fileId));
   const hasContentItems =
     pinnedItems.length +
       unpinnedChildFolders.length +
@@ -706,6 +748,7 @@ export function ContentClient() {
     folderId: string,
     options?: { silent?: boolean },
   ) {
+    clearDocumentSelection();
     setActiveFolderId(folderId);
     persistActiveFolder(folderId);
     setContentSearchQuery("");
@@ -724,6 +767,7 @@ export function ContentClient() {
   }
 
   function selectRoot() {
+    clearDocumentSelection();
     setActiveFolderId(null);
     persistActiveFolder(null);
     setContentSearchQuery("");
@@ -914,6 +958,167 @@ export function ContentClient() {
       await refreshTree();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "删除文档失败");
+    }
+  }
+
+  function clearDocumentSelection() {
+    setIsSelectionMode(false);
+    setSelectedFileIds(new Set());
+    setShowBulkMove(false);
+    setBulkMoveTargetFolderId("");
+  }
+
+  function toggleFileSelection(fileId: string) {
+    setSelectedFileIds((current) => {
+      const next = new Set(current);
+      if (next.has(fileId)) {
+        next.delete(fileId);
+      } else {
+        next.add(fileId);
+      }
+      return next;
+    });
+  }
+
+  function toggleVisibleFileSelection() {
+    setSelectedFileIds((current) => {
+      const next = new Set(current);
+      if (visibleFileIds.every((fileId) => next.has(fileId))) {
+        for (const fileId of visibleFileIds) next.delete(fileId);
+      } else {
+        for (const fileId of visibleFileIds) next.add(fileId);
+      }
+      return next;
+    });
+  }
+
+  function renderFileSelectionControl(file: FileSummary) {
+    if (!isSelectionMode) return null;
+
+    return (
+      <label
+        className="content-document-selection"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <input
+          aria-label={`选择文档“${file.title}”`}
+          checked={selectedFileIds.has(file.id)}
+          onChange={() => toggleFileSelection(file.id)}
+          type="checkbox"
+        />
+      </label>
+    );
+  }
+
+  async function refreshAfterBulkOperation() {
+    if (activeFolderId) {
+      await refreshFolderContents(activeFolderId);
+    }
+    await refreshTree();
+  }
+
+  async function onBulkMoveFiles(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (
+      selectedFiles.length === 0 ||
+      !bulkMoveTargetFolderId ||
+      bulkMoveTargetFolderId === activeFolderId
+    ) {
+      return;
+    }
+
+    setError(null);
+    setMessage(null);
+    setIsBulkOperating(true);
+    const failedIds = new Set<string>();
+    let firstFailure: unknown = null;
+
+    for (const file of selectedFiles) {
+      try {
+        await updateFile({
+          fileId: file.id,
+          folderId: bulkMoveTargetFolderId,
+        });
+      } catch (caught) {
+        failedIds.add(file.id);
+        firstFailure ??= caught;
+      }
+    }
+
+    try {
+      await refreshAfterBulkOperation();
+      if (failedIds.size === 0) {
+        const movedCount = selectedFiles.length;
+        clearDocumentSelection();
+        setMessage(`${movedCount} 个文档已移动`);
+      } else {
+        const movedCount = selectedFiles.length - failedIds.size;
+        setSelectedFileIds(failedIds);
+        setShowBulkMove(false);
+        setBulkMoveTargetFolderId("");
+        const detail =
+          firstFailure instanceof Error ? `：${firstFailure.message}` : "";
+        setError(
+          `${movedCount} 个文档已移动，${failedIds.size} 个移动失败${detail}`,
+        );
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? `批量移动已执行，但刷新列表失败：${caught.message}`
+          : "批量移动已执行，但刷新列表失败",
+      );
+    } finally {
+      setIsBulkOperating(false);
+    }
+  }
+
+  async function onBulkDeleteFiles() {
+    if (selectedFiles.length === 0) return;
+
+    const confirmed = window.confirm(
+      `永久删除选中的 ${selectedFiles.length} 个文档？此操作无法撤销。`,
+    );
+    if (!confirmed) return;
+
+    setError(null);
+    setMessage(null);
+    setIsBulkOperating(true);
+    const failedIds = new Set<string>();
+    let firstFailure: unknown = null;
+
+    for (const file of selectedFiles) {
+      try {
+        await deleteFile(file.id);
+      } catch (caught) {
+        failedIds.add(file.id);
+        firstFailure ??= caught;
+      }
+    }
+
+    try {
+      await refreshAfterBulkOperation();
+      if (failedIds.size === 0) {
+        const deletedCount = selectedFiles.length;
+        clearDocumentSelection();
+        setMessage(`${deletedCount} 个文档已删除`);
+      } else {
+        const deletedCount = selectedFiles.length - failedIds.size;
+        setSelectedFileIds(failedIds);
+        const detail =
+          firstFailure instanceof Error ? `：${firstFailure.message}` : "";
+        setError(
+          `${deletedCount} 个文档已删除，${failedIds.size} 个删除失败${detail}`,
+        );
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? `批量删除已执行，但刷新列表失败：${caught.message}`
+          : "批量删除已执行，但刷新列表失败",
+      );
+    } finally {
+      setIsBulkOperating(false);
     }
   }
 
@@ -1456,40 +1661,53 @@ export function ContentClient() {
     return (
       <Fragment key={`${item.kind}:${id}`}>
         <tr
-          className="content-drive-row content-pinned-row"
+          className={`content-drive-row content-pinned-row${!isFolder && selectedFileIds.has(item.file.id) ? " is-selected" : ""}`}
           onClick={(event) => onContentRowClick(event, item)}
         >
           <td data-label="文件名">
-            {isFolder ? (
-              <button
-                className="content-folder-link"
-                onClick={() => void selectFolder(item.folder.id)}
-                title={label}
-                type="button"
-              >
-                <Folder aria-hidden="true" />
-                <span>{label}</span>
-                <Pin aria-hidden="true" className="content-pin-marker" />
-              </button>
-            ) : (
-              <Link
-                aria-label={label}
-                className="content-file-link"
-                href={contentDetail(item.file.id)}
-                rel="noopener noreferrer"
-                target={openContentInCurrentTab ? undefined : "_blank"}
-                title={label}
-              >
-                <FileText aria-hidden="true" />
-                {item.file.status === "draft" ? (
-                  <span aria-hidden="true" className="content-draft-tag">
-                    草稿
-                  </span>
-                ) : null}
-                <span>{label}</span>
-                <Pin aria-hidden="true" className="content-pin-marker" />
-              </Link>
-            )}
+            <div className="content-row-name">
+              {isFolder ? (
+                <>
+                  {isSelectionMode ? (
+                    <span
+                      aria-hidden="true"
+                      className="content-selection-spacer"
+                    />
+                  ) : null}
+                  <button
+                    className="content-folder-link"
+                    onClick={() => void selectFolder(item.folder.id)}
+                    title={label}
+                    type="button"
+                  >
+                    <Folder aria-hidden="true" />
+                    <span>{label}</span>
+                    <Pin aria-hidden="true" className="content-pin-marker" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  {renderFileSelectionControl(item.file)}
+                  <Link
+                    aria-label={label}
+                    className="content-file-link"
+                    href={contentDetail(item.file.id)}
+                    rel="noopener noreferrer"
+                    target={openContentInCurrentTab ? undefined : "_blank"}
+                    title={label}
+                  >
+                    <FileText aria-hidden="true" />
+                    {item.file.status === "draft" ? (
+                      <span aria-hidden="true" className="content-draft-tag">
+                        草稿
+                      </span>
+                    ) : null}
+                    <span>{label}</span>
+                    <Pin aria-hidden="true" className="content-pin-marker" />
+                  </Link>
+                </>
+              )}
+            </div>
           </td>
           <td data-label="最近更新">{formatRelativeTime(updatedAt)}</td>
           <td data-label="操作">
@@ -1619,9 +1837,10 @@ export function ContentClient() {
 
     return (
       <article
-        className={`content-drive-card content-drive-card--${isFolder ? "folder" : "document"}${isPinned ? " content-drive-card--pinned" : ""}`}
+        className={`content-drive-card content-drive-card--${isFolder ? "folder" : "document"}${isPinned ? " content-drive-card--pinned" : ""}${!isFolder && selectedFileIds.has(item.file.id) ? " is-selected" : ""}`}
         key={`${item.kind}:${id}`}
       >
+        {!isFolder ? renderFileSelectionControl(item.file) : null}
         {isFolder ? (
           <button
             className="content-drive-card-main"
@@ -2084,6 +2303,30 @@ export function ContentClient() {
                 options={SORT_OPTIONS}
                 value={contentSortMode}
               />
+              {activeFolderId && canCreateFileHere && files.length > 0 ? (
+                <button
+                  aria-pressed={isSelectionMode}
+                  className="button secondary content-multi-select-button"
+                  onClick={() => {
+                    if (isSelectionMode) {
+                      clearDocumentSelection();
+                    } else {
+                      setIsSelectionMode(true);
+                      setOpenContentRowMenu(null);
+                      setShowCreateMenu(false);
+                    }
+                  }}
+                  title={isSelectionMode ? "退出多选" : "多选文档"}
+                  type="button"
+                >
+                  {isSelectionMode ? (
+                    <X aria-hidden="true" className="button-icon" />
+                  ) : (
+                    <CheckSquare2 aria-hidden="true" className="button-icon" />
+                  )}
+                  <span>{isSelectionMode ? "取消" : "多选"}</span>
+                </button>
+              ) : null}
               {activeFolderId && canCreateFileHere ? (
                 <>
                   <button
@@ -2166,13 +2409,66 @@ export function ContentClient() {
             </div>
           </div>
 
+          {isSelectionMode ? (
+            <div className="content-bulk-toolbar" aria-label="文档批量操作">
+              <div className="content-bulk-summary">
+                <strong>已选择 {selectedFiles.length} 个文档</strong>
+                {visibleFileIds.length > 0 ? (
+                  <button onClick={toggleVisibleFileSelection} type="button">
+                    {allVisibleFilesSelected ? "取消全选" : "全选当前结果"}
+                  </button>
+                ) : null}
+              </div>
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  disabled={selectedFiles.length === 0 || isBulkOperating}
+                  onClick={() => {
+                    setBulkMoveTargetFolderId("");
+                    setShowBulkMove(true);
+                  }}
+                  type="button"
+                >
+                  <MoveRight aria-hidden="true" className="button-icon" />
+                  <span>移动</span>
+                </button>
+                <button
+                  className="button danger"
+                  disabled={selectedFiles.length === 0 || isBulkOperating}
+                  onClick={() => void onBulkDeleteFiles()}
+                  type="button"
+                >
+                  <Trash2 aria-hidden="true" className="button-icon" />
+                  <span>{isBulkOperating ? "处理中" : "删除"}</span>
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="content-drive-content">
             {contentView === "list" ? (
               <div className="content-drive-list table-wrap">
-                <table className="table responsive-table content-items-table content-drive-table">
+                <table
+                  className={`table responsive-table content-items-table content-drive-table${isSelectionMode ? " is-selection-mode" : ""}`}
+                >
                   <thead>
                     <tr>
-                      <th scope="col">文件名</th>
+                      <th scope="col">
+                        {isSelectionMode ? (
+                          <label className="content-select-all">
+                            <input
+                              aria-label="选择当前显示的全部文档"
+                              checked={allVisibleFilesSelected}
+                              disabled={visibleFileIds.length === 0}
+                              onChange={toggleVisibleFileSelection}
+                              type="checkbox"
+                            />
+                            <span>文件名</span>
+                          </label>
+                        ) : (
+                          "文件名"
+                        )}
+                      </th>
                       <th scope="col">最近更新</th>
                       <th scope="col">
                         <span className="sr-only">操作</span>
@@ -2199,14 +2495,22 @@ export function ContentClient() {
                             }
                           >
                             <td data-label="文件名">
-                              <button
-                                className="content-folder-link"
-                                onClick={() => void selectFolder(folder.id)}
-                                type="button"
-                              >
-                                <Folder aria-hidden="true" />
-                                {folder.name}
-                              </button>
+                              <div className="content-row-name">
+                                {isSelectionMode ? (
+                                  <span
+                                    aria-hidden="true"
+                                    className="content-selection-spacer"
+                                  />
+                                ) : null}
+                                <button
+                                  className="content-folder-link"
+                                  onClick={() => void selectFolder(folder.id)}
+                                  type="button"
+                                >
+                                  <Folder aria-hidden="true" />
+                                  {folder.name}
+                                </button>
+                              </div>
                             </td>
                             <td data-label="最近更新">
                               {formatRelativeTime(folder.updatedAt)}
@@ -2248,34 +2552,37 @@ export function ContentClient() {
                         {visibleFiles.map((file) => (
                           <Fragment key={file.id}>
                             <tr
-                              className="content-drive-row content-file-row"
+                              className={`content-drive-row content-file-row${selectedFileIds.has(file.id) ? " is-selected" : ""}`}
                               onClick={(event) =>
                                 onContentRowClick(event, { kind: "file", file })
                               }
                             >
                               <td data-label="文件名">
-                                <Link
-                                  aria-label={file.title}
-                                  className="content-file-link"
-                                  href={contentDetail(file.id)}
-                                  rel="noopener noreferrer"
-                                  target={
-                                    openContentInCurrentTab
-                                      ? undefined
-                                      : "_blank"
-                                  }
-                                >
-                                  <FileText aria-hidden="true" />
-                                  {file.status === "draft" ? (
-                                    <span
-                                      aria-hidden="true"
-                                      className="content-draft-tag"
-                                    >
-                                      草稿
-                                    </span>
-                                  ) : null}
-                                  {file.title}
-                                </Link>
+                                <div className="content-row-name">
+                                  {renderFileSelectionControl(file)}
+                                  <Link
+                                    aria-label={file.title}
+                                    className="content-file-link"
+                                    href={contentDetail(file.id)}
+                                    rel="noopener noreferrer"
+                                    target={
+                                      openContentInCurrentTab
+                                        ? undefined
+                                        : "_blank"
+                                    }
+                                  >
+                                    <FileText aria-hidden="true" />
+                                    {file.status === "draft" ? (
+                                      <span
+                                        aria-hidden="true"
+                                        className="content-draft-tag"
+                                      >
+                                        草稿
+                                      </span>
+                                    ) : null}
+                                    {file.title}
+                                  </Link>
+                                </div>
                               </td>
                               <td data-label="最近更新">
                                 {formatRelativeTime(file.updatedAt)}
@@ -2319,20 +2626,28 @@ export function ContentClient() {
                             onClick={(event) => onAssetRowClick(event, asset)}
                           >
                             <td data-label="文件名">
-                              <a
-                                className="content-file-link"
-                                href={apiResourceUrl(`/assets/${asset.id}`)}
-                                onClick={(event) => {
-                                  event.preventDefault();
-                                  setPreviewAsset(asset);
-                                }}
-                              >
-                                <FileIcon aria-hidden="true" />
-                                {asset.filename}
-                                <small className="muted">
-                                  {formatFileSize(asset.sizeBytes)}
-                                </small>
-                              </a>
+                              <div className="content-row-name">
+                                {isSelectionMode ? (
+                                  <span
+                                    aria-hidden="true"
+                                    className="content-selection-spacer"
+                                  />
+                                ) : null}
+                                <a
+                                  className="content-file-link"
+                                  href={apiResourceUrl(`/assets/${asset.id}`)}
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    setPreviewAsset(asset);
+                                  }}
+                                >
+                                  <FileIcon aria-hidden="true" />
+                                  {asset.filename}
+                                  <small className="muted">
+                                    {formatFileSize(asset.sizeBytes)}
+                                  </small>
+                                </a>
+                              </div>
                             </td>
                             <td data-label="最近更新">
                               {formatRelativeTime(asset.updatedAt)}
@@ -2976,6 +3291,82 @@ export function ContentClient() {
                   type="submit"
                 >
                   移动到这里
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {showBulkMove ? (
+        <div className="modal-backdrop" role="presentation">
+          <form
+            aria-labelledby="bulk-move-documents-title"
+            className="modal-panel content-operation-dialog"
+            onSubmit={(event) => void onBulkMoveFiles(event)}
+          >
+            <div className="modal-head">
+              <h2 id="bulk-move-documents-title">
+                移动 {selectedFiles.length} 个文档
+              </h2>
+              <button
+                aria-label="关闭批量移动"
+                className="icon-button subtle"
+                disabled={isBulkOperating}
+                onClick={() => {
+                  setShowBulkMove(false);
+                  setBulkMoveTargetFolderId("");
+                }}
+                title="关闭"
+                type="button"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="modal-body content-move-dialog-body">
+              <p className="content-current-location">
+                当前位置：
+                {activeFolderId ? folderPathLabel(activeFolderId) : "文档"}
+              </p>
+              <fieldset className="content-location-picker">
+                <legend>选择目标文件夹</legend>
+                {bulkMoveTargetFolders.map((folder) => (
+                  <label key={folder.id}>
+                    <input
+                      checked={bulkMoveTargetFolderId === folder.id}
+                      name="bulk-document-move-target"
+                      onChange={() => setBulkMoveTargetFolderId(folder.id)}
+                      type="radio"
+                    />
+                    <span>{folderPathLabel(folder.id)}</span>
+                  </label>
+                ))}
+                {bulkMoveTargetFolders.length === 0 ? (
+                  <p className="content-location-empty">
+                    没有其他可写的目标文件夹。
+                  </p>
+                ) : null}
+              </fieldset>
+            </div>
+            <div className="modal-foot">
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  disabled={isBulkOperating}
+                  onClick={() => {
+                    setShowBulkMove(false);
+                    setBulkMoveTargetFolderId("");
+                  }}
+                  type="button"
+                >
+                  取消
+                </button>
+                <button
+                  className="button"
+                  disabled={!bulkMoveTargetFolderId || isBulkOperating}
+                  type="submit"
+                >
+                  {isBulkOperating ? "正在移动…" : "移动到这里"}
                 </button>
               </div>
             </div>
