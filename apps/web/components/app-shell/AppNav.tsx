@@ -136,7 +136,11 @@ export function AppNav() {
   useEffect(() => {
     if (!user) return;
 
-    const loadSecondaryNavigationData = () => void loadActivity();
+    const loadSecondaryNavigationData = () => {
+      if (document.visibilityState === "visible") {
+        void loadActivity();
+      }
+    };
     const usesIdleCallback = typeof window.requestIdleCallback === "function";
     const idleCallback: number = usesIdleCallback
       ? window.requestIdleCallback(loadSecondaryNavigationData, {
@@ -159,15 +163,44 @@ export function AppNav() {
 
   useEffect(() => {
     if (!user) return;
-    const timer = window.setInterval(() => void loadActivity(), 60_000);
-    return () => window.clearInterval(timer);
+    let timer: number | null = null;
+
+    const stopPolling = () => {
+      if (timer !== null) {
+        window.clearInterval(timer);
+        timer = null;
+      }
+    };
+    const startPolling = () => {
+      stopPolling();
+      if (document.visibilityState !== "visible") return;
+      timer = window.setInterval(() => void loadActivity(), 60_000);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void loadActivity();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
+    startPolling();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stopPolling();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
     if (!user) return;
     const onNotificationsUpdated = (event: Event) => {
-      if ((event as CustomEvent<NotificationUpdateSource>).detail !== "nav") {
+      if (
+        document.visibilityState === "visible" &&
+        (event as CustomEvent<NotificationUpdateSource>).detail !== "nav"
+      ) {
         void loadActivity();
       }
     };

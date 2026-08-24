@@ -12,6 +12,10 @@ const mockedGetMaintenanceStatus = vi.mocked(getMaintenanceStatus);
 describe("MaintenanceBanner", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
     Object.defineProperty(navigator, "onLine", {
       configurable: true,
       value: true,
@@ -125,5 +129,43 @@ describe("MaintenanceBanner", () => {
     });
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("pauses polling while hidden and refreshes immediately when visible again", async () => {
+    mockedGetMaintenanceStatus.mockResolvedValue({
+      enabled: false,
+      reason: null,
+    });
+
+    render(<MaintenanceBanner />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mockedGetMaintenanceStatus).toHaveBeenCalledTimes(1);
+
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+    });
+    expect(mockedGetMaintenanceStatus).toHaveBeenCalledTimes(1);
+
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mockedGetMaintenanceStatus).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(mockedGetMaintenanceStatus).toHaveBeenCalledTimes(3);
   });
 });
