@@ -3,6 +3,7 @@
 import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { UserSummary, UserTagSummary } from "@liveboard/shared";
+import { IdentityName } from "./IdentityName";
 import styles from "./PermissionUserPicker.module.css";
 
 interface PermissionUserPickerProps {
@@ -70,8 +71,9 @@ export function PermissionUserPicker({
             type="button"
           >
             <span>
-              <strong>{user.displayName}</strong>
-              <small>@{user.username}</small>
+              <strong>
+                <IdentityName user={user} />
+              </strong>
             </span>
             {user.tags?.length ? (
               <em>{user.tags.map((tag) => tag.name).join(" · ")}</em>

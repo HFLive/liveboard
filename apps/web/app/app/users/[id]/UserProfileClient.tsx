@@ -14,6 +14,7 @@ import { APP_ROUTES, forumThread } from "@/lib/routes";
 import { formatRelativeTime } from "@/lib/labels";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { UserBadges } from "@/components/UserBadges";
+import { IdentityName } from "@/components/IdentityName";
 import { UserContributionHeatmap } from "./UserContributionHeatmap";
 
 export function UserProfileClient({ userId }: { userId: string }) {
@@ -64,7 +65,9 @@ export function UserProfileClient({ userId }: { userId: string }) {
             <div className="user-profile-heading">
               <div>
                 <div className="user-profile-name">
-                  <h1>{profile.displayName}</h1>
+                  <h1>
+                    <IdentityName user={profile} />
+                  </h1>
                   <UserBadges badges={profile.badges} />
                 </div>
                 <p>@{profile.username}</p>

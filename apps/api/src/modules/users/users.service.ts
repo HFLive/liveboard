@@ -1154,6 +1154,8 @@ export class UsersService {
     id: string;
     username: string;
     displayName: string;
+    identityLabel?: string | null;
+    realName?: string | null;
     avatarUpdatedAt?: Date | null;
     systemRole: UserSummary["systemRole"];
     status: UserSummary["status"];
@@ -1171,6 +1173,10 @@ export class UsersService {
       id: user.id,
       username: user.username,
       displayName: user.displayName,
+      identityLabel: this.hfliveConfig.enabled
+        ? (user.identityLabel ?? null)
+        : null,
+      realName: this.hfliveConfig.enabled ? (user.realName ?? null) : null,
       avatarUrl: user.avatarUpdatedAt
         ? `/auth/avatar/${user.id}?v=${user.avatarUpdatedAt.getTime()}`
         : null,

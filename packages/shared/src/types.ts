@@ -87,6 +87,8 @@ export interface UserSummary {
   id: string;
   username: string;
   displayName: string;
+  identityLabel?: string | null;
+  realName?: string | null;
   avatarUrl: string | null;
   systemRole: SystemRole;
   status: "active" | "disabled";

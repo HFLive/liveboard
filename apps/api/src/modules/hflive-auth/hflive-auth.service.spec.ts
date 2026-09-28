@@ -336,6 +336,8 @@ describe("HfliveAuthService webhook and status convergence", () => {
       status: "ACTIVE" as const,
       preferredUsername: "teacher_new",
       name: "New Display Name",
+      identityLabel: "教师",
+      realName: "张老师",
       picture: "https://auth.hsfz.live/api/profile/avatar/id?v=5",
       email: "teacher@example.invalid",
       emailVerified: true,
@@ -374,6 +376,8 @@ describe("HfliveAuthService webhook and status convergence", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           displayName: "New Display Name",
+          identityLabel: "教师",
+          realName: "张老师",
           username: "teacher_new",
           emailNormalized: "teacher@example.invalid",
         }),
@@ -383,6 +387,8 @@ describe("HfliveAuthService webhook and status convergence", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           picture: "https://auth.hsfz.live/api/profile/avatar/id?v=5",
+          identityLabel: "教师",
+          realName: "张老师",
           syncState: "CURRENT",
           lastProfileSyncedAt: expect.any(Date),
         }),

@@ -22,7 +22,10 @@ describe("PermissionsService user exceptions", () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-    service = new PermissionsService(prisma as unknown as PrismaService);
+    service = new PermissionsService(
+      prisma as unknown as PrismaService,
+      { enabled: true } as never,
+    );
     prisma.user.findUnique.mockResolvedValue({
       id: "member-1",
       status: "active",

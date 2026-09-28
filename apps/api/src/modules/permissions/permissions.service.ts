@@ -16,6 +16,7 @@ import {
 } from "@liveboard/shared";
 import type { PermissionLevel, PermissionTargetType } from "@liveboard/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { HfliveAuthConfig } from "../hflive-auth/hflive-auth.config";
 
 export interface UpsertPermissionInput {
   targetType: PermissionTargetType;
@@ -32,7 +33,10 @@ type GrantSource = {
 
 @Injectable()
 export class PermissionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly hfliveConfig: HfliveAuthConfig,
+  ) {}
 
   getEffectivePermission(
     inherited: PermissionLevel | null,
@@ -577,6 +581,8 @@ export class PermissionsService {
     id: string;
     username: string;
     displayName: string;
+    identityLabel?: string | null;
+    realName?: string | null;
     systemRole: "super_admin" | "admin" | "member";
     status: "active" | "disabled";
     tagAssignments?: Array<{ tag: { id: string; name: string } }>;
@@ -585,6 +591,10 @@ export class PermissionsService {
       id: user.id,
       username: user.username,
       displayName: user.displayName,
+      identityLabel: this.hfliveConfig.enabled
+        ? (user.identityLabel ?? null)
+        : null,
+      realName: this.hfliveConfig.enabled ? (user.realName ?? null) : null,
       avatarUrl: null,
       systemRole: user.systemRole,
       status: user.status,

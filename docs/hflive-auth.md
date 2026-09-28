@@ -88,6 +88,7 @@ OIDC 回调失败统一返回登录页的可重试错误状态，不向浏览器
 
 - 用户名、邮箱、显示名和头像由 HFLive Auth 管理；显示名与头像在 LiveBoard 只读，入口
   跳转到带受控 `returnTo` 的 `https://auth.hsfz.live/profile`；头像保存成功后在同一标签页返回 LiveBoard 资料页；
+- HFLive Auth 管理员设置的可选身份标签与真名经 Directory 同步到本地快照；完整身份区域显示“显示名（标签 真名）”并在下一行显示 `@用户名`，紧凑列表省略 `@用户名`。它们不同于 LiveBoard 的成员标签，后者继续用于业务筛选和权限管理。旧 Directory 未返回新字段时按未设置处理；`AUTH_MODE=local` 的用户摘要不展示统一身份字段。
 - 当前用户和公开个人主页查询都加载并优先使用 `ExternalIdentity.picture`；头像变更事件经 Directory 刷新后，`/app/users/:id` 不会回退到旧本地头像；
 - bio、Banner、徽章、打开方式、课堂角色、权限和配额继续由 LiveBoard 管理；
 - 服务端同时拒绝绕过界面修改统一显示名或上传本地头像；
@@ -167,3 +168,5 @@ linkMethod、最近同步时间），支持「统一身份」列与筛选；编�
 统一字段只读并链接到 `profileUrl`，管理员只操作角色/状态/AI 限额/标签，支持
 「立即同步」与 `super_admin` 改名。`AUTH_MODE=hflive_oidc` 时隐藏「创建成员」与
 「批量导入」入口（JIT 成为唯一创建路径）。
+
+2026-09-28 联合身份展示本地验证：隔离 PostgreSQL 16 空库 `prisma migrate deploy` 成功，`pnpm validate` 通过，HFLive profile webhook 专项 17 项通过。浏览器以隔离 hybrid 账号检查个人主页和成员列表；390px、1280px 下个人主页无横向溢出。正式部署同步仍待验收。

@@ -18,6 +18,7 @@ import {
 import { permissionLabel } from "@/lib/labels";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { IdentityName } from "@/components/IdentityName";
 
 const permissionOptions: Array<{
   value: PermissionLevel;
@@ -161,13 +162,12 @@ export function ContentPermissionsClient() {
             return (
               <div className="content-permission-row" key={user.id}>
                 <div>
-                  <strong>{user.displayName}</strong>
-                  <span>
-                    @{user.username}
-                    {user.tags?.length
-                      ? ` · ${user.tags.map((tag) => tag.name).join(" · ")}`
-                      : ""}
-                  </span>
+                  <strong>
+                    <IdentityName user={user} />
+                  </strong>
+                  {user.tags?.length ? (
+                    <span>{user.tags.map((tag) => tag.name).join(" · ")}</span>
+                  ) : null}
                 </div>
                 <label>
                   <select

@@ -3,9 +3,13 @@ import type { UserSummary } from "@liveboard/shared";
 import { useContentOpenMode } from "@/components/app-shell/UserPreferencesProvider";
 import { userProfile } from "@/lib/routes";
 import { UserBadges } from "./UserBadges";
+import { IdentityName } from "./IdentityName";
 
 type UserProfileLinkProps = {
-  user: Pick<UserSummary, "id" | "displayName" | "badges">;
+  user: Pick<
+    UserSummary,
+    "id" | "displayName" | "badges" | "identityLabel" | "realName"
+  >;
   className?: string;
   children?: React.ReactNode;
   compactBadges?: boolean;
@@ -25,7 +29,7 @@ export function UserProfileLink({
       rel="noopener noreferrer"
       target={openContentInCurrentTab ? undefined : "_blank"}
     >
-      <span>{children ?? user.displayName}</span>
+      <span>{children ?? <IdentityName user={user} />}</span>
       <UserBadges badges={user.badges} compact={compactBadges} />
     </Link>
   );

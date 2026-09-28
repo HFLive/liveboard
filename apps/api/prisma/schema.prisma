@@ -164,6 +164,8 @@ model User {
   email                   String?
   emailNormalized         String?        @unique
   displayName             String
+  identityLabel           String?        @db.VarChar(40)
+  realName                String?        @db.VarChar(80)
   passwordHash            String
   localPasswordEnabled    Boolean        @default(true)
   avatarStorageKey        String?
@@ -225,6 +227,8 @@ model ExternalIdentity {
   emailNormalized         String?
   emailVerified           Boolean                    @default(false)
   displayName             String?
+  identityLabel           String?                    @db.VarChar(40)
+  realName                String?                    @db.VarChar(80)
   picture                 String?
   externalStatus          ExternalIdentityStatus     @default(UNKNOWN)
   lastStatusConfirmedAt   DateTime?

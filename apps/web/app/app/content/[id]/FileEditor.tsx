@@ -1,5 +1,7 @@
 "use client";
 
+import { IdentityName } from "@/components/IdentityName";
+
 import {
   type DragEvent as ReactDragEvent,
   type FocusEvent as ReactFocusEvent,
@@ -2357,9 +2359,11 @@ export function FileEditor({ fileId }: { fileId: string }) {
                       className="grant-member"
                       title={`@${grant.user.username}`}
                     >
-                      <strong>{grant.user.displayName}</strong>
+                      <strong>
+                        <IdentityName user={grant.user} />
+                      </strong>
                       <small>
-                        @{grant.user.username} · 当前文档单独设置
+                        当前文档单独设置
                         {inheritedFallbackByUserId.get(grant.userId)
                           ? `，恢复后为${permissionLabel(inheritedFallbackByUserId.get(grant.userId)?.level)}（来自「${inheritedFallbackByUserId.get(grant.userId)?.inheritedFrom.targetName}」）`
                           : "，恢复后使用默认权限"}
@@ -2420,9 +2424,11 @@ export function FileEditor({ fileId }: { fileId: string }) {
                     {visibleInheritedGrants.map((grant) => (
                       <div className="grant-row inherited" key={grant.id}>
                         <span className="grant-member">
-                          <strong>{grant.user.displayName}</strong>
+                          <strong>
+                            <IdentityName user={grant.user} />
+                          </strong>
                           <small>
-                            @{grant.user.username} · 来自「
+                            来自「
                             {grant.inheritedFrom.targetName}」
                           </small>
                         </span>

@@ -24,6 +24,8 @@ export interface ConflictTicket {
   email: string | null;
   emailVerified: boolean;
   displayName: string;
+  identityLabel?: string | null;
+  realName?: string | null;
   picture: string | null;
   directoryUpdatedAt: string;
 }
