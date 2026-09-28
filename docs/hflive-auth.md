@@ -88,7 +88,7 @@ OIDC 回调失败统一返回登录页的可重试错误状态，不向浏览器
 
 - 用户名、邮箱、显示名和头像由 HFLive Auth 管理；显示名与头像在 LiveBoard 只读，入口
   跳转到带受控 `returnTo` 的 `https://auth.hsfz.live/profile`；头像保存成功后在同一标签页返回 LiveBoard 资料页；
-- HFLive Auth 管理员设置的可选身份标签与真名经 Directory 同步到本地快照；完整身份区域显示“显示名（标签 真名）”并在下一行显示 `@用户名`，紧凑列表省略 `@用户名`。它们不同于 LiveBoard 的成员标签，后者继续用于业务筛选和权限管理。旧 Directory 未返回新字段时按未设置处理；`AUTH_MODE=local` 的用户摘要不展示统一身份字段。
+- HFLive Auth 管理员设置的可选身份标签与真名经 Directory 同步到本地快照；完整身份区域显示“显示名 (标签 真名)”并在下一行显示 `@用户名`，紧凑列表省略 `@用户名`。括号使用半角字符，小字使用独立字距，并在空间不足时换行。它们不同于 LiveBoard 的成员标签，后者继续用于业务筛选和权限管理。旧 Directory 未返回新字段时按未设置处理；`AUTH_MODE=local` 的用户摘要不展示统一身份字段。
 - 当前用户和公开个人主页查询都加载并优先使用 `ExternalIdentity.picture`；头像变更事件经 Directory 刷新后，`/app/users/:id` 不会回退到旧本地头像；
 - bio、Banner、徽章、打开方式、课堂角色、权限和配额继续由 LiveBoard 管理；
 - 服务端同时拒绝绕过界面修改统一显示名或上传本地头像；

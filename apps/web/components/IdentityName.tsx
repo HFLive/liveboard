@@ -10,7 +10,7 @@ export function IdentityName({
     <span className="identity-name">
       <span className="identity-name-primary">{user.displayName}</span>
       {details ? (
-        <small className="identity-name-details">（{details}）</small>
+        <small className="identity-name-details">({details})</small>
       ) : null}
     </span>
   );
