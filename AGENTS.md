@@ -40,6 +40,7 @@ pnpm dev
 - Web：Next.js dev server，端口 3000，支持热更新。
 - API：NestJS watch mode，端口 4000。
 - PostgreSQL、Redis、MinIO：Docker 容器。
+- CI 的集成测试从 MinIO 官方同版本二进制构建临时镜像并校验 SHA-256，再启动 Docker Compose；原 Docker Hub 镜像已无法拉取。
 - Mobile：`pnpm dev:mobile` 启动 Expo。Android 真机填局域网 API 地址；模拟器使用 `http://10.0.2.2:4000`。不要把 mobile 并进默认 `pnpm dev`。
 
 生产容器：
