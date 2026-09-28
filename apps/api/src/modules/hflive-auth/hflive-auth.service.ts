@@ -683,6 +683,8 @@ export class HfliveAuthService {
               ? normalizeEmail(profile.email)
               : null,
             displayName: profile.displayName,
+            identityLabel: profile.identityLabel ?? null,
+            realName: profile.realName ?? null,
             passwordHash,
             localPasswordEnabled: false,
             systemRole: "member",
@@ -841,6 +843,8 @@ export class HfliveAuthService {
       email: profile.emailVerified ? profile.email?.trim() || null : null,
       emailVerified: profile.emailVerified === true,
       displayName: profile.name.trim(),
+      identityLabel: profile.identityLabel?.trim() || null,
+      realName: profile.realName?.trim() || null,
       picture: profile.picture ?? null,
       directoryUpdatedAt: profile.updatedAt,
     };
@@ -885,6 +889,8 @@ export class HfliveAuthService {
       where: { id: user.id },
       data: {
         displayName: profile.displayName,
+        identityLabel: profile.identityLabel ?? null,
+        realName: profile.realName ?? null,
         ...(!conflict ? { username: profile.preferredUsername } : {}),
         ...(!conflict && profile.emailVerified
           ? {
@@ -1094,6 +1100,8 @@ export class HfliveAuthService {
       where: { id: user.id },
       data: {
         displayName: profile.displayName,
+        identityLabel: profile.identityLabel ?? null,
+        realName: profile.realName ?? null,
         ...(!conflict ? { username: profile.preferredUsername } : {}),
         ...(!conflict && profile.emailVerified
           ? {
@@ -1230,6 +1238,8 @@ function identitySnapshot(profile: VerifiedProfile) {
       : null,
     emailVerified: profile.emailVerified,
     displayName: profile.displayName,
+    identityLabel: profile.identityLabel ?? null,
+    realName: profile.realName ?? null,
     picture: profile.picture,
     directoryUpdatedAt: new Date(profile.directoryUpdatedAt),
   };

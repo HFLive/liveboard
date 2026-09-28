@@ -16,6 +16,7 @@ import {
   listVisibilityUsers,
 } from "@/lib/api";
 import { classroomDetail } from "@/lib/routes";
+import { IdentityName } from "@/components/IdentityName";
 
 type DraftRole = ClassroomMemberRole | "none";
 
@@ -367,13 +368,14 @@ export function ClassroomsClient() {
                     filteredUsers.map((user) => (
                       <label className="classroom-member-option" key={user.id}>
                         <span className="classroom-member-option-main">
-                          <strong>{user.displayName}</strong>
-                          <small>
-                            @{user.username}
-                            {user.tags?.length
-                              ? ` · ${user.tags.map((tag) => tag.name).join("、")}`
-                              : ""}
-                          </small>
+                          <strong>
+                            <IdentityName user={user} />
+                          </strong>
+                          {user.tags?.length ? (
+                            <small>
+                              {user.tags.map((tag) => tag.name).join("、")}
+                            </small>
+                          ) : null}
                         </span>
                         <select
                           className="select compact-select"

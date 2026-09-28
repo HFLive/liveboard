@@ -40,6 +40,7 @@ pnpm dev
 - Web：Next.js dev server，端口 3000，支持热更新。
 - API：NestJS watch mode，端口 4000。
 - PostgreSQL、Redis、MinIO：Docker 容器。
+- CI 的集成测试从 MinIO 官方同版本二进制构建临时镜像并校验 SHA-256，再启动 Docker Compose；原 Docker Hub 镜像已无法拉取。
 - Mobile：`pnpm dev:mobile` 启动 Expo。Android 真机填局域网 API 地址；模拟器使用 `http://10.0.2.2:4000`。不要把 mobile 并进默认 `pnpm dev`。
 
 生产容器：
@@ -149,6 +150,8 @@ LiveBoard 支持双目标部署，自托管能力保持不变：
   MIME（`application/javascript; charset=utf-8`），不能是 `application/octet-stream`。
 
 ## UI 设计原则
+
+- 用户身份展示以可修改显示名为主，HFLive Auth 管理员维护的身份标签和真名以较小字号放在括号内；完整资料页下一行显示 `@登录用户名`，空间紧张的列表省略该行。统一身份标签与 LiveBoard 成员标签是不同字段，不得互相替代。
 
 - 参考 Notion、Claude、Reddit 等产品的信息密度与交互克制，但不复制品牌外观。
 - 优先扁平信息层级、清晰间距和连续列表；减少嵌套卡片、色块、阴影和无意义圆角。

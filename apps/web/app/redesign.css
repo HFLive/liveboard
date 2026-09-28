@@ -2088,6 +2088,27 @@ button:disabled {
   gap: 8px;
 }
 
+.identity-name {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 0.35em;
+  min-width: 0;
+}
+.identity-name-primary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.identity-name-details {
+  color: var(--muted);
+  font-size: 0.62em;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.user-profile-link .identity-name-details {
+  font-size: 0.82em;
+}
+
 .user-profile-link:hover {
   color: var(--accent-dark);
   text-decoration: none;

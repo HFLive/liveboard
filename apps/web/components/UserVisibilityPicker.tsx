@@ -2,6 +2,7 @@
 
 import { Search } from "lucide-react";
 import type { UserSummary, UserTagSummary } from "@liveboard/shared";
+import { IdentityName } from "./IdentityName";
 import styles from "./UserVisibilityPicker.module.css";
 
 interface UserVisibilityPickerProps {
@@ -107,7 +108,9 @@ export function UserVisibilityPicker({
                 type="checkbox"
               />
               <span>
-                <strong>{user.displayName}</strong>
+                <strong>
+                  <IdentityName user={user} />
+                </strong>
               </span>
               {isCreator ? <em>创建者</em> : null}
             </label>

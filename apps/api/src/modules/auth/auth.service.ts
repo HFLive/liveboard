@@ -821,6 +821,8 @@ export class AuthService {
     id: string;
     username: string;
     displayName: string;
+    identityLabel?: string | null;
+    realName?: string | null;
     avatarUpdatedAt?: Date | null;
     systemRole: UserSummary["systemRole"];
     status: UserSummary["status"];
@@ -842,6 +844,8 @@ export class AuthService {
       id: user.id,
       username: user.username,
       displayName: user.displayName,
+      identityLabel: identity ? (user.identityLabel ?? null) : null,
+      realName: identity ? (user.realName ?? null) : null,
       avatarUrl: identity
         ? // 已绑定用户资料以 HFLive 为权威：无头像时显示首字母占位，
           // 不回退本地历史头像。

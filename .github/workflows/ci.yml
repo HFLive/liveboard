@@ -82,6 +82,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build pinned MinIO test image
+        run: |
+          docker build \
+            --file .github/minio/Dockerfile \
+            --tag minio/minio:RELEASE.2024-12-18T13-15-44Z \
+            .
+
       - name: Start infrastructure
         shell: bash
         run: |

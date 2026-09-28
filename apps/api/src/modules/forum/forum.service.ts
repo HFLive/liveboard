@@ -30,11 +30,14 @@ import type {
 import { DEFAULT_FORUM_CATEGORIES } from "./forum-defaults";
 import { PermissionsService } from "../permissions/permissions.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { HfliveAuthConfig } from "../hflive-auth/hflive-auth.config";
 
 type ForumUserRecord = {
   id: string;
   username: string;
   displayName: string;
+  identityLabel?: string | null;
+  realName?: string | null;
   avatarUpdatedAt?: Date | null;
   systemRole: UserSummary["systemRole"];
   status: UserSummary["status"];
@@ -124,6 +127,7 @@ export class ForumService {
     private readonly assets: AssetsService,
     private readonly permissions: PermissionsService,
     private readonly notifications: NotificationsService,
+    private readonly hfliveConfig: HfliveAuthConfig,
   ) {}
 
   async listOverview(userId: string | null) {
@@ -1141,6 +1145,10 @@ export class ForumService {
       id: user.id,
       username: user.username,
       displayName: user.displayName,
+      identityLabel: this.hfliveConfig.enabled
+        ? (user.identityLabel ?? null)
+        : null,
+      realName: this.hfliveConfig.enabled ? (user.realName ?? null) : null,
       avatarUrl: user.avatarUpdatedAt
         ? `/auth/avatar/${user.id}?v=${user.avatarUpdatedAt.getTime()}`
         : null,

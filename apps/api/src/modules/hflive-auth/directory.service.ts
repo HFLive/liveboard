@@ -10,6 +10,8 @@ export interface DirectoryProfile {
   subject: string;
   preferredUsername: string;
   name: string;
+  identityLabel?: string | null;
+  realName?: string | null;
   picture: string | null;
   email: string | null;
   emailVerified: boolean;

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { IdentityName } from "@/components/IdentityName";
 import { useRouter } from "next/navigation";
 import {
   ChangeEvent,
@@ -951,7 +952,9 @@ export function ClassroomDetailClient({
               {matchingUsers.length ? (
                 matchingUsers.map((user) => (
                   <div className="classroom-member-row" key={user.id}>
-                    <span>{user.displayName}</span>
+                    <span>
+                      <IdentityName user={user} />
+                    </span>
                     <div>
                       <button
                         className="classroom-text-action"
