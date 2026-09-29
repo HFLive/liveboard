@@ -489,14 +489,14 @@ export class AuthService {
     const user = await this.requireActiveUser(userId);
 
     if (!file) {
-      throw new BadRequestException("请选择 Banner 图片");
+      throw new BadRequestException("请选择背景图片");
     }
 
     if (file.size > MAX_BANNER_SIZE_BYTES) {
-      throw new BadRequestException("Banner 图片不能超过 5MB");
+      throw new BadRequestException("背景图片不能超过 5MB");
     }
 
-    const mimeType = normalizeProfileImageMimeType(file, "Banner");
+    const mimeType = normalizeProfileImageMimeType(file, "背景");
     const storageKey = `banners/${user.id}/${randomUUID()}.${profileImageExtension(mimeType)}`;
     const backend = await this.storage.activeBackend();
 
@@ -540,12 +540,12 @@ export class AuthService {
       throw new BadRequestException("无效的文件大小");
     }
     if (input.sizeBytes > MAX_BANNER_SIZE_BYTES) {
-      throw new BadRequestException("Banner 图片不能超过 5MB");
+      throw new BadRequestException("背景图片不能超过 5MB");
     }
     const mimeType = normalizeDirectProfileMime(
       input.filename,
       input.mimeType,
-      "Banner",
+      "背景",
     );
     const storageKey = `banners/${user.id}/${randomUUID()}.${profileImageExtension(mimeType)}`;
     const backend = await this.storage.activeBackend();
@@ -604,7 +604,7 @@ export class AuthService {
       );
       const detectedMime = detectAvatarMimeType(buffer);
       if (!detectedMime || !PROFILE_IMAGE_MIMES.has(detectedMime)) {
-        throw new BadRequestException("Banner 仅支持 PNG、JPEG 或 WebP 图片");
+        throw new BadRequestException("背景仅支持 PNG、JPEG 或 WebP 图片");
       }
 
       const updated = await this.prisma.$transaction(async (transaction) => {
@@ -743,7 +743,7 @@ export class AuthService {
     });
 
     if (!user || user.status !== "active" || !user.bannerStorageKey) {
-      throw new NotFoundException("Banner not found");
+      throw new NotFoundException("背景不存在");
     }
 
     const mimeType = user.bannerMimeType ?? "image/webp";

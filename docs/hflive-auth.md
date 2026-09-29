@@ -49,9 +49,13 @@ Deployment URL。Directory client 至少需要 `directory:user:status` 和
   处理资料冲突和故障。
 - `POST /admin/users/:id/hflive-sync`：管理员立即回拉 Directory 权威资料并应用，
   返回刷新后的身份状态；目标未绑定返回 400，Directory 瞬态故障返回 503。
-- `PATCH /admin/users/:id`：已绑定用户拒绝修改显示名/重置密码（与个人设置一致）；
-  `username` 字段仅 `super_admin` 可改（共享命名规则 + 大小写不敏感判重，
-  成功后递增 sessionVersion 并写审计）。
+- `POST /auth/hflive/account/sync`：已绑定成员即时回拉自己的目录资料。个人设置从
+  HFLive Auth 返回时自动调用，也提供手动刷新；未绑定返回 400，上游暂时不可用
+  返回 503。接口只接收当前会话身份，不接受目标用户 ID。
+- `PATCH /admin/users/:id`：外部认证启用时，已绑定用户拒绝本地修改显示名、
+  用户名或重置密码；本地用户的 `username` 仅 `super_admin` 可改（共享命名规则 +
+  大小写不敏感判重，成功后递增 sessionVersion 并写审计）。资料冲突应修改占用
+  统一用户名的另一个本地账号，再重新同步已绑定用户。
 - `POST /admin/users/bulk-status`：`{ ids, status }` 批量启停，ids 上限 200；
   逐条套用与单条更新相同的权限规则（不能操作自己、admin 不能操作非 member、
   不能停用最后一位正常最高管理员），返回 `{ updated, skipped }`。
@@ -86,11 +90,12 @@ OIDC 回调失败统一返回登录页的可重试错误状态，不向浏览器
 个人设置通过 `GET /auth/hflive/account` 获取当前用户自己的安全身份摘要；响应不含
 `sub`、token 或 client secret，并使用 `private, no-store`。已关联且外部认证启用时：
 
-- 用户名、邮箱、显示名和头像由 HFLive Auth 管理；显示名与头像在 LiveBoard 只读，入口
-  跳转到带受控 `returnTo` 的 `https://auth.hsfz.live/profile`；头像保存成功后在同一标签页返回 LiveBoard 资料页；
+- 用户名、邮箱、显示名和头像由 HFLive Auth 管理；用户可在统一身份资料页凭当前密码自行修改登录用户名。LiveBoard 只提供修改入口，
+  跳转到带受控 `returnTo` 的 `https://auth.hsfz.live/profile`；从资料页返回
+  LiveBoard 后立即回拉目录并清理前端 `/auth/me` 缓存，无需等待 webhook；
 - HFLive Auth 管理员设置的可选身份标签与真名经 Directory 同步到本地快照；完整身份区域显示“显示名 (标签 真名)”并在下一行显示 `@用户名`，紧凑列表省略 `@用户名`。括号使用半角字符，小字使用独立字距，并在空间不足时换行。它们不同于 LiveBoard 的成员标签，后者继续用于业务筛选和权限管理。旧 Directory 未返回新字段时按未设置处理；`AUTH_MODE=local` 的用户摘要不展示统一身份字段。
 - 当前用户和公开个人主页查询都加载并优先使用 `ExternalIdentity.picture`；头像变更事件经 Directory 刷新后，`/app/users/:id` 不会回退到旧本地头像；
-- bio、Banner、徽章、打开方式、课堂角色、权限和配额继续由 LiveBoard 管理；
+- 个人简介、背景、徽章、打开方式、课堂角色、权限和配额继续由 LiveBoard 管理；个人设置页不重复展示登录账号、权限和“正常”状态，已关联账号在“账号资料”中查看用户名和邮箱并跳转修改。
 - 服务端同时拒绝绕过界面修改统一显示名或上传本地头像；
 - 本地旧账号可从个人设置输入当前密码，发起一次带 `LOCAL_SESSION` intent 的显式
   关联；回调成功后仍使用 LiveBoard 本地会话。
@@ -111,7 +116,7 @@ HFLive 无头像时显示首字母占位。
    UNKNOWN_SUBJECT / STALE_EVENT / HFLIVE_DISABLED）一律 204。
 2. **请求驱动周期刷新**：已关联会话每 15 分钟用 `getProfile` 一次往返同时拿到
    状态与完整资料；ACTIVE 时顺带回写资料（displayName 总是更新，username/email
-   仅在无大小写不敏感冲突时更新，冲突标 `PROFILE_CONFLICT`）。即使 webhook 完全
+   分别检查大小写不敏感冲突，未冲突的字段继续更新，任一冲突标 `PROFILE_CONFLICT`）。即使 webhook 完全
    丢失，活跃用户的资料也会在 15 分钟内自愈。短租约合并并发刷新；最近一次明确
    ACTIVE 不超过 60 分钟时，暂时故障可宽限，之后返回 503。
 3. **每日兜底对账 cron**：`GET /internal/cron/identity-sync` 清扫
@@ -121,7 +126,8 @@ HFLive 无头像时显示首字母占位。
    （恒定时间比较）。`apps/api/vercel.json` 的 cron 指向 `/internal/cron/daily`
    （`3 4 * * *`），旧 `/internal/cron/storage-cleanup` 端点保留供自托管/回滚兼容。
 
-Directory client_credentials token 缓存在 Redis（TTL = `expires_in - 60s`），进程内
+Directory client_credentials token 按 scope 分开缓存在 Redis（仅当 `expires_in > 60s`
+时缓存，TTL = `expires_in - 60s`），进程内
 单飞合并并发请求；Redis 不可用时回退为每次获取。Directory 请求收到 401/403 时清除
 缓存并用新 token 重试一次（应对上游轮换）。
 

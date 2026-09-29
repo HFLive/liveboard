@@ -58,7 +58,7 @@ describe("HfliveAuthConfig", () => {
       hfliveOidc: true,
       breakglass: true,
       profileUrl:
-        "https://auth.hsfz.live/profile?returnTo=https%3A%2F%2Fboard.example%2Fapp%2Fprofile",
+        "https://auth.hsfz.live/profile?returnTo=https%3A%2F%2Fboard.example%2Fapp%2Fprofile%3Fidentity%3Dreturned",
     });
   });
 });

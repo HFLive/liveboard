@@ -1,0 +1,145 @@
+.profile-settings .profile-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 300px);
+  min-width: 0;
+}
+
+.profile-settings-intro {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  min-width: 0;
+  padding: 12px 22px 24px;
+}
+
+.profile-settings-intro .profile-avatar-preview {
+  flex: none;
+  width: 58px;
+  height: 58px;
+  font-size: 21px;
+}
+
+.profile-settings-intro > div:last-child {
+  min-width: 0;
+}
+
+.profile-settings-intro strong,
+.profile-settings-intro span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.profile-settings-intro strong {
+  font-size: 19px;
+  line-height: 1.35;
+}
+.profile-settings-intro span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.profile-settings-intro p {
+  margin: 7px 0 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.profile-settings .workbench-main,
+.profile-settings .workbench-side {
+  min-width: 0;
+}
+
+.profile-settings .profile-form {
+  padding: 18px 22px 28px;
+  gap: 22px;
+}
+
+.profile-settings .profile-banner-preview {
+  border-radius: 8px;
+  background: var(--fill-subtle);
+}
+
+.profile-settings .workbench-side {
+  gap: 0;
+  border-left: 1px solid var(--line);
+}
+
+.profile-settings .workbench-side > :is(section, details) {
+  margin: 0;
+  padding: 18px 20px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.profile-settings .profile-readonly-grid div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "label action" "value action";
+  align-items: center;
+  gap: 2px 8px;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.profile-settings .profile-readonly-grid span {
+  grid-area: label;
+}
+
+.profile-settings .profile-readonly-grid strong {
+  grid-area: value;
+}
+
+.profile-settings .profile-account-edit {
+  grid-area: action;
+  align-self: center;
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.profile-settings .profile-account-edit:hover {
+  text-decoration: underline;
+}
+
+.profile-settings .profile-readonly-grid strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.profile-settings .profile-identity-panel .button {
+  width: auto;
+  justify-self: start;
+}
+.profile-settings .profile-identity-panel .identity-warning {
+  margin: 0;
+  border-radius: 6px;
+}
+.profile-settings .profile-badge-choices label {
+  border-bottom-color: var(--line);
+}
+
+@media (max-width: 760px) {
+  .workspace.profile-settings .profile-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .profile-settings .workbench-side {
+    border-left: 0;
+  }
+  .profile-settings .workbench-side > :is(section, details) {
+    padding-inline: 18px;
+  }
+  .profile-settings-intro {
+    padding-inline: 18px;
+  }
+  .profile-settings .profile-form {
+    padding-inline: 18px;
+  }
+}

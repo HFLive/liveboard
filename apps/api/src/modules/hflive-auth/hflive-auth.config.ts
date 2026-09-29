@@ -64,7 +64,10 @@ export class HfliveAuthConfig {
     try {
       const applicationOrigin = new URL(this.redirectUri).origin;
       const target = new URL(HFLIVE_PROFILE_URL);
-      target.searchParams.set("returnTo", `${applicationOrigin}/app/profile`);
+      target.searchParams.set(
+        "returnTo",
+        `${applicationOrigin}/app/profile?identity=returned`,
+      );
       return target.toString();
     } catch {
       return HFLIVE_PROFILE_URL;

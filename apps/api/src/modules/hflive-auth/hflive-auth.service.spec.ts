@@ -455,6 +455,49 @@ describe("HfliveAuthService webhook and status convergence", () => {
     );
   });
 
+  it("still syncs the free username when only the email conflicts", async () => {
+    tx.user.findUniqueOrThrow.mockResolvedValue({ id: "user-1" });
+    tx.user.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "user-2" });
+
+    await service["applyVerifiedProfile"](
+      tx as unknown as PrismaService,
+      identity,
+      {
+        issuer: "https://auth.hsfz.live",
+        subject: "subject-1",
+        preferredUsername: "teacher_new",
+        email: "occupied@example.invalid",
+        emailVerified: true,
+        displayName: "New Display Name",
+        picture: null,
+        directoryUpdatedAt: new Date().toISOString(),
+      },
+    );
+
+    expect(tx.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          username: "teacher_new",
+          displayName: "New Display Name",
+        }),
+      }),
+    );
+    expect(tx.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.not.objectContaining({
+          email: "occupied@example.invalid",
+        }),
+      }),
+    );
+    expect(tx.externalIdentity.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ syncState: "PROFILE_CONFLICT" }),
+      }),
+    );
+  });
+
   it("admin sync pulls the directory profile and returns the refreshed identity status", async () => {
     const mockAdminTargetPair = () => {
       prisma.user.findUnique
@@ -514,6 +557,47 @@ describe("HfliveAuthService webhook and status convergence", () => {
     expect(tx.user.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ displayName: "统一姓名" }),
+      }),
+    );
+  });
+
+  it("lets a linked member refresh their own directory profile", async () => {
+    prisma.externalIdentity.findUnique
+      .mockResolvedValueOnce(identity)
+      .mockResolvedValueOnce({
+        preferredUsername: "teacher_new",
+        email: "teacher@example.invalid",
+        displayName: "New Display Name",
+        picture: null,
+        externalStatus: "ACTIVE",
+        syncState: "CURRENT",
+        syncErrorCode: null,
+        lastProfileSyncedAt: new Date(),
+      });
+    prisma.user.findUnique.mockResolvedValue({
+      status: "active",
+      localPasswordEnabled: false,
+    });
+    directory.getProfile.mockResolvedValue({
+      subject: "subject-1",
+      status: "ACTIVE",
+      preferredUsername: "teacher_new",
+      name: "New Display Name",
+      picture: null,
+      email: "teacher@example.invalid",
+      emailVerified: true,
+      updatedAt: new Date().toISOString(),
+    });
+    tx.user.findUniqueOrThrow.mockResolvedValue({ id: "user-1" });
+    tx.user.findFirst.mockResolvedValue(null);
+
+    await expect(service.syncMyIdentity("user-1")).resolves.toMatchObject({
+      linked: true,
+      identity: { preferredUsername: "teacher_new" },
+    });
+    expect(tx.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ username: "teacher_new" }),
       }),
     );
   });

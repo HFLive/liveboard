@@ -3,6 +3,7 @@ import { RedisService } from "../redis/redis.service";
 import { HFLIVE_ISSUER, HfliveAuthConfig } from "./hflive-auth.config";
 
 const DIRECTORY_TOKEN_KEY = "liveboard:hflive:directory-token";
+const tokenKey = (scope: string) => `${DIRECTORY_TOKEN_KEY}:${scope}`;
 
 export type DirectoryStatus = "ACTIVE" | "DISABLED";
 
@@ -30,7 +31,7 @@ export class DirectoryRequestError extends Error {
 
 @Injectable()
 export class HfliveDirectoryService {
-  private inFlightTokenPromise: Promise<string> | null = null;
+  private readonly inFlightTokens = new Map<string, Promise<string>>();
 
   constructor(
     private readonly config: HfliveAuthConfig,
@@ -81,7 +82,7 @@ export class HfliveDirectoryService {
     // 上游轮换后缓存 token 失效：清除缓存并用新 token 重试一次。
     if (response.status === 401 || response.status === 403) {
       await response.body?.cancel();
-      await this.invalidateToken();
+      await this.invalidateToken(scope);
       try {
         token = await this.fetchAccessToken(scope);
         response = await directoryFetch(token);
@@ -117,22 +118,22 @@ export class HfliveDirectoryService {
   private async getAccessToken(scope: string) {
     const client = await this.redis.getClient().catch(() => null);
     if (client) {
-      const cached = await client.get(DIRECTORY_TOKEN_KEY).catch(() => null);
+      const cached = await client.get(tokenKey(scope)).catch(() => null);
       if (cached) return cached;
     }
-    if (this.inFlightTokenPromise) return this.inFlightTokenPromise;
-    this.inFlightTokenPromise = this.fetchAccessToken(scope, client).finally(
-      () => {
-        this.inFlightTokenPromise = null;
-      },
-    );
-    return this.inFlightTokenPromise;
+    const inFlight = this.inFlightTokens.get(scope);
+    if (inFlight) return inFlight;
+    const request = this.fetchAccessToken(scope, client).finally(() => {
+      this.inFlightTokens.delete(scope);
+    });
+    this.inFlightTokens.set(scope, request);
+    return request;
   }
 
-  private async invalidateToken() {
-    this.inFlightTokenPromise = null;
+  private async invalidateToken(scope: string) {
+    this.inFlightTokens.delete(scope);
     const client = await this.redis.getClient().catch(() => null);
-    if (client) await client.del(DIRECTORY_TOKEN_KEY).catch(() => undefined);
+    if (client) await client.del(tokenKey(scope)).catch(() => undefined);
   }
 
   private async fetchAccessToken(
@@ -178,12 +179,12 @@ export class HfliveDirectoryService {
       throw new DirectoryRequestError("INVALID_RESPONSE");
     }
     if (client && typeof payload.expires_in === "number") {
-      const ttlSeconds = Math.max(60, Math.floor(payload.expires_in) - 60);
-      await client
-        .set(DIRECTORY_TOKEN_KEY, payload.access_token, {
-          EX: ttlSeconds,
-        })
-        .catch(() => undefined);
+      const ttlSeconds = Math.floor(payload.expires_in) - 60;
+      if (ttlSeconds > 0) {
+        await client
+          .set(tokenKey(scope), payload.access_token, { EX: ttlSeconds })
+          .catch(() => undefined);
+      }
     }
     return payload.access_token;
   }

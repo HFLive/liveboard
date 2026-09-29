@@ -92,7 +92,7 @@ describe("UsersService", () => {
     );
   });
 
-  it("rejects displayName and password changes for HFLive-linked users", async () => {
+  it("rejects name, username and password changes for HFLive-linked users", async () => {
     prisma.externalIdentity.findUnique.mockResolvedValue({ id: "identity-1" });
     Object.defineProperty(hfliveConfig, "enabled", {
       configurable: true,
@@ -121,6 +121,19 @@ describe("UsersService", () => {
         password: "long-enough-pass",
       }),
     ).rejects.toThrow("统一身份密码由 HFLive Auth 管理");
+    expect(tx.user.update).not.toHaveBeenCalled();
+
+    prisma.user.findUnique
+      .mockReset()
+      .mockResolvedValueOnce(actor)
+      .mockResolvedValueOnce({
+        ...target,
+        systemRole: "member",
+        status: "active",
+      });
+    await expect(
+      service.updateUser("admin-1", "admin-2", { username: "local_override" }),
+    ).rejects.toThrow("统一身份用户名请前往 HFLive Auth 修改");
     expect(tx.user.update).not.toHaveBeenCalled();
 
     Object.defineProperty(hfliveConfig, "enabled", {

@@ -456,7 +456,9 @@ export function UserManagementClient() {
         // 已绑定用户显示名/密码由 HFLive Auth 权威管理，服务端会拒绝；
         // 前端直接不提交这些字段（双保险）。
         ...(!linked ? { displayName: editDraft.displayName } : {}),
-        ...(actorIsSuperAdmin && editDraft.username !== editingUser?.username
+        ...(actorIsSuperAdmin &&
+        !linked &&
+        editDraft.username !== editingUser?.username
           ? { username: editDraft.username }
           : {}),
         systemRole: editDraft.systemRole,
@@ -1123,31 +1125,33 @@ export function UserManagementClient() {
                     该用户尚未绑定统一身份，绑定需用户在登录时自助完成。
                   </p>
                 ) : null}
-                <label className="label">
-                  登录账号
-                  {actorIsSuperAdmin ? (
-                    <>
-                      <input
-                        className="input"
-                        value={editDraft.username}
-                        onChange={(event) =>
-                          setEditDraft({
-                            ...editDraft,
-                            username: event.target.value,
-                          })
-                        }
-                      />
-                      <small className="field-hint">
-                        仅最高管理员可改。若该用户已绑定 HFLive，下次同步会被
-                        统一用户名覆盖（用于解决用户名冲突）。
-                      </small>
-                    </>
-                  ) : (
-                    <strong className="readonly-value">
-                      {editingUser.username}
-                    </strong>
-                  )}
-                </label>
+                {!hfliveEnabled ||
+                !editingUser.hflive?.linked ||
+                editingIdentity?.syncState === "PROFILE_CONFLICT" ? (
+                  <label className="label">
+                    登录账号
+                    {actorIsSuperAdmin &&
+                    !(hfliveEnabled && editingUser.hflive?.linked) ? (
+                      <>
+                        <input
+                          className="input"
+                          value={editDraft.username}
+                          onChange={(event) =>
+                            setEditDraft({
+                              ...editDraft,
+                              username: event.target.value,
+                            })
+                          }
+                        />
+                        <small className="field-hint">仅最高管理员可改。</small>
+                      </>
+                    ) : (
+                      <strong className="readonly-value">
+                        {editingUser.username}
+                      </strong>
+                    )}
+                  </label>
+                ) : null}
                 {!editingUser.hflive?.linked ? (
                   <label className="label">
                     显示名
