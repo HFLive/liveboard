@@ -83,6 +83,10 @@ describe("ProfileClient HFLive ownership", () => {
       "href",
       expect.stringContaining("https://auth.hsfz.live/profile?"),
     );
+    expect(screen.queryByText("当前密码")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /前往 HFLive Auth 修改密码/ }),
+    ).toHaveAttribute("href", expect.stringContaining("action=password"));
     expect(screen.getByLabelText(/^个人简介/)).not.toHaveAttribute("readonly");
     expect(
       screen.queryByRole("button", { name: "上传头像" }),
@@ -140,6 +144,39 @@ describe("ProfileClient HFLive ownership", () => {
     expect(screen.getByLabelText(/^显示名/)).not.toHaveAttribute("readonly");
     expect(
       screen.getByRole("button", { name: "上传头像" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "修改密码", hidden: true }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows only the emergency password form for a linked breakglass administrator", async () => {
+    vi.mocked(getMe).mockResolvedValue({
+      user: { ...user, systemRole: "super_admin" },
+    });
+    vi.mocked(getHfliveAccountContext).mockResolvedValue({
+      mode: "hflive_oidc",
+      localLogin: false,
+      hfliveOidc: true,
+      breakglass: true,
+      issuer: "https://auth.hsfz.live",
+      profileUrl: "https://auth.hsfz.live/profile",
+      linked: true,
+      authoritative: true,
+      localPasswordEnabled: true,
+      identity: null,
+    });
+
+    render(<ProfileClient />);
+
+    expect(
+      await screen.findByText("此密码仅用于 LiveBoard 应急登录。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /前往 HFLive Auth 修改密码/ }),
+    ).toHaveAttribute("href", "https://auth.hsfz.live/profile?action=password");
+    expect(
+      screen.getByRole("button", { name: "修改应急登录密码", hidden: true }),
     ).toBeInTheDocument();
   });
 });

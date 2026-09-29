@@ -1,4 +1,8 @@
-import { HttpException, UnauthorizedException } from "@nestjs/common";
+import {
+  ForbiddenException,
+  HttpException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import argon2 from "argon2";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { StorageService } from "../storage/storage.service";
@@ -36,10 +40,17 @@ describe("AuthService", () => {
     getObject: jest.fn(),
   };
   let service: AuthService;
-  const hfliveConfig = { mode: "local", breakglassEnabled: false };
+  const hfliveConfig = {
+    mode: "local",
+    enabled: false,
+    breakglassEnabled: false,
+  };
 
   beforeEach(() => {
     jest.resetAllMocks();
+    hfliveConfig.mode = "local";
+    hfliveConfig.enabled = false;
+    hfliveConfig.breakglassEnabled = false;
     service = new AuthService(
       prisma as unknown as PrismaService,
       limiter as unknown as LoginRateLimitService,
@@ -121,6 +132,7 @@ describe("AuthService", () => {
       id: "user-1",
       status: "active",
       passwordHash,
+      localPasswordEnabled: true,
     });
     prisma.user.update.mockResolvedValue({ id: "user-1", sessionVersion: 8 });
 
@@ -135,6 +147,49 @@ describe("AuthService", () => {
         data: expect.objectContaining({ sessionVersion: { increment: 1 } }),
       }),
     );
+  });
+
+  it("rejects local password changes for SSO-linked accounts before checking the password", async () => {
+    hfliveConfig.mode = "hybrid";
+    hfliveConfig.enabled = true;
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      status: "active",
+      systemRole: "member",
+      localPasswordEnabled: true,
+      passwordHash: await argon2.hash("old-password"),
+    });
+    prisma.externalIdentity.findUnique.mockResolvedValue({ id: "identity-1" });
+
+    await expect(
+      service.changePassword("user-1", {
+        currentPassword: "old-password",
+        newPassword: "new-password-long",
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("lets an SSO-linked super administrator rotate the enabled emergency password", async () => {
+    hfliveConfig.mode = "hflive_oidc";
+    hfliveConfig.enabled = true;
+    hfliveConfig.breakglassEnabled = true;
+    prisma.user.findUnique.mockResolvedValue({
+      id: "admin-1",
+      status: "active",
+      systemRole: "super_admin",
+      localPasswordEnabled: true,
+      passwordHash: await argon2.hash("old-password"),
+    });
+    prisma.externalIdentity.findUnique.mockResolvedValue({ id: "identity-1" });
+    prisma.user.update.mockResolvedValue({ id: "admin-1", sessionVersion: 2 });
+
+    await expect(
+      service.changePassword("admin-1", {
+        currentPassword: "old-password",
+        newPassword: "new-password-long",
+      }),
+    ).resolves.toEqual({ userId: "admin-1", sessionVersion: 2 });
   });
 
   it("updates the display name and public biography", async () => {

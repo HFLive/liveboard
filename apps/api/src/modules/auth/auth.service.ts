@@ -768,6 +768,20 @@ export class AuthService {
 
   async changePassword(userId: string | null, input: ChangePasswordDto) {
     const user = await this.requireActiveUser(userId);
+    const canChangeBreakglassPassword =
+      this.hfliveConfig.mode === "hflive_oidc" &&
+      this.hfliveConfig.breakglassEnabled &&
+      user.systemRole === "super_admin" &&
+      user.localPasswordEnabled;
+    if (
+      !canChangeBreakglassPassword &&
+      (await this.hasAuthoritativeExternalProfile(user.id))
+    ) {
+      throw new ForbiddenException("请前往 HFLive Auth 修改密码");
+    }
+    if (!user.localPasswordEnabled) {
+      throw new ForbiddenException("此账号没有本地登录密码");
+    }
     const passwordMatches = await argon2.verify(
       user.passwordHash,
       input.currentPassword,

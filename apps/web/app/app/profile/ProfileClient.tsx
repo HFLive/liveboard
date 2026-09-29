@@ -40,6 +40,12 @@ const AVATAR_OUTPUT_SIZE = 512;
 const BANNER_OUTPUT_WIDTH = 1600;
 const BANNER_OUTPUT_HEIGHT = 280;
 
+function passwordSettingsUrl(profileUrl: string) {
+  const target = new URL(profileUrl);
+  target.searchParams.set("action", "password");
+  return target.toString();
+}
+
 type CropTarget = "avatar" | "banner";
 
 const CROP_CONFIG: Record<
@@ -615,6 +621,19 @@ export function ProfileClient() {
                       修改
                     </a>
                   </div>
+                  {account.authoritative ? (
+                    <div>
+                      <span>登录密码</span>
+                      <strong>由 HFLive Auth 管理</strong>
+                      <a
+                        aria-label="前往 HFLive Auth 修改密码"
+                        className="profile-account-edit"
+                        href={passwordSettingsUrl(account.profileUrl)}
+                      >
+                        修改
+                      </a>
+                    </div>
+                  ) : null}
                 </div>
                 {account.identity?.syncState === "PROFILE_CONFLICT" ? (
                   <p className="identity-warning" role="status">
@@ -740,20 +759,25 @@ export function ProfileClient() {
               <p className="success-text">{preferenceMessage}</p>
             ) : null}
           </section>
-          {account?.localPasswordEnabled ? (
+          {account?.localPasswordEnabled &&
+          (!account.authoritative ||
+            (account.breakglass && user?.systemRole === "super_admin")) ? (
             <details className="password-disclosure">
               <summary>
                 <span>
                   <KeyRound aria-hidden="true" className="heading-icon" />
-                  修改密码
+                  {account?.authoritative ? "修改应急登录密码" : "修改密码"}
                 </span>
               </summary>
               <form
                 className="form disclosure-body"
                 onSubmit={onChangePassword}
               >
+                {account?.authoritative ? (
+                  <p className="muted">此密码仅用于 LiveBoard 应急登录。</p>
+                ) : null}
                 <label className="label">
-                  当前密码
+                  {account?.authoritative ? "当前应急登录密码" : "当前密码"}
                   <input
                     autoComplete="current-password"
                     className="input"
@@ -790,7 +814,11 @@ export function ProfileClient() {
                   disabled={savingPassword}
                   type="submit"
                 >
-                  {savingPassword ? "修改中" : "修改密码"}
+                  {savingPassword
+                    ? "修改中"
+                    : account?.authoritative
+                      ? "修改应急登录密码"
+                      : "修改密码"}
                 </button>
               </form>
             </details>
