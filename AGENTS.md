@@ -245,6 +245,7 @@ LiveBoard 支持双目标部署，自托管能力保持不变：
 - 系统角色为 `super_admin`、`admin`、`member`；文档权限只由系统角色决定：两类管理员均可创建和编辑，普通成员仅可查看已发布文档。
 - 后端服务层是权限安全边界。
 - 非公开 API 统一通过全局活动用户守卫校验账号状态和 `sessionVersion`；停用账号、修改密码或管理员重置关键账号属性后，旧会话必须立即失效。Web 继续只使用 HttpOnly Cookie。原生客户端登录时携带 `X-LiveBoard-Client: mobile`，响应才包含与 Cookie 相同的 `sessionToken`；守卫同时接受 Cookie 与 `Authorization: Bearer`。不得把 sessionToken 返回给浏览器页面。
+- 已关联且由 HFLive Auth 管理的账号在 LiveBoard 个人设置中跳转至 HFLive Auth 的密码修改入口，LiveBoard API 必须拒绝其普通本地改密请求；已启用应急登录的最高管理员可单独轮换 LiveBoard 应急登录密码。本地身份账号仍可在 LiveBoard 修改本地密码。
 - 登录失败次数使用 Redis 计数，`TRUST_PROXY_HOPS` 必须与 API 前实际可信代理层数一致，避免直接信任客户端伪造的转发头。
 - 上传内容不得以内联方式提供 SVG；只有经过文件头识别的 PNG、JPEG、GIF 和 WebP 可以内联，其他类型强制下载并使用 `nosniff`。安全图片响应使用 `Cross-Origin-Resource-Policy: same-site`，以支持本地 Web 与 API 不同端口的预览；下载型附件继续使用 `same-origin`。
 - AI 服务商 API Key 使用 `AI_ENCRYPTION_KEY` 进行 AES-GCM 加密后存入数据库；生产部署必须保留该密钥，否则已有配置无法解密。
