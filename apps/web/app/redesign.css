@@ -1901,7 +1901,7 @@ button:disabled {
   background: transparent;
 }
 
-/* 个人主页 Banner 为通栏横幅，不再使用圆角卡片块。 */
+/* 个人主页背景为通栏横幅，不再使用圆角卡片块。 */
 @media (min-width: 1121px) {
   .user-profile-card {
     margin-top: calc(0px - var(--page-gutter));

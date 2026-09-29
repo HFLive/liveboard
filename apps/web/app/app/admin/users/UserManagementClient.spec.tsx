@@ -220,6 +220,7 @@ describe("UserManagementClient unified identity", () => {
       screen.getByRole("heading", { name: /本地管理/ }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText(/^显示名/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("登录账号")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/重置密码/)).not.toBeInTheDocument();
   });
 

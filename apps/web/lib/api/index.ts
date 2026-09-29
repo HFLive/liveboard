@@ -169,6 +169,15 @@ export function getHfliveAccountContext() {
   return request<HfliveAccountContext>("/auth/hflive/account");
 }
 
+export function syncHfliveAccount() {
+  return request<HfliveAccountContext>("/auth/hflive/account/sync", {
+    method: "POST",
+  }).then((result) => {
+    clearCurrentUserCache();
+    return result;
+  });
+}
+
 export function linkHfliveWithPassword(input: {
   ticket: string;
   username: string;
@@ -336,7 +345,7 @@ export async function uploadProfileBanner(file: File) {
     const message = Array.isArray(body?.message)
       ? body.message.join("；")
       : body?.message;
-    throw new ApiError(message ?? "Banner 上传失败", response.status);
+    throw new ApiError(message ?? "背景上传失败", response.status);
   }
 
   return (await response.json()) as { user: UserProfile };

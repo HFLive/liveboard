@@ -373,6 +373,46 @@ export class HfliveAuthService {
     return this.adminIdentityStatus(actorUserId, targetUserId);
   }
 
+  /** 成员从统一账号返回时可立即回拉自己的资料，无需等待 webhook 或周期对账。 */
+  async syncMyIdentity(userId: string | null): Promise<HfliveAccountContext> {
+    this.requireEnabled();
+    if (!userId) throw new UnauthorizedException("Missing session");
+    const identity = await this.prisma.externalIdentity.findUnique({
+      where: { userId_issuer: { userId, issuer: HFLIVE_ISSUER } },
+    });
+    if (!identity) throw new BadRequestException("该账号尚未绑定统一身份");
+    let profile: DirectoryProfile;
+    try {
+      profile = await this.directory.getProfile(identity.subject);
+    } catch (caught) {
+      if (
+        caught instanceof DirectoryRequestError &&
+        caught.code === "NOT_FOUND"
+      ) {
+        await this.disableIdentity(identity, "DIRECTORY_NOT_FOUND");
+        throw new UnauthorizedException("统一身份账号不可用");
+      }
+      throw new ServiceUnavailableException(
+        "统一身份资料暂时不可用，请稍后重试",
+      );
+    }
+    try {
+      if (
+        (await this.applyDirectorySnapshot(identity, profile)) === "DISABLED"
+      ) {
+        throw new UnauthorizedException("统一身份账号不可用");
+      }
+    } catch (caught) {
+      if (caught instanceof DirectoryRequestError) {
+        throw new ServiceUnavailableException(
+          "统一身份资料暂时不可用，请稍后重试",
+        );
+      }
+      throw caught;
+    }
+    return this.accountContext(userId);
+  }
+
   private async authorizeAdminTarget(
     actorUserId: string | null,
     targetUserId: string,
@@ -854,7 +894,7 @@ export class HfliveAuthService {
    * 「目录资料 → 本地写入」的冲突感知更新，webhook 事务、周期对账、登录同步
    * 三处共用，行为保持一致：
    * - User.displayName 总是更新；
-   * - username/email 仅在无其他用户的大小写不敏感冲突时更新；
+   * - username/email 各自检查冲突，避免其中一项被占用时阻止另一项同步；
    * - ExternalIdentity 写 identitySnapshot + lastProfileSyncedAt，
    *   syncState = 冲突 ? PROFILE_CONFLICT : CURRENT。
    * 事务（webhook）与非事务（对账/登录）上下文都可传入（PrismaService 也是
@@ -868,31 +908,36 @@ export class HfliveAuthService {
     const user = await tx.user.findUniqueOrThrow({
       where: { id: identity.userId },
     });
-    const conflict = await tx.user.findFirst({
-      where: {
-        id: { not: user.id },
-        OR: [
-          {
-            username: {
-              equals: profile.preferredUsername,
-              mode: "insensitive",
-            },
+    const [usernameConflict, emailConflict] = await Promise.all([
+      tx.user.findFirst({
+        where: {
+          id: { not: user.id },
+          username: {
+            equals: profile.preferredUsername,
+            mode: "insensitive",
           },
-          ...(profile.emailVerified && profile.email
-            ? [{ emailNormalized: normalizeEmail(profile.email) }]
-            : []),
-        ],
-      },
-      select: { id: true },
-    });
+        },
+        select: { id: true },
+      }),
+      profile.emailVerified && profile.email
+        ? tx.user.findFirst({
+            where: {
+              id: { not: user.id },
+              emailNormalized: normalizeEmail(profile.email),
+            },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+    ]);
+    const conflict = Boolean(usernameConflict || emailConflict);
     const updated = await tx.user.update({
       where: { id: user.id },
       data: {
         displayName: profile.displayName,
         identityLabel: profile.identityLabel ?? null,
         realName: profile.realName ?? null,
-        ...(!conflict ? { username: profile.preferredUsername } : {}),
-        ...(!conflict && profile.emailVerified
+        ...(!usernameConflict ? { username: profile.preferredUsername } : {}),
+        ...(!emailConflict && profile.emailVerified
           ? {
               email: profile.email,
               emailNormalized: normalizeEmail(profile.email),
@@ -944,7 +989,6 @@ export class HfliveAuthService {
             externalStatus: "ACTIVE",
             lastStatusConfirmedAt: new Date(),
             statusRefreshLeaseUntil: null,
-            syncErrorCode: null,
           },
         });
       });

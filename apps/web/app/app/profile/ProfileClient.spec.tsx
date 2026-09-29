@@ -11,6 +11,7 @@ vi.mock("@/lib/api", () => ({
   listMyBadges: vi.fn(),
   setEquippedBadges: vi.fn(),
   startHfliveAccountLink: vi.fn(),
+  syncHfliveAccount: vi.fn(),
   updateProfile: vi.fn(),
   uploadAvatar: vi.fn(),
   uploadProfileBannerDirect: vi.fn(),
@@ -62,8 +63,26 @@ describe("ProfileClient HFLive ownership", () => {
 
     const { container } = render(<ProfileClient />);
 
-    expect(await screen.findByText("已关联 HFLive Auth")).toBeInTheDocument();
-    expect(screen.getByLabelText(/^显示名/)).toHaveAttribute("readonly");
+    expect(
+      await screen.findByRole("heading", { name: "账号资料" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^显示名/)).not.toBeInTheDocument();
+    expect(screen.getByText("个人主页背景")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "更换背景" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("账号信息")).not.toBeInTheDocument();
+    expect(screen.queryByText("状态")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "修改登录用户名" }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining("https://auth.hsfz.live/profile?"),
+    );
+    expect(screen.getByRole("link", { name: "修改邮箱" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("https://auth.hsfz.live/profile?"),
+    );
     expect(screen.getByLabelText(/^个人简介/)).not.toHaveAttribute("readonly");
     expect(
       screen.queryByRole("button", { name: "上传头像" }),
@@ -79,6 +98,24 @@ describe("ProfileClient HFLive ownership", () => {
         'img[src="https://auth.hsfz.live/api/profile/avatar/id?v=2"]',
       ),
     ).toBeInTheDocument();
+  });
+
+  it("keeps account settings available if badges cannot be loaded", async () => {
+    vi.mocked(listMyBadges).mockRejectedValue(new Error("badges unavailable"));
+    vi.mocked(getHfliveAccountContext).mockResolvedValue({
+      mode: "local",
+      localLogin: true,
+      hfliveOidc: false,
+      breakglass: false,
+      issuer: "https://auth.hsfz.live",
+      profileUrl: "https://auth.hsfz.live/profile",
+      linked: false,
+      authoritative: false,
+      localPasswordEnabled: true,
+      identity: null,
+    });
+    render(<ProfileClient />);
+    expect(await screen.findByLabelText(/^个人简介/)).toBeInTheDocument();
   });
 
   it("keeps local profile controls editable in local mode", async () => {

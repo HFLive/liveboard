@@ -103,6 +103,15 @@ export class HfliveAuthController {
     return this.hflive.accountContext(userId);
   }
 
+  @Post("hflive/account/sync")
+  async syncAccount(
+    @CurrentUserId() userId: string | null,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.setHeader("Cache-Control", "private, no-store");
+    return this.hflive.syncMyIdentity(userId);
+  }
+
   @Post("hflive/link/password")
   @Public()
   async linkPassword(

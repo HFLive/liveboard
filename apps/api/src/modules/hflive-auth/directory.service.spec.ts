@@ -63,7 +63,7 @@ describe("HfliveDirectoryService token caching", () => {
       );
     await service.getStatus("s-1");
     expect(redisClient.set).toHaveBeenCalledWith(
-      "liveboard:hflive:directory-token",
+      "liveboard:hflive:directory-token:directory:user:status",
       "token-1",
       expect.objectContaining({ EX: 3540 }),
     );
@@ -99,12 +99,53 @@ describe("HfliveDirectoryService token caching", () => {
       );
     await service.getStatus("s-1");
     expect(redisClient.del).toHaveBeenCalledWith(
-      "liveboard:hflive:directory-token",
+      "liveboard:hflive:directory-token:directory:user:status",
     );
     expect(fetchMock.mock.calls[1][0]).toContain("/oauth2/token");
     const directoryCall = fetchMock.mock.calls[2][1] as RequestInit;
     expect(directoryCall.headers).toEqual(
       expect.objectContaining({ authorization: "Bearer fresh-token" }),
+    );
+  });
+
+  it("keeps profile and status tokens in separate scope caches", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({ access_token: "status-token", expires_in: 3600 }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          subject: "s-1",
+          status: "ACTIVE",
+          updatedAt: "2026-08-11T00:00:00.000Z",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ access_token: "profile-token", expires_in: 3600 }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          subject: "s-1",
+          status: "ACTIVE",
+          preferredUsername: "teacher",
+          name: "Teacher",
+          picture: null,
+          email: null,
+          emailVerified: false,
+          updatedAt: "2026-08-11T00:00:00.000Z",
+        }),
+      );
+    await service.getStatus("s-1");
+    await service.getProfile("s-1");
+    expect(redisClient.set).toHaveBeenCalledWith(
+      "liveboard:hflive:directory-token:directory:user:status",
+      "status-token",
+      expect.anything(),
+    );
+    expect(redisClient.set).toHaveBeenCalledWith(
+      "liveboard:hflive:directory-token:directory:user:read",
+      "profile-token",
+      expect.anything(),
     );
   });
 

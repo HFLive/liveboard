@@ -24,11 +24,11 @@ import {
   listMyBadges,
   setEquippedBadges,
   startHfliveAccountLink,
+  syncHfliveAccount,
   updateProfile,
   uploadAvatar,
   uploadProfileBannerDirect,
 } from "@/lib/api";
-import { roleLabel, userStatusLabel } from "@/lib/labels";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
 import { AutoTextarea } from "@/components/AutoTextarea";
 import { UserBadges } from "@/components/UserBadges";
@@ -62,12 +62,12 @@ const CROP_CONFIG: Record<
     confirmLabel: "确认头像",
   },
   banner: {
-    title: "裁剪 Banner",
+    title: "裁剪背景",
     aspect: BANNER_OUTPUT_WIDTH / BANNER_OUTPUT_HEIGHT,
     outputWidth: BANNER_OUTPUT_WIDTH,
     outputHeight: BANNER_OUTPUT_HEIGHT,
     outputFileName: "banner.webp",
-    confirmLabel: "确认 Banner",
+    confirmLabel: "确认背景",
   },
 };
 
@@ -92,6 +92,11 @@ export function ProfileClient() {
   const [savingPreference, setSavingPreference] = useState(false);
   const [linkPassword, setLinkPassword] = useState("");
   const [startingLink, setStartingLink] = useState(false);
+  const [syncingIdentity, setSyncingIdentity] = useState(false);
+  const [identityMessage, setIdentityMessage] = useState<{
+    kind: "success" | "error";
+    text: string;
+  } | null>(null);
   const [preferenceMessage, setPreferenceMessage] = useState<string | null>(
     null,
   );
@@ -102,12 +107,27 @@ export function ProfileClient() {
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    Promise.all([getMe(), listMyBadges(), getHfliveAccountContext()])
-      .then(([result, badgeResult, accountResult]) => {
+    Promise.all([getMe(), getHfliveAccountContext()])
+      .then(([result, accountResult]) => {
         setUser(result.user);
         setAccount(accountResult);
         setDisplayName(result.user.displayName);
         setBio(result.user.bio ?? "");
+        if (
+          accountResult.linked &&
+          new URLSearchParams(window.location.search).get("identity") ===
+            "returned"
+        ) {
+          window.history.replaceState(null, "", window.location.pathname);
+          void syncMyProfile();
+        }
+      })
+      .catch((caught) => {
+        setError(caught instanceof Error ? caught.message : "加载个人信息失败");
+      })
+      .finally(() => setLoadingProfile(false));
+    listMyBadges()
+      .then((badgeResult) => {
         setAwardedBadges(badgeResult.badges);
         setEquippedBadgeIds(
           badgeResult.badges
@@ -119,11 +139,29 @@ export function ProfileClient() {
             .map((badge) => badge.id),
         );
       })
-      .catch((caught) => {
-        setError(caught instanceof Error ? caught.message : "加载个人信息失败");
-      })
-      .finally(() => setLoadingProfile(false));
+      .catch(() => undefined);
   }, []);
+
+  async function syncMyProfile() {
+    setSyncingIdentity(true);
+    setIdentityMessage(null);
+    try {
+      const refreshedAccount = await syncHfliveAccount();
+      const refreshedUser = await getMe();
+      setAccount(refreshedAccount);
+      setUser(refreshedUser.user);
+      setDisplayName(refreshedUser.user.displayName);
+      window.dispatchEvent(new Event("liveboard:profile-updated"));
+      setIdentityMessage({ kind: "success", text: "统一身份资料已更新" });
+    } catch (caught) {
+      setIdentityMessage({
+        kind: "error",
+        text: caught instanceof Error ? caught.message : "同步失败，请稍后重试",
+      });
+    } finally {
+      setSyncingIdentity(false);
+    }
+  }
 
   useEffect(() => {
     return () => {
@@ -191,7 +229,7 @@ export function ProfileClient() {
     setError(null);
     setProfileMessage(null);
 
-    const label = target === "avatar" ? "头像" : "Banner";
+    const label = target === "avatar" ? "头像" : "背景";
     const maxBytes =
       target === "avatar" ? MAX_AVATAR_UPLOAD_BYTES : MAX_BANNER_UPLOAD_BYTES;
 
@@ -202,9 +240,7 @@ export function ProfileClient() {
 
     if (file.size > maxBytes) {
       setError(
-        target === "avatar"
-          ? "头像图片不能超过 2MB"
-          : "Banner 图片不能超过 5MB",
+        target === "avatar" ? "头像图片不能超过 2MB" : "背景图片不能超过 5MB",
       );
       return;
     }
@@ -240,9 +276,7 @@ export function ProfileClient() {
       if (cropTarget === "avatar") {
         window.dispatchEvent(new Event("liveboard:profile-updated"));
       }
-      setProfileMessage(
-        cropTarget === "avatar" ? "头像已更新" : "Banner 已更新",
-      );
+      setProfileMessage(cropTarget === "avatar" ? "头像已更新" : "背景已更新");
       closeCropDialog();
     } catch (caught) {
       setError(
@@ -250,7 +284,7 @@ export function ProfileClient() {
           ? caught.message
           : cropTarget === "avatar"
             ? "头像上传失败"
-            : "Banner 上传失败",
+            : "背景上传失败",
       );
     } finally {
       setSavingCrop(false);
@@ -378,24 +412,43 @@ export function ProfileClient() {
   }
 
   return (
-    <div className="workspace">
-      <header className="page-head">
-        <div>
-          <p className="page-eyebrow">账户</p>
-          <h1>个人设置</h1>
-          <p className="muted">维护个人资料、登录身份与账户安全。</p>
-        </div>
-      </header>
-
+    <div className="workspace profile-settings">
       {error ? <p className="error-text">{error}</p> : null}
 
       <section className="workbench profile-layout">
         <div className="workbench-main">
+          <div className="profile-settings-intro">
+            <div className="profile-avatar-preview" aria-hidden="true">
+              {(account.authoritative && account.identity?.picture) ||
+              user.avatarUrl ? (
+                <img
+                  alt=""
+                  src={apiResourceUrl(
+                    (account.authoritative && account.identity?.picture) ||
+                      user.avatarUrl!,
+                  )}
+                />
+              ) : (
+                displayName.trim().slice(0, 1).toUpperCase() || "L"
+              )}
+            </div>
+            <div>
+              <strong>{user.displayName}</strong>
+              <span>
+                @{account.identity?.preferredUsername ?? user.username}
+              </span>
+              <p>
+                {account.authoritative
+                  ? "统一账号资料在 HFLive Auth 修改；这里管理你的 LiveBoard 个人主页。"
+                  : "管理个人主页和账号设置。"}
+              </p>
+            </div>
+          </div>
           <div className="panel-head">
             <div>
               <h2>
                 <UserRound aria-hidden="true" className="heading-icon" />
-                账号资料
+                个人主页
               </h2>
             </div>
           </div>
@@ -411,7 +464,7 @@ export function ProfileClient() {
               </div>
               <div className="profile-banner-actions">
                 <div>
-                  <strong>个人主页 Banner</strong>
+                  <strong>个人主页背景</strong>
                   <p className="muted">
                     支持 PNG、JPEG、WebP，图片不超过 5MB。
                   </p>
@@ -430,7 +483,7 @@ export function ProfileClient() {
                   type="button"
                 >
                   <ImagePlus aria-hidden="true" className="button-icon" />
-                  {savingCrop ? "上传中" : "更换 Banner"}
+                  {savingCrop ? "上传中" : "更换背景"}
                 </button>
               </div>
             </div>
@@ -480,19 +533,18 @@ export function ProfileClient() {
                 )}
               </div>
             </div>
-            <label className="label" htmlFor="profile-display-name">
-              显示名
-              <input
-                className="input"
-                id="profile-display-name"
-                onChange={(event) => setDisplayName(event.target.value)}
-                readOnly={Boolean(account?.authoritative)}
-                value={displayName}
-              />
-              {account?.authoritative ? (
-                <small className="muted">显示名由 HFLive Auth 管理。</small>
-              ) : null}
-            </label>
+            {!account.authoritative ? (
+              <label className="label" htmlFor="profile-display-name">
+                显示名
+                <input
+                  className="input"
+                  id="profile-display-name"
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  readOnly={Boolean(account?.authoritative)}
+                  value={displayName}
+                />
+              </label>
+            ) : null}
             <label className="label" htmlFor="profile-bio">
               个人简介
               <AutoTextarea
@@ -534,23 +586,34 @@ export function ProfileClient() {
           <section className="action-panel profile-identity-panel">
             <h2>
               <ShieldCheck aria-hidden="true" className="heading-icon" />
-              统一身份
+              账号资料
             </h2>
             {account?.linked ? (
               <>
-                <p className="identity-state success-text">
-                  已关联 HFLive Auth
-                </p>
                 <div className="profile-readonly-grid">
                   <div>
-                    <span>统一账号</span>
+                    <span>登录用户名</span>
                     <strong>
                       {account.identity?.preferredUsername ?? "-"}
                     </strong>
+                    <a
+                      aria-label="修改登录用户名"
+                      className="profile-account-edit"
+                      href={account.profileUrl}
+                    >
+                      修改
+                    </a>
                   </div>
                   <div>
-                    <span>统一邮箱</span>
+                    <span>邮箱</span>
                     <strong>{account.identity?.email ?? "-"}</strong>
+                    <a
+                      aria-label="修改邮箱"
+                      className="profile-account-edit"
+                      href={account.profileUrl}
+                    >
+                      修改
+                    </a>
                   </div>
                 </div>
                 {account.identity?.syncState === "PROFILE_CONFLICT" ? (
@@ -558,10 +621,26 @@ export function ProfileClient() {
                     统一资料存在命名冲突，身份关联保持有效；请联系管理员处理。
                   </p>
                 ) : null}
-                <a className="button secondary" href={account.profileUrl}>
-                  <ExternalLink aria-hidden="true" className="button-icon" />
-                  管理统一资料
-                </a>
+                <button
+                  className="button secondary"
+                  disabled={syncingIdentity}
+                  onClick={() => void syncMyProfile()}
+                  type="button"
+                >
+                  {syncingIdentity ? "同步中…" : "同步最新资料"}
+                </button>
+                {identityMessage ? (
+                  <p
+                    className={
+                      identityMessage.kind === "success"
+                        ? "success-text"
+                        : "error-text"
+                    }
+                    role="status"
+                  >
+                    {identityMessage.text}
+                  </p>
+                ) : null}
               </>
             ) : account?.hfliveOidc && account.localPasswordEnabled ? (
               <form
@@ -633,23 +712,6 @@ export function ProfileClient() {
             ) : (
               <p className="muted">尚未获得徽章。</p>
             )}
-          </section>
-          <section className="action-panel profile-account-panel">
-            <h2>账号信息</h2>
-            <div className="profile-readonly-grid">
-              <div>
-                <span>登录账号</span>
-                <strong>{user?.username ?? "-"}</strong>
-              </div>
-              <div>
-                <span>系统权限</span>
-                <strong>{user ? roleLabel(user.systemRole) : "-"}</strong>
-              </div>
-              <div>
-                <span>状态</span>
-                <strong>{user ? userStatusLabel(user.status) : "-"}</strong>
-              </div>
-            </div>
           </section>
           <section className="action-panel profile-preference-panel">
             <h2>偏好设置</h2>

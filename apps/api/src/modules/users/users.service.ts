@@ -783,6 +783,9 @@ export class UsersService {
     }
 
     if (typeof input.username === "string") {
+      if (hfliveLinked) {
+        throw new BadRequestException("统一身份用户名请前往 HFLive Auth 修改");
+      }
       if (!isSuperAdmin(actor.systemRole)) {
         throw new ForbiddenException("只有最高管理员可以修改登录账号");
       }
