@@ -613,6 +613,7 @@ describe("StorageService", () => {
       expect.objectContaining({
         expirySeconds: PRESIGN_EXPIRY_SECONDS,
         responseContentDisposition: expect.stringContaining("inline"),
+        responseContentType: "application/pdf",
       }),
     );
   });
@@ -635,6 +636,10 @@ describe("StorageService", () => {
         inline: true,
       }),
     ).resolves.toBe("https://r2.example/signed-octet-pdf");
+    expect(presignGet).toHaveBeenCalledWith(
+      "ws/assets/lesson.pdf",
+      expect.objectContaining({ responseContentType: "application/pdf" }),
+    );
   });
 
   it("honors caller-provided expiry for long reading sessions", async () => {

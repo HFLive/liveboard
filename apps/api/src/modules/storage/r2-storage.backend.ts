@@ -176,6 +176,9 @@ export class R2StorageBackend implements ObjectStorageBackend {
         ...(options.responseCacheControl
           ? { ResponseCacheControl: options.responseCacheControl }
           : {}),
+        ...(options.responseContentType
+          ? { ResponseContentType: options.responseContentType }
+          : {}),
       }),
       { expiresIn: options.expirySeconds },
     );

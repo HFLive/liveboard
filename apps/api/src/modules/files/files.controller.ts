@@ -546,10 +546,16 @@ export class FilesController {
           ? "text/markdown; charset=utf-8"
           : "text/plain; charset=utf-8";
     response.setHeader("Content-Type", contentType);
-    response.setHeader("Content-Disposition", "inline");
+    response.setHeader(
+      "Content-Disposition",
+      `inline; filename*=UTF-8''${encodeURIComponent(preview.asset.filename)}`,
+    );
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("Cross-Origin-Resource-Policy", "same-site");
-    response.setHeader("Content-Security-Policy", "sandbox");
+    // CSP sandbox 会阻止浏览器原生 PDF 控件；文本预览继续隔离。
+    if (preview.kind !== "pdf") {
+      response.setHeader("Content-Security-Policy", "sandbox");
+    }
     response.setHeader("Cache-Control", PRIVATE_IMMUTABLE_CACHE_CONTROL);
     if (preview.kind === "pdf") {
       // PDF 可能接近 25MB，超过 Vercel 普通响应体上限，必须流式 pipe。

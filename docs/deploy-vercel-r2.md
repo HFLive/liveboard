@@ -31,13 +31,15 @@ Vercel API（NestJS，apps/api，sin1）
 
 大文件上传：浏览器 ──预签名 PUT──▶ 私有 R2
 受保护图片：浏览器 ──▶ API 权限校验 ──302 短期签名──▶ 私有 R2
-文档预览：浏览器 ──▶ API 权限校验与流式中转 ──▶ 私有 R2
+PDF 查看：浏览器 ──▶ API 权限校验 ──签名 URL──▶ 私有 R2（新窗口原生 PDF 控件）
+文本预览：浏览器 ──▶ API 权限校验与中转 ──▶ 私有 R2
 ```
 
 浏览器始终访问 Web 域名下的 `/api`，不直接使用 API 域名。这样 Session Cookie
 留在 Web 域名下，也避免跨域登录问题。大文件通过短期预签名 URL 直接上传 R2，
 避开 Vercel Function 的请求体限制；安全位图由 API 鉴权后跳转到 120 秒签名
-GET，避免下载字节经过 Vercel。PDF、Markdown 与文本预览仍由 API 流式中转，
+GET，避免下载字节经过 Vercel。PDF 在文件弹窗中提供“新窗口打开”，优先使用签名
+URL，由新窗口的浏览器原生控件直连 R2；直连探测失败时回退 API 流式中转。Markdown 与文本预览始终由 API 中转，
 R2 Bucket 本身保持私有。
 
 favicon 与用户头像始终由 API 从私有 R2 流式中转，不使用签名重定向。带内容版本号的
@@ -211,10 +213,9 @@ JSON 编辑器使用**数组**，不是 `{ "rules": [...] }` 包装对象：
 - Origin 只有协议和主机名，不带路径，不带结尾 `/`。
 - 上线过渡期可同时保留 Vercel Web 域名和正式域名。
 - `GET` 用于 API 鉴权后跳转的短期图片签名地址，`PUT` 用于浏览器直传。
-- `AllowedHeaders` 里的 `Range` 是 PDF 预览流式加载（pdf.js 按需拉取页面）所必需的：
-  浏览器跨域请求带 `Range` 头会触发预检，不放行则请求被拒。
-- `ExposeHeaders` 里的 `Content-Length`/`Accept-Ranges`/`Content-Range` 是 pdf.js
-  判断并读取 Range 分片响应的必需响应头，不暴露则流式加载退化为整份下载。
+- `AllowedHeaders` 放行 `Range`，支持 PDF 直连探测和浏览器原生控件的分段加载。
+- `ExposeHeaders` 保留 `Content-Length`/`Accept-Ranges`/`Content-Range`，以便浏览器
+  读取文件大小与范围响应；具体下载策略由浏览器原生 PDF 控件决定。
 - 允许 `GET` 不会公开 Bucket；请求仍必须携带有效的 R2 签名。
 - Production 不要使用 `AllowedOrigins: ["*"]`。
 
@@ -466,17 +467,10 @@ Cache-Control: public, max-age=31536000, immutable
 Access-Control-Allow-Origin: *
 ```
 
-PDF.js worker 由 Web 站点自身提供，不进入 EdgeOne：EdgeOne 上传会把 `.mjs` 存成
-`application/octet-stream`，而用 `new URL()` 输出 `.js` 又会被 webpack 编译出无法
-解析的裸导入。worker 位于 `apps/web/public/pdf.worker.<版本>.js`，升级 pdfjs-dist
-时同步更新文件名与 `PdfAssetPreview.tsx` 里的路径。直接访问 Web 域名验证：
-
-```bash
-curl -I https://<Web 域名>/pdf.worker.v6.1.200.js
-```
-
-预期 `200` 且 `Content-Type` 为 `application/javascript`（不能是
-`application/octet-stream`）。
+PDF 仅在新窗口中由浏览器原生控件查看，文件弹窗不内嵌 PDF，不再分发 PDF.js 或 worker 文件。PDF 直链响应必须为
+`application/pdf` 且 `Content-Disposition` 为 `inline`；即使对象上传时使用
+`application/octet-stream`，签名 GET 也会覆盖响应类型。API 中转的 PDF 不设置
+CSP `sandbox`，避免阻止浏览器原生控件；Markdown 和文本预览继续隔离。
 
 最后必须从目标用户的真实网络分别测试完整页面，而不只比较服务商默认域名。无备案
 时 EdgeOne 也只能使用不含中国大陆的节点，不能把 Cloudflare 或 EdgeOne 方案描述
@@ -722,8 +716,10 @@ FROM "User";
 
 - 上传进度正常，浏览器请求直接发往 R2。
 - 支持的 PDF/Markdown/TXT 可以预览。
-- PDF 预览的加载请求直接发往 R2（网络面板目标为 R2 域名而非 Vercel），首屏快速出现，
-  翻页为 `206 Partial Content` 的 Range 请求，进度条与页码跳转正常。
+- PDF 文件弹窗只显示“新窗口打开”阅读入口和次要下载操作，不内嵌 PDF。
+  先向 R2 发送小范围 GET 探测，用户点击后才在新窗口中由浏览器原生控件加载；
+  确认新窗口打开、原生阅读与下载可用。具体是否使用 Range、何时继续下载由浏览器决定。
+  探测失败应回退 API 中转，不能自动触发下载。
 - 下载成功。
 - 删除后页面记录和 R2 对象按业务规则清理。
 - 浏览器控制台没有 R2 CORS 错误。

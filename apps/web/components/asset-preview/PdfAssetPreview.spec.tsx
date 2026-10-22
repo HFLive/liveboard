@@ -1,185 +1,95 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchPreviewUrl } from "@/lib/api";
+import { resolvePdfPreviewUrl } from "@/lib/api";
 import { PdfAssetPreview } from "./PdfAssetPreview";
 
-const { getDocumentMock, fetchPreviewUrlMock, ApiErrorMock } = vi.hoisted(
-  () => {
-    class ApiError extends Error {
-      readonly status: number;
-      constructor(message: string, status: number) {
-        super(message);
-        this.status = status;
-      }
-    }
-    return {
-      getDocumentMock: vi.fn(),
-      fetchPreviewUrlMock: vi.fn(),
-      ApiErrorMock: ApiError,
-    };
-  },
-);
-
 vi.mock("@/lib/api", () => ({
-  apiResourceUrl: (path: string) => path,
-  fetchPreviewUrl: fetchPreviewUrlMock,
-  ApiError: ApiErrorMock,
+  resolvePdfPreviewUrl: vi.fn(),
 }));
 
-vi.mock("pdfjs-dist", () => ({
-  GlobalWorkerOptions: { workerSrc: "" },
-  getDocument: getDocumentMock,
-}));
-
-type LoadingTask = {
-  promise: Promise<unknown>;
-  onProgress?: (progress: { loaded: number; total?: number }) => void;
-  destroy: ReturnType<typeof vi.fn>;
-};
-
-function makeTask(
-  promise: Promise<unknown> = Promise.resolve(null),
-): LoadingTask {
-  return {
-    promise,
-    destroy: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
-// 带 numPages 的文档代理，用于交互测试（页码输入框、回车提交）。
-function makeDocumentProxy(numPages = 10) {
-  return {
-    numPages,
-    getPage: vi.fn().mockResolvedValue({
-      getViewport: vi.fn().mockReturnValue({ width: 800, height: 1000 }),
-      render: vi.fn().mockReturnValue({
-        promise: Promise.resolve(),
-        cancel: vi.fn(),
-      }),
-    }),
-  };
-}
+const resolveUrl = vi.mocked(resolvePdfPreviewUrl);
+const props = { previewPath: "/assets/asset-1/preview" };
 
 describe("PdfAssetPreview", () => {
   beforeEach(() => {
-    fetchPreviewUrlMock.mockReset();
-    getDocumentMock.mockReset();
-    if (!globalThis.ResizeObserver) {
-      globalThis.ResizeObserver = class {
-        observe() {}
-        disconnect() {}
-        unobserve() {}
-      } as unknown as typeof ResizeObserver;
-    }
+    resolveUrl.mockReset();
   });
 
-  it("uses the direct signed URL when the backend presigns", async () => {
-    fetchPreviewUrlMock.mockResolvedValue({
-      url: "https://r2.example/signed.pdf",
-    });
-    const task = makeTask();
-    getDocumentMock.mockReturnValue(task);
+  it("offers an explicit new-window link without embedding or navigating automatically", async () => {
+    resolveUrl.mockResolvedValue("https://r2.example/signed.pdf");
+    const openWindow = vi.spyOn(window, "open");
+    const { container } = render(<PdfAssetPreview {...props} />);
 
-    render(<PdfAssetPreview previewPath="/assets/asset-1/preview" />);
-
-    await waitFor(() => expect(getDocumentMock).toHaveBeenCalled());
-    expect(fetchPreviewUrlMock).toHaveBeenCalledWith(
-      expect.stringContaining("/assets/asset-1/preview-url"),
-      expect.anything(),
-    );
-    expect(getDocumentMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: "https://r2.example/signed.pdf",
-        withCredentials: false,
-        disableStream: true,
-        disableAutoFetch: true,
-      }),
-    );
-    await waitFor(() => expect(task.onProgress).toEqual(expect.any(Function)));
+    expect(screen.getByRole("status")).toHaveTextContent("正在准备文件");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    const openLink = await screen.findByRole("link", { name: "新窗口打开" });
+    expect(openLink).toHaveAttribute("href", "https://r2.example/signed.pdf");
+    expect(openLink).toHaveAttribute("target", "_blank");
+    expect(openLink).toHaveAttribute("rel", "noopener noreferrer");
+    expect(openLink).not.toHaveAttribute("download");
+    expect(container.querySelector("iframe, embed, object, canvas")).toBeNull();
+    expect(screen.queryByLabelText("跳转到页码")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(openWindow).not.toHaveBeenCalled();
+    openWindow.mockRestore();
   });
 
-  it("falls back to the proxy endpoint when no direct URL is available", async () => {
-    fetchPreviewUrlMock.mockResolvedValue({ url: null });
-    getDocumentMock.mockReturnValue(makeTask());
+  it("uses the classroom preview endpoint returned by the API helper", async () => {
+    const path = "/classrooms/c1/files/f1/preview";
+    resolveUrl.mockResolvedValue(path);
+    render(<PdfAssetPreview {...props} previewPath={path} />);
 
-    render(<PdfAssetPreview previewPath="/classrooms/c1/files/f1/preview" />);
-
-    await waitFor(() => expect(getDocumentMock).toHaveBeenCalled());
-    expect(getDocumentMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: "/classrooms/c1/files/f1/preview",
-        withCredentials: true,
-      }),
-    );
+    expect(
+      await screen.findByRole("link", { name: "新窗口打开" }),
+    ).toHaveAttribute("href", path);
+    expect(resolveUrl).toHaveBeenCalledWith(path, expect.any(AbortSignal));
   });
 
-  it("falls back to the proxy when the direct URL load fails", async () => {
-    fetchPreviewUrlMock.mockResolvedValue({
-      url: "https://r2.example/signed.pdf",
-    });
-    getDocumentMock
-      .mockImplementationOnce(() =>
-        makeTask(Promise.reject(new TypeError("Failed to fetch"))),
+  it("surfaces permission errors without creating a viewer or an open link", async () => {
+    resolveUrl.mockRejectedValue(new Error("无权查看这个文件"));
+    const { container } = render(<PdfAssetPreview {...props} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "无权查看这个文件",
+    );
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("aborts pending work and ignores a late URL after changing files", async () => {
+    let finishFirst!: (url: string) => void;
+    resolveUrl
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishFirst = resolve;
+          }),
       )
-      .mockImplementationOnce(() => makeTask());
+      .mockResolvedValueOnce("/assets/asset-2/preview");
+    const { rerender } = render(<PdfAssetPreview {...props} />);
+    const firstSignal = resolveUrl.mock.calls[0]![1];
 
-    render(<PdfAssetPreview previewPath="/assets/asset-1/preview" />);
-
-    await waitFor(() => expect(getDocumentMock).toHaveBeenCalledTimes(2));
-    expect(getDocumentMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        url: "/assets/asset-1/preview",
-        withCredentials: true,
-      }),
+    rerender(
+      <PdfAssetPreview {...props} previewPath="/assets/asset-2/preview" />,
+    );
+    expect(firstSignal.aborted).toBe(true);
+    await screen.findByRole("link", { name: "新窗口打开" });
+    await act(async () => {
+      finishFirst("https://r2.example/stale.pdf");
+    });
+    expect(screen.getByRole("link", { name: "新窗口打开" })).toHaveAttribute(
+      "href",
+      "/assets/asset-2/preview",
     );
   });
 
-  it("falls back to the proxy when the preview-url probe fails", async () => {
-    fetchPreviewUrlMock.mockRejectedValue(new Error("server error"));
-    getDocumentMock.mockReturnValue(makeTask());
+  it("aborts the pending URL request when the dialog closes", () => {
+    resolveUrl.mockImplementation(() => new Promise(() => {}));
+    const { unmount } = render(<PdfAssetPreview {...props} />);
+    const signal = resolveUrl.mock.calls[0]![1];
 
-    render(<PdfAssetPreview previewPath="/assets/asset-1/preview" />);
+    unmount();
 
-    await waitFor(() => expect(getDocumentMock).toHaveBeenCalled());
-    expect(getDocumentMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: "/assets/asset-1/preview",
-        withCredentials: true,
-      }),
-    );
-  });
-
-  it("surfaces a 403 from the preview-url probe without attempting the proxy", async () => {
-    fetchPreviewUrlMock.mockRejectedValue(
-      new ApiErrorMock("No permission to view asset", 403),
-    );
-    getDocumentMock.mockReturnValue(makeTask());
-
-    render(<PdfAssetPreview previewPath="/assets/asset-1/preview" />);
-
-    expect(await screen.findByText("无法在线预览")).toBeInTheDocument();
-    expect(getDocumentMock).not.toHaveBeenCalled();
-  });
-
-  it("commits a page on Enter and keeps it across blur, discarding uncommitted input", async () => {
-    fetchPreviewUrlMock.mockResolvedValue({ url: null });
-    getDocumentMock.mockReturnValue(
-      makeTask(Promise.resolve(makeDocumentProxy())),
-    );
-
-    render(<PdfAssetPreview previewPath="/assets/asset-1/preview" />);
-
-    const input = await screen.findByLabelText("跳转到页码");
-    await waitFor(() => expect(input).not.toBeDisabled());
-
-    // 输入 9 后回车：提交并跳转到第 9 页，输入框保持 9（不被 blur 闪回旧页）。
-    fireEvent.change(input, { target: { value: "9" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    expect(input).toHaveValue(9);
-
-    // 未提交的输入（改 5 后直接 blur）应被丢弃，回到当前页 9。
-    fireEvent.change(input, { target: { value: "5" } });
-    fireEvent.blur(input);
-    expect(input).toHaveValue(9);
+    expect(signal.aborted).toBe(true);
   });
 });

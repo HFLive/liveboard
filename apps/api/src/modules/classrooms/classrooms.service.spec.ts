@@ -477,6 +477,46 @@ describe("ClassroomsService", () => {
     });
   });
 
+  it.each([true, false])(
+    "validates and streams a classroom PDF (valid: %s)",
+    async (valid) => {
+      const content = Buffer.from(
+        valid ? "%PDF-1.7\nfixture" : "<html>not a PDF</html>",
+      );
+      prisma.user.findUnique.mockResolvedValue({
+        id: "student-1",
+        status: "active",
+        systemRole: "member",
+      });
+      prisma.classroomMember.findUnique.mockResolvedValue({
+        classroomId: "classroom-1",
+        userId: "student-1",
+        role: "student",
+      });
+      prisma.classroomFile.findFirst.mockResolvedValue({
+        id: "file-1",
+        classroomId: "classroom-1",
+        filename: "讲义.pdf",
+        mimeType: "application/octet-stream",
+        sizeBytes: content.length,
+        storageBackend: "minio",
+        storageKey: "classrooms/file-1",
+      });
+      backend.getObject.mockResolvedValue(Readable.from([content]));
+      const preview = service.previewFile("student-1", "classroom-1", "file-1");
+      if (!valid) {
+        await expect(preview).rejects.toThrow("文件内容不是有效的 PDF");
+        return;
+      }
+      const result = await preview;
+      expect(result.kind).toBe("pdf");
+      expect(result.content).toBeUndefined();
+      const chunks = [];
+      for await (const chunk of result.stream!) chunks.push(chunk);
+      expect(Buffer.concat(chunks)).toEqual(content);
+    },
+  );
+
   it("lets the storage policy choose direct or proxied delivery for inline images", async () => {
     const content = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
     prisma.user.findUnique.mockResolvedValue({

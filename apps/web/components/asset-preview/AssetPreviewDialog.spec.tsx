@@ -27,6 +27,38 @@ describe("AssetPreviewDialog", () => {
     expect(screen.getByRole("link", { name: "下载" })).toBeInTheDocument();
   });
 
+  it("keeps PDFs in a compact dialog with a new-window link and secondary download", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(Response.json({ url: null })),
+    );
+    const { container } = render(
+      <AssetPreviewDialog
+        asset={{
+          ...textAsset,
+          filename: "讲义.pdf",
+          mimeType: "application/pdf",
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("link", { name: "新窗口打开" }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining("/assets/asset-1/preview"),
+    );
+    expect(screen.getByRole("dialog")).toHaveClass(
+      "asset-preview-dialog--file",
+    );
+    expect(screen.getByRole("dialog")).not.toHaveClass(
+      "asset-preview-dialog--document",
+    );
+    expect(screen.getByRole("link", { name: "下载" })).toHaveClass("secondary");
+    expect(container.querySelector("iframe, embed, object, canvas")).toBeNull();
+  });
+
   it("uses classroom-specific preview and download paths", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("课堂讲义"));
     vi.stubGlobal("fetch", fetchMock);

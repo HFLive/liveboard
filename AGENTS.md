@@ -140,9 +140,8 @@ LiveBoard 支持双目标部署，自托管能力保持不变：
   Makers；默认 `vercel`。Cloudflare 与 EdgeOne 的域名、项目名和 Secret 可以同时
   保留，切换 provider 时 `postbuild` 只向选中的 Direct Upload Project 上传本次
   相同构建，并通过正式静态域名逐字节校验构建文件（含存在时的 `.mjs`）的
-  JavaScript Content-Type；PDF.js worker 由 Web 站点从 `public/` 提供，不进入
-  EdgeOne（EdgeOne 上传把 `.mjs` 存成 `application/octet-stream`，而 `new URL()`
-  输出 `.js` 会被 webpack 编译出无法解析的裸导入）；上传或校验失败必须阻止
+  JavaScript Content-Type；PDF 预览使用浏览器原生控件，不再携带 PDF.js worker。
+  上传或校验失败必须阻止
   Vercel 上线；本地、Preview 和自托管不得上传。
   Cloudflare Token 只能授予 Account / Cloudflare Pages / Edit；EdgeOne 使用独立
   Makers API Token；二者都只能配置在 Web Production。业务 R2 Bucket 继续私有。
@@ -219,8 +218,8 @@ LiveBoard 支持双目标部署，自托管能力保持不变：
 - 主导航不单独展示“课件”“练习”或“文件”；课件与练习从课堂进入，文档附件文件页从文档页进入。普通文档附件只能在编辑文档时上传，失去全部文档及课件引用后自动删除；课堂文件使用独立存储记录，可上传 PDF、PPT 等供课堂成员下载，不受文档引用清理规则影响。
 - 用户上传的独立文件、文档附件和课堂文件必须复用重命名时的资源名称规则：规范空白并拒绝空名、超长名称、控制/不可见字符及 `.`/`..`；不得静默替换非法字符。独立文件按所在文件夹、文档附件按所在文档、课堂文件按所在课堂拒绝同名上传；独立文件重命名也必须执行同目录判重。
 - 独立文件、文档附件和课堂文件上传统一显示右下角任务浮窗与真实传输进度，支持一次多选、最多两个文件并发，每个任务可独立取消；等待、上传、失败与完成状态必须逐文件呈现，成功状态不得重复显示说明文字。浏览器取消或连接提前断开后，服务端必须补偿删除已写对象和预留数据库记录；若对象清理失败则保留可见记录供后续删除，不得制造不可见的孤立对象。超过 8MiB 的文件使用 8MiB multipart 分片，单个文件最多并发 4 个分片，会话状态保存在 Redis，服务端确认前必须列出并校验全部分片；小文件继续使用单请求。
-- 独立文件、文档附件和课堂文件统一支持 PDF、Markdown 与 UTF-8 `.txt` 在线预览。PDF 预览在 direct 下载模式下由 API 校验读取权限后签发短期预签名 URL，浏览器直连对象存储流式按需加载（对象存储需放行 `Range` 请求头并暴露 `Content-Length`/`Accept-Ranges`/`Content-Range`；直连失败时前端自动回退 API 中转）；Markdown 与文本预览必须通过 API 重新校验当前读取权限并由服务器中转对象内容，不得使用公开或签名直链。PDF 预览上限 25MB，文本预览上限 2MB；Markdown 禁止原始 HTML 和远程图片，PDF 在浏览器内使用 PDF.js 渲染。其他格式继续下载。
-- 文档页和课堂文件页点击文件名都先打开统一文件弹窗；支持的格式直接预览，不支持的格式在弹窗中显示文件信息和下载操作，不得让文件名点击直接触发下载。列表右侧可保留独立下载按钮。
+- 独立文件、文档附件和课堂文件统一支持 PDF、Markdown 与 UTF-8 `.txt` 在线查看。PDF 在紧凑文件弹窗中仅提供“新窗口打开”阅读入口和次要下载操作，不做内嵌预览，不维护 PDF.js、画布或自定义阅读工具栏；新窗口中的翻页、缩放、搜索、打印与加载策略由浏览器负责。direct 模式下由 API 校验读取权限后签发短期预签名 URL，前端先做小范围 GET 探测，网络失败或响应不是 PDF 时回退 API 中转；对象存储需放行 `Range` 并暴露 `Content-Length`/`Accept-Ranges`/`Content-Range`。必须由用户点击链接打开新窗口，不能自动触发下载。PDF 响应与直链必须使用 `application/pdf` 和 `inline`，不能添加会阻止原生控件的 CSP `sandbox`；Markdown 与文本仍保持 `sandbox`，通过 API 重新校验权限并中转，禁止公开或签名直链。PDF 在线查看上限 25MB，文本预览上限 2MB；Markdown 禁止原始 HTML 和远程图片。其他格式继续下载。
+- 文档页和课堂文件页点击文件名都先打开统一文件弹窗；PDF 提供“新窗口打开”，图片、Markdown 与文本直接预览，不支持的格式在弹窗中显示文件信息和下载操作，不得让文件名点击直接触发下载。列表右侧可保留独立下载按钮。
 - 用户上传的 favicon、头像、Banner 只有带内容版本号的 URL 才允许使用一年 `immutable` 缓存；文档附件和课堂文件的资源 ID 永久对应同一对象内容，可使用一年私有不可变缓存。公共设置允许浏览器保存但必须重新校验，附件下载、导出和签名跳转必须 `private, no-store`。favicon URL 可在浏览器本地保存经过路径校验的上一份配置，先恢复再后台校验，禁止缓存任意外部 URL。
 - 登录页的演示账号由 `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS` 控制；该变量写入 Web 构建产物，生产容器修改后需要重新 build。
 - 阿里云 OSS 的内网 Endpoint 只允许配合服务器中转下载；签名直出必须使用浏览器可访问的公网 Endpoint。管理界面应保持两者互斥，服务端必须拒绝冲突配置，并将历史遗留的冲突配置安全回退到服务器中转。OSS 默认域名会阻止浏览器内联预览签名 URL，因此图片、头像、Banner 和 favicon 等 `inline` 资源必须由 API 中转，仅明确下载的 `attachment` 可签名直出；PDF 预览在 direct 模式下的签名直出依赖 OSS 放行 `Range` 并暴露相关响应头，未配置时前端自动回退 API 中转。
