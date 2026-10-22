@@ -121,6 +121,54 @@ export function fetchPreviewUrl(
   return request<{ url: string | null }>(path, { signal });
 }
 
+export async function resolvePdfPreviewUrl(
+  previewPath: string,
+  signal: AbortSignal,
+): Promise<string> {
+  const proxyUrl = apiResourceUrl(previewPath);
+  let directUrl: string | null = null;
+  try {
+    directUrl = (
+      await fetchPreviewUrl(
+        previewPath.replace(/\/preview$/, "/preview-url"),
+        signal,
+      )
+    ).url;
+  } catch (caught) {
+    signal.throwIfAborted();
+    // 权限、文件不存在和大小限制等业务错误必须保留；网络/服务错误可回退。
+    if (caught instanceof ApiError && caught.status < 500) throw caught;
+  }
+  signal.throwIfAborted();
+  if (!directUrl) return proxyUrl;
+
+  // 新窗口打开前，用小范围 GET 检查直链可达性和 PDF MIME。
+  // 收到响应头后取消正文，避免为了准备链接先下载整个文件。
+  const probeSignal = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
+  try {
+    const response = await fetch(directUrl, {
+      cache: "no-store",
+      credentials: "omit",
+      headers: { Range: "bytes=0-0" },
+      referrerPolicy: "no-referrer",
+      signal: probeSignal,
+    });
+    const isPdf =
+      response.ok &&
+      response.headers
+        .get("Content-Type")
+        ?.split(";")[0]
+        ?.trim()
+        .toLowerCase() === "application/pdf";
+    await response.body?.cancel();
+    signal.throwIfAborted();
+    return isPdf ? directUrl : proxyUrl;
+  } catch {
+    signal.throwIfAborted();
+    return proxyUrl;
+  }
+}
+
 // 内容块里的附件链接指向 /assets/:id，点击图片类附件会打开裸图页；
 // 统一补 download=1 强制下载，外部链接原样返回。
 export function attachmentDownloadUrl(url: string) {

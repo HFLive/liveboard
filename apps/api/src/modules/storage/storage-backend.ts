@@ -37,6 +37,7 @@ export function multipartPartCount(sizeBytes: number) {
 export interface PresignDownloadOptions {
   expirySeconds: number;
   responseContentDisposition?: string;
+  responseContentType?: string;
   responseCacheControl?: string;
 }
 

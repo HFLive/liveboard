@@ -335,25 +335,36 @@ export class ClassroomsController {
     @Param("fileId") fileId: string,
     @Res() response: Response,
   ) {
-    const { kind, content } = await this.classroomsService.previewFile(
+    const preview = await this.classroomsService.previewFile(
       userId,
       classroomId,
       fileId,
     );
     response.setHeader(
       "Content-Type",
-      kind === "pdf"
+      preview.kind === "pdf"
         ? "application/pdf"
-        : kind === "markdown"
+        : preview.kind === "markdown"
           ? "text/markdown; charset=utf-8"
           : "text/plain; charset=utf-8",
     );
-    response.setHeader("Content-Disposition", "inline");
+    response.setHeader(
+      "Content-Disposition",
+      `inline; filename*=UTF-8''${encodeURIComponent(preview.file.filename)}`,
+    );
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("Cross-Origin-Resource-Policy", "same-site");
-    response.setHeader("Content-Security-Policy", "sandbox");
+    // CSP sandbox 会阻止浏览器原生 PDF 控件；文本预览继续隔离。
+    if (preview.kind !== "pdf") {
+      response.setHeader("Content-Security-Policy", "sandbox");
+    }
     response.setHeader("Cache-Control", PRIVATE_IMMUTABLE_CACHE_CONTROL);
-    response.send(content);
+    if (preview.kind === "pdf") {
+      response.setHeader("Content-Length", String(preview.file.sizeBytes));
+      preview.stream.pipe(response);
+      return;
+    }
+    response.send(preview.content);
   }
 
   @Delete(":id/files/:fileId")

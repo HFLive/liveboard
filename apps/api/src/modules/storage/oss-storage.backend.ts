@@ -129,6 +129,9 @@ export class OssStorageBackend implements ObjectStorageBackend {
     if (options.responseCacheControl) {
       respHeaders["response-cache-control"] = options.responseCacheControl;
     }
+    if (options.responseContentType) {
+      respHeaders["response-content-type"] = options.responseContentType;
+    }
     return this.presignClient.presignedGetObject(
       this.bucket,
       key,

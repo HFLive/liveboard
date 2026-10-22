@@ -5,13 +5,10 @@ import { useEffect } from "react";
 import { Download, File as FileIcon, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { apiResourceUrl, assetDownloadUrl } from "@/lib/api";
+import { PdfAssetPreview } from "./PdfAssetPreview";
 
 const AssetTextPreview = dynamic(
   () => import("./AssetTextPreview").then((module) => module.AssetTextPreview),
-  { ssr: false },
-);
-const PdfAssetPreview = dynamic(
-  () => import("./PdfAssetPreview").then((module) => module.PdfAssetPreview),
   { ssr: false },
 );
 
@@ -132,7 +129,7 @@ export function AssetPreviewDialog({
         className={`modal-panel asset-preview-dialog ${
           previewKind === "image"
             ? "asset-preview-dialog--image"
-            : canPreview
+            : canPreview && previewKind !== "pdf"
               ? "asset-preview-dialog--document"
               : "asset-preview-dialog--file"
         }`}
@@ -162,7 +159,7 @@ export function AssetPreviewDialog({
               src={imageUrl}
             />
           ) : previewKind === "pdf" ? (
-            <PdfAssetPreview previewPath={previewPath} />
+            <PdfAssetPreview key={previewPath} previewPath={previewPath} />
           ) : previewKind === "markdown" || previewKind === "text" ? (
             <AssetTextPreview
               markdown={previewKind === "markdown"}
@@ -188,7 +185,10 @@ export function AssetPreviewDialog({
             {fileKind} <i aria-hidden="true">·</i> {formatSize(asset.sizeBytes)}
           </span>
           <div className="button-row">
-            <a className="button" href={downloadUrl}>
+            <a
+              className={previewKind === "pdf" ? "button secondary" : "button"}
+              href={downloadUrl}
+            >
               <Download aria-hidden="true" />
               下载
             </a>

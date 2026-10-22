@@ -15,6 +15,7 @@ import {
   getPublicSettings,
   importMarkdown,
   resolveBlockAssetUrl,
+  resolvePdfPreviewUrl,
   setHttpsAutoRenew,
 } from "./index";
 
@@ -53,6 +54,115 @@ describe("Asset preview API", () => {
       message: "PDF 超过 25MB，请下载后查看",
       status: 400,
     });
+  });
+});
+
+describe("Native PDF preview URL", () => {
+  const path = "/assets/asset-1/preview";
+  const directUrl = "https://r2.example/signed.pdf";
+  const signedResponse = () => Response.json({ url: directUrl });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("probes one byte without cookies and cancels the body before opening", async () => {
+    const response = new Response("%", {
+      status: 206,
+      headers: { "Content-Type": "application/pdf" },
+    });
+    const cancel = vi.spyOn(response.body!, "cancel");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(signedResponse())
+      .mockResolvedValueOnce(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      resolvePdfPreviewUrl(path, new AbortController().signal),
+    ).resolves.toBe(directUrl);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      directUrl,
+      expect.objectContaining({
+        credentials: "omit",
+        cache: "no-store",
+        headers: { Range: "bytes=0-0" },
+      }),
+    );
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("uses the authenticated proxy when signing is not available", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ url: null }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      resolvePdfPreviewUrl(path, new AbortController().signal),
+    ).resolves.toBe(`${API_URL}${path}`);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each(["application/octet-stream", "text/html"])(
+    "rejects a direct response with type %s",
+    async (contentType) => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValueOnce(signedResponse())
+          .mockResolvedValueOnce(
+            new Response("not a PDF", {
+              headers: { "Content-Type": contentType },
+            }),
+          ),
+      );
+      await expect(
+        resolvePdfPreviewUrl(path, new AbortController().signal),
+      ).resolves.toBe(`${API_URL}${path}`);
+    },
+  );
+
+  it("falls back when the direct probe fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(signedResponse())
+        .mockRejectedValueOnce(new TypeError("Failed to fetch")),
+    );
+    await expect(
+      resolvePdfPreviewUrl(path, new AbortController().signal),
+    ).resolves.toBe(`${API_URL}${path}`);
+  });
+
+  it.each([400, 403, 404])(
+    "preserves HTTP %s validation and access errors",
+    async (status) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({ message: "无法访问文件" }, { status }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(
+        resolvePdfPreviewUrl(path, new AbortController().signal),
+      ).rejects.toMatchObject({ status });
+      expect(fetchMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("does not turn a cancelled probe into a proxy navigation", async () => {
+    const controller = new AbortController();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(signedResponse())
+        .mockImplementationOnce(() => {
+          controller.abort();
+          return Promise.reject(controller.signal.reason);
+        }),
+    );
+    await expect(
+      resolvePdfPreviewUrl(path, controller.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
   });
 });
 

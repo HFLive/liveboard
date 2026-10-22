@@ -154,9 +154,20 @@ describe("FilesController Markdown endpoints", () => {
         "Content-Type",
         contentType,
       );
+      if (kind === "pdf") {
+        expect(response.setHeader).not.toHaveBeenCalledWith(
+          "Content-Security-Policy",
+          "sandbox",
+        );
+      } else {
+        expect(response.setHeader).toHaveBeenCalledWith(
+          "Content-Security-Policy",
+          "sandbox",
+        );
+      }
       expect(response.setHeader).toHaveBeenCalledWith(
-        "Content-Security-Policy",
-        "sandbox",
+        "Content-Disposition",
+        "inline; filename*=UTF-8''preview",
       );
       expect(response.setHeader).toHaveBeenCalledWith(
         "Cache-Control",

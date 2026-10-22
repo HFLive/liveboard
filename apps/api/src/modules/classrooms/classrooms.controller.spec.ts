@@ -30,10 +30,12 @@ describe("ClassroomsController file preview", () => {
     ["markdown", "text/markdown; charset=utf-8", "# 标题"],
     ["text", "text/plain; charset=utf-8", "正文"],
   ])("returns a protected %s preview", async (kind, contentType, content) => {
+    const stream = { pipe: jest.fn() };
     classroomsService.previewFile.mockResolvedValue({
-      file: { filename: "preview" },
+      file: { filename: "preview", sizeBytes: content.length },
       kind,
       content,
+      stream,
     });
 
     await controller.previewFile(
@@ -52,15 +54,32 @@ describe("ClassroomsController file preview", () => {
       "Content-Type",
       contentType,
     );
+    if (kind === "pdf") {
+      expect(response.setHeader).not.toHaveBeenCalledWith(
+        "Content-Security-Policy",
+        "sandbox",
+      );
+      expect(response.setHeader).toHaveBeenCalledWith(
+        "Content-Length",
+        String(content.length),
+      );
+      expect(stream.pipe).toHaveBeenCalledWith(response);
+      expect(response.send).not.toHaveBeenCalled();
+    } else {
+      expect(response.setHeader).toHaveBeenCalledWith(
+        "Content-Security-Policy",
+        "sandbox",
+      );
+      expect(response.send).toHaveBeenCalledWith(content);
+    }
     expect(response.setHeader).toHaveBeenCalledWith(
-      "Content-Security-Policy",
-      "sandbox",
+      "Content-Disposition",
+      "inline; filename*=UTF-8''preview",
     );
     expect(response.setHeader).toHaveBeenCalledWith(
       "Cache-Control",
       PRIVATE_IMMUTABLE_CACHE_CONTROL,
     );
-    expect(response.send).toHaveBeenCalledWith(content);
   });
 
   it("serves classroom images inline with a browser-renderable content type", async () => {

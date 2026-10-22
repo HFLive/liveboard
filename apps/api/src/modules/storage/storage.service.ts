@@ -654,6 +654,7 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     // 落库（未声明 MIME 的上传归一化结果），这些 PDF 预览也应能直传。
     const inlinePdf =
       target.inline &&
+      target.filename.toLowerCase().endsWith(".pdf") &&
       (target.mimeType === "application/pdf" ||
         target.mimeType === "application/octet-stream");
     if (target.inline && !directInlineR2Image && !inlinePdf) return null;
@@ -669,6 +670,8 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
       responseContentDisposition: `${
         target.inline ? "inline" : "attachment"
       }; filename*=UTF-8''${encodeURIComponent(target.filename)}`,
+      // 原生 PDF 控件依赖响应类型，兼容以 octet-stream 元数据上传的 PDF。
+      ...(inlinePdf ? { responseContentType: "application/pdf" } : {}),
       ...(target.cacheControl
         ? { responseCacheControl: target.cacheControl }
         : {}),

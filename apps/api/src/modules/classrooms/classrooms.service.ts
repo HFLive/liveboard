@@ -32,6 +32,7 @@ import {
   getAssetPreviewKind,
   MAX_PDF_PREVIEW_SIZE_BYTES,
   MAX_TEXT_PREVIEW_SIZE_BYTES,
+  pdfStreamWithHeaderCheck,
   readPreviewBuffer,
 } from "../files/assets.service";
 import type {
@@ -938,15 +939,12 @@ export class ClassroomsService {
 
     const backend = await this.storage.backendFor(file.storageBackend);
     const stream = (await backend.getObject(file.storageKey)) as Readable;
+    if (kind === "pdf") {
+      return { file, kind, stream: await pdfStreamWithHeaderCheck(stream) };
+    }
     const buffer = await readPreviewBuffer(stream, maxBytes);
     if (buffer.length !== file.sizeBytes) {
       throw new BadRequestException("文件内容不完整，无法预览");
-    }
-    if (kind === "pdf") {
-      if (!buffer.subarray(0, 1024).includes(Buffer.from("%PDF-"))) {
-        throw new BadRequestException("文件内容不是有效的 PDF");
-      }
-      return { file, kind, content: buffer };
     }
 
     try {
