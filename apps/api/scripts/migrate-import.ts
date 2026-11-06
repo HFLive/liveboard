@@ -317,6 +317,16 @@ async function wipeSecrets(
   preservedOss: OssSettingsFields | null,
 ): Promise<void> {
   await prisma.$executeRawUnsafe(`UPDATE "AiProviderConfig" SET "apiKey" = ''`);
+  // Older bundles may predate RAG. Never carry an encrypted key to a target
+  // with a different AI_ENCRYPTION_KEY or leave its index worker enabled.
+  await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      IF to_regclass('"AiRetrievalSettings"') IS NOT NULL THEN
+        UPDATE "AiRetrievalSettings"
+        SET "apiKey" = '', enabled = false, "leaseToken" = NULL, "leaseUntil" = NULL;
+      END IF;
+    END $$
+  `);
   if (targetBackend === "oss" && preservedOss) {
     // OSS 目标：把导入前捕获的目标自身 OSS 配置（含加密 secret，密钥未变）写回，
     // 导入完成后应用无需重新配置即可继续访问 OSS。

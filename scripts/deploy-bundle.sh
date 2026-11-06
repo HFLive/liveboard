@@ -325,7 +325,7 @@ echo "导入离线镜像包..."
 gzip -dc "$IMAGES_FILE" | docker load
 
 for image in \
-  postgres:16-alpine \
+  liveboard-postgres:16-pgvector0.8.1 \
   redis:7-alpine \
   minio/minio:RELEASE.2024-12-18T13-15-44Z \
   "liveboard-api:${VERSION}" \

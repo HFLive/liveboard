@@ -51,6 +51,9 @@ jobs:
       - name: Build API image
         run: docker build --file apps/api/Dockerfile --tag liveboard-api:ci .
 
+      - name: Build PostgreSQL image with pgvector
+        run: docker build --file infra/postgres/Dockerfile --tag liveboard-postgres:16-pgvector0.8.1 .
+
       - name: Build Web image
         run: |
           docker build \
@@ -111,6 +114,13 @@ jobs:
           pnpm --filter @liveboard/shared build
           pnpm --filter @liveboard/api exec dotenv -e ../../.env -- prisma migrate deploy --schema prisma/schema.prisma
           pnpm --filter @liveboard/api build
+
+      - name: Verify hybrid RAG against PostgreSQL
+        env:
+          RUN_RAG_TESTS: "true"
+        # Integration tests use only generated data and synthetic embeddings.
+        # They exercise real PostgreSQL vector queries without paid AI calls.
+        run: pnpm --filter @liveboard/api exec dotenv -e ../../.env -- jest src/modules/ai/ai-rag.integration.spec.ts --runInBand --coverage=false
 
       - name: Verify dependency-aware health endpoint
         shell: bash

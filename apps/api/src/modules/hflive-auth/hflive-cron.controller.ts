@@ -11,6 +11,7 @@ import { Public } from "../../common/public.decorator";
 import { RedisService } from "../redis/redis.service";
 import { StorageService } from "../storage/storage.service";
 import { HfliveAuthService } from "./hflive-auth.service";
+import { AiRagService } from "../ai/ai-rag.service";
 
 const IDENTITY_SYNC_LOCK_KEY = "liveboard:cron:identity-sync";
 const IDENTITY_SYNC_LOCK_TTL_MS = 10 * 60 * 1000;
@@ -40,6 +41,7 @@ export class HfliveCronController {
     private readonly redis: RedisService,
     private readonly storage: StorageService,
     private readonly hflive: HfliveAuthService,
+    private readonly rag: AiRagService,
   ) {
     this.expectedSecret = config.get<string>("CRON_SECRET", "") ?? "";
   }
@@ -111,6 +113,7 @@ export class HfliveCronController {
       IDENTITY_SYNC_LOCK_TTL_MS,
       () => this.hflive.reconcileStaleIdentities(IDENTITY_SYNC_BATCH),
     );
+    this.rag.scheduleSync();
     return { ok: true, storage, identity };
   }
 

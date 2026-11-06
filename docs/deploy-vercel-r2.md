@@ -114,7 +114,7 @@ Organization 拥有的私有仓库时，使用个人账号下的 fork/镜像仓�
 建议配置：
 
 - Project name：`liveboard-production`。
-- Postgres version：`16`，与本项目本地 `postgres:16-alpine` 保持一致。
+- Postgres version：`16`，与本项目基于 `postgres:16-alpine` 构建的 pgvector 镜像保持一致。
 - Region：AWS Asia Pacific 1（Singapore），尽量和 API、Redis 放在同一区域。
 - Neon Auth：关闭。LiveBoard 使用自己的用户、密码和 Session 系统。
 

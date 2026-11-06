@@ -2,6 +2,7 @@ import type { PermissionsService } from "../permissions/permissions.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import { AiService } from "./ai.service";
 import type { AiSecretService } from "./ai-secret.service";
+import type { AiRagService } from "./ai-rag.service";
 import { formatDateKey } from "../../common/date-key";
 
 describe("AiService", () => {
@@ -57,6 +58,10 @@ describe("AiService", () => {
         decrypt: (value: string) => value,
         isEncrypted: () => true,
       } as unknown as AiSecretService,
+      {
+        search: jest.fn().mockResolvedValue([]),
+        scheduleSync: jest.fn(),
+      } as unknown as AiRagService,
     );
     prisma.user.findUnique.mockResolvedValue({
       id: "admin-1",

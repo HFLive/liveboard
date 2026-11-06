@@ -44,6 +44,7 @@ import { isSafeInlineImageMime } from "../storage/storage-backend";
 import { FilesService } from "./files.service";
 import { MAX_MARKDOWN_SIZE_BYTES } from "./markdown";
 import { createRequestAbortSignal } from "../../common/request-abort";
+import { AiIndexRefreshInterceptor } from "../ai/ai-index-refresh.interceptor";
 
 class CreateFolderDto {
   @IsString()
@@ -240,6 +241,7 @@ interface UploadedMarkdownFile {
 }
 
 @Controller()
+@UseInterceptors(AiIndexRefreshInterceptor)
 export class FilesController {
   constructor(
     private readonly assetsService: AssetsService,

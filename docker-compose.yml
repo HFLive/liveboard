@@ -1,6 +1,9 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: liveboard-postgres:16-pgvector0.8.1
+    build:
+      context: .
+      dockerfile: infra/postgres/Dockerfile
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-liveboard}

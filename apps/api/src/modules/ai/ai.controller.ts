@@ -261,6 +261,7 @@ export class AiController {
         userId,
         body.message,
         body.conversationId,
+        abortController.signal,
       );
       const turn = await this.aiService.createConversationTurn(
         userId,

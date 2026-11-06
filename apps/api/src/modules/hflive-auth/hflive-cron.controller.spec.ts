@@ -5,6 +5,7 @@ import { RedisService } from "../redis/redis.service";
 import type { StorageService } from "../storage/storage.service";
 import { HfliveCronController } from "./hflive-cron.controller";
 import type { HfliveAuthService } from "./hflive-auth.service";
+import type { AiRagService } from "../ai/ai-rag.service";
 
 function controllerWith(overrides: {
   secret?: string;
@@ -44,6 +45,7 @@ function controllerWith(overrides: {
     redis as unknown as RedisService,
     { cleanupExpiredPendingUploads: cleanup } as unknown as StorageService,
     { reconcileStaleIdentities: reconcile } as unknown as HfliveAuthService,
+    { scheduleSync: jest.fn() } as unknown as AiRagService,
   );
   return { controller, redisClient, redis, reconcile, cleanup };
 }

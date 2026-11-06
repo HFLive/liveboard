@@ -24,6 +24,7 @@ import {
 } from "@/lib/api";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
+import { AiRetrievalPanel } from "./AiRetrievalPanel";
 
 const providerOptions = [
   {
@@ -596,6 +597,8 @@ export function AiSettingsClient() {
             </div>
           )}
         </section>
+
+        <AiRetrievalPanel />
 
         <div className="ai-policy-note">
           <ShieldCheck aria-hidden="true" />
