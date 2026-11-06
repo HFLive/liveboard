@@ -253,6 +253,30 @@ export interface AiSettingsSummary {
   updatedAt: string;
 }
 
+export interface AiRetrievalSettingsSummary {
+  enabled: boolean;
+  providerName: string;
+  baseUrl: string;
+  model: string;
+  dimensions: number;
+  apiKeyConfigured: boolean;
+  totalDocuments: number;
+  indexedDocuments: number;
+  pendingDocuments: number;
+  failedDocuments: number;
+  indexedChunks: number;
+  indexing: boolean;
+  lastError: string | null;
+}
+
+export interface AiRetrievalSettingsInput {
+  enabled: boolean;
+  providerName?: string;
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+}
+
 export interface AiUsageSummary {
   used: number;
   limit: number;

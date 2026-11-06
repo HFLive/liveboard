@@ -53,6 +53,9 @@ const BUSINESS_TABLES = [
   "NotificationRecipient",
   "AiSettings",
   "AiProviderConfig",
+  "AiRetrievalSettings",
+  "AiDocumentIndex",
+  "AiDocumentChunk",
   "AiConversation",
   "AiMessage",
 ] as const;
@@ -226,8 +229,11 @@ async function run() {
     const aiConfigs = await prisma.aiProviderConfig.findMany({
       select: { id: true, apiKey: true },
     });
+    const retrievalConfigs = await prisma.aiRetrievalSettings.findMany({
+      select: { apiKey: true },
+    });
     let decryptFailures = 0;
-    for (const config of aiConfigs) {
+    for (const config of [...aiConfigs, ...retrievalConfigs]) {
       try {
         if (secrets.isEncrypted(config.apiKey)) {
           secrets.decrypt(config.apiKey);

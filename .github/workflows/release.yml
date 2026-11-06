@@ -48,7 +48,7 @@ jobs:
 
       - name: Pull runtime images
         run: |
-          docker pull --platform linux/amd64 postgres:16-alpine
+          docker build --platform linux/amd64 --file infra/postgres/Dockerfile --tag liveboard-postgres:16-pgvector0.8.1 .
           docker pull --platform linux/amd64 redis:7-alpine
           docker pull --platform linux/amd64 minio/minio:RELEASE.2024-12-18T13-15-44Z
 
@@ -106,7 +106,7 @@ jobs:
             --help >/dev/null
 
           docker save \
-            postgres:16-alpine \
+            liveboard-postgres:16-pgvector0.8.1 \
             redis:7-alpine \
             minio/minio:RELEASE.2024-12-18T13-15-44Z \
             "liveboard-api:${GITHUB_REF_NAME}" \
@@ -137,7 +137,7 @@ jobs:
             echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo
             for image in \
-              postgres:16-alpine \
+              liveboard-postgres:16-pgvector0.8.1 \
               redis:7-alpine \
               minio/minio:RELEASE.2024-12-18T13-15-44Z \
               "liveboard-api:${GITHUB_REF_NAME}" \

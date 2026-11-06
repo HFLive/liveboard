@@ -462,6 +462,7 @@ model Workspace {
   aiSettings        AiSettings?
   aiProviderConfigs AiProviderConfig[]
   aiConversations   AiConversation[]
+  aiRetrieval       AiRetrievalSettings?
   forumCategories   ForumCategory[]
   forumThreads      ForumThread[]
   teachingDecks     TeachingDeck[]
@@ -599,6 +600,7 @@ model File {
   exercise          ExerciseSet?
   assets            FileAsset[]
   teachingDeckItems TeachingDeckItem[] @relation("TeachingDeckItemSourceFile")
+  aiIndex           AiDocumentIndex?
 
   @@index([folderId, status, updatedAt])
   @@index([workspaceId, pinnedOrder])
@@ -976,6 +978,53 @@ model PendingUpload {
 
   @@index([uploadedBy, expiresAt])
   @@index([forumPostId])
+}
+
+model AiRetrievalSettings {
+  workspaceId String   @id
+  enabled     Boolean  @default(false)
+  providerName String  @default("custom")
+  baseUrl     String   @default("")
+  model       String   @default("")
+  apiKey      String   @default("")
+  dimensions  Int      @default(0)
+  generation  String   @default(uuid())
+  leaseToken  String?
+  leaseUntil  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model AiDocumentIndex {
+  fileId      String   @id
+  generation  String
+  fileVersion Int
+  nextChunk   Int      @default(0)
+  totalChunks Int      @default(0)
+  status      String   @default("pending")
+  lastError   String?
+  retryAfter  DateTime?
+  updatedAt   DateTime @updatedAt
+
+  file   File              @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  chunks AiDocumentChunk[]
+}
+
+model AiDocumentChunk {
+  id        String @id
+  fileId    String
+  ordinal   Int
+  blockId   String
+  type      String
+  text      String
+  sortOrder Int
+  embedding Unsupported("vector")
+
+  document AiDocumentIndex @relation(fields: [fileId], references: [fileId], onDelete: Cascade)
+
+  @@unique([fileId, ordinal])
 }
 
 model AiSettings {

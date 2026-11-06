@@ -3,6 +3,8 @@ import type {
   AdminBadgeSummary,
   AiProviderConfigSummary,
   AiSettingsSummary,
+  AiRetrievalSettingsSummary,
+  AiRetrievalSettingsInput,
   AiUsageSummary,
   ContentBlockType,
   ContentPinTarget,
@@ -1022,6 +1024,29 @@ export function getServerStatus(hours = 24) {
 export type AiProviderConfig = AiProviderConfigSummary;
 
 export type AiSettings = AiSettingsSummary;
+
+export function getAiRetrievalSettings() {
+  return request<{ retrieval: AiRetrievalSettingsSummary }>(
+    "/admin/ai/retrieval",
+  );
+}
+
+export function updateAiRetrievalSettings(input: AiRetrievalSettingsInput) {
+  return request<{ retrieval: AiRetrievalSettingsSummary }>(
+    "/admin/ai/retrieval",
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function syncAiRetrieval(retryFailures = false) {
+  return request<{ scheduled: boolean }>("/admin/ai/retrieval/sync", {
+    method: "POST",
+    body: JSON.stringify({ retryFailures }),
+  });
+}
 
 export function getAiSettings() {
   return request<{ settings: AiSettings }>("/admin/ai/settings");
