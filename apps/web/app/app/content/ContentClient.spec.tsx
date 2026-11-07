@@ -11,6 +11,7 @@ import type { FolderNode } from "@liveboard/shared";
 import { ContentClient } from "./ContentClient";
 import { UserPreferencesProvider } from "@/components/app-shell/UserPreferencesProvider";
 import {
+  createFolder,
   deleteFile,
   deleteFolder,
   deleteLibraryAsset,
@@ -20,6 +21,7 @@ import {
   uploadAsset,
   updateContentPins,
   updateFile,
+  updateFolder,
 } from "@/lib/api";
 
 function makeUser(openContentInCurrentTab = false) {
@@ -466,9 +468,149 @@ describe("ContentClient folder deletion", () => {
     expect(
       screen.getByRole("heading", { name: "移动“课程资料”" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("选择目标位置")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "顶层" })).toBeChecked();
+    const dialog = screen.getByRole("dialog", { name: "移动“课程资料”" });
+    expect(within(dialog).getByText("目标位置")).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "顶层" }),
+    ).toHaveAttribute("aria-current", "location");
     expect(screen.getByRole("button", { name: "移动到这里" })).toBeDisabled();
+  });
+
+  it("excludes a moved folder and its descendants from browsing and search", async () => {
+    const child = folderTree[0]!.children[0]!;
+    const destination = {
+      ...child,
+      id: "destination",
+      name: "课程归档",
+      parentId: null,
+    };
+    vi.mocked(getFolderTree)
+      .mockReset()
+      .mockResolvedValue({
+        folders: [
+          {
+            ...folderTree[0]!,
+            children: [
+              {
+                ...child,
+                children: [
+                  {
+                    ...child,
+                    id: "descendant",
+                    parentId: child.id,
+                    name: "第一章补充",
+                  },
+                ],
+              },
+            ],
+          },
+          destination,
+        ],
+        canManagePins: false,
+      });
+    vi.mocked(updateFolder).mockResolvedValue({ folder: destination });
+    render(<ContentClient />);
+    fireEvent.click(
+      await within(getTree()).findByRole("button", {
+        name: "“第一章”文件夹操作",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "移动到…" }));
+    const dialog = screen.getByRole("dialog", { name: "移动“第一章”" });
+    const search = within(dialog).getByRole("searchbox", {
+      name: "搜索目标位置",
+    });
+    expect(
+      within(dialog).queryByRole("button", { name: "选择“课程资料 / 第一章”" }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "第一章" } });
+    expect(within(dialog).getByRole("status")).toHaveTextContent(
+      "没有匹配的文件夹",
+    );
+    fireEvent.change(search, { target: { value: "课程归档" } });
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(updateFolder).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "选择“课程归档”" }),
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "移动到这里" }));
+    await waitFor(() =>
+      expect(updateFolder).toHaveBeenCalledWith({
+        folderId: "folder-2",
+        parentId: "destination",
+      }),
+    );
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+  });
+
+  it("prevents moving a document to root or a read-only folder but permits a lecturer destination", async () => {
+    const root = folderTree[0]!;
+    const child = root.children[0]!;
+    const lecturer = {
+      ...child,
+      id: "lecturer-folder",
+      name: "授课讲义",
+      parentId: "read-only",
+      permission: "lecturer" as const,
+    };
+    vi.mocked(getFolderTree)
+      .mockReset()
+      .mockResolvedValue({
+        folders: [
+          root,
+          {
+            ...child,
+            id: "read-only",
+            name: "只读资料",
+            parentId: null,
+            permission: "viewer",
+            children: [lecturer],
+          },
+        ],
+        canManagePins: false,
+      });
+    vi.mocked(listFiles).mockResolvedValueOnce({
+      files: root.files,
+      standaloneAssets: [],
+    });
+    vi.mocked(updateFile).mockResolvedValue({
+      file: { ...root.files[0]!, permission: "editor", version: 1 },
+    });
+    render(<ContentClient />);
+    await enterFolderFromTree("课程资料");
+    fireEvent.click(
+      within(screen.getByRole("table")).getByRole("button", {
+        name: "“课程导读”文档操作",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "移动到…" }));
+    const dialog = screen.getByRole("dialog", { name: "移动“课程导读”" });
+    const submit = within(dialog).getByRole("button", { name: "移动到这里" });
+    expect(submit).toBeDisabled();
+    fireEvent.submit(dialog);
+    expect(updateFile).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "顶层" }));
+    expect(submit).toBeDisabled();
+    fireEvent.submit(dialog);
+    expect(updateFile).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "选择“只读资料”" }),
+    );
+    expect(submit).toBeDisabled();
+    fireEvent.submit(dialog);
+    expect(updateFile).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "选择“只读资料 / 授课讲义”" }),
+    );
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(updateFile).toHaveBeenCalledWith({
+        fileId: "file-1",
+        folderId: "lecturer-folder",
+      }),
+    );
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
   });
 
   it("shows pins only inside their own folder", async () => {
@@ -667,6 +809,135 @@ describe("ContentClient folder deletion", () => {
     expect(screen.queryByText("文档类型")).not.toBeInTheDocument();
   });
 
+  it("searches folder paths without submitting and creates in the selected location", async () => {
+    vi.mocked(createFolder).mockResolvedValue({
+      folder: { id: "folder-new", name: "补充资料" },
+    });
+    render(<ContentClient />);
+
+    await enterFolderFromTree("课程资料");
+    fireEvent.click(screen.getByRole("button", { name: "新建" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "新建文件夹" }));
+
+    const dialog = screen.getByRole("dialog", { name: "新建文件夹" });
+    const search = within(dialog).getByRole("searchbox", {
+      name: "搜索创建位置",
+    });
+    const name = within(dialog).getByRole("textbox", { name: "文件夹名称" });
+    fireEvent.change(name, { target: { value: "  补充资料  " } });
+    fireEvent.change(search, { target: { value: "不存在" } });
+    expect(within(dialog).getByRole("status")).toHaveTextContent(
+      "没有匹配的文件夹",
+    );
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(createFolder).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "清除文件夹搜索" }),
+    );
+    expect(search).toHaveFocus();
+    fireEvent.change(search, { target: { value: "课程资料 第一章" } });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "选择“课程资料 / 第一章”" }),
+    );
+    expect(search).toHaveValue("");
+    expect(
+      within(dialog).getByRole("navigation", { name: "创建位置路径" }),
+    ).toHaveTextContent("第一章");
+    expect(within(dialog).getByRole("status")).toHaveTextContent(
+      "此位置下没有子文件夹",
+    );
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "创建文件夹" }));
+    await waitFor(() =>
+      expect(createFolder).toHaveBeenCalledWith({
+        name: "补充资料",
+        parentId: "folder-2",
+      }),
+    );
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+  });
+
+  it("browses parent folders but prevents creation in a location without permission", async () => {
+    render(<ContentClient />);
+
+    await enterFolderFromTree("课程资料");
+    fireEvent.click(screen.getByRole("button", { name: "新建" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "新建文件夹" }));
+    const dialog = screen.getByRole("dialog", { name: "新建文件夹" });
+    fireEvent.change(within(dialog).getByLabelText("文件夹名称"), {
+      target: { value: "新资料" },
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "选择“课程资料 / 第一章”" }),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "返回上级文件夹" }),
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "创建文件夹" }),
+    ).toBeEnabled();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "返回上级文件夹" }),
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "创建文件夹" }),
+    ).toBeDisabled();
+    expect(
+      within(dialog).getByText("此位置没有创建权限，请选择其他文件夹。"),
+    ).toBeInTheDocument();
+    fireEvent.submit(dialog);
+    expect(createFolder).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "选择“课程资料”" }),
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "创建文件夹" }),
+    ).toBeEnabled();
+  });
+
+  it("keeps a failed creation editable and prevents duplicate requests while saving", async () => {
+    let rejectCreation!: (error: Error) => void;
+    vi.mocked(createFolder).mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectCreation = reject;
+        }),
+    );
+    render(<ContentClient />);
+
+    await enterFolderFromTree("课程资料");
+    const createMenu = screen.getByRole("button", { name: "新建" });
+    createMenu.focus();
+    fireEvent.click(createMenu);
+    fireEvent.click(screen.getByRole("menuitem", { name: "新建文件夹" }));
+    const dialog = screen.getByRole("dialog", { name: "新建文件夹" });
+    const name = within(dialog).getByLabelText("文件夹名称");
+    fireEvent.change(name, { target: { value: "新资料" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "创建文件夹" }));
+    expect(
+      within(dialog).getByRole("button", { name: "创建中…" }),
+    ).toBeDisabled();
+    fireEvent.submit(dialog);
+    expect(createFolder).toHaveBeenCalledTimes(1);
+    rejectCreation(new Error("暂时无法创建"));
+    await waitFor(() => expect(name).toBeEnabled());
+    expect(name).toHaveValue("新资料");
+
+    const close = within(dialog).getByRole("button", {
+      name: "关闭新建文件夹",
+    });
+    close.focus();
+    fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+    expect(
+      within(dialog).getByRole("button", { name: "创建文件夹" }),
+    ).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(dialog).not.toBeInTheDocument();
+    expect(createMenu).toHaveFocus();
+  });
+
   it("hides creation and Markdown import actions without write permission", async () => {
     const viewerTree: FolderNode[] = [
       {
@@ -732,7 +1003,27 @@ describe("ContentClient folder deletion", () => {
     expect(
       screen.getByRole("heading", { name: "移动 2 个文档" }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText("课程资料 / 第一章"));
+    const dialog = screen.getByRole("dialog", { name: "移动 2 个文档" });
+    expect(
+      within(dialog).getByRole("button", { name: "移动到这里" }),
+    ).toBeDisabled();
+    fireEvent.submit(dialog);
+    expect(updateFile).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "顶层" }));
+    expect(
+      within(dialog).getByRole("button", { name: "移动到这里" }),
+    ).toBeDisabled();
+    fireEvent.submit(dialog);
+    expect(updateFile).not.toHaveBeenCalled();
+    const search = within(dialog).getByRole("searchbox", {
+      name: "搜索目标位置",
+    });
+    fireEvent.change(search, { target: { value: "第一章" } });
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(updateFile).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "选择“课程资料 / 第一章”" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "移动到这里" }));
 
     await waitFor(() => {
