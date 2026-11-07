@@ -13,6 +13,7 @@ import {
   useState,
 } from "react";
 import type { CSSProperties } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -27,6 +28,7 @@ import {
   File as FileIcon,
   FileText,
   Folder,
+  FolderPlus,
   LayoutGrid,
   MoreHorizontal,
   MoveRight,
@@ -91,6 +93,10 @@ import {
   useUploadTask,
 } from "@/components/upload/useUploadTask";
 import { MarkdownImportButton } from "./MarkdownImportButton";
+import {
+  FolderLocationPicker,
+  FolderLocationSummary,
+} from "./FolderLocationPicker";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
 import {
   FeedbackNotice,
@@ -307,6 +313,9 @@ export function ContentClient() {
     useState<PermissionTarget | null>(null);
   const [folderName, setFolderName] = useState("");
   const [folderParentId, setFolderParentId] = useState("");
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [isMovingContent, setIsMovingContent] = useState(false);
+  const locationDialogTriggerRef = useRef<HTMLElement | null>(null);
   const [folderRename, setFolderRename] = useState("");
   const [fileTitle, setFileTitle] = useState("");
   const [permissionUsers, setPermissionUsers] = useState<UserSummary[]>([]);
@@ -363,14 +372,12 @@ export function ContentClient() {
   const canCreateFileHere = isRootView
     ? false
     : canCreateFile(activeFolder?.permission ?? null);
-  const bulkMoveTargetFolders = useMemo(
-    () =>
-      flatFolders.filter(
-        (folder) =>
-          folder.id !== activeFolderId && canCreateFile(folder.permission),
-      ),
-    [activeFolderId, flatFolders],
-  );
+  const canCreateInSelectedFolder = folderParentId
+    ? canCreateFolder(
+        flatFolders.find((folder) => folder.id === folderParentId)
+          ?.permission ?? null,
+      )
+    : canManagePins;
   const pinnedItems = useMemo(
     () => collectPinnedContent(activeFolder),
     [activeFolder],
@@ -393,6 +400,14 @@ export function ContentClient() {
     flatFolders.find((folder) => folder.id === editingFolderId) ?? null;
   const folderBeingMoved =
     flatFolders.find((folder) => folder.id === movingFolderId) ?? null;
+  const folderMoveUnavailableReason = folderBeingMoved
+    ? getFolderMoveUnavailableReason(folderBeingMoved)
+    : null;
+  const fileMoveUnavailableReason =
+    getDocumentMoveUnavailableReason(moveTargetFolderId);
+  const bulkMoveUnavailableReason = getDocumentMoveUnavailableReason(
+    bulkMoveTargetFolderId,
+  );
   const pinnedTargetKeys = useMemo(
     () =>
       new Set(
@@ -822,6 +837,7 @@ export function ContentClient() {
 
   async function onCreateFolder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isCreatingFolder || !canCreateInSelectedFolder) return;
     setError(null);
     setMessage(null);
 
@@ -831,6 +847,7 @@ export function ContentClient() {
       return;
     }
 
+    setIsCreatingFolder(true);
     try {
       await createFolder({
         name: normalizeResourceName(folderName),
@@ -839,10 +856,13 @@ export function ContentClient() {
       setFolderName("");
       setFolderParentId("");
       setShowCreateFolder(false);
+      locationDialogTriggerRef.current?.focus();
       setMessage("文件夹已创建");
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "创建文件夹失败");
+    } finally {
+      setIsCreatingFolder(false);
     }
   }
 
@@ -1056,8 +1076,9 @@ export function ContentClient() {
   async function onBulkMoveFiles(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (
+      isBulkOperating ||
       selectedFiles.length === 0 ||
-      !bulkMoveTargetFolderId ||
+      bulkMoveUnavailableReason ||
       bulkMoveTargetFolderId === activeFolderId
     ) {
       return;
@@ -1202,6 +1223,7 @@ export function ContentClient() {
     surface: ContentRowMenuState["surface"],
     itemCount: number,
   ) {
+    locationDialogTriggerRef.current = button;
     setOpenContentRowMenu((current) => {
       if (
         current?.targetType === targetType &&
@@ -1247,10 +1269,52 @@ export function ContentClient() {
   }
 
   function beginCreateFolder(parentId: string | null = activeFolderId) {
+    const focused = document.activeElement;
+    locationDialogTriggerRef.current =
+      focused instanceof HTMLElement
+        ? (focused
+            .closest('[data-menu-root="true"]')
+            ?.querySelector<HTMLElement>('[aria-haspopup="menu"]') ?? focused)
+        : null;
     setFolderParentId(parentId ?? "");
     setFolderName("");
     setShowCreateFolder(true);
     setShowCreateMenu(false);
+  }
+
+  function closeCreateFolder() {
+    if (isCreatingFolder) return;
+    setShowCreateFolder(false);
+    locationDialogTriggerRef.current?.focus();
+  }
+
+  function onLocationDialogKeyDown(
+    event: ReactKeyboardEvent<HTMLFormElement>,
+    onClose: () => void,
+  ) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+
+    const focusable = event.currentTarget.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), [tabindex="0"]',
+    );
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first) {
+      event.preventDefault();
+      return;
+    }
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
   }
 
   function folderPathLabel(folderId: string) {
@@ -1272,21 +1336,65 @@ export function ContentClient() {
     setOpenContentRowMenu(null);
   }
 
+  function getFolderMoveUnavailableReason(folder: FolderNode) {
+    if (!folderMoveTargetId) return null;
+    if (
+      folderMoveTargetId === folder.id ||
+      getFolderDescendantIds(folder.id).has(folderMoveTargetId)
+    ) {
+      return "不能移动到自身或子文件夹中。";
+    }
+    const target = flatFolders.find((item) => item.id === folderMoveTargetId);
+    return canCreateFolder(target?.permission ?? null)
+      ? null
+      : "此位置没有移动权限，请选择其他文件夹。";
+  }
+
+  function getDocumentMoveUnavailableReason(folderId: string) {
+    if (!folderId) return "文档需要放在文件夹内，请选择目标文件夹。";
+    const target = flatFolders.find((folder) => folder.id === folderId);
+    return canCreateFile(target?.permission ?? null)
+      ? null
+      : "此位置没有移动权限，请选择其他文件夹。";
+  }
+
+  function closeMoveFolder() {
+    if (isMovingContent) return;
+    setMovingFolderId(null);
+    setFolderMoveTargetId("");
+    locationDialogTriggerRef.current?.focus();
+  }
+
+  function closeMoveFile() {
+    if (isMovingContent) return;
+    setMovingFileId(null);
+    setMoveTargetFolderId("");
+    locationDialogTriggerRef.current?.focus();
+  }
+
+  function closeBulkMove() {
+    if (isBulkOperating) return;
+    setShowBulkMove(false);
+    setBulkMoveTargetFolderId("");
+    locationDialogTriggerRef.current?.focus();
+  }
+
   async function onMoveFolder(
     event: FormEvent<HTMLFormElement>,
     folder: FolderNode,
   ) {
     event.preventDefault();
+    if (isMovingContent || folderMoveUnavailableReason) return;
     setError(null);
     setMessage(null);
 
     const nextParentId = folderMoveTargetId || null;
 
     if (nextParentId === folder.parentId) {
-      setMovingFolderId(null);
       return;
     }
 
+    setIsMovingContent(true);
     try {
       await updateFolder({
         folderId: folder.id,
@@ -1294,10 +1402,13 @@ export function ContentClient() {
       });
       setMovingFolderId(null);
       setFolderMoveTargetId("");
+      locationDialogTriggerRef.current?.focus();
       setMessage("文件夹已移动");
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "移动文件夹失败");
+    } finally {
+      setIsMovingContent(false);
     }
   }
 
@@ -1306,14 +1417,15 @@ export function ContentClient() {
     file: FileSummary,
   ) {
     event.preventDefault();
+    if (isMovingContent || fileMoveUnavailableReason) return;
     setError(null);
     setMessage(null);
 
     if (!moveTargetFolderId || moveTargetFolderId === file.folderId) {
-      setMovingFileId(null);
       return;
     }
 
+    setIsMovingContent(true);
     try {
       await updateFile({
         fileId: file.id,
@@ -1321,6 +1433,7 @@ export function ContentClient() {
       });
       setMovingFileId(null);
       setMoveTargetFolderId("");
+      locationDialogTriggerRef.current?.focus();
       setMessage("文档已移动");
 
       if (activeFolderId) {
@@ -1329,6 +1442,8 @@ export function ContentClient() {
       await refreshTree();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "移动文档失败");
+    } finally {
+      setIsMovingContent(false);
     }
   }
 
@@ -2459,8 +2574,9 @@ export function ContentClient() {
                 <button
                   className="button secondary"
                   disabled={selectedFiles.length === 0 || isBulkOperating}
-                  onClick={() => {
-                    setBulkMoveTargetFolderId("");
+                  onClick={(event) => {
+                    locationDialogTriggerRef.current = event.currentTarget;
+                    setBulkMoveTargetFolderId(activeFolderId ?? "");
                     setShowBulkMove(true);
                   }}
                   type="button"
@@ -3185,19 +3301,23 @@ export function ContentClient() {
       {folderBeingMoved ? (
         <div className="modal-backdrop" role="presentation">
           <form
+            aria-busy={isMovingContent}
             aria-labelledby="move-folder-title"
-            className="modal-panel content-operation-dialog"
+            aria-modal="true"
+            className="modal-panel content-location-dialog"
+            onKeyDown={(event) =>
+              onLocationDialogKeyDown(event, closeMoveFolder)
+            }
             onSubmit={(event) => void onMoveFolder(event, folderBeingMoved)}
+            role="dialog"
           >
             <div className="modal-head">
               <h2 id="move-folder-title">移动“{folderBeingMoved.name}”</h2>
               <button
                 aria-label="关闭移动文件夹"
                 className="icon-button subtle"
-                onClick={() => {
-                  setMovingFolderId(null);
-                  setFolderMoveTargetId("");
-                }}
+                disabled={isMovingContent}
+                onClick={closeMoveFolder}
                 title="关闭"
                 type="button"
               >
@@ -3211,48 +3331,31 @@ export function ContentClient() {
                   ? folderPathLabel(folderBeingMoved.parentId)
                   : "顶层"}
               </p>
-              <fieldset className="content-location-picker">
-                <legend>选择目标位置</legend>
-                <label>
-                  <input
-                    checked={folderMoveTargetId === ""}
-                    name="folder-move-target"
-                    onChange={() => setFolderMoveTargetId("")}
-                    type="radio"
-                  />
-                  <span>顶层</span>
-                </label>
-                {flatFolders
-                  .filter((candidate) => {
-                    const blockedIds = getFolderDescendantIds(
-                      folderBeingMoved.id,
-                    );
-                    return (
-                      candidate.id !== folderBeingMoved.id &&
-                      !blockedIds.has(candidate.id)
-                    );
-                  })
-                  .map((candidate) => (
-                    <label key={candidate.id}>
-                      <input
-                        checked={folderMoveTargetId === candidate.id}
-                        name="folder-move-target"
-                        onChange={() => setFolderMoveTargetId(candidate.id)}
-                        type="radio"
-                      />
-                      <span>{folderPathLabel(candidate.id)}</span>
-                    </label>
-                  ))}
-              </fieldset>
+              <FolderLocationPicker
+                autoFocus
+                disabled={isMovingContent}
+                excludedFolderId={folderBeingMoved.id}
+                folders={folders}
+                label="目标位置"
+                onChange={setFolderMoveTargetId}
+                value={folderMoveTargetId}
+              />
             </div>
             <div className="modal-foot">
+              <FolderLocationSummary
+                label="将移动到"
+                path={
+                  folderMoveTargetId
+                    ? folderPathLabel(folderMoveTargetId)
+                    : "顶层"
+                }
+                unavailableReason={folderMoveUnavailableReason}
+              />
               <div className="button-row">
                 <button
                   className="button secondary"
-                  onClick={() => {
-                    setMovingFolderId(null);
-                    setFolderMoveTargetId("");
-                  }}
+                  disabled={isMovingContent}
+                  onClick={closeMoveFolder}
                   type="button"
                 >
                   取消
@@ -3260,11 +3363,13 @@ export function ContentClient() {
                 <button
                   className="button"
                   disabled={
+                    isMovingContent ||
+                    Boolean(folderMoveUnavailableReason) ||
                     folderMoveTargetId === (folderBeingMoved.parentId ?? "")
                   }
                   type="submit"
                 >
-                  移动到这里
+                  {isMovingContent ? "正在移动…" : "移动到这里"}
                 </button>
               </div>
             </div>
@@ -3275,19 +3380,21 @@ export function ContentClient() {
       {fileBeingMoved ? (
         <div className="modal-backdrop" role="presentation">
           <form
+            aria-busy={isMovingContent}
             aria-labelledby="move-document-title"
-            className="modal-panel content-operation-dialog"
+            aria-modal="true"
+            className="modal-panel content-location-dialog"
+            onKeyDown={(event) => onLocationDialogKeyDown(event, closeMoveFile)}
             onSubmit={(event) => void onMoveFile(event, fileBeingMoved)}
+            role="dialog"
           >
             <div className="modal-head">
               <h2 id="move-document-title">移动“{fileBeingMoved.title}”</h2>
               <button
                 aria-label="关闭移动文档"
                 className="icon-button subtle"
-                onClick={() => {
-                  setMovingFileId(null);
-                  setMoveTargetFolderId("");
-                }}
+                disabled={isMovingContent}
+                onClick={closeMoveFile}
                 title="关闭"
                 type="button"
               >
@@ -3298,39 +3405,44 @@ export function ContentClient() {
               <p className="content-current-location">
                 当前位置：{folderPathLabel(fileBeingMoved.folderId)}
               </p>
-              <fieldset className="content-location-picker">
-                <legend>选择目标文件夹</legend>
-                {flatFolders.map((folder) => (
-                  <label key={folder.id}>
-                    <input
-                      checked={moveTargetFolderId === folder.id}
-                      name="document-move-target"
-                      onChange={() => setMoveTargetFolderId(folder.id)}
-                      type="radio"
-                    />
-                    <span>{folderPathLabel(folder.id)}</span>
-                  </label>
-                ))}
-              </fieldset>
+              <FolderLocationPicker
+                autoFocus
+                disabled={isMovingContent}
+                folders={folders}
+                label="目标位置"
+                onChange={setMoveTargetFolderId}
+                value={moveTargetFolderId}
+              />
             </div>
             <div className="modal-foot">
+              <FolderLocationSummary
+                label="将移动到"
+                path={
+                  moveTargetFolderId
+                    ? folderPathLabel(moveTargetFolderId)
+                    : "顶层"
+                }
+                unavailableReason={fileMoveUnavailableReason}
+              />
               <div className="button-row">
                 <button
                   className="button secondary"
-                  onClick={() => {
-                    setMovingFileId(null);
-                    setMoveTargetFolderId("");
-                  }}
+                  disabled={isMovingContent}
+                  onClick={closeMoveFile}
                   type="button"
                 >
                   取消
                 </button>
                 <button
                   className="button"
-                  disabled={moveTargetFolderId === fileBeingMoved.folderId}
+                  disabled={
+                    isMovingContent ||
+                    Boolean(fileMoveUnavailableReason) ||
+                    moveTargetFolderId === fileBeingMoved.folderId
+                  }
                   type="submit"
                 >
-                  移动到这里
+                  {isMovingContent ? "正在移动…" : "移动到这里"}
                 </button>
               </div>
             </div>
@@ -3341,9 +3453,13 @@ export function ContentClient() {
       {showBulkMove ? (
         <div className="modal-backdrop" role="presentation">
           <form
+            aria-busy={isBulkOperating}
             aria-labelledby="bulk-move-documents-title"
-            className="modal-panel content-operation-dialog"
+            aria-modal="true"
+            className="modal-panel content-location-dialog"
+            onKeyDown={(event) => onLocationDialogKeyDown(event, closeBulkMove)}
             onSubmit={(event) => void onBulkMoveFiles(event)}
+            role="dialog"
           >
             <div className="modal-head">
               <h2 id="bulk-move-documents-title">
@@ -3353,10 +3469,7 @@ export function ContentClient() {
                 aria-label="关闭批量移动"
                 className="icon-button subtle"
                 disabled={isBulkOperating}
-                onClick={() => {
-                  setShowBulkMove(false);
-                  setBulkMoveTargetFolderId("");
-                }}
+                onClick={closeBulkMove}
                 title="关闭"
                 type="button"
               >
@@ -3368,42 +3481,41 @@ export function ContentClient() {
                 当前位置：
                 {activeFolderId ? folderPathLabel(activeFolderId) : "文档"}
               </p>
-              <fieldset className="content-location-picker">
-                <legend>选择目标文件夹</legend>
-                {bulkMoveTargetFolders.map((folder) => (
-                  <label key={folder.id}>
-                    <input
-                      checked={bulkMoveTargetFolderId === folder.id}
-                      name="bulk-document-move-target"
-                      onChange={() => setBulkMoveTargetFolderId(folder.id)}
-                      type="radio"
-                    />
-                    <span>{folderPathLabel(folder.id)}</span>
-                  </label>
-                ))}
-                {bulkMoveTargetFolders.length === 0 ? (
-                  <p className="content-location-empty">
-                    没有其他可写的目标文件夹。
-                  </p>
-                ) : null}
-              </fieldset>
+              <FolderLocationPicker
+                autoFocus
+                disabled={isBulkOperating}
+                folders={folders}
+                label="目标位置"
+                onChange={setBulkMoveTargetFolderId}
+                value={bulkMoveTargetFolderId}
+              />
             </div>
             <div className="modal-foot">
+              <FolderLocationSummary
+                label="将移动到"
+                path={
+                  bulkMoveTargetFolderId
+                    ? folderPathLabel(bulkMoveTargetFolderId)
+                    : "顶层"
+                }
+                unavailableReason={bulkMoveUnavailableReason}
+              />
               <div className="button-row">
                 <button
                   className="button secondary"
                   disabled={isBulkOperating}
-                  onClick={() => {
-                    setShowBulkMove(false);
-                    setBulkMoveTargetFolderId("");
-                  }}
+                  onClick={closeBulkMove}
                   type="button"
                 >
                   取消
                 </button>
                 <button
                   className="button"
-                  disabled={!bulkMoveTargetFolderId || isBulkOperating}
+                  disabled={
+                    isBulkOperating ||
+                    Boolean(bulkMoveUnavailableReason) ||
+                    bulkMoveTargetFolderId === activeFolderId
+                  }
                   type="submit"
                 >
                   {isBulkOperating ? "正在移动…" : "移动到这里"}
@@ -3470,12 +3582,26 @@ export function ContentClient() {
 
       {showCreateFolder ? (
         <div className="modal-backdrop" role="presentation">
-          <form className="modal-panel" onSubmit={onCreateFolder}>
+          <form
+            aria-labelledby="create-folder-title"
+            aria-modal="true"
+            className="modal-panel content-location-dialog"
+            onKeyDown={(event) =>
+              onLocationDialogKeyDown(event, closeCreateFolder)
+            }
+            onSubmit={onCreateFolder}
+            role="dialog"
+          >
             <div className="modal-head">
-              <h2>新建文件夹</h2>
+              <h2 id="create-folder-title">
+                <FolderPlus aria-hidden="true" />
+                新建文件夹
+              </h2>
               <button
+                aria-label="关闭新建文件夹"
                 className="icon-button subtle"
-                onClick={() => setShowCreateFolder(false)}
+                disabled={isCreatingFolder}
+                onClick={closeCreateFolder}
                 title="关闭"
                 type="button"
               >
@@ -3488,45 +3614,49 @@ export function ContentClient() {
                 <input
                   autoFocus
                   className="input"
+                  disabled={isCreatingFolder}
                   maxLength={120}
                   placeholder="例如：基础培训"
                   value={folderName}
                   onChange={(event) => setFolderName(event.target.value)}
                 />
               </label>
-              <label className="label">
-                创建位置
-                <select
-                  className="select"
-                  value={folderParentId}
-                  onChange={(event) => setFolderParentId(event.target.value)}
-                >
-                  <option value="">顶层</option>
-                  {flatFolders.map((folder) => (
-                    <option key={folder.id} value={folder.id}>
-                      {folderPathLabel(folder.id)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="notice-box">
-                <span>
-                  将创建在：
-                  {folderParentId ? folderPathLabel(folderParentId) : "顶层"}
-                </span>
-              </div>
+              <FolderLocationPicker
+                disabled={isCreatingFolder}
+                folders={folders}
+                onChange={setFolderParentId}
+                value={folderParentId}
+              />
             </div>
             <div className="modal-foot">
+              <FolderLocationSummary
+                label="将创建在"
+                path={folderParentId ? folderPathLabel(folderParentId) : "顶层"}
+                unavailableReason={
+                  canCreateInSelectedFolder
+                    ? null
+                    : "此位置没有创建权限，请选择其他文件夹。"
+                }
+              />
               <div className="button-row">
                 <button
                   className="button secondary"
-                  onClick={() => setShowCreateFolder(false)}
+                  disabled={isCreatingFolder}
+                  onClick={closeCreateFolder}
                   type="button"
                 >
                   取消
                 </button>
-                <button className="button" type="submit">
-                  创建文件夹
+                <button
+                  className="button"
+                  disabled={
+                    isCreatingFolder ||
+                    !folderName.trim() ||
+                    !canCreateInSelectedFolder
+                  }
+                  type="submit"
+                >
+                  {isCreatingFolder ? "创建中…" : "创建文件夹"}
                 </button>
               </div>
             </div>
