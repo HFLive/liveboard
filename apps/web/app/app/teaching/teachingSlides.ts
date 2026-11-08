@@ -30,6 +30,15 @@ function lineCount(text: string) {
   return Math.max(1, text.split("\n").filter((line) => line.trim()).length);
 }
 
+function tableRowLineCount(row: unknown[]) {
+  return Math.max(
+    1,
+    ...row.map((cell) =>
+      typeof cell === "string" ? cell.split("\n").length : 1,
+    ),
+  );
+}
+
 function cloneItemWithData(
   item: TeachingDeckItem,
   dataJson: Record<string, unknown>,
@@ -68,8 +77,10 @@ function splitLongString(text: string, limit: number) {
   return parts.length ? parts : [text];
 }
 
-function splitWeightedLines(text: string) {
-  const sourceLines = text.split("\n").filter((line) => line.trim());
+function splitWeightedLines(text: string, preserveBlankLines = false) {
+  const sourceLines = text
+    .split("\n")
+    .filter((line) => preserveBlankLines || line.trim());
   const chunks: string[] = [];
   let pending: string[] = [];
   let units = 0;
@@ -111,33 +122,57 @@ function expandOversizedItem(item: TeachingDeckItem) {
     const hasHeader = data.hasHeader !== false;
     const header = hasHeader && rows[0] ? [rows[0]] : [];
     const body = hasHeader ? rows.slice(1) : rows;
-    if (body.length <= TABLE_BODY_ROW_LIMIT) return [item];
+    const rowBudget = Math.max(
+      1,
+      TABLE_BODY_ROW_LIMIT - (header[0] ? tableRowLineCount(header[0]) - 1 : 0),
+    );
+    if (
+      body.reduce((sum, row) => sum + tableRowLineCount(row), 0) <= rowBudget
+    ) {
+      return [item];
+    }
     const parts: TeachingDeckItem[] = [];
-    for (let index = 0; index < body.length; index += TABLE_BODY_ROW_LIMIT) {
+    let pendingRows: unknown[][] = [];
+    let pendingLines = 0;
+    function flushRows() {
+      if (!pendingRows.length) return;
       parts.push(
         cloneItemWithData(
           item,
           {
             ...data,
-            rows: [
-              ...header,
-              ...body.slice(index, index + TABLE_BODY_ROW_LIMIT),
-            ],
+            rows: [...header, ...pendingRows],
           },
           parts.length,
         ),
       );
+      pendingRows = [];
+      pendingLines = 0;
     }
+    for (const row of body) {
+      const rowLines = tableRowLineCount(row);
+      if (pendingRows.length && pendingLines + rowLines > rowBudget) {
+        flushRows();
+      }
+      pendingRows.push(row);
+      pendingLines += rowLines;
+    }
+    flushRows();
     return parts;
   }
 
   const text = textValue(block);
   if (!text) return [item];
+  const listOrCode = ["bulleted_list", "numbered_list", "code"].includes(
+    block.type,
+  );
+  const multilineText =
+    ["paragraph", "quote", "todo", "question"].includes(block.type) ||
+    block.type.startsWith("heading_");
   const textParts =
-    block.type === "bulleted_list" ||
-    block.type === "numbered_list" ||
-    block.type === "code"
-      ? splitWeightedLines(text)
+    listOrCode ||
+    (multilineText && text.split("\n").length > LONG_BLOCK_UNIT_LIMIT)
+      ? splitWeightedLines(text, !listOrCode)
       : splitLongString(text, LONG_TEXT_CHAR_LIMIT);
 
   if (textParts.length <= 1) return [item];
@@ -165,28 +200,40 @@ function estimateBlockWeight(block: ContentBlock | null) {
 
   const data = blockData(block);
   const text = textValue(block);
+  const additionalLines = text.split("\n").length - 1;
 
   if (block.type === "image") return 8;
   if (block.type === "table") {
-    const rows = Array.isArray(data.rows) ? data.rows.length : 2;
-    return Math.min(9, Math.max(3, rows * 1.25));
+    const lines = Array.isArray(data.rows)
+      ? data.rows
+          .filter(Array.isArray)
+          .reduce((sum, row) => sum + tableRowLineCount(row), 0)
+      : 2;
+    return Math.min(9, Math.max(3, lines * 1.25));
   }
   if (block.type === "code") {
     return Math.min(9, Math.max(3, Math.ceil(lineCount(text) / 4) + 2));
   }
-  if (block.type === "heading_3") return 2.5;
-  if (block.type.startsWith("heading_")) return 1.5;
+  if (block.type === "heading_3") return 2.5 + additionalLines * 2;
+  if (block.type.startsWith("heading_")) return 1.5 + additionalLines * 2;
   if (block.type === "bulleted_list" || block.type === "numbered_list") {
     return Math.min(8, Math.max(2, lineCount(text) * 0.9));
   }
   if (block.type === "quote" || block.type === "question") {
-    return Math.min(6, Math.max(2, Math.ceil(text.length / 110) + 1));
+    return (
+      Math.min(6, Math.max(2, Math.ceil(text.length / 110) + 1)) +
+      additionalLines
+    );
   }
   if (block.type === "math") return 2.5;
   if (block.type === "divider") return 1;
-  if (block.type === "attachment" || block.type === "todo") return 1.5;
+  if (block.type === "attachment") return 1.5;
+  if (block.type === "todo") return 1.5 + additionalLines;
 
-  return Math.min(6, Math.max(1.5, Math.ceil(text.length / 140) + 0.5));
+  return (
+    Math.min(6, Math.max(1.5, Math.ceil(text.length / 140) + 0.5)) +
+    additionalLines
+  );
 }
 
 function isLargeHeading(item: TeachingDeckItem) {

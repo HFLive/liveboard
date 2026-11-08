@@ -3683,6 +3683,21 @@ p.muted {
   letter-spacing: 0.02em;
 }
 
+.render-heading-xl,
+.render-heading-lg,
+.render-heading-md,
+.render-heading-sm,
+.render-heading-xs,
+.render-heading-xxs,
+.render-paragraph,
+.render-quote,
+.render-todo > span,
+.render-question,
+.render-table th,
+.render-table td {
+  white-space: pre-wrap;
+}
+
 .render-paragraph,
 .render-list,
 .render-quote,
