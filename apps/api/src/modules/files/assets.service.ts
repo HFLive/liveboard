@@ -1151,11 +1151,7 @@ export class AssetsService {
     return { ok: true };
   }
 
-  async renameStandaloneAsset(
-    userId: string | null,
-    assetId: string,
-    filename: string,
-  ) {
+  async renameAsset(userId: string | null, assetId: string, filename: string) {
     if (!userId) {
       throw new UnauthorizedException("Missing session");
     }
@@ -1165,48 +1161,86 @@ export class AssetsService {
       this.prisma.user.findUnique({ where: { id: userId } }),
     ]);
 
-    if (!asset || asset.kind !== "standalone") {
+    if (!user || user.status !== "active") {
+      throw new UnauthorizedException("Missing session");
+    }
+    if (
+      !asset ||
+      asset.forumPostId ||
+      (asset.kind === "embedded" && !asset.mimeType.startsWith("image/"))
+    ) {
       throw new NotFoundException("文件不存在");
     }
 
-    const isUploader = asset.uploadedBy === userId;
-    if (!isUploader && (!user || !isSystemAdmin(user.systemRole))) {
+    const isStandalone = asset.kind === "standalone";
+    if (asset.uploadedBy !== userId) {
+      if (!isStandalone) {
+        throw new ForbiddenException("只有上传者可以重命名图片");
+      }
       const canManageFolder =
-        asset.folderId &&
-        user?.status === "active" &&
-        canEdit(
-          await this.permissions.getEffectiveLevelForFolder(
-            userId,
-            asset.folderId,
-          ),
-        );
+        isSystemAdmin(user.systemRole) ||
+        (asset.folderId &&
+          canEdit(
+            await this.permissions.getEffectiveLevelForFolder(
+              userId,
+              asset.folderId,
+            ),
+          ));
       if (!canManageFolder) {
         throw new ForbiddenException("No permission to rename asset");
       }
     }
 
-    const name = requireResourceName(filename, "文件名称");
-    const duplicate = await this.prisma.fileAsset.findFirst({
-      where: {
-        folderId: asset.folderId,
-        kind: "standalone",
-        filename: name,
-        id: { not: asset.id },
-      },
-      select: { id: true },
-    });
-    if (duplicate) {
-      throw new ConflictException("当前文件夹中已存在同名文件");
+    const name = requireResourceName(
+      filename,
+      isStandalone ? "文件名称" : "图片名称",
+    );
+    const location = isStandalone
+      ? { folderId: asset.folderId }
+      : { fileId: asset.fileId };
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          if (isStandalone || asset.fileId) {
+            const duplicate = await tx.fileAsset.findFirst({
+              where: {
+                ...location,
+                workspaceId: asset.workspaceId,
+                kind: asset.kind,
+                filename: name,
+                id: { not: asset.id },
+              },
+              select: { id: true },
+            });
+            if (duplicate) {
+              throw new ConflictException(
+                isStandalone
+                  ? "当前文件夹中已存在同名文件"
+                  : "当前文档中已存在同名附件",
+              );
+            }
+          }
+          const updated = await tx.fileAsset.update({
+            where: { id: asset.id, ...location },
+            data: { filename: name },
+          });
+          return {
+            id: updated.id,
+            filename: updated.filename,
+            updatedAt: updated.updatedAt.toISOString(),
+          };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (caught) {
+      if (
+        caught instanceof Prisma.PrismaClientKnownRequestError &&
+        (caught.code === "P2034" || caught.code === "P2025")
+      ) {
+        throw new ConflictException("文件已被其他操作修改，请刷新后重试");
+      }
+      throw caught;
     }
-    const updated = await this.prisma.fileAsset.update({
-      where: { id: asset.id },
-      data: { filename: name },
-    });
-    return {
-      id: updated.id,
-      filename: updated.filename,
-      updatedAt: updated.updatedAt.toISOString(),
-    };
   }
 
   private async resolveUploadContext(userId: string, input: UploadAssetInput) {

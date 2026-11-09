@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from "@nestjs/common";
 import { Readable } from "node:stream";
 import sharp from "sharp";
 import type { PermissionsService } from "../permissions/permissions.service";
@@ -682,19 +687,107 @@ describe("AssetsService consistency", () => {
     expect(backend.putObject).not.toHaveBeenCalled();
   });
 
-  it("applies the same duplicate check when renaming standalone files", async () => {
-    prisma.fileAsset.findUnique.mockResolvedValue({
+  describe("renaming uploaded images", () => {
+    const image = {
       id: "asset-1",
-      kind: "standalone",
+      kind: "embedded",
+      workspaceId: "workspace-1",
       folderId: "folder-1",
+      fileId: "file-1",
+      forumPostId: null,
       uploadedBy: "user-1",
-    });
-    prisma.fileAsset.findFirst.mockResolvedValue({ id: "asset-2" });
+      filename: "原图.webp",
+      mimeType: "image/webp",
+    };
 
-    await expect(
-      service.renameStandaloneAsset("user-1", "asset-1", "讲义.pdf"),
-    ).rejects.toThrow("当前文件夹中已存在同名文件");
-    expect(prisma.fileAsset.update).not.toHaveBeenCalled();
+    beforeEach(() => {
+      prisma.fileAsset.findUnique.mockResolvedValue(image);
+      prisma.fileAsset.findFirst.mockResolvedValue(null);
+      prisma.$transaction.mockImplementation((run) => run(prisma));
+    });
+
+    it("normalizes the filename and only updates the asset metadata", async () => {
+      const updatedAt = new Date("2026-11-09T00:00:00.000Z");
+      prisma.fileAsset.update.mockResolvedValue({
+        ...image,
+        filename: "课程 封面.webp",
+        updatedAt,
+      });
+
+      await expect(
+        service.renameAsset("user-1", image.id, "  课程　封面.webp  "),
+      ).resolves.toEqual({
+        id: image.id,
+        filename: "课程 封面.webp",
+        updatedAt: updatedAt.toISOString(),
+      });
+      expect(prisma.fileAsset.findFirst).toHaveBeenCalledWith({
+        where: {
+          fileId: image.fileId,
+          workspaceId: image.workspaceId,
+          kind: "embedded",
+          filename: "课程 封面.webp",
+          id: { not: image.id },
+        },
+        select: { id: true },
+      });
+      expect(prisma.fileAsset.update).toHaveBeenCalledWith({
+        where: { id: image.id, fileId: image.fileId },
+        data: { filename: "课程 封面.webp" },
+      });
+      expect(storage.backendFor).not.toHaveBeenCalled();
+    });
+
+    it("rejects names already used by attachments in the same document", async () => {
+      prisma.fileAsset.findFirst.mockResolvedValue({ id: "asset-2" });
+
+      await expect(
+        service.renameAsset("user-1", image.id, "封面.webp"),
+      ).rejects.toThrow("当前文档中已存在同名附件");
+      expect(prisma.fileAsset.update).not.toHaveBeenCalled();
+    });
+
+    it("requires the uploader even if another user can edit the document", async () => {
+      prisma.fileAsset.findUnique.mockResolvedValue({
+        ...image,
+        uploadedBy: "another-user",
+      });
+
+      await expect(
+        service.renameAsset("user-1", image.id, "封面.webp"),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.fileAsset.update).not.toHaveBeenCalled();
+    });
+
+    it.each([{ forumPostId: "post-1" }, { mimeType: "application/pdf" }])(
+      "rejects assets outside the image rename flow (%o)",
+      async (overrides) => {
+        prisma.fileAsset.findUnique.mockResolvedValue({
+          ...image,
+          ...overrides,
+        });
+
+        await expect(
+          service.renameAsset("user-1", image.id, "封面.webp"),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.fileAsset.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it("continues checking duplicate standalone filenames in the same folder", async () => {
+      prisma.fileAsset.findUnique.mockResolvedValue({
+        ...image,
+        kind: "standalone",
+        fileId: null,
+        mimeType: "application/pdf",
+      });
+      prisma.fileAsset.findFirst.mockResolvedValue({ id: "asset-2" });
+
+      await expect(
+        service.renameAsset("user-1", image.id, "讲义.pdf"),
+      ).rejects.toThrow("当前文件夹中已存在同名文件");
+      expect(prisma.fileAsset.update).not.toHaveBeenCalled();
+    });
   });
 
   it("rejects standalone uploads of unsupported file types", async () => {

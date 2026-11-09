@@ -12,6 +12,7 @@ import {
   deleteLibraryAsset,
   listLibraryAssets,
   listAssetReferences,
+  renameAsset,
 } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
@@ -27,6 +28,7 @@ vi.mock("@/lib/api", () => ({
   deleteLibraryAsset: vi.fn(),
   listLibraryAssets: vi.fn(),
   listAssetReferences: vi.fn(),
+  renameAsset: vi.fn(),
   resolveBlockAssetUrl: vi.fn((url: string) => url),
   uploadAsset: vi.fn(),
 }));
@@ -130,6 +132,39 @@ describe("LibraryClient selection", () => {
     expect(
       within(referenceDialog).getAllByRole("button", { name: "关闭" }),
     ).toHaveLength(1);
+  });
+
+  it("keeps the image name editable after a conflict and shows the saved name", async () => {
+    const filename = "课程封面.png";
+    vi.mocked(renameAsset)
+      .mockRejectedValueOnce(new Error("当前文档中已存在同名附件"))
+      .mockResolvedValueOnce({
+        asset: { id: asset.id, filename, updatedAt: asset.createdAt },
+      });
+    render(<LibraryClient />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /example.png/ }));
+    fireEvent.click(screen.getByText("文件操作"));
+    fireEvent.click(screen.getByRole("button", { name: "重命名图片" }));
+    const dialog = screen.getByRole("dialog", { name: "重命名图片" });
+    const input = within(dialog).getByRole("textbox", { name: "图片名称" });
+    const save = within(dialog).getByRole("button", { name: "保存名称" });
+    expect(input).toHaveValue(asset.filename);
+
+    fireEvent.change(input, { target: { value: "同名.png" } });
+    fireEvent.click(save);
+    expect(await screen.findByText("当前文档中已存在同名附件")).toBeVisible();
+    expect(input).toHaveValue("同名.png");
+
+    fireEvent.change(input, { target: { value: `  ${filename}  ` } });
+    fireEvent.click(save);
+    const detail = await screen.findByRole("dialog", { name: filename });
+    expect(within(detail).getByRole("img", { name: filename })).toHaveAttribute(
+      "src",
+      asset.url,
+    );
+    expect(renameAsset).toHaveBeenLastCalledWith(asset.id, filename);
+    expect(dialog).not.toBeInTheDocument();
   });
 
   it("replaces the delete confirmation with a reference details dialog", async () => {

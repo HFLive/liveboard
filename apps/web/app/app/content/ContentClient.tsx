@@ -73,7 +73,6 @@ import {
   listPermissionGrants,
   InheritedPermissionGrantSummary,
   PermissionGrantSummary,
-  renameAsset,
   updateFile,
   updateFolder,
   updateContentPins,
@@ -86,6 +85,7 @@ import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { useContentOpenMode } from "@/components/app-shell/UserPreferencesProvider";
 import { SortIconSelect } from "@/components/SortIconSelect";
 import { PermissionUserPicker } from "@/components/PermissionUserPicker";
+import { AssetRenameDialog } from "@/components/AssetRenameDialog";
 import { AssetPreviewDialog } from "@/components/asset-preview/AssetPreviewDialog";
 import { UploadTaskToast } from "@/components/upload/UploadTaskToast";
 import {
@@ -293,7 +293,6 @@ export function ContentClient() {
   const [previewAsset, setPreviewAsset] = useState<FolderAssetSummary | null>(
     null,
   );
-  const [assetRename, setAssetRename] = useState("");
   const assetInputRef = useRef<HTMLInputElement>(null);
   const folderContentsRequestRef = useRef(0);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
@@ -953,29 +952,6 @@ export function ContentClient() {
       }
     } finally {
       setUploadingAsset(false);
-    }
-  }
-
-  async function onRenameAssetSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!renamingAsset) return;
-    const nameError = getResourceNameError(assetRename, "文件名称");
-    if (nameError) {
-      setError(nameError);
-      return;
-    }
-    setError(null);
-    setMessage(null);
-    try {
-      await renameAsset(renamingAsset.id, normalizeResourceName(assetRename));
-      setMessage("文件已重命名");
-      setRenamingAsset(null);
-      setAssetRename("");
-      if (activeFolderId) {
-        await refreshFolderContents(activeFolderId);
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "重命名文件失败");
     }
   }
 
@@ -1780,8 +1756,8 @@ export function ContentClient() {
         <button
           onClick={() => {
             setOpenContentRowMenu(null);
+            setMessage(null);
             setRenamingAsset(asset);
-            setAssetRename(asset.filename);
           }}
           type="button"
         >
@@ -3527,57 +3503,19 @@ export function ContentClient() {
       ) : null}
 
       {renamingAsset ? (
-        <div className="modal-backdrop" role="presentation">
-          <form
-            aria-labelledby="rename-asset-title"
-            className="modal-panel"
-            onSubmit={(event) => void onRenameAssetSubmit(event)}
-          >
-            <div className="modal-head">
-              <h2 id="rename-asset-title">重命名文件</h2>
-              <button
-                className="icon-button subtle"
-                onClick={() => {
-                  setRenamingAsset(null);
-                  setAssetRename("");
-                }}
-                title="关闭"
-                type="button"
-              >
-                <X aria-hidden="true" />
-              </button>
-            </div>
-            <div className="modal-body">
-              <label className="label">
-                文件名称
-                <input
-                  autoFocus
-                  className="input"
-                  maxLength={120}
-                  onChange={(event) => setAssetRename(event.target.value)}
-                  value={assetRename}
-                />
-              </label>
-            </div>
-            <div className="modal-foot">
-              <div className="button-row">
-                <button
-                  className="button secondary"
-                  onClick={() => {
-                    setRenamingAsset(null);
-                    setAssetRename("");
-                  }}
-                  type="button"
-                >
-                  取消
-                </button>
-                <button className="button" type="submit">
-                  保存名称
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
+        <AssetRenameDialog
+          asset={renamingAsset}
+          onClose={() => setRenamingAsset(null)}
+          onError={setError}
+          onRenamed={(updated) => {
+            setStandaloneAssets((current) =>
+              current.map((asset) =>
+                asset.id === updated.id ? { ...asset, ...updated } : asset,
+              ),
+            );
+            setMessage("文件已重命名");
+          }}
+        />
       ) : null}
 
       {showCreateFolder ? (
