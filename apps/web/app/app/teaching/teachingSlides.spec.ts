@@ -114,6 +114,68 @@ describe("buildTeachingSlides", () => {
     ).toBe(text);
   });
 
+  it.each(["paragraph", "quote", "todo", "question", "heading_3"] as const)(
+    "counts newlines and blank lines when packing %s blocks",
+    (type) => {
+      const text = "第一行\n第二行\n\n第四行";
+      const items = Array.from({ length: 4 }, (_, index) =>
+        item(`multiline-${index}`, type, { text }),
+      );
+      const slides = buildTeachingSlides(items);
+
+      expect(slides.length).toBeGreaterThan(1);
+      expect(slides.flatMap((slide) => slide.items)).toEqual(items);
+      expect(slides.every((slide) => slide.items.length <= 2)).toBe(true);
+    },
+  );
+
+  it("paginates many short text lines without losing blank lines", () => {
+    const text = Array.from(
+      { length: 12 },
+      (_, index) => `第 ${index + 1} 行`,
+    ).join("\n\n");
+    const slides = buildTeachingSlides([
+      item("multiline-quote", "quote", { text }),
+    ]);
+
+    expect(slides.length).toBeGreaterThan(1);
+    expect(
+      slides
+        .flatMap((slide) => slide.items)
+        .map((entry) => (entry.block?.dataJson as { text: string }).text)
+        .join("\n"),
+    ).toBe(text);
+  });
+
+  it("accounts for multiline table headers and cells when paginating", () => {
+    const header = ["表头\n\n说明"];
+    const body = Array.from({ length: 4 }, (_, index) => [
+      `第 ${index + 1} 项\n第二行\n\n第四行`,
+    ]);
+    const slides = buildTeachingSlides([
+      item("multiline-table", "table", { rows: [header, ...body] }),
+    ]);
+    const tables = slides.map(
+      (slide) => (slide.items[0]?.block?.dataJson as { rows: string[][] }).rows,
+    );
+
+    expect(slides.length).toBeGreaterThan(1);
+    for (const rows of tables) expect(rows[0]).toEqual(header);
+    expect(tables.flatMap((rows) => rows.slice(1))).toEqual(body);
+  });
+
+  it("keeps multiline formulas intact", () => {
+    const text = `\\begin{aligned}\n${Array.from(
+      { length: 12 },
+      (_, index) => `x_${index} &= y \\\\`,
+    ).join("\n")}\n\\end{aligned}`;
+    const formula = item("formula", "math", { text });
+
+    expect(
+      buildTeachingSlides([formula]).flatMap((slide) => slide.items),
+    ).toEqual([formula]);
+  });
+
   it("keeps numbered-list numbering continuous after pagination", () => {
     const text = Array.from(
       { length: 24 },
