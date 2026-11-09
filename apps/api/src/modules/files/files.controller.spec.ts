@@ -60,8 +60,9 @@ describe("FilesController Markdown endpoints", () => {
 
   it("forces attachment download for images when download is requested", async () => {
     const stream = { pipe: jest.fn() };
+    const filename = "课程 封面.png";
     assetsService.getAssetForDownload.mockResolvedValue({
-      asset: { filename: "preview.png", mimeType: "image/png" },
+      asset: { filename, mimeType: "image/png" },
       stream,
     });
 
@@ -83,7 +84,7 @@ describe("FilesController Markdown endpoints", () => {
     );
     expect(response.setHeader).toHaveBeenCalledWith(
       "Content-Disposition",
-      'attachment; filename="preview.png"',
+      `attachment; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
     );
     expect(response.setHeader).toHaveBeenCalledWith(
       "Cross-Origin-Resource-Policy",
@@ -115,7 +116,7 @@ describe("FilesController Markdown endpoints", () => {
     );
     expect(response.setHeader).toHaveBeenCalledWith(
       "Content-Disposition",
-      'attachment; filename="notes.pdf"',
+      `attachment; filename="notes.pdf"; filename*=UTF-8''notes.pdf`,
     );
     expect(response.setHeader).toHaveBeenCalledWith(
       "Content-Security-Policy",

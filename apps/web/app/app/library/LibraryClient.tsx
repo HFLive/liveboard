@@ -9,6 +9,7 @@ import {
   Image,
   LayoutGrid,
   MoreHorizontal,
+  Pencil,
   Rows3,
   Search,
   Trash2,
@@ -30,8 +31,13 @@ import {
   formatRelativeTime,
 } from "@/lib/labels";
 import { APP_ROUTES, contentDetail, teachingPresent } from "@/lib/routes";
+import { AssetRenameDialog } from "@/components/AssetRenameDialog";
 import { SortIconSelect } from "@/components/SortIconSelect";
 import { SkeletonRows } from "@/components/system/ProgressiveLoading";
+import {
+  FeedbackNotice,
+  useFeedbackNotice,
+} from "@/components/system/FeedbackNotice";
 
 type AssetKindFilter = "all" | "image" | "file";
 type AssetSort = "newest" | "oldest" | "name" | "references";
@@ -52,6 +58,9 @@ export function LibraryClient() {
   const [view, setView] = useState<AssetView>("grid");
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [renamingImage, setRenamingImage] = useState<FileAssetSummary | null>(
+    null,
+  );
   const [deleteTarget, setDeleteTarget] = useState<FileAssetSummary | null>(
     null,
   );
@@ -60,8 +69,8 @@ export function LibraryClient() {
     message: string;
     references: AssetReferenceSummary[];
   } | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [messageNotice, setMessage] = useFeedbackNotice();
+  const [errorNotice, setError] = useFeedbackNotice();
   const [loadingAssets, setLoadingAssets] = useState(true);
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(
     new Set(),
@@ -258,8 +267,8 @@ export function LibraryClient() {
         </div>
       </header>
 
-      {error ? <p className="error-text">{error}</p> : null}
-      {message ? <p className="success-text">{message}</p> : null}
+      <FeedbackNotice notice={errorNotice} tone="error" />
+      <FeedbackNotice notice={messageNotice} tone="success" />
 
       <section className="library-layout">
         <div className="workbench-main" onClick={clearSelectionFromBackground}>
@@ -544,6 +553,21 @@ export function LibraryClient() {
                     <a href={assetDownloadUrl(selectedAsset.id)}>
                       <Download aria-hidden="true" /> 下载
                     </a>
+                    {selectedAsset.mimeType.startsWith("image/") ? (
+                      <button
+                        onClick={(event) => {
+                          event.currentTarget
+                            .closest("details")
+                            ?.removeAttribute("open");
+                          setError(null);
+                          setMessage(null);
+                          setRenamingImage(selectedAsset);
+                        }}
+                        type="button"
+                      >
+                        <Pencil aria-hidden="true" /> 重命名图片
+                      </button>
+                    ) : null}
                     <button
                       onClick={() => void showReferences(selectedAsset)}
                       type="button"
@@ -564,6 +588,23 @@ export function LibraryClient() {
           </>
         ) : null}
       </section>
+
+      {renamingImage ? (
+        <AssetRenameDialog
+          asset={renamingImage}
+          label="图片"
+          onClose={() => setRenamingImage(null)}
+          onError={setError}
+          onRenamed={({ id, filename }) => {
+            setAssets((current) =>
+              current.map((asset) =>
+                asset.id === id ? { ...asset, filename } : asset,
+              ),
+            );
+            setMessage("图片已重命名");
+          }}
+        />
+      ) : null}
 
       {deleteTarget ? (
         <div className="modal-backdrop" role="presentation">

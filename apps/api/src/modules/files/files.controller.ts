@@ -500,7 +500,7 @@ export class FilesController {
     @Body() body: RenameAssetDto,
   ) {
     return {
-      asset: await this.assetsService.renameStandaloneAsset(
+      asset: await this.assetsService.renameAsset(
         userId,
         assetId,
         body.filename,
@@ -607,9 +607,12 @@ export class FilesController {
       inline ? "same-site" : "same-origin",
     );
     if (!inline) res.setHeader("Content-Security-Policy", "sandbox");
+    const encodedFilename = encodeURIComponent(asset.filename);
     res.setHeader(
       "Content-Disposition",
-      `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(asset.filename)}"`,
+      inline
+        ? `inline; filename="${encodedFilename}"`
+        : `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`,
     );
     res.setHeader("Content-Length", String(asset.sizeBytes));
     stream!.pipe(res);

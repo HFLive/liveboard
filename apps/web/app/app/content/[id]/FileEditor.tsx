@@ -83,6 +83,7 @@ import {
 import { assetTypeLabel, permissionLabel } from "@/lib/labels";
 import { APP_ROUTES, contentDetail } from "@/lib/routes";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
+import { AssetRenameDialog } from "@/components/AssetRenameDialog";
 import { AutoTextarea } from "@/components/AutoTextarea";
 import { compressImageFile } from "@/components/image-compress";
 import { PermissionUserPicker } from "@/components/PermissionUserPicker";
@@ -1055,6 +1056,9 @@ export function FileEditor({ fileId }: { fileId: string }) {
     InternalDocumentOption[]
   >([]);
   const [libraryAssets, setLibraryAssets] = useState<FileAssetSummary[]>([]);
+  const [renamingImage, setRenamingImage] = useState<FileAssetSummary | null>(
+    null,
+  );
   const [assetQuery, setAssetQuery] = useState("");
   const [assetTargetBlockId, setAssetTargetBlockId] = useState<string | null>(
     null,
@@ -1120,6 +1124,14 @@ export function FileEditor({ fileId }: { fileId: string }) {
   const menuBlock = openBlockMenu
     ? blocks.find((block) => block.id === openBlockMenu.id)
     : null;
+  const menuImage =
+    menuBlock?.type === "image"
+      ? libraryAssets.find(
+          (asset) =>
+            asset.id === getBlockDataString(menuBlock, "assetId") &&
+            asset.mimeType.startsWith("image/"),
+        )
+      : null;
   const isPublished = file?.status === "published";
   const isArchived = file?.status === "archived";
   const filteredLibraryAssets = useMemo(
@@ -2133,6 +2145,20 @@ export function FileEditor({ fileId }: { fileId: string }) {
                     编辑此块
                   </button>
                 ) : null}
+                {menuImage ? (
+                  <button
+                    onClick={() => {
+                      setOpenBlockMenu(null);
+                      setError(null);
+                      setMessage(null);
+                      setRenamingImage(menuImage);
+                    }}
+                    type="button"
+                  >
+                    <Pencil aria-hidden="true" />
+                    重命名图片
+                  </button>
+                ) : null}
                 <button
                   onClick={() => {
                     setOpenBlockMenu(null);
@@ -2270,6 +2296,23 @@ export function FileEditor({ fileId }: { fileId: string }) {
             </div>
           </section>
         </div>
+      ) : null}
+
+      {renamingImage ? (
+        <AssetRenameDialog
+          asset={renamingImage}
+          label="图片"
+          onClose={() => setRenamingImage(null)}
+          onError={setError}
+          onRenamed={({ id, filename }) => {
+            setLibraryAssets((current) =>
+              current.map((asset) =>
+                asset.id === id ? { ...asset, filename } : asset,
+              ),
+            );
+            setMessage("图片已重命名");
+          }}
+        />
       ) : null}
 
       {showPermissions ? (
